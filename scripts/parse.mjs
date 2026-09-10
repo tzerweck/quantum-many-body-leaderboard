@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const SRC = process.env.VB || "/tmp/varbench";
+const SRC = process.env.VB || "vendor/varbench";
 const MODELS = ["Heisenberg", "Hubbard", "Impurity", "J1J2", "TFIsing", "tV"];
 
 const splitCols = (s) =>

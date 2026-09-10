@@ -2,8 +2,9 @@
 export const RULES = [
   // 0. Explicitly disclaimed by VarBench itself as not a strict upper bound
   [/no strict upper bound|constraint release/i, "projected"],
-  // 1. Projector / constrained methods: bound only within a constraint, or biased
-  [/fixed[- ]node|^fn\b|\bfn on the state\b|\bcp[- ]afqmc\b|constrained[- ]path|\bgfmc\b|green'?s function monte carlo|lanczos step|\bpower method\b/i, "projected"],
+  // 1. Projector / constrained methods: bound only within a constraint, or biased.
+  //    NOTE: p-step Lanczos is deliberately NOT here - it is a strict variational upper bound.
+  [/fixed[- ]node|^fn\b|\bfn on the state\b|\bcp[- ]afqmc\b|constrained[- ]path|\bgfmc\b|green'?s function monte carlo|\bpower method\b/i, "projected"],
   // 2. Variational circuits BEFORE the exact rule: "exact grad" / "exact grads & metric"
   //    describes how the gradient was computed, not the energy. 21 VQE rows depend on this.
   [/\bvqe\b|\bcircuit\b|\bpqc\b|variational quantum/i, "variational"],
