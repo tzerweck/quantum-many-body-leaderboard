@@ -11,6 +11,37 @@ Second pass on every paper: **harvest its bibliography**. Comparison tables cite
 they are beating, and reviews aggregate SOTA across models we have not touched. That is how the
 triangular/kagome/pyrochlore instances get found — nobody wrote a SOTA note for them.
 
+## Harvest (2026-09-12)
+
+`scripts/sweep_search.mjs` -> **161 unique candidates since 2025, 39 peer reviewed**
+(`sweep-candidates.tsv`, scored by whether the abstract promises a usable energy).
+`scripts/harvest_refs.mjs` mines seed bibliographies -> `sweep-refs.tsv` (56 distinct cited
+arXiv ids from 7 seeds, 49 not already in the candidate list).
+
+Peer-reviewed, highest scoring, not yet mined:
+
+| arXiv | journal | why |
+|---|---|---|
+| 2510.11710 | Phys. Rev. B 113, 245104 | *comparison* of symmetrized determinant NQS - comparison papers carry benchmark tables |
+| 2506.08329 | Phys. Rev. B 113, 085134 | neuralized fermionic tensor networks |
+| 2510.04907 | Phys. Rev. B 113, 045117 | PEPS on the triangular lattice |
+| 2502.13454 | Phys. Rev. Lett. 134 | Hubbard with finite fermionic PEPS |
+| 2512.14414 | Phys. Rev. B 113, 155127 | single-layer variational tensor network states |
+
+Preprint-only but high value: 2604.21978 (intertwined orders in the Hubbard model),
+2608.12465 (t-t' Hubbard), 2605.28861 (the kagome Comment).
+
+**Confirmed from the harvest:** neither 2510.26906 (NNBF) nor 2604.25775 (ACE) has a journal
+version, so the -0.766073(6) provenance problem in RULES.md 8 cannot be resolved by checking a
+published version - there is none.
+
+Two leads found only through the citation graph, neither in the keyword search:
+
+- **2503.10462** Chen, Naik & Heyl, *Convolutional transformer wave functions* - 10x10 square
+  J1-J2, E/N = **-0.4976764**. Above their own ResNet -0.4976921, so not a record, but a row.
+- **2502.17144** Moss et al. - RNN wavefunctions to 30x30. No J1-J2 energies in the text; numbers
+  are likely in figures. Needs a closer look.
+
 ## Status 2026-09-11
 
 Only **4 of 177** instances have any post-2024 row (`scripts/staleness.mjs`).
@@ -44,8 +75,8 @@ Only **4 of 177** instances have any post-2024 row (`scripts/staleness.mjs`).
 
 ### Square J1-J2 at J2 != 0.5 — likely genuinely stale, not merely unchecked
 
-Checked 2505.03466 (PRResearch 7, 043099 (2025)) and 2606.02794 (scaling laws): **both only
-report J2 = 0.5.** The 28 J1-J2 square papers since 2025 are phase-diagram, dynamics, magnon and
+Checked 2505.03466 (PRResearch 7, 043099 (2025)), 2606.02794 (scaling laws) and now
+2503.10462 (convolutional transformer): **all three report J2 = 0.5 and nothing else.** The 28 J1-J2 square papers since 2025 are phase-diagram, dynamics, magnon and
 classical-MC studies, not variational-energy papers. Provisional read: the 2025-26 NQS literature
 concentrated on the maximally frustrated point, leaving `square_100_P_0.4/0.7/0.8/0.9/1.0` at
 their 2024 values — one of which is still a plain alpha=1 RBM. Worth confirming before claiming it.
