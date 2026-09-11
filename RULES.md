@@ -127,9 +127,23 @@ and is never ranked on.
    legitimately sit below the lowest state of one sector. A violation counts only past
    3 sigma, or past a relative 1e-8 when no sigma is given.
 
-Six issues currently survive these checks on the imported VarBench data and are carried as
-known upstream defects rather than silently corrected. Three are RBM rows sitting up to
-6.8 sigma below an exact solution on TFIsing chains.
+Six issues survive these checks on the imported VarBench data. They are carried as known
+defects attached to the row (§11), not silently corrected.
+
+**Resolved case, 2026-09-11 — the three TFIsing `RBM (alpha = 1)` rows.** They sit 3.8 to
+10.4 sigma below an exact solution, which no variational state can be. Rerun on three seeds
+each (netket 3.22.4, alpha=1 complex RBM, 2000 SR steps): evaluating the trained parameters
+by **full summation over all 1024 basis states**, with zero Monte-Carlo error, puts every
+converged energy *above* the exact value as the variational principle requires, while every
+training trace dips 1.5e-3 to 3.5e-3 *below* it. Each published value lies between the two.
+The conclusion is that the published number is **a minimum of the optimization trace, not a
+converged measurement**. An underestimated error bar is ruled out: tau_corr <= 0.05 and
+R_hat = 1.0000 across all six runs. Evidence in `checks/`.
+
+This is why §6 requires a stated sigma *and* how it was estimated, and why §10 admits
+"violates the variational principle against a known exact reference" as grounds for
+objection. A leaderboard that ranked on energy alone, with no exact-reference check, would
+have carried all three as records.
 
 ## 10. Pending, confirmed, objections
 
