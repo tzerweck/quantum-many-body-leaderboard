@@ -1,4 +1,4 @@
-# Rules
+# QMBL rules
 
 Version 0.1 (draft, 2026-09-11). These rules exist so that accepting or rejecting a
 row is a matter of citing a clause, not of anyone's judgment about anyone's work.

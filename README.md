@@ -1,6 +1,6 @@
-# qmbl — quantum many-body leaderboard (working title)
+# QMBL — the Quantum Many-Body Leaderboard
 
-Phase 1 dataset build. Imports the [VarBench](https://github.com/varbench/varbench)
+Ground-state track. Imports the [VarBench](https://github.com/varbench/varbench)
 dataset (Apache-2.0, frozen 2024-10-22) into a structured, CI-validatable form and
 adds the `bound_type` field VarBench lacks.
 
