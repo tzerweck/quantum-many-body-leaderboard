@@ -6,6 +6,10 @@ import { classify } from "./bound_type.mjs";
 const PARAMS = { J1J2:["J2"], Hubbard:["Nf","U"], tV:["Nf","V"], TFIsing:["h"], Heisenberg:[], Impurity:[] };
 const NEEDS_REVIEW = new Set(["QMC","AFQMC"]); // bare strings: sign-problem-free (exact) vs constrained (projected)
 
+// Clean rebuild: data/ is fully derived from vendor/ + scripts/, never edited by hand,
+// so wipe it first. Without this, add_literature.mjs double-appends to instances it created.
+fs.rmSync("data", { recursive: true, force: true });
+
 const summary = { instances:0, rows:0, by_bound:{}, needs_review:[], vscore_rows:0, no_variance:0, no_sigma:0 };
 for (const it of instances()) {
   const [lattice, N, BC, ...rest] = it.stem.split("_");
