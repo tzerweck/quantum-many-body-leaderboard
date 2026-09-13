@@ -80,3 +80,31 @@ Checked 2505.03466 (PRResearch 7, 043099 (2025)), 2606.02794 (scaling laws) and 
 classical-MC studies, not variational-energy papers. Provisional read: the 2025-26 NQS literature
 concentrated on the maximally frustrated point, leaving `square_100_P_0.4/0.7/0.8/0.9/1.0` at
 their 2024 values — one of which is still a plain alpha=1 RBM. Worth confirming before claiming it.
+
+## Leads examined and REJECTED (2026-09-13)
+
+Recorded because a rejected lead is a result: without instance discipline each of these
+would have produced a false record.
+
+- **2510.04907** (*Phys. Rev. B* 113, 045117) — triangular −0.55136 and kagome −0.43929.
+  Both are **iPEPS on an infinite lattice**, and the kagome value is an explicit
+  `ξ→∞` extrapolation. QMBL instances are finite lattices, so neither maps onto
+  `kagome-8x8_192_P` or any triangular instance. Dropping them into a finite instance
+  would have manufactured records out of thermodynamic-limit numbers. Admitting these
+  needs a thermodynamic-limit instance class, which is a scope decision, not an import.
+- **2604.21978** — 8×8 Hubbard PBC, U=8, 1/8 doping, but at **t′ = −0.2**. Our
+  `square_64_P_28_8` is t′ = 0, a different Hamiltonian. Needs a new instance; the
+  VarBench naming convention for t′ variants (`_t12`) is not yet decoded, so this is
+  parked rather than guessed.
+
+## Accepted this pass
+
+| instance | row | source | peer reviewed |
+|---|---|---|---|
+| `J1J2/square_100_P_0.5` | **−0.4976939(2)** CNN-MPS — **new record** | arXiv:2603.14425 | no |
+| `J1J2/square_256_P_0.5` | **−0.4969140(5)** CNN-MPS — **new record** | arXiv:2603.14425 | no |
+| `J1J2/square_400_P_0.5` | **−0.4967987(6)** CNN-MPS — **new instance** (20×20) | arXiv:2603.14425 | no |
+| `Hubbard/rectangular-4x16_64_P_28_8` | −0.76413 HFPS | arXiv:2507.10705 | no |
+
+Still to mine: 2502.14091 (*PRL* 136, Shastry-Sutherland, check finite vs iPEPS first),
+2502.13454 (*PRL* 134, Hubbard + PEPS), 2506.08329 (*PRB* 113), 2605.13807, 2502.17144.
