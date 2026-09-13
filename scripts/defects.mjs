@@ -26,7 +26,21 @@ export const DEFECTS = [
   },
 ];
 
+DEFECTS.push(
+  { match:{instance:"J1J2/square_100_P_0.5", method:"Holographic Quantum Transformer (HQT), zero-shot 8x8->10x10 transfer"},
+    flag:"below-established-ground-state",
+    finding:"-0.49782(3) is 1.05e-4 below the best zero-variance extrapolated ground state, -0.497715(9), and 1.3e-4 below the best variational energy. The paper calls it 'statistically consistent with the variational state of the art'; it is lower by ~4 sigma of its own error bar." },
+  { match:{instance:"J1J2/square_64_P_0.5", method:"Holographic Quantum Transformer (HQT)"},
+    flag:"below-established-ground-state",
+    finding:"-0.5001(1) is 1.1e-3 below the best known variational energy for 8x8 J2=0.5 (RBM+PP, -0.4989635), on a well-studied instance. Same direction as the same paper's 10x10 claim, so a systematic error rather than a fluctuation." },
+);
+
 export const SHARED = {
+  "below-established-ground-state": {
+    diagnosis: "Below the established ground state on two independent instances, in the same direction. Not auto-detectable by scripts/validate.mjs: neither 8x8 nor 10x10 J1-J2 has an exact reference row, so the variational-principle check has nothing to fire against. Caught by comparing against the best published values instead.",
+    ruled_out: "Not a convention mismatch: the paper compares its number directly against Chen & Heyl's -0.4976921(4), so it intends the same units.",
+    evidence: "arXiv:2607.00398 abstract and Sec. 1; comparison rows in this instance.",
+  },
   "below-exact": {
     diagnosis:
       "The published value is a minimum of the optimization trace, not a converged measurement. " +

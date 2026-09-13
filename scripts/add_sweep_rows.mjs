@@ -5,6 +5,7 @@ const CHECKED = "2026-09-13";
 const CNNMPS = { ref: "arXiv:2603.14425, Disentangling Tensor Network States with Deep Neural Networks", pr: false };
 const CTWF   = { ref: "Chen, Naik & Heyl, Convolutional transformer wave functions, arXiv:2503.10462", pr: false };
 const HFPS   = { ref: "Neural Network-Augmented Pfaffian Wave-functions, arXiv:2507.10705", pr: false };
+const HQT    = { ref: "Holographic Quantum Transformer, arXiv:2607.00398 (conference proceedings)", pr: true };
 const VIT26  = { ref: "Approaching the Thermodynamic Limit with Neural-Network Quantum States, arXiv:2602.02665", pr: false };
 const TBL = "Read from Table 1 of arXiv:2603.14425 (square-lattice J1-J2 at J2/J1=0.5, PBC, E per site in S.S units), parsed from the arXiv HTML.";
 
@@ -27,6 +28,10 @@ const ADD = {
 ADD["Hubbard/rectangular-4x16_64_P_28_8"] = { hubbard:true, rows: [
   { eps:-0.76413, err:null, m:"HFPS (hidden-fermion Pfaffian state)", src:HFPS,
     note: "Sec. III: \"The energy we obtain in the 16x4 lattice is E/N = -0.76413, outperforming a recent result E/N = -0.76298 produced by Transformer-NNBF\". Instance identity confirmed by that comparison value; the number is independently quoted as the HFPS result by both arXiv:2604.25775 and arXiv:2510.26906. No error bar given." },
+]};
+ADD["J1J2/square_100_P_0.5"].rows.push({ eps:-0.49782, err:3e-5, m:"Holographic Quantum Transformer (HQT), zero-shot 8x8->10x10 transfer", src:HQT, note:"Abstract: \"This zero-shot protocol yields an energy of E/N = -0.49782(3), statistically consistent with the variational state of the art\". It is not consistent: it is 1.3e-4 BELOW the best variational energy (CNN-MPS -0.4976939(2)) and 1.05e-4 below the zero-variance extrapolated ground state -0.497715(9), i.e. below the ground state itself, which no variational energy can be. See the defect flag." });
+ADD["J1J2/square_64_P_0.5"] = { rows: [
+  { eps:-0.5001, err:1e-4, m:"Holographic Quantum Transformer (HQT)", src:HQT, note:"Abstract: \"HQT reaches a ground-state energy per site of -0.5001(1)\" on 8x8 at J2=0.5. That is 1.1e-3 below the best known variational energy for this instance (RBM+PP, -0.4989635), on a well-studied lattice. See the defect flag." },
 ]};
 let n=0;
 for (const [id, spec] of Object.entries(ADD)) {

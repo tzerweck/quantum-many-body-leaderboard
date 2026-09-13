@@ -116,13 +116,31 @@ and is never ranked on.
   that paper, whose best 4x16 energy is −0.76560(1); its lower −0.768337(2) is a 4x8 number.
   The −0.76560(1) row is admissible, the −0.766073(6) row is not.
 
+### 8.1 Venue type
+
+"Peer reviewed" is not one thing. A number in *Phys. Rev. B* has been refereed by people who
+check physics numerics; the same number in a machine-learning conference proceedings has been
+refereed for machine-learning contribution. Both are peer reviewed; only one is evidence about
+the energy. Rows therefore record the venue, and a physics-numerics venue outranks an ML venue
+when the two disagree.
+
+Case: arXiv:2607.00398 (conference proceedings) claims -0.49782(3) on 10x10 J1-J2, described in
+its own abstract as "statistically consistent with the variational state of the art". It is
+1.05e-4 *below* the zero-variance extrapolated ground state and 1.3e-4 below the best
+variational energy - impossible for a variational method - and the same paper is 1.1e-3 below
+the field on 8x8. Both rows are listed and flagged `below-established-ground-state`.
+
 ## 9. Validation
 
 `scripts/validate.mjs` runs on every change and checks:
 
 1. `dof` and `einf` against the instance definition (§5).
 2. The V-score recomputed from the row's own energy, variance, dof and einf.
-3. **The variational principle**: no `variational` row may sit below an `exact` row in the
+3. **Comparison against the best published value.** A row far below the field on a
+   well-studied instance is flagged even where no exact reference exists. The check above
+   cannot fire at 10x10 J1-J2, because there is no ED row to compare against - which is
+   exactly where a wrong number does the most damage.
+4. **The variational principle**: no `variational` row may sit below an `exact` row in the
    same instance. Sector-resolved ED rows are excluded, since an unconstrained state may
    legitimately sit below the lowest state of one sector. A violation counts only past
    3 sigma, or past a relative 1e-8 when no sigma is given.
