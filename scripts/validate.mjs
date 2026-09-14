@@ -34,6 +34,38 @@ for (const m of fs.readdirSync("data")) {
     }
   }
 }
-console.log(`rows=${rows}  dof_checked=${checkedD}  einf_checked=${checkedE}  vscore_checked=${checkedV}`);
+// The TFIsing unit convention, asserted rather than assumed.
+//
+// Grouping TFIsing with the Heisenberg models put it on the 4*N divisor, so every
+// per-site energy in that family read a factor of 4 too small and no literature value
+// could ever match one - most of why the family shows 0 of 7 instances covered. The
+// convention is not a matter of opinion here: the transverse-field Ising CHAIN is
+// exactly solvable, so the stored number can be derived. H = -sum s^z s^z - h sum s^x
+// with PBC has ground state -sum_k 2 sqrt(h^2 - 2h cos k + 1) over the antiperiodic
+// momenta k = pi(2n+1)/N. If that stops reproducing the stored `exact` rows, either the
+// convention or the reference data has moved, and both are worth stopping for.
+const tfisingExactPBC = (N, h) => {
+  let E = 0;
+  for (let n = 0; n < N / 2; n++) {
+    const k = Math.PI * (2 * n + 1) / N;
+    E -= 2 * Math.sqrt(h * h - 2 * h * Math.cos(k) + 1);
+  }
+  return E;
+};
+let checkedT = 0;
+for (const f of fs.readdirSync(path.join("data", "TFIsing"))) {
+  const inst = JSON.parse(fs.readFileSync(path.join("data", "TFIsing", f), "utf8"));
+  if (inst.lattice !== "chain" || inst.boundary !== "P") continue;
+  const ex = inst.rows.find(r => r.bound_type === "exact");
+  if (!ex) continue;
+  checkedT++;
+  const want = tfisingExactPBC(inst.n_sites, inst.params.h);
+  if (Math.abs(ex.energy - want) > 1e-9 * Math.abs(want))
+    issues.push(`TFCONV ${inst.instance_id}: exact row ${ex.energy}, free-fermion ${want}`);
+  if (perSiteDivisor(inst) !== inst.n_sites)
+    issues.push(`TFCONV ${inst.instance_id}: perSiteDivisor ${perSiteDivisor(inst)}, expected ${inst.n_sites} (Pauli convention)`);
+}
+
+console.log(`rows=${rows}  dof_checked=${checkedD}  einf_checked=${checkedE}  vscore_checked=${checkedV}  tfising_exact_checked=${checkedT}`);
 console.log(`within-rounding bound violations (rel < 1e-8, ignored): ${rounding.length}`);
 console.log(issues.length ? `\n${issues.length} ISSUES:\n` + issues.slice(0, 25).join("\n") : "\nall checks pass");

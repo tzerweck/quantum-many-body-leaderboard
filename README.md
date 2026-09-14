@@ -162,7 +162,8 @@ loader, never by hand.
 
 | | stored as | papers usually quote |
 |---|---|---|
-| Heisenberg, J1-J2, TFIsing | total energy, **Pauli** (σ·σ) convention | `E/N` in `S·S`: divide by `4 * n_sites` |
+| Heisenberg, J1-J2 | total energy, **Pauli** (σ·σ) convention | `E/N` in `S·S`: divide by `4 * n_sites` |
+| TFIsing | total energy, **Pauli** | `E/N`: divide by `n_sites` — no `S·S` term to rescale |
 | Hubbard, t-V | total energy | per site: divide by `n_sites` |
 | Impurity | total energy | no meaningful per-site energy |
 

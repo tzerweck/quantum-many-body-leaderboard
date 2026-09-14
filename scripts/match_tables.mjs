@@ -40,6 +40,10 @@ const LATTICE_WORD = {
 const instanceTokens = inst => {
   const t = new Set([`N=${inst.n_sites}`]);
   const lat = inst.lattice.toLowerCase();
+  // On a chain the linear size IS the site count, and chain papers label their tables
+  // with L far more often than with N. Without this every chain instance could only ever
+  // be matched by a table that happened to say "N =", which no 1D paper does.
+  if (lat === "chain") t.add(`L=${inst.n_sites}`);
   const m = lat.match(/(\d+)x(\d+)(?:x(\d+))?$/);          // rectangular-4x16, kagome-8x8
   if (m) t.add(m[0]);
   const r = Math.round(Math.sqrt(inst.n_sites));
@@ -181,6 +185,19 @@ for (const inst of instances) {
       }
       const tp = statedTprime(blob);
       if (tp && tp !== instanceTprime(inst)) continue;
+    }
+
+    // Boundary conditions are part of the instance (RULES.md 2) and nothing checked them.
+    // arXiv:2605.13807's transverse-field Ising chains are OPEN; matched on size alone its
+    // N = 32 value came back as a candidate for TFIsing/chain_32_P_1, which is PERIODIC,
+    // sitting 0.92% away - a gap that is the boundary condition, not an improvement.
+    // Mixed boundaries (PA, PO) are skipped: a paper states those too rarely to test.
+    const wantOpen = inst.boundary === "O", wantPeriodic = inst.boundary === "P";
+    if (wantOpen || wantPeriodic) {
+      const saysOpen = /\bOBC\b|open boundar|open chain|\bopen\b\s+(?:chain|lattice|system)/i.test(blob);
+      const saysPeriodic = /\bPBC\b|periodic boundar|\btorus\b|periodic chain/i.test(blob);
+      if (saysOpen && !saysPeriodic && wantPeriodic) continue;
+      if (saysPeriodic && !saysOpen && wantOpen) continue;
     }
 
     // The coupling that distinguishes this instance from its siblings must agree, and

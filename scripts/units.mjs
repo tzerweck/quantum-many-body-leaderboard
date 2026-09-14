@@ -39,7 +39,21 @@ export function recordEligible(r) {
 // VarBench writes spin Hamiltonians with PAULI matrices (sigma.sigma) and stores
 // TOTAL energies. NQS papers quote E/N in the S.S convention. Factor 4 N_sites.
 // Fermionic models (Hubbard, tV) are stored as totals; papers quote per site.
+//
+// TFIsing is the exception, and grouping it with the Heisenberg models was a factor-4
+// error (found 2026-09-14). Its Hamiltonian is -sum s^z s^z - h sum s^x, already written
+// in Pauli operators with no S.S term to rescale, so the per-site energy is E/N.
+//
+// This is checkable rather than a matter of opinion: TFIsing/chain_32_P_1 is the critical
+// 1D transverse-field Ising chain, where the free-fermion ground state is exact. Summing
+// -2 sqrt(h^2 - 2h cos k + 1) over the antiperiodic momenta k = pi(2n+1)/N reproduces the
+// stored total -40.760032 to 7e-15, and E/N = -1.2738 sits just below the thermodynamic
+// limit -4/pi = -1.2732, as it must for PBC at criticality. Under the 4N divisor the same
+// instance read -0.3184, so every TFIsing cell in the literature missed by a factor of 4
+// and the family could never produce a single match - which is most of why it shows
+// 0 of 7 instances covered. scripts/validate.mjs asserts the identity on every run.
 export function perSiteDivisor(inst) {
+  if (inst.model === "TFIsing") return inst.n_sites;
   if (SPIN_MODELS.has(inst.model)) return 4 * inst.n_sites;
   if (inst.model === "Hubbard" || inst.model === "tV") return inst.n_sites;
   return null; // Impurity: no meaningful per-site energy
@@ -51,6 +65,7 @@ export function toPerSite(energy, inst) {
 }
 
 export function perSiteLabel(inst) {
+  if (inst.model === "TFIsing") return "E/N (Pauli)";
   if (SPIN_MODELS.has(inst.model)) return "E/N (S.S)";
   return perSiteDivisor(inst) == null ? "E (total)" : "E/site";
 }

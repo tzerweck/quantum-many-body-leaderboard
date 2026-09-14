@@ -50,6 +50,25 @@ const sizeTokens = txt => {
   return [...s];
 };
 
+// A finite-size table usually names its sizes in the leftmost column and nowhere else:
+// arXiv:2605.13807's transverse-field Ising chain series labels its rows "6", "8", "10",
+// "12", ... with the size named only in the column header, "e exact (N)". Under the
+// patterns above those cells carry NO size token at all and can never match an instance -
+// 272 of the TFIsing cells were in exactly that state, which is most of the rest of why
+// the family showed no coverage.
+//
+// A bare integer standing alone as the row label is therefore read as a size, ambiguously:
+// both N = n and L = n are emitted, and the matcher decides which one an instance answers
+// to. Only the row LABEL is treated this way. The same number in a data cell is an energy
+// or an error bar, and the caption is full of reference numbers and bond dimensions.
+const BARE_SIZE = /^([0-9]{1,4})$/;
+const labelSizeTokens = label => {
+  const m = String(label).trim().match(BARE_SIZE);
+  if (!m) return [];
+  const n = +m[1];
+  return n >= 4 && n <= 4096 ? [`N=${n}`, `L=${n}`] : [];
+};
+
 // Pull (caption, tableHtml) pairs. ar5iv puts both inside <figure class="ltx_table">;
 // anything else is taken as a bare table with whatever caption precedes it.
 function tablesOf(h) {
@@ -225,7 +244,7 @@ for (const f of fs.readdirSync("sources").filter(f => f.endsWith(".txt") && !f.s
         const col = !cells.length ? ""
           : exact ? cells[ei].text
           : cells.reduce((p, c) => Math.abs(c.centre + delta - e.centre) < Math.abs(p.centre + delta - e.centre) ? c : p).text;
-        const sizes = [...new Set([...sizeTokens(label), ...sizeTokens(col), ...capSizes])];
+        const sizes = [...new Set([...sizeTokens(label), ...labelSizeTokens(label), ...sizeTokens(col), ...capSizes])];
         out.push({ src: "pdf", id, ti: tbl.bi, value: v, err, label, col: col.slice(0, 45),
                    sizes: sizes.slice(0, 4).join(","), models: models.join("+"),
                    caption: tbl.caption, glued });
@@ -270,7 +289,7 @@ for (const f of files) {
         const err = em ? +(+em[1] * 10 ** -dec).toPrecision(3) : null;
         const col = header[ci] || "";
         // size hints, most specific first: this row, this column, the caption
-        const sizes = [...new Set([...sizeTokens(label), ...sizeTokens(col), ...capSizes])];
+        const sizes = [...new Set([...sizeTokens(label), ...labelSizeTokens(label), ...sizeTokens(col), ...capSizes])];
         out.push({ src: "html", id, ti, value: v, err, label: label.slice(0, 70), col: col.slice(0, 45),
           sizes: sizes.slice(0, 4).join(","), models: models.join("+"), caption, glued: 0 });
       }
