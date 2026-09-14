@@ -11,6 +11,105 @@ Second pass on every paper: **harvest its bibliography**. Comparison tables cite
 they are beating, and reviews aggregate SOTA across models we have not touched. That is how the
 triangular/kagome/pyrochlore instances get found — nobody wrote a SOTA note for them.
 
+## The pipeline pass (2026-09-14, later) — the pool was never a census
+
+Every number below the line was harvested by a pipeline that reported its own coverage
+incorrectly. Four defects, each of which made the result look complete when it was not.
+
+**The candidate pool was a floor.** `sweep_search.mjs` asked arXiv for `max_results=40`
+with no paging, so all twelve queries were truncated at 40 hits regardless of how many
+matched. "161 unique candidates since 2025" was twelve queries capped, not twelve queries
+answered. It now pages until it reaches the date floor, and a page cap that binds is
+reported as TRUNCATED with the hit count it abandoned.
+
+**A network failure was indistinguishable from an empty result.** `get()` returned `""`
+after its retries, so an HTTP 429 logged as `<tag>: 0 since 2025` — character for
+character what a query matching nothing logged. Any sweep run during an arXiv outage
+would have been recorded as a sweep that found nothing new. A failed request is now a
+hard error, named in `sweep-queries.tsv`, printed in a banner, non-zero exit; and the
+candidate file is merged rather than replaced, so a partial run can only ever add.
+
+This is not hypothetical. `export.arxiv.org/api` returned 429 to every request for over
+an hour on 2026-09-14 while `arxiv.org` served PDFs and HTML normally. The two are rate
+limited separately, so `--via auto` now falls back to the arxiv.org search UI. The
+queries stay defined once, in API syntax, and are parsed into groups: the search UI
+applies operators left to right with no grouping, so `A AND (B OR C)` is expanded into
+its cartesian product of flat AND queries and unioned rather than trusting its
+precedence. 21 queries become 101 sub-queries.
+
+**The date floor was hard-coded at 2025-01-01.** 54 of the first 97 accepted rows came
+from pre-2025 papers, and arXiv has no HTML before ~Dec 2023, so the backlog had never
+been *searched*, let alone read. `--since` now defaults to 2019.
+
+**The table harvester only read HTML.** For the entire pre-2024 literature the only
+machine-readable form is pypdf layout-mode text, so those tables were reachable only by
+hand. `harvest_tables.mjs` now mines them too. It is a different parsing problem: there
+are no cell boundaries, only character offsets; a dash is a minus before a digit and a
+missing entry otherwise, where the HTML path flattens both; and layout mode strips the
+spaces out of justified captions, so keyword tests run against the despaced form as well.
+
+### The off-by-one that invented a record
+
+Matching a value to its header by nearest position is wrong on its own, and wrong
+*systematically*: headers are centred over columns whose values are right-aligned, so
+every value sits left of its own header and lands on the previous one.
+
+On arXiv:2206.14307 this filed the J2 = 0.4 energy under J2 = 0.7 and reported it as
+beating `J1J2/square_100_P_0.7` by 0.96%. What exposed it was not the size of the claim
+but an impossibility one row up: the same table's *exact diagonalization* column, read
+the same way, came out **below** the instance's own exact row. No variational number can
+sit under an exact one on the same instance, so the columns had shifted — the tell was
+internal consistency, not plausibility.
+
+A row carrying exactly as many energies as there are header cells settles the alignment
+by order alone. Those rows now calibrate one offset per table, applied to the ragged rows
+where a missing entry makes the counts disagree. Verified against the paper: the 10×10
+RBM row reads J2 = 0.0, 0.2, 0.4, 0.6, 0.7 as printed, the 6×6 row 0.5, 0.55, 0.6.
+
+**The rows added by hand from this paper earlier today are unaffected and were
+re-verified against lines 299–304 and 442–444: −0.51889(2) really is the J2 = 0.7
+column.** The human reading was right; only the automated assignment was wrong. That is
+the argument for the method note in §8 rather than against it.
+
+### Instance discipline: the coupling, and where it is stated
+
+Within a family, instances differ *only* by a coupling — J1J2 by J2, tV by V, TFIsing by
+the transverse field h — and nothing checked it. One 4×4 spinless-fermion energy came
+back as a candidate for both `tV/square_16_P_5_0.01` and `tV/square_16_P_5_0.1`, two
+different Hamiltonians, on size alone. Same failure mode as the t′ case in §2, and higher
+volume, since J1J2 is the largest family on the board.
+
+Where the coupling is stated decides what it is worth. A caption routinely enumerates
+every value in the table ("J2 = 0.0, 0.2, 0.4, 0.6, 0.7"), so a check that reads captions
+lets every column match every sibling. The column header is specific to the cell and
+wins, then the row label; a coupling known only from the caption is marked as such.
+Deliberately not matched: `alpha`. In an NQS paper that is the hidden-unit density, and
+reading it as J2 would reject most of the largest family on the board.
+
+### Shuriken — a thermodynamic-limit trap, caught before it became three records
+
+The first paper the fixed sweep surfaced for a zero-coverage family was
+**arXiv:2211.16932** (Schmoll, Kshetrimayum, Naumann, Eisert & Iqbal), a peer-reviewed
+2022 tensor-network study of the spin-1/2 Heisenberg AFM on the Shuriken lattice. All
+four shuriken instances hold exactly one row each, every one of them the frozen VarBench
+import, so any second row would have been the first competition they have ever had.
+
+It is **rejected**: iPEPS/iPESS on an *infinite* lattice, the same ground as 2510.04907
+below. Its best energy, −0.440908 per site, sits within 1% of three of the four
+instances — inside the matcher's BEATS window — and below all three:
+
+| instance | record E/N | −0.440908 would be |
+|---|---|---|
+| `Heisenberg/shuriken_96_P` | −0.438260 | a false record, −0.604% |
+| `Heisenberg/shuriken_216_P` | −0.437600 | a false record, −0.756% |
+| `Heisenberg/shuriken_384_P` | −0.437129 | a false record, −0.865% |
+| `Heisenberg/shuriken_24_P` | −0.448329 | above it, +1.655% |
+
+Nothing about the *number* would have caught this, and the near-miss at N=24 is what the
+pattern looks like from the inside: a thermodynamic-limit value tracks finite-size ones
+closely enough to pass any plausibility check, and crosses them at some size. Only the
+finite-versus-infinite rule in §2 rejects it.
+
 ## The table pass (2026-09-14) — mine the comparison table, not the claim
 
 The 09-13 sweep read claim *sentences* ("state of the art", "we reach"). That only finds papers
