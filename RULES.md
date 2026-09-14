@@ -97,6 +97,20 @@ The record for an instance is the **lowest `variational` energy with a stated `s
   understates by around an order of magnitude, which is enough to manufacture a record.
   Report the blocking or binning analysis, or the raw chain.
 - A row without `sigma` is listed and is eligible for nothing.
+- A row without `energy_variance` is completely fine. The V-score renders `n/a` and nothing is
+  inferred or reconstructed. Most of the literature stops at the energy, and a missing V-score
+  is never held against a row; it only means the row cannot be compared across instances.
+
+### 6.1 A flagged row cannot hold a record
+
+A row carrying a `defect` is displayed in rank order, in place, with its flag - and is skipped
+when the record is assigned. Suspicion is enough to withhold a record; it is never enough to
+hide or delete a row (11). Section 10 is how a flag gets lifted or upheld.
+
+This exists because the opposite happened on first implementation: **5 of 7 flagged rows held
+their instance record**, including the three TFIsing `RBM (alpha = 1)` rows a rerun had already
+shown to be minima of an optimization trace. Ranking purely on energy promotes precisely the
+numbers that are wrong, because being wrong downward is what makes a number look like a record.
 
 ## 7. Aggregate
 
