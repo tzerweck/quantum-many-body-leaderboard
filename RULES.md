@@ -111,13 +111,19 @@ The record for an instance is the **lowest eligible `variational` energy**.
 - A row without `energy_variance` is completely fine. The V-score renders `n/a` and nothing is
   inferred or reconstructed. Most of the literature stops at the energy, and a missing V-score
   is never held against a row; it only means the row cannot be compared across instances.
-- **A row reporting neither `sigma` nor `energy_variance` is marked, not penalised.** With no
-  error bar and no variance, the source has said nothing about how converged its number is, and
-  a reader comparing two energies should see that rather than infer it from two blank cells. The
-  marker is `o` in `scripts/records.mjs` and a circle in the README table, and it is derived at
-  display time from the two absent fields - deliberately **not** a `defect` (11), which asserts
-  a suspected error. Missing data is not an error, and by 3 it excludes nothing. `exact` rows
-  are not marked: an exact diagonalization has no error to report, so the absence says nothing.
+- **A row with no error metric we could find is marked, not penalised.** Where neither a
+  `sigma` nor an `energy_variance` turned up in the source that was read, there is currently no
+  way to judge how converged the number is, and a reader comparing two energies should see that
+  rather than infer it from two blank cells. The marker is `o` in `scripts/records.mjs` and a
+  circle in the README table, derived at display time from the two absent fields.
+
+  **The marker describes our search, not the authors.** The figure may be in a supplement, a
+  companion paper, or the group's own records; what the row records is that we did not find it.
+  It is therefore an open question addressed to whoever can close it - the row stays in the
+  table and in rank order, and closing it takes one message. It is deliberately **not** a
+  `defect` (11), which asserts a suspected error and withholds the record: missing data is not
+  an error, and by 3 it excludes nothing. `exact` rows are not marked, since an exact
+  diagonalization has no error to report and nothing is missing.
 
 ### 6.1 A flagged row cannot hold a record
 

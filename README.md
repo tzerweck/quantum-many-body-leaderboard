@@ -37,10 +37,10 @@ nothing is re-run: this is the literature, organised.
 
 Energies are per site: spin models as `E/N (S.S)`, Hubbard as `E/site` (see
 [units and conventions](#units-and-conventions)). **Bold** is the record under
-[the ranking rules](#how-the-ranking-works). **&#9675;** marks a row whose source reported **no
-error metric at all** — no error bar and no energy variance, so there is no way to judge how
-close the number is; **&dagger;** marks a sampled energy with a variance but no error bar. Either
-way the row is listed in rank order and, if its energy was sampled, cannot hold a record.
+[the ranking rules](#how-the-ranking-works). **&#9675;** marks a row where **we found no error
+metric** — neither an error bar nor an energy variance — in the source we read; **&dagger;** marks a
+sampled energy with a variance but no error bar. Both rows stay in the table and in rank
+order; the marker is an open question, not a criticism (see [error metrics](#error-metrics)).
 
 Across the whole table: **179 of 202 instances have a record**, from 665 rows.
 Of the 23 instances without one, 16 are solved exactly and have nothing to compete
@@ -48,9 +48,9 @@ for. Separately, **31 sampled variational rows across 25 instances carry no erro
 they are listed and rank for nothing — and 4 of them sit below their instance's current
 record. If one of those is your paper, the error bar is the only thing missing.
 
-**19 rows report no error metric at all** (&#9675;): no error bar and no energy variance,
-so nothing in the published source says how converged the number is. They are kept and
-shown, because a missing field never excludes a row — but the marker travels with them.
+And **19 rows carry no error metric we could find** (&#9675;). Those numbers stay in the
+table and in the ranking — the marker only says the row still needs verification or a word
+from the people who produced it.
 
 <!-- END LEADERBOARD -->
 
@@ -160,6 +160,23 @@ count for **spinless** t-V. `einf` is `0` for traceless spin Hamiltonians and
 
 Getting these wrong is the single most likely source of a false record, which is why
 they are stated once and reused rather than inlined per script.
+
+### Error metrics
+
+Some rows carry no error information at all: no error bar, no energy variance, nothing
+that says how converged the number is. Those rows are marked **&#9675;** in the table
+above and `o` in `scripts/records.mjs`.
+
+**The marker is about our search, not about the authors.** It records that we did not
+find an error metric in the source we read — and that figure may well exist in a
+supplement, in a companion paper, or in the group's own records. So the number stays in
+the table and stays in the ranking; what the marker says is that the row still wants
+verification, and that a single message from the people who produced it would close the
+question. It is not a judgement on the work, and it is not a `defect` — that field means
+something specific here and withholds the record.
+
+If one of these is yours, see [Contributing](#contributing): the error bar, the
+variance, or the checkpoint all resolve it.
 
 ## Provenance and defects
 

@@ -104,10 +104,10 @@ const site = perSiteLabel(byId.get("Hubbard/square_256_P_112_8"));
 lines.push("");
 lines.push(`Energies are per site: spin models as \`${spin}\`, Hubbard as \`${site}\` (see`);
 lines.push("[units and conventions](#units-and-conventions)). **Bold** is the record under");
-lines.push("[the ranking rules](#how-the-ranking-works). **&#9675;** marks a row whose source reported **no");
-lines.push("error metric at all** — no error bar and no energy variance, so there is no way to judge how");
-lines.push("close the number is; **&dagger;** marks a sampled energy with a variance but no error bar. Either");
-lines.push("way the row is listed in rank order and, if its energy was sampled, cannot hold a record.");
+lines.push("[the ranking rules](#how-the-ranking-works). **&#9675;** marks a row where **we found no error");
+lines.push("metric** — neither an error bar nor an energy variance — in the source we read; **&dagger;** marks a");
+lines.push("sampled energy with a variance but no error bar. Both rows stay in the table and in rank");
+lines.push("order; the marker is an open question, not a criticism (see [error metrics](#error-metrics)).");
 lines.push("");
 const b = s.blocked_on_sigma;
 lines.push(`Across the whole table: **${s.records.held} of ${s.instances} instances have a record**, from ${s.rows} rows.`);
@@ -116,9 +116,9 @@ lines.push(`for. Separately, **${b.rows} sampled variational rows across ${b.ins
 lines.push(`they are listed and rank for nothing — and ${b.would_take_record} of them sit below their instance's current`);
 lines.push("record. If one of those is your paper, the error bar is the only thing missing.");
 lines.push("");
-lines.push(`**${s.no_error_metrics} rows report no error metric at all** (&#9675;): no error bar and no energy variance,`);
-lines.push("so nothing in the published source says how converged the number is. They are kept and");
-lines.push("shown, because a missing field never excludes a row — but the marker travels with them.");
+lines.push(`And **${s.no_error_metrics} rows carry no error metric we could find** (&#9675;). Those numbers stay in the`);
+lines.push("table and in the ranking — the marker only says the row still needs verification or a word");
+lines.push("from the people who produced it.");
 
 const readme = fs.readFileSync("README.md", "utf8");
 const i = readme.indexOf(BEGIN);
