@@ -104,23 +104,35 @@ const normLine = s => mathDigits(s).replace(ZERO_WIDTH, "");
 // removes the spaces from justified text
 const hits2 = (re, s) => re.test(s) || re.test(s.replace(/\s+/g, ""));
 
-// split a header line into cells on runs of 2+ spaces, keeping each cell's centre column
+// Split a header line into cells, keeping each cell's centre column.
+//
+// Runs of 2+ spaces are the usual separator, but a header whose cells are themselves
+// "key = value" pairs is often set with single spaces - "10x10 J2 = 0.0 J2 = 0.2 J2 = 0.4"
+// collapses to ONE cell under the space rule, and then every energy in the row is
+// labelled with the whole header. That is the column-misassignment this project's method
+// note warns about, and on arXiv:2206.14307 it put a J2 = 0.6 energy under J2 = 0.7.
+// So both splits are tried and the finer one wins.
+const KEYVAL = /[A-Za-zͰ-Ͽᵀ0-ᵿf_{}\\'′\/0-9]+\s*[=:]\s*[0-9]+(?:\.[0-9]+)?(?:\s*\/\s*[0-9]+)?/gu;
 function headerCells(line) {
-  const out = [];
+  const bySpace = [];
   for (const m of line.matchAll(/\S(?:.*?\S)?(?=\s{2,}|$)/g)) {
     const text = m[0].trim();
-    if (text) out.push({ text, centre: m.index + text.length / 2 });
+    if (text) bySpace.push({ text, centre: m.index + text.length / 2 });
   }
-  return out;
+  const byKeyVal = [];
+  for (const m of line.matchAll(KEYVAL))
+    byKeyVal.push({ text: m[0].trim(), centre: m.index + m[0].length / 2 });
+  return byKeyVal.length > bySpace.length ? byKeyVal : bySpace;
 }
 
-// every energy token on a line, with the column it sits at
+// Every energy on a line, with the column it sits at. Scanned as a pattern rather than
+// tokenised, because layout mode sometimes runs the last cell of one row into the first
+// cell of the next ("0.0022(5)108 -0.55315(3)"), and tokenising loses both.
+const LINE_ENERGY = /(?<![0-9.])-?[0-9]{1,3}\.[0-9]{4,}(?:\(\s?[0-9]{1,4}\))?/g;
 function energyTokens(line) {
   const out = [];
-  for (const m of line.matchAll(/\S+/g)) {
-    const t = tight(m[0]);
-    if (CELL.test(t)) out.push({ t, centre: m.index + m[0].length / 2, index: m.index });
-  }
+  for (const m of line.matchAll(LINE_ENERGY))
+    out.push({ t: tight(m[0]), centre: m.index + m[0].length / 2, index: m.index });
   return out;
 }
 
@@ -251,6 +263,7 @@ for (const f of files) {
 // The same number reached through both paths is one candidate, not two. HTML wins: it
 // has real cell boundaries, so its row label and column header are the trustworthy ones.
 const seenCell = new Set();
+out.sort((a, b) => (a.src === b.src ? 0 : a.src === "html" ? -1 : 1));   // html first, so it wins
 const rows = out.filter(r => {
   const k = `${r.id}|${r.value}|${r.err ?? ""}`;
   return seenCell.has(k) ? false : (seenCell.add(k), true);

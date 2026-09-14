@@ -75,6 +75,42 @@ function statedDoping(txt) {
 // "half filling" / "half-filled" is delta = 0
 const statedHalfFilling = txt => /half[- ]fill/i.test(txt);
 
+// --- the coupling that names the instance ------------------------------------------
+// Within a family, instances differ ONLY by a coupling: J1J2 by J2, tV by V, TFIsing by
+// the transverse field h. Nothing checked it, so a cell matched on size alone - which is
+// how one 4x4 spinless-fermion energy came back as a candidate for BOTH tV/square_16_P_5_0.01
+// and tV/square_16_P_5_0.1, two different Hamiltonians. Same failure mode as the t' case
+// in RULES.md 2, and higher volume: J1J2 is the largest family on the board and the
+// 2026-09-14 PDF pass had to verify every J2 label by hand for exactly this reason.
+//
+// A table often states several values at once ("for J2 = 0.4, 0.6 and 0.8"), so all of
+// them are collected: the cell survives if the instance's coupling is among them.
+const COUPLING = {
+  // NOT alpha: in an NQS paper "alpha = 1" is the hidden-unit density, not a coupling,
+  // and treating it as J2 would reject most of the largest family on the board.
+  J1J2:    { key: "J2", re: /(?:J\s*_?\{?2\}?\s*\/\s*J\s*_?\{?1\}?|J\s*_?\{?2\}?|J\s*['′]\s*\/\s*J)\s*[=:]\s*/gi },
+  tV:      { key: "V",  re: /(?:V\s*\/\s*t|\bV\b)\s*[=:]\s*/gi },
+  TFIsing: { key: "h",  re: /(?:h\s*\/\s*J|\bh\b|\bΓ\b|transverse[- ]field(?:\s+strength)?)\s*[=:]\s*/gi },
+};
+// values may be decimals or fractions, in a comma/"and"-separated list
+const NUMLIST = /^\s*((?:[0-9]*\.?[0-9]+(?:\s*\/\s*[0-9]+)?)(?:\s*(?:,|and|&)\s*[0-9]*\.?[0-9]+(?:\s*\/\s*[0-9]+)?)*)/;
+const asNum = s => { const f = s.match(/^([0-9.]+)\s*\/\s*([0-9.]+)$/); return f ? +f[1] / +f[2] : parseFloat(s); };
+
+function statedCoupling(txt, spec) {
+  const vals = [];
+  spec.re.lastIndex = 0;
+  for (const m of txt.matchAll(spec.re)) {
+    const tail = txt.slice(m.index + m[0].length, m.index + m[0].length + 40);
+    const l = tail.match(NUMLIST);
+    if (!l) continue;
+    for (const p of l[1].split(/\s*(?:,|and|&)\s*/)) {
+      const v = asNum(p.trim());
+      if (Number.isFinite(v)) vals.push(v);
+    }
+  }
+  return vals;
+}
+
 // t' is 0 unless the instance id says otherwise; VarBench marks the variants _t12
 const instanceTprime = inst => (/_t12/.test(inst.instance_id) ? "nonzero" : "zero");
 function statedTprime(txt) {
@@ -147,12 +183,29 @@ for (const inst of instances) {
       if (tp && tp !== instanceTprime(inst)) continue;
     }
 
+    // the coupling that distinguishes this instance from its siblings must agree
+    let coupNote = "";
+    const spec = COUPLING[inst.model];
+    if (spec) {
+      const want = inst.params?.[spec.key];
+      const got = statedCoupling(blob, spec);
+      if (want != null) {
+        if (got.length && !got.some(v => Math.abs(v - want) < 1e-6)) continue;
+        if (!got.length) coupNote = ` ${spec.key}=UNSTATED(instance ${spec.key}=${want})`;
+      }
+    }
+    // a plain Heisenberg instance is J2 = 0; a stated nonzero J2 is a different model
+    if (inst.model === "Heisenberg") {
+      const j2 = statedCoupling(blob, COUPLING.J1J2);
+      if (j2.length && !j2.some(v => v === 0)) continue;
+    }
+
     const rel = (c.value - recEps) / Math.abs(recEps);
     if (Math.abs(rel) > 0.01) continue;                                // different quantity
     hits.push({ inst: inst.instance_id, fresh, recEps, rec: rec.method, ...c, rel,
       // classify from the row label and column header only - the caption names every
       // method in the table, so including it marks every row "exact"
-      kind: cellKind(`${c.label} ${c.col}`), fillNote,
+      kind: cellKind(`${c.label} ${c.col}`), fillNote: fillNote + coupNote,
       verdict: c.value < recEps ? "BEATS" : "FILLS" });
   }
 }
