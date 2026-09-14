@@ -42,13 +42,13 @@ metric** — neither an error bar nor an energy variance — in the source we re
 sampled energy with a variance but no error bar. Both rows stay in the table and in rank
 order; the marker is an open question, not a criticism (see [error metrics](#error-metrics)).
 
-Across the whole table: **179 of 202 instances have a record**, from 665 rows.
+Across the whole table: **182 of 205 instances have a record**, from 675 rows.
 Of the 23 instances without one, 16 are solved exactly and have nothing to compete
 for. Separately, **31 sampled variational rows across 25 instances carry no error bar**, so
 they are listed and rank for nothing — and 4 of them sit below their instance's current
 record. If one of those is your paper, the error bar is the only thing missing.
 
-And **19 rows carry no error metric we could find** (&#9675;). Those numbers stay in the
+And **21 rows carry no error metric we could find** (&#9675;). Those numbers stay in the
 table and in the ranking — the marker only says the row still needs verification or a word
 from the people who produced it.
 
