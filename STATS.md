@@ -8,8 +8,8 @@ who holds a record. Where a view can only be computed over part of the table, it
 
 **64 of 182 records stand on a single published number.**
 One group computed an energy, and in the years since, nobody has published a second
-one to compare it against. That is not a criticism of the number — it means the record
-is untested, and it is the cheapest possible target for anyone looking for one.
+one to compare it against. That is not a criticism of the number — it is a statement
+about the coverage of this table, and of the literature it draws on.
 
 | instance | record | method | source |
 |---|---|---|---|

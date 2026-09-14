@@ -36,8 +36,8 @@ const uncontested = instances
   .sort((a, b) => b.i.n_sites - a.i.n_sites);
 p(`**${uncontested.length} of ${instances.filter(recordOf).length} records stand on a single published number.**`);
 p("One group computed an energy, and in the years since, nobody has published a second");
-p("one to compare it against. That is not a criticism of the number — it means the record");
-p("is untested, and it is the cheapest possible target for anyone looking for one.", "");
+p("one to compare it against. That is not a criticism of the number — it is a statement");
+p("about the coverage of this table, and of the literature it draws on.", "");
 p("| instance | record | method | source |");
 p("|---|---|---|---|");
 for (const { i, rec } of uncontested.slice(0, 15)) {
