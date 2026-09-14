@@ -4,7 +4,7 @@
 [![rows](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Ftzerweck%2Fquantum-many-body-leaderboard%2Fmain%2Fdata%2F_summary.json&query=%24.rows&label=rows)](data/_summary.json)
 [![instances](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Ftzerweck%2Fquantum-many-body-leaderboard%2Fmain%2Fdata%2F_summary.json&query=%24.instances&label=instances)](data/_summary.json)
 
-<!-- DOI badge goes here after the first Zenodo-archived release; see "Citing". -->
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22753734.svg)](https://doi.org/10.5281/zenodo.22753734)
 
 **A record book of the best published ground-state energies in quantum many-body
 physics, with the bookkeeping that makes them comparable.**
@@ -268,10 +268,21 @@ faking by grouping on method names.
 
 ## Citing
 
-Releases are archived on Zenodo with a versioned DOI, so a paper can cite a frozen
-comparison set rather than a moving table ([`.zenodo.json`](.zenodo.json),
-[`CITATION.cff`](CITATION.cff)). Cite the release DOI for a specific snapshot, or the
-concept DOI for the project.
+Releases are archived on Zenodo, so a paper can cite a frozen comparison set rather than
+a moving table.
+
+- **Concept DOI — [10.5281/zenodo.22753734](https://doi.org/10.5281/zenodo.22753734)** always resolves to the
+  latest release. Cite this one unless you need a specific snapshot.
+- **v0.1.0 — [10.5281/zenodo.22753735](https://doi.org/10.5281/zenodo.22753735)** (205 instances, 675 rows, 182
+  records). Cite this to pin the exact comparison set your numbers were measured against.
+
+> T. Zerweck, *QMBL — the Quantum Many-Body Leaderboard*, v0.1.0, Zenodo (2026).
+> [10.5281/zenodo.22753735](https://doi.org/10.5281/zenodo.22753735)
+
+Individual energies should cite **the primary paper named on the row**, not this dataset —
+QMBL is a compilation, and the people who produced a number are the ones a referee expects
+to see cited. Machine-readable metadata is in [`CITATION.cff`](CITATION.cff) and
+[`.zenodo.json`](.zenodo.json).
 
 QMBL builds on **VarBench**, the dataset published with the V-score paper, which is the
 source of the imported rows and of many of the references they cite. If you use this
