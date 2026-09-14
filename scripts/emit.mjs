@@ -41,5 +41,7 @@ for (const it of instances()) {
   fs.writeFileSync(path.join(dst, it.stem + ".json"), JSON.stringify(out, null, 2) + "\n");
   summary.instances++; summary.rows += rows.length;
 }
-fs.writeFileSync("data/_summary.json", JSON.stringify(summary, null, 2) + "\n");
+// Import stats only, deliberately NOT written to data/_summary.json: rows are still
+// appended after this by add_literature.mjs and add_sweep_rows.mjs. scripts/summary.mjs
+// owns that file and runs last.
 console.log(JSON.stringify({ ...summary, needs_review: summary.needs_review }, null, 2));
