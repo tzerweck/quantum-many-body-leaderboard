@@ -183,15 +183,25 @@ for (const inst of instances) {
       if (tp && tp !== instanceTprime(inst)) continue;
     }
 
-    // the coupling that distinguishes this instance from its siblings must agree
+    // The coupling that distinguishes this instance from its siblings must agree, and
+    // WHERE it is stated decides the question. A caption routinely enumerates every
+    // value in the table ("J2 = 0.0, 0.2, 0.4, 0.6, 0.7"), so reading the caption alone
+    // lets every column match every sibling instance. The column header is specific to
+    // this cell and wins; the row label is next; the caption is only a fallback for
+    // tables that have neither.
     let coupNote = "";
     const spec = COUPLING[inst.model];
     if (spec) {
       const want = inst.params?.[spec.key];
-      const got = statedCoupling(blob, spec);
+      let got = [], from = "";
+      for (const [src, txt] of [["col", c.col], ["row", c.label], ["caption", c.caption]]) {
+        got = statedCoupling(txt || "", spec);
+        if (got.length) { from = src; break; }
+      }
       if (want != null) {
         if (got.length && !got.some(v => Math.abs(v - want) < 1e-6)) continue;
         if (!got.length) coupNote = ` ${spec.key}=UNSTATED(instance ${spec.key}=${want})`;
+        else if (from === "caption") coupNote = ` ${spec.key} from caption only`;
       }
     }
     // a plain Heisenberg instance is J2 = 0; a stated nonzero J2 is a different model

@@ -184,6 +184,23 @@ for (const f of fs.readdirSync("sources").filter(f => f.endsWith(".txt") && !f.s
 
   for (const tbl of textTables(raw)) {
     const cells = headerCells(tbl.header);
+    // Nearest-header-by-position is off by one on its own: headers are centred over
+    // columns whose values are right-aligned, so every value sits left of its own header
+    // and lands on the previous one. On arXiv:2206.14307 that filed the J2 = 0.4 energy
+    // under J2 = 0.7 and reported it as beating that instance's record by 0.96%.
+    //
+    // A row carrying exactly as many energies as there are header cells fixes the
+    // alignment exactly - order is unambiguous there. Those rows calibrate a single
+    // offset for the block, which is then applied to the ragged rows, where a missing
+    // entry makes the counts disagree and only position can decide.
+    const deltas = [];
+    for (const line of tbl.rows) {
+      const e = energyTokens(line);
+      if (cells.length && e.length === cells.length)
+        for (let i = 0; i < e.length; i++) deltas.push(e[i].centre - cells[i].centre);
+    }
+    deltas.sort((a, b) => a - b);
+    const delta = deltas.length ? deltas[deltas.length >> 1] : 0;
     const capSizes = sizeTokens(tbl.caption);
     const capTags = MODEL.filter(([, re]) => hits2(re, `${tbl.caption} ${tbl.header}`)).map(([n]) => n);
     const models = [...new Set(capTags.length ? capTags : paperTags)];
@@ -198,15 +215,16 @@ for (const f of fs.readdirSync("sources").filter(f => f.endsWith(".txt") && !f.s
       // guess, so triage knows the row label may belong to the other half
       const glued = cells.length && ens.length > cells.length ? 1 : 0;
 
-      for (const e of ens) {
+      const exact = cells.length && ens.length === cells.length;   // order is unambiguous
+      for (const [ei, e] of ens.entries()) {
         const v = parseFloat(e.t.replace(/\(.*/, ""));
         const em = e.t.match(/\(([0-9]{1,4})\)$/);
         const dec = (e.t.replace(/\(.*/, "").split(".")[1] || "").length;
         const err = em ? +(+em[1] * 10 ** -dec).toPrecision(3) : null;
-        // nearest header cell by character position - not by token index
-        const col = cells.length
-          ? cells.reduce((p, c) => Math.abs(c.centre - e.centre) < Math.abs(p.centre - e.centre) ? c : p).text
-          : "";
+        // by index where the counts agree, else nearest header by offset-corrected position
+        const col = !cells.length ? ""
+          : exact ? cells[ei].text
+          : cells.reduce((p, c) => Math.abs(c.centre + delta - e.centre) < Math.abs(p.centre + delta - e.centre) ? c : p).text;
         const sizes = [...new Set([...sizeTokens(label), ...sizeTokens(col), ...capSizes])];
         out.push({ src: "pdf", id, ti: tbl.bi, value: v, err, label, col: col.slice(0, 45),
                    sizes: sizes.slice(0, 4).join(","), models: models.join("+"),
