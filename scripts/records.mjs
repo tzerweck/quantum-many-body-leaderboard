@@ -12,7 +12,10 @@ for (const id of process.argv.slice(2)) {
     const v = r.v_score ? r.v_score.toExponential(1) : "  n/a ";
     // "o" = no error metric found for this row, neither a sigma nor a variance.
     const err = noErrorMetrics(r) ? "o" : " ";
-    console.log(`  ${mark}${err} ${(r.energy / f).toFixed(7)}  V=${v}  ${(r.provenance || "").padEnd(9)} ${r.method.slice(0, 50)}`);
+    // "baseline" says more than "imported": the number is VarBench's own reference run,
+    // not a result someone published as state of the art.
+    const prov = r.baseline ? "baseline" : (r.provenance || "");
+    console.log(`  ${mark}${err} ${(r.energy / f).toFixed(7)}  V=${v}  ${prov.padEnd(9)} ${r.method.slice(0, 50)}`);
   }
   console.log("  legend: ! flagged  P projected  X extrapolated  ? unclassified"
     + "\n          o no error metric found in the source read - needs verification, not a criticism");

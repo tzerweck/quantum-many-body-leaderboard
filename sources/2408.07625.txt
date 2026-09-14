@@ -1,0 +1,2219 @@
+     Neural quantum states and peaked molecular wave functions:  curse or blessing?
+
+                                  Aleksei  Malyshev,1,∗  Markus  Schmitt,2, 3  and  A.  I.  Lvovsky1
+                         1University  of  Oxford,  Clarendon  Laboratory,  Parks  Road,  Oxford,  OX1  3PU,  UK
+                                      2Forschungszentrum  J¨ulich  GmbH,  Peter  Gr¨unberg  Institute,
+                                           Quantum  Control  (PGI-8),  52425  J¨ulich,  Germany
+                                         3University  of  Regensburg,  93053  Regensburg,  Germany
+
+                   The field of neural quantum states has recently experienced a tremendous progress, making them a
+                competitive tool of computational quantum many-body physics. However, their largest achievements
+                to date mostly concern interacting spin systems, while their utility for quantum chemistry remains
+                yet to be demonstrated.  Two main complications are the peaked structure of the molecular wave
+                functions, which impedes sampling, and large number of terms in second quantised Hamiltonians,
+                which  hinders  scaling  to  larger  molecule  sizes.   In  this  paper  we  address  these  issues  jointly  and
+                argue  that  the  peaked  structure  might  actually  be  key  to  drastically  more  efficient  calculations.
+                Specifically, we introduce a novel algorithm for autoregressive sampling without replacement and a
+                procedure to calculate a computationally cheaper surrogate for the local energy.  We complement
+                them  with  a  custom  modification  of  the  stochastic  reconfiguration  optimisation  technique  and  a
+                highly  optimised  GPU  implementation.   As  a  result,  our  calculations  require  substantially  less
+                resources and exhibit more than order of magnitude speedup compared to the previous works.  On a
+                single GPU we study molecules comprising up to 118 qubits and outperform the “golden standard”
+                CCSD(T) benchmark in Hilbert spaces of∼ 1015 Slater determinants, which is orders of magnitude
+                larger than what was previously achieved.  We believe that our work underscores the prospect of
+                NQS for challenging quantum chemistry calculations and serves as a favourable ground for the future
+                method development.
+
+
+                    I.    INTRODUCTION                                        respect to the molecule size, and thus a trade off between
+                                                                              the solution accuracy and its efficiency is inevitable.  A
+  The past decade witnessed an explosive growth of deep                       rich computational toolbox has been elaborated in quan-
+learning applications stipulated by a remarkable ability                      tum chemistry, with different methods relying on differ-
+of  neural  networks  to  efficiently  represent  complicated                 ent approximations,  and no method performing univer-
+multidimensional  probability  distributions.   To  exploit                   sally well across a multitude of molecular systems.  Thus,
+these capabilities in the context of computational quan-                      the development of versatile and widely applicable tech-
+tum  many-body  physics,  Carleo  and  Troyer  pioneered                      niques remains a pivotal quest in the field.
+the  idea  of  neural  quantum  states  (NQS),  i.e.,  an  effi-                 However, ever since the first work by Choo  et  al. [43]
+cient representation of a quantum state with a generative                     on NQS application to ab initio quantum chemistry two
+neural network [1].  Since its conception the field flour-                    outstanding challenges were recognised.  First, the molec-
+ished considerably [2–4] and now neural quantum states                        ular  ground  state  wave  functions  are  often  of  peaked
+are capable to tackle various problems, including low en-                     structure, i.e. dominated by few high amplitude compo-
+ergy states [5–25],  unitary time evolution [26–33],  open                    nents in the computational basis, which constitutes a ma-
+systems [34–38] and quantum state tomography [39–42],                         jor obstacle for sampling the Born distribution.  Second,
+placing them among state-of-the-art methods of compu-                         molecular Hamiltonians have excessive number of terms,
+tational quantum many-body physics.                                           which renders the stochastic estimation of energy highly
+  A key advantage of NQS in comparison to alternative                         expensive and poses a formidable challenge of computa-
+methods is the fact that the wave function representation                     tional nature.  A range of subsequent works focused on
+can in principle be efficient irrespective of the interaction                 gradually  lifting  these  limitations  by  employing  better
+graph of the underlying physical system.  Therefore, NQS                      sampling techniques [20], streamlining the energy calcu-
+are  a  promising  candidate  to  tackle  the  paradigmatic                   lations [22], parallelising the computational load [21,22],
+problem of ab initio quantum chemistry to calculate the                       or giving up sampling altogether and resorting to deter-
+ground states of molecules in second quantisation.  Find-                     ministic  optimisation  [44].   While  such  collective  effort
+ing  an  algorithmic  solution  to  this  problem  is  of  out-               pushed the boundary of what is in principle achievable
+standing interest, since having access to the ground state                    with NQS to system sizes of several dozens to hundred
+of a molecule allows one to deduce most of the physical                       qubits, competitive energies were so far reported only for
+and chemical properties of the latter.  As for any quan-                      systems still amenable to exact diagonalisation.  Thus, at
+tum many-body problem, computational approaches are                           its current state the field lacks a compelling evidence sug-
+hindered by exponential growth of the Hilbert space with                      gesting that NQS can both scale up to challenging system
+                                                                              sizes and achieve state-of-the-art energies there.
+                                                                                 In this work, we supplement NQS quantum chemistry
+∗ aleksei.malyshev@physics.ox.ac.uk
+                                                                              calculations with a set of advances of both conceptual and
+                                                                                                                                                  2
+
+practical  nature  aimed  at  improving  its  computational                 orbitals  and  is  represented  with  a  basis  vector |x⟩  =
+performance.    As  a  result,  we  obtain  an  optimisation                |x0x1...xN−1⟩, xi ∈ {0, 1}.   Here  the i-th  orbital  is
+procedure  which  provides  orders  of  magnitude  speedup                  occupied  if xi  =  1.   The  molecular  orbitals  are  usually
+as compared to the conventional NQS optimisation and                        obtained via the Hartree-Fock procedure.  The basis vec-
+yet  retains  the  same  accuracy  level.   Using  only  a  sin-            tor|xHF⟩ :=|11... 1|{z   }0... 0|{z}⟩ represents the Hartree-Fock
+gle  GPU,  we  surpass  conventional  quantum  chemistry                                        ne     N−ne
+methods such as CISD, CCSD and CCSD(T) for system                           Slater determinant, which is a mean-field approximation
+sizes that have been previously inaccessible to NQS (118                    of the true ground state.
+qubits,  1015  Slater  determinants,    3· 106  Hamiltonian                    The exact diagonalisation of the Hamiltonian, referred
+terms).                                                                     to  as  full  configuration  interaction  (FCI)  in  quantum
+  At a high level, we leverage the previously unwelcome                     chemistry, is clearly restricted by the factorial complex-
+peakedness of the wave function.  Our contributions in-                     ity scaling of Hilbert space size.  The traditional quan-
+clude  (i)  a  previously  unexplored  algorithm  for  autore-              tum chemistry methods trade off accuracy for polynomial
+gressive sampling without replacement; (ii) two novel ap-                   complexity and approximate the ground state by choos-
+proaches to energy evaluation with improved asymptotic                      ing a class of trial states.  Two most prominent are fam-
+complexity; (iii) a modification of the stochastic reconfig-                ilies  of  configuration  interaction  (CI)  and  coupled  clus-
+uration (SR) optimisation technique tailored to ANQS;                       ter (CC) methods, which consider computational spaces
+(iv)  compressed  data  representation  enabling  memory                    spanned by excitations over|xHF⟩ up to a certain level.
+and compute efficient GPU implementation.                                   Among these methods, CISD, CCSD and CCSD(T) are
+  The  remainder  of  this  paper  is  organised  as  follows.              commonly used, with the latter considered as the de facto
+We provide a relevant background on variational Monte                       “golden standard”.
+Carlo, quantum chemistry in second quantised formalism
+and autoregressive neural quantum states in SectionII.
+In SectionIIIwe overview at a high-level our contribu-                                      B.    Variational Monte Carlo
+tions, while their technical details are left for Methods.
+In SectionIVwe present results of NQS quantum chem-                            To approximate the ground state of  ˆH  we use a vari-
+istry calculations for a range of molecules beyond exact                    ational ansatz for the wave function,|ψ⟩ =Pxψ(x)|x⟩.
+diagonalisation, showcasing an improved computational                       Here,|x⟩ is a computational basis vector in the Hilbert
+performance  of  the  method.   Finally,  in  SectionVwe                    space  of N  qubits  and ψ(x)  is  a  “black  box”  function
+conclude our work and indicate directions for future re-                    which  depends  on  a  set  of  parameters θ  and  returns
+search.                                                                     the quantum state amplitude for|x⟩.  We represent|ψ⟩
+                                                                            with a neural network,  and refer to the former as  neu-
+                                                                            ral  quantum  state  (NQS).  We  numerically  optimise  the
+                    II.    BACKGROUND                                       network parameters to minimise the energy expectation
+            A.    Ab initio quantum chemistry                               value⟨E⟩ := ⟨ψ| ˆH|ψ⟩⟨ψ|ψ⟩  , and thus find the best ground state
+                                                                            approximation.
+                                                                               To   that   end   we   employ   the   framework   of   itera-
+  In  second  quantisation  molecular  Hamiltonians  take                   tive stochastic optimisation known as variational Monte
+the following general form:                                                 Carlo (VMC). This approach relies on the fact that quan-
+    ˆHSQ =X                                                                 tum expectation values, such as the mean energy⟨E⟩, can
+                 tij(ˆc†i ˆcj +h.c.) + X     Vi,j,k,lˆc†i ˆc†jˆckˆcl     (1)be cast in the form of mean values with respect to the
+             i,j                       i,j,k,l                              Born distribution p(x) := |ψ(x)|2P
+
+                                                                                                                x|ψ(x)|2 .  Hence, they can be
+where fermionic creation and annihilation operators ˆc†                     estimated efficiently by obtaining a batchB of Ns  sam-
+                                                                  i, ˆci    ples from the distribution p(x).  LetU  := Unique(B) be
+act on a set ofN  molecular orbitals.  In the field of NQS                  the set of unique samples inB and letn(x) be the occur-
+one  usually  applies  the  Jordan-Wigner  transformation                   rence number for the sample x so thatP
+and maps orbitals to a system of N  qubits [20,21,43].                      We call the set of pairs{ (x,n(x))| x∈U} the samplingx∈Un(x) =Ns.
+This produces a Hamiltonian of the following form:                          statistics.   Using  the  sampling  statistics,  one  estimates
+
+                              NT−1X    N−1O                                 the  energy  of  the  state  as  a  Monte  Carlo  expectation
+                    ˆHJW =          hl       ˆP (l)i ,                    (2)value as follows:
+
+                               l=0      i=0
+                                                                                       ⟨E⟩ = E(Eloc(x))≈X             Eloc(x)· n(x)Ns ,         (3)
+where NT   is   the   number   of   terms   and    ˆP (l)i  ∈                                                   x∈U
+nˆIi,  ˆXi, ˆYi, ˆZio
+                    are  Pauli  operators  acting  on  the i-               where Eloc(x) is the so-called local energy  estimator:
+th  qubit.    For ne  electrons,  this  Hamiltonian  acts  on  Slater  determi-                                     Hxx′ψ(x′)
+the  Hilbert  space  spanned  with  Nne                                                     Eloc(x) :=  X                ψ(x)  .               (4)
+nants.    Each  determinant  corresponds  to ne  occupied                                                x′:Hxx′̸=0
+                                                                                                                                                   3
+
+Similarly,  one  estimates  the  gradient  of  the  energy  ac-              result, the number of obtained unique samplesNunq can-
+cording to Ref. [45]:                                                        not be set in advance; it emerges during sampling.  One
+                                                                             controls Nunq only indirectly by changing the batch size
+         ∇θ⟨E⟩ = 2 Re{E [Eloc(x)·∇θ lnψ∗θ(x)]                                Ns, and the same value ofNs can produce vastly different
+                        − E [Eloc(x)]· E [∇θ lnψ∗θ(x)]}.     (5)             Nunq depending on the probability distribution encoded
+                                                                             by the ansatz.  The autoregressive statistics sampling of
+This estimate is employed to update the ansatz parame-                       Ref. [20], while being more efficient, also emulates sam-
+ters following the gradient descent rule or any advanced                     pling with replacement and hence suffers from the same
+modification thereof [45].                                                   shortcoming.
+                                                                               It is however desirable to have direct control overNunq.
+                                                                             First,  it  defines  the  computational  complexity  of  both
+      C.    Autoregressive neural quantum states                             autoregressive  statistics  sampling  and  local  energy  cal-
+                                                                             culations,  while Ns  does not.  Second, Nunq  serves as a
+  The quantum chemistry VMC optimisation is hindered                         direct measure for the Hilbert space portion explored by
+by  the  fact  that  the  ground  state  wave  functions  often              an ANQS.
+have a distinct peaked structure.  The dominant contri-                        To address this issue, we resort to sampling from p(x)
+bution comes from the Hartree-Fock Slater determinant,                       without  replacement.   Such  sampling  is  memoryful,  i.e.
+i.e. p(xHF) can be as high as 0.99 or more.  As a result,                    if  x  was  obtained  as  the k-th  sample,  then  (i)  it  can
+after the initial iterations xHF  constitutes the majority                   never  be  obtained  in  any  of  subsequent  samplings;  (ii)
+of samples in the batchB.  Correspondingly, one needs to                     the remaining samples are produced from a renormalised
+resort to large batch sizesNs to explore a non-trivial por-                  probability distribution in which the samples that have
+tion of the Hilbert space and obtain meaningful gradient                     already occurred are assigned zero probability.  As a re-
+estimates.   This  results  in  a  large  computational  over-               sult,  we  obtain  a  batch  of  precisely Nunq  unique  sam-
+head  if  one  optimises  an  NQS  using  conventional  sam-                 ples.   Our  sampling  procedure,  based  on  the  algorithm
+pling methods such as Metropolis-Hastings [1,43].                            by Kool et al. [47], invokes the ancestral Gumbel top-  K
+  To mitigate this issue we follow Ref. [20] and employ                      trick [48,49], to autoregressively produce     Nunq  samples
+autoregressive neural quantum states (ANQS). The wave                        without replacement in parallel.  We describe further de-
+function ψ(x) of an ANQS is a product of single qubit                        tails in Methods and present an ablation study showcas-
+conditional wave functionsψi(xi|x<i) such that the con-                      ing the computational advantage in the Supplementary
+ditional wave function for thei-th qubit depends only on                     Material.
+the values of previous i− 1 qubits:
+
+                               N−1Y
+                     ψ(x) =         ψi(xi|x<i).                      (6)            B.    Streamlined local energy calculations
+                               i=0
+Such  a  construction  enables  quick  and  unbiased  sam-                     The  calculation  of  local  energies  constitutes  the  cen-
+pling from the underlying Born distribution [20,46].  Im-                    tral  computational  bottleneck  of  NQS  quantum  chem-
+portantly,  Ref. [20] developed an algorithm which sam-                      istry calculations since the number of terms in molecular
+ples the  statistics  corresponding to a batch of Ns  sam-                   Hamiltonians  grows  quartically  with  the  number  of  or-
+ples  without  producing  each  sample  individually.   The                  bitals, NT =O(N4) [50].  According to Eq. (4) one has
+complexity  of  this  algorithm  is  dominated  by  evaluat-                 to evaluate ansatz amplitudes for all x′ coupled via  ˆH to
+ing amplitudes of only Nunq unique basis vectors, where                      sampled x∈U, i.e. such x′ thatHxx′̸= 0.  This requires
+Nunq  := |U|.    This  opened  the  avenue  to  batch  sizes                 O(NunqNT) additional ansatz evaluations, which quickly
+Ns  as  big  as  1012  (with  the  number  of  unique  samples               becomes unwieldy as the system size grows.
+Nunq∼ 103–104) and was adopted in subsequent research                          To mitigate this problem, we build upon the proposal
+on ANQS quantum chemistry calculations [21–23].                              of Wu et al. [22] and replace the local energy calculation
+                                                                             (4)  with  its  computationally  cheaper  surrogate  Evarloc (x)
+                                                                             which  contains  contributions  only  from  those x′  which
+          III.    METHOD ADVANCEMENTS                                        belong to the set of unique sampled basis vectors.  Hence,
+                                                                             for the full energy calculation one requires only the am-
+           A.    Sampling without replacement                                plitudes  of  basis  vectors  inU,  which  can  be  computed
+                                                                             and stored in memory withO (Nunq) ansatz evaluations
+  Both  Metropolis-Hastings  and  conventional  autore-                      immediately afterU  is obtained.
+gressive sampling are examples of so-called sampling with                      In addition, instead of evaluating the state energy as
+replacement.  Such sampling is memoryless, i.e. if x was                     a  Monte  Carlo  expectation  (3)  of  the  local  energy,  we
+obtained  as k-th  sample  (k < Ns),  it  can  still  be  pro-               directly calculate the variational energy of the instantly
+duced by the ansatz as k′-th sample, where k′ >k.  As a                      sampled state:
+                                                                                                                                                 4
+
+                                                                           element  ofU×U  results  in  unnecessary  computations
+                                                                           too.  We address this issue by preprocessingU  and reor-
+   Evar =X       Evarloc (x)· p(x)                       p(x).    (7)      ganising it into a data structure known as prefix  tree  or
+            x∈U                N , whereN  :=Xx∈U                          simply trie, which we describe in more details in Meth-
+                                                                           ods.  This data structure allows one to exploit the spar-
+Here we weigh local energy surrogate values by the renor-                  sity of couplings withinU×U and substantially speed up
+malised probabilities obtained directly from ansatz, as op-                FindCoupledPairs.   We  refer  to  this  implementation
+posed  to  weighing  them  by  empirical  frequencies n(x)Ns  .            of FindCoupledPairs as LoopOverTrie.
+The reason for this is twofold.  First,  sampling without
+replacement does not provide any empirical frequencies,
+but  only  the  unique  samples  themselves,  and  thus  one                    C.    ANQS-tailored stochastic reconfiguration
+cannot use Eq. (3) directly.  Second,  under such defini-
+tion, the value calculated via Eq. (7) becomes variational,                   Standard gradient descent performs poorly in curved
+in that it is always an upper bound for the ground state                   parameter spaces, where the learning rate has to be se-
+energy since it corresponds to a physical state spanned                    lected carefully so that optimisation does not overshoot
+by the vectors inU.  Hence, in what follows we refer to                    narrow ravines.  Stochastic reconfiguration (SR) is a gra-
+the value given by Eq. (7) as the variational energy, and                  dient postprocessing technique that modifies the energy
+to the values ofEvarloc (x) as the variational (proxy of) local            gradient at every iteration to account for the curvature
+energy.                                                                    of underlying variational manifold.  To that end, for an
+                                                                           ansatz  with Np  parameters{θp}  one  evaluates  the  so-
+                Improved asymptotic complexity                             calledNp×Np quantum geometric tensor (QGT) [51,52]:
+
+                                                                              Spq =⟨∂pψ|∂qψ⟩−⟨∂pψ|ψ⟩⟨ψ|∂qψ⟩ ; p,q∈ 1..Np,   (8)
+  Although the approach of Ref. [22] reduces the num-
+ber of ansatz evaluations significantly belowO(NunqNT),                    where|∂pψ⟩ := ∂|ψ⟩∂θp .  QGT captures the local curvature
+the number of computational operations  required to cal-                   of the parameter space and allows one to “flatten” it by
+culateEvar still scales withNT.  This is because there are                 multiplying the energy gradient with an inverse of QGT:
+Nunq  values of Evarloc (x) to be calculated; to obtain each               ∇E→S−1∇E.
+of them, the authors iterate over NT Hamiltonian terms                        In VMC applications the overlaps in Eq. (8) are esti-
+and calculate the corresponding coupled candidate x′.  If                  mated via sampling similarly to Eqs. (3) and (5) [45].  We
+x′ belongs toU, they add the relevant matrix element to                    introduce two modifications to their calculation.  First, in
+the final value.  In Ref. [22] checking whether     x′ belongs             the vein of Eq. (7) we evaluate stochastic averages using
+toU  is implemented with binary search inO(logNunq)                        renormalised probabilities p(x)
+operations,  and thus in total one performs   ˜O(NunqNT)                   posed to their occurrence numbers.  Second,  evaluatingN   of unique samples, as op-
+operations.  Here  ˜O indicates the complexity with omit-                   ∂ψ(x)
+ted logarithmic scaling factors.                                             ∂θp   for each x inU is computationally heavy, and thus
+  In  this  work  we  propose  two  novel  methods  to  eval-              we  restrict  the  set  of  unique  samples  used  to  evaluate
+uate Evar, which have asymptotic complexity that does                      S.  Specifically, we take only first NSRunq≪ Nunq  unique
+not  depend  on NT.   Specifically,  we  split  the  calcula-              samples corresponding to the highest probabilities.  In all
+tion  of Evar  in  two  steps.    First,  we  obtain  all  pairs           experiments we use NSRunq = 100 chosen after a study on
+(x, x′)∈U×U  which are coupled via the Hamiltonian.                        how NSRunq impacts the achieved variational energies (see
+We refer to this stage as FindCoupledPairs procedure.                      Supplementary Material).  Apart from a computational
+Second, we evaluate the matrix elements Hxx′  and add                      benefit,  this  also  seems  to  numerically  stabilise  the  in-
+the corresponding factors to Evarloc (x) and Evarloc (x′).  Our            version of S, which is performed following the recipes of
+methods focus on improving the asymptotic complexity                       Refs. [53] and [54].
+of  FindCoupledPairs.   The  benchmark  implementa-                           We use the SR-transformed gradients jointly with the
+tion  we  compare  with  is  that  of  Ref.  [22],  to  which  we          Adam optimiser.We observe that SR substantially boosts
+refer as LoopOverTerms.                                                    the optimisation convergence, i.e.  allows achieving lower
+  When Nunq≪ NT  the  majority  of  candidate x′  will                     energies  earlier  in  the  optimisation.    This  observation
+not belong toU.  To take advantage of this, our first ap-                  contrasts  with  previous  reports  that  cast  doubt  on  the
+proach, to which we refer as LoopOverBatch, iterates                       merit of SR for ANQS optimisation [9,28].
+over each pair (x, x′)∈U×U  and checks whether there
+exists  a  Hamiltonian  term  coupling x  to x′,  see  Meth-                                 D.    GPU implementation
+ods for details.  This approach brings the complexity of
+FindCoupledPairs down to  ˜O(N2unq).
+  Our  second  approach  employs  an  empirical  observa-                     Apart  from  improving  the  asymptotic  complexity  of
+tion  that  in  practice  very  few  pairs  (x, x′)  are  actually         optimisation, we also focus on the practical aspects of its
+coupled via the Hamiltonian.  Thus, iterating over each                    implementation, namely on fully leveraging the inherent
+                                                                                                                                                    5
+
+massive  parallelism  of  GPUs.   We  adapt  the  approach
+of Wu  et  al. [22] to store each basis vector     x in a com-
+pressed form as a tuple of integers.  This leads to a fac-
+tor of eight memory requirement reduction compared to
+previous implementations, in which each bit was stored
+as  a  one-byte  integer.   This  is  critical  given  our  algo-
+rithms require simultaneous handling of data structures
+containingO(Nunq2) ≳ 109  bit vectors of length N  (see
+Supplementary Material).
+  We advance this method further by implementing  all
+steps of local energy calculation as a sequence of bitwise
+operations on x stored in such compressed format.  This
+allows us to replace looping over qubits with vectorised
+bitwise  processor  operations,  leading  to  highly  acceler-
+ated calculations.  Specifically, encoding the basis vectors                 FIG.  1.   Dissociation  curves  for  Li2O  and  BeF2  molecules.
+in 64-bit integers speeds up the calculation by a factor of                  The grey shaded areas correspond to energy differences within
+up to 64.  As a result, experiments for systems with up                      chemical accuracy.  The blue shaded areas depict the spread
+to 3· 106 Hamiltonian terms required only a single GPU                       of values from minimum to maximum across seeds.  We plot
+with  24GB  of  RAM  and  barely  over  a  second  per  iter-                energy  differences  to  the  exact  diagonalisation  (FCI)  result
+ation.  This is a substantial reduction in comparison to                     ((left y-axis) and ground state IPR (right y-axis) as a function
+Refs. [21] and [22] which relied on several GPUs and took                    of interatomic distance.
+dozens of seconds per iteration.  In addition, our imple-
+mentation  employs  standard  tensor  algebra  routines  of                  these molecules has been reported so far [21].
+PyTorch  software  library  [55]  and  may  be  run  without                    We quantify the peakedness of the ground states using
+any custom CUDA code.  We refer the reader to Supple-                        the inverse participation ratio (IPR) defined as follows:
+mentary Material for an overview of the key aspects of
+our code.                                                                                   IPR := E [p(x)] =X          p(x)·p(x).              (9)
+
+                                                                                                                     x
+                         IV.    RESULTS                                      The maximum value of IPR is 1 and it is achieved when
+                                                                             only one basis vector contributes to a wave function, and
+  The main implicit assumption behind our approach is                        its minimum is   12N , reached when∀x|ψ(x)| =     1√2N .
+that a large enough Nunq  allows sampling the most im-                          For  each  molecule  we  explore  a  range  of  interatomic
+portant amplitudes as long as the true ground state wave                     distances  and  for  each  distance  we  optimise  an  ANQS
+function is peaked enough.  In this section we empirically                   with Nunq   =   104.     The  minimum  achieved  varia-
+demonstrate the validity of this assumption.  We obtain                      tional  energies  depicted  in  Fig1consistently  surpass
+energies that are better than those provided by state-of-                    those  obtained  by  the  conventional  methods  like  CISD
+the art quantum chemistry methods and/or below chem-                         and  CCSD.  While  ANQS  does  not  always  outperform
+ical accuracy.  Equally as importantly, our approach pro-                    CCSD(T),  it  is  important  to  remember  that  the  latter
+vides an order of magnitude computational speedup com-                       can yield unphysical energies below EFCI, thus warrant-
+pared to existing works.                                                     ing  cautious  interpretation  of  such  comparison.    Cru-
+                                                                             cially,  ANQS reliably achieves energies within chemical
+                                                                             accuracy for nearly all points on dissociation curves, with
+         A.    Li2O and BeF2 dissociation curves                             a notable exception around 2.4–2.6 ˚A for Li2O, a region
+                                                                             where  traditional  methods  deliver  poorer  energies  too.
+  In the first set of experiments we study Li2O and BeF2                     We also plot the IPR corresponding to each interatomic
+molecules  both  requiring N  =  30  qubits  in  the  mini-                  distance.  For Li2O, a higher peakedness generally corre-
+mum basis set STO-3G. These are amongst the largest                          lates with the improved optimisation accuracy.  However,
+molecules still amenable to exact diagonalisation.  Thus,                    the accuracy for BeF2 shows a more complicated pattern:
+it is possible to check whether ANQS can achieve chem-                       it  drops  with  an  initial  decrease  in  IPR  from  approxi-
+ical  accuracy,  i.e.  whether  it  can  converge  to  energies              mately  0.9  to  0.75,  before  improving  again  as  the  IPR
+within ∆Echem.acc. := 1.6 mHa of the true ground state                       decreases further to around 0.25.  Thus,  while the data
+energy EFCI.   In  addition,  the  unfavourable  scaling  of                 are compatible with the hypothesis that high peakedness
+local  energy  calculations  is  already  apparent  for  these               is  sufficient  for  successful  optimisation,  the  overall  suc-
+molecules,  and  in  the  previous  works  an  optimisation                  cess may also be influenced by other factors, such as the
+based on the fullEloc required an excessive compute time                     phase  structure  of  the  ground  state.   Identifying  these
+ranging  from  hours  [23]  to  days  [20].   As  a  result,  lit-           factors is an important direction for future research.
+tle progress on extending the ANQS calculations beyond                          Finally,  let  us  note  that  for  Li2O  molecule  with  the
+                                                                                                                                                   6
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+FIG. 2.  Dissociation curves for bigger molecules as described in the main text.  For each molecule we show the number of qubits
+in the Hamiltonian N  as well as the size of the physical Hilbert space.  The C2 molecule is considered in cc-pvdz basis set.  We
+plot energy differences to a reference energy as a function of interatomic distance. A–F. The reference energy is obtained with
+CCSD(T). G. The reference energy is obtained with FCI as reported in [56].  The grey shaded areas correspond to the energy
+differences within chemical accuracy.  The blue shaded areas depict the spread of values from minimum to maximum across
+seeds.
+
+
+geometry taken from PubChem database [57] we achieve                        Fig.2A–F.  We  do  not  have  access  to  FCI  energies  for
+chemical  accuracy  on  average  in  750  seconds.   This  is               these molecules, and thus we plot the difference between
+25 times faster compared to Ref. [23], which to the best                    the minimum variational energies achieved by ANQS and
+of  our  knowledge  reported  the  fastest  optimisation  for               those obtained with CCSD(T). It can be seen that in the
+the  same  molecule  so  far.   The  per-iteration  time  also              dominant majorities of experiments ANQS outperforms
+improves to 0.18 seconds as compared to 8.3 seconds re-                     traditional  quantum  chemistry  methods  such  as  CISD
+ported in the same work.                                                    and CCSD. When compared to CCSD(T), ANQS results
+                                                                            mostly  come  close  to  within  chemical  accuracy,  and  in
+                                                                            some  cases  surpass  them.   We  consider  this  as  an  evi-
+            B.    Further Li and Be compounds                               dence in favour of the remarkable prospect of ANQS.
+
+
+  In the next set of experiments we expand the ANQS
+quantum  chemistry  calculations  to  previously  challeng-                            C.    C2 molecule in cc-pvdz basis set
+ing system sizes.  We obtain dissociation curves for two
+groups of molecules of increasing size; the first group in-
+cludes Li2S, Li2Se and Li2Te molecules, while the second                       We also apply ANQS to a paradigmatic strongly cor-
+consists of BeCl2,  BeBr2  and BeI2.  We base our selec-                    related  system:   C2  molecule  in  the  cc-pvdz  basis  [56].
+tion on their chemical similarity with the already studied                  The results are presented in Fig2G, where we plot the
+Li2O and BeF2:  the anion is replaced by a heavier ele-                     difference between the lowest energy achieved by ANQS
+ment in the same group 6 (7) of the periodic table.  Thus                   and EFCI  as  given  in  Ref.  [56].   While  we  find  that  in-
+we can systematically scale the number of qubits N, the                     creasingNunq systematically improves the result, none of
+Hilbert space size and the number of terms in Hamilto-                      Nunq  values allowed reaching chemical accuracy or sur-
+nianNT.  We note, however, that since the Hilbert space, the largest values of N  do notpassing  the  CCSD(T)  energies,  even  though  C2  has  a
+dimension is|H|  := Nne                                                     moderate number of qubits (56) and Hilbert space size
+necessarily amount to the largest values of|H|.  For ex-                    (∼  1011)  as  compared  to  Li  and  Be  compounds  stud-
+ample, the largest studied Hilbert space is that of Li2Te                   ied in the previous section.  Nevertheless, an increase in
+molecule with 74 qubits and∼ 1015 Slater determinants,                      Nunq  does result in better accuracy,  and,  starting from
+which is three orders of magnitude more than the largest                    Nunq = 40000, ANQS energies surpass those of CISD and
+FCI study performed so far [58].  At the same time, the                     CCSD methods.  We leave it for future work to explore
+Hilbert space size of BeI2 molecule with 118 qubits is on                   whether  increasing Nunq  further  would  continue  to  im-
+the order of “mere” 1011 Slater determinants.                               prove the convergence, or whether the limiting factor is
+  We  plot  the  results  of  this  set  of  experiments  in                rather the expressivity of the chosen ansatz.
+                                                                                                                                               7
+
+         D.    Comparison of  FindCoupledPairs
+                        implementations
+
+  In the final set of experiments we benchmark three im-
+plementations of the FindCoupledPairs procedure.  In
+Fig.3A we plot the speedups achieved by        LoopOver-
+Batch and LoopOverTrie algorithms compared to the
+baseline LoopOverTerms  implementation.   For  small
+values  of Nunq  the  LoopOverBatch  implementation
+performs the best, offering up to 10x reduction in time.
+However, as Nunq  grows, the advantage of LoopOver-
+Batch becomes less and less pronounced,  until it van-
+ishes.  For example, for Li2O molecule andNunq = 5· 104
+it  is  an  order  of  magnitude  slower  than  the  other  ap-
+proaches.                                                                  FIG. 3.  The speedup of LoopOverBatch and LoopOver-
+  The opposite holds for LoopOverTrie:  at low Nunq                        Trie  routines  with  respect  to  baseline  LoopOverTerms.
+it  struggles  to  compete  with LoopOverBatch.   How-                     The  speedups  are  calculated  for:  A.  Only  FindCoupled-
+ever,  as  both Nunq  and NT  grow, LoopOverTrie  be-                      Pairs procedure; B. Total iteration time.
+comes  more  and  more  advantageous:   for  example,  for
+Li2Se molecule and Nunq = 5· 104  it is five times faster
+than  either  LoopOverTerms  or  LoopOverBatch.                            ples.  Thus, we were able to focus on a small physically
+For Li2Te molecule and the same Nunq  it demonstrates                      relevant portion of the Hilbert space and greatly accel-
+a tenfold speedup compared to LoopOverTerms.                               erate the stochastic estimation of the variational energy
+  To  accurately  estimate  the  speedup  associated  with                 by ignoring the contributions from the unsampled part of
+these  new  techniques,  it  is  important  to  keep  in  mind             the Hilbert space.  Consequently, we were able to achieve
+that FindCoupledPairs takes only a part of the com-                        energies that compete with those obtained with the tra-
+pute time in each iteration.  The local energy calculation                 ditional quantum chemistry methods, for computational
+involves three more important subroutines:  sampling of                    spaces several orders of magnitude larger than those pre-
+x, amplitude evaluation and computing matrix elements                      viously attempted with ANQS.
+Hxx′.  In Fig.3B, we show the gains associated with the                      Remarkably,  we  even  came  across  certain  geometries
+new FindCoupledPairs algorithms with respect to the                        where the peakedness was less pronounced,  and yet fo-
+total iteration time.  In the case of Li2Te molecule and                   cusing only on the sampled subspace still yielded energies
+Nunq = 5· 104, the tenfold improvement of LoopOver-                        within chemical accuracy to the ground state — this was
+Trie shrinks down to a factor of four.                                     the case, for example, with BeF2.  At the same time, we
+  In Fig.4we plot the fraction of the time spent on each                   identified cases when our method struggled to reach com-
+of  the  four  subroutines  during  the  energy  calculation.              petitive energies, such as C2.  However, it remains to be
+Both for LoopOverTerms and LoopOverBatch the                               explored,  whether  this  indicates  a  general  limitation  of
+fraction of FindCoupledPairs grows asNunq increases.                       our method or whether it is due to unrelated issues like
+For  the  largest  molecule  (Li2Te)  at Nunq  =  5· 104,  it              bottlenecks in the optimisation [59].
+amounts  for  the  majority  of  energy  calculation  time,                  Our  results  point  out  further  directions  for  algorith-
+while the remaining subroutines take at most 10% of the                    mic  improvements  and  theoretical  analysis  that  would
+calculations  each.   At  the  same  time,  FindCoupled-                   scale up our method.  The first observation is that our
+Pairs implemented as LoopOverTrie constitutes only                         method is readily amenable to parallelisation across sev-
+a third of the energy calculation time, and, more gener-                   eral  GPUs.   We  expect  this  to  enable  addressing  even
+ally, decreases as both Nunq  and NT  grow.  Thus, com-                    larger  problem  sizes  [21, 22],  potentially  reaching  com-
+putations related directly to the local energy calculation                 plex organic compounds.
+(as opposed to sampling and amplitude evaluation) are                        Additionally, the impact of the underlying neural net-
+no longer a bottleneck of NQS quantum chemistry.                           work  architecture  on  the  accuracy  of  optimisation  re-
+                                                                           mains  a  largely  unexplored  topic.     Recently,   neural
+                                                                           network  architectures  that  are  specifically  tailored  to
+                      V.    DISCUSSION                                     fermionic systems showed significant promise in applica-
+                                                                           tion to quantum many-body problems [60,61], including
+  Our results suggest that the peaked ground state wave                    quantum chemistry   [25,62].  Combining the enhanced
+functions typical for molecules should be not only mit-                    expressivity exhibited by these models with the sampling
+igated  in  ANQS  quantum  chemistry  calculations,  but                   efficiency of ANQS can potentially give rise to a powerful
+rather  celebrated  in  certain  cases.   In  particular,  it  al-         new approach [63].
+lowed  us  to  leverage  an  ANQS-specific  sampling  algo-                  We lack understanding on how the choice of Nunq  in-
+rithm which produces the desired number of unique sam-                     fluences  the  learning  ability  of  ANQS.  However  daunt-
+                                                                                                                                                   8
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+FIG. 4.  The fraction of the energy evaluation time spent on each of four crucial iteration parts:  (i) sampling; (ii) evaluation of
+amplitudes for basis vectors inU; (iii) finding the coupled pairs (x, x′); (iv) calculating the matrix elements between the coupled
+pairs.   Top  to  bottom  rows  correspond  to  different  implementations  of  FindCoupledPairs  procedure:  LoopOverTerms,
+LoopOverBatch, LoopOverTrie.
+
+
+ing  this  question  might  seem,  first  steps  in  similar  di-            ously unexplored within the field of NQS optimisation.
+rection were already made by Astrakhantsev  et  al. [64].
+This  work  analysed  an  algorithmic  phase  transition  in
+the  learning  dynamics  of  a  variational  quantum  circuit                       1.    Conventional sampling without replacement
+related to the number of samples produced at each gradi-
+ent descent step.  It is natural to extend these techniques                     A conventional way to obtain K  samples without re-
+to ANQS optimisation.                                                        placement from a probability distribution p(x) is to pro-
+  Finally,  as discussed,  the variational energy (7) is an                  duce samples one-by-one and adaptively change the sam-
+upper  bound  to  the  true  energy  of  the  NQS,  but  this                pled distribution in the following way.  Suppose one has
+upper bound may not be sufficiently tight.  The so-called                    sampled without replacementk−1 unique samples consti-
+projected energies provide a more accurate estimate [65].                    tuting the setU(k−1).  Then, one obtains thek-th unique
+It is to be explored whether ANQS optimisation can be                        sample by sampling from the following probability distri-
+synthesised with this approach to energy calculation for                     bution:     (0,  if x∈U(k−1),
+improved optimisation.
+  Regardless  of  the  actual  research  path  taken,  we  be-               p(k)(x) =      P      p(x)
+lieve that our work showcases the high promise of ANQS                                        x′̸∈U(k−1)p(x)≡      p(x)1−Px′∈U(k−1)p(x)  otherwise.
+ab initio quantum chemistry calculations beyond the FCI                                                                                        (10)
+limit.  We are optimistic that the ideas presented in this                   In  other  words,  one  manually  removes  the  probability
+paper, particularly aimed at reducing time and memory                        mass associated with already produced samples and then
+requirements of the method, will democratise and facili-                     renormalises the remaining probabilities.
+tate further experiments, thus serving as a fruitful basis
+for the rapid future progress.
+                                                                                                  2.    Gumbel top-K  trick
+
+                           METHODS                                              The Gumbel top-K trick replaces sequential sampling
+                                                                             from p(x)  with  multiple  samplings  of  another  random
+ A.    Autoregressive sampling without replacement                           variable, referred to as the Gumbel noise. The cumulative
+                                                                             distribution function of Gumbel noise is given byFG(g) =
+  For sampling without replacement we employ an algo-                        e−e−g.  The advantage of this approach is that Gumbel
+rithm developed in Ref. [47] which extends the Gumbel                        noise  sampling  can  be  performed  in  a  parallel  fashion.
+top-K  trick [48,49] to autoregressive probability distri-                   The algorithm proceeds as follows [47]:
+butions.  This algorithm is not our contribution  per  se,                      1.We obtain a set of i.i.d.  samples of Gumbel noise
+yet we overview it since it touches upon the ideas previ-                           Gx,  one  per  each  x.    This  can  be  achieved  by
+                                                                                                                                                   9
+
+       inverse  transform  sampling  as G  = F−1G  (U)  =                    log-probabilities  of  x<i0  and x<i1  and  keep  only  that
+       − log (− logU), where U∼ Uniform(0, 1).                               partially sampled vector which has the larger perturbed
+   2.We evaluate    log-probabilities corresponding to each                  log-probability.  By starting this process with an empty
+       possible outcome lx  := logp(x),  which we further                    vector x<0≡ ∅ and repeating it iteratively, one obtains
+       refer to as unperturbed  log-probabilities.                           the  full x  corresponding  to  the  highest  perturbed  log-
+                                                                             probability without exponential growth of complexity.
+   3.We    calculate    the    so-called        perturbed     log-              There is, however, a subtlety.  Since the perturbed log-
+       probabilities by adding an Gumbel noise sample to                     probability of x<i bounds the perturbed log-probabilities
+       each unperturbed log-probability: Lx :=lx +Gx.                        of  x<i0  and  x<i1  from  above,  the  latter,  being  sam-
+                                                                             pled at a  later  stage, should not exceed the value Lx<i
+   4.We sort the perturbed log-probabilities in the de-                      obtained  at  an  earlier   stage.    In  other  words,  sam-
+       scending order and take first K x’s corresponding                     pling of Lx<i0  and Lx<i1  should be  conditioned  on the
+       to the highest perturbed log-probabilities as an out-                 value  of Lx<i.   The  authors  of  Ref.  [47]  show  that  the
+       put of the sampling without replacement algorithm.                    correct  conditioned  values  denoted  as  ˜Lx<i0  and  ˜Lx<i1
+  To intuitively understand the Gumbel top-K trick, let                      can be obtained by starting with the unconditioned val-
+us suppose we have already selected k<K basis vectors                        ues,  finding  their  maximum Z  :=  max{Lx<i0,Lx<i1}
+and are now seeking to add the (k + 1)-st.  Let x and x′                     and   calculating   the   conditioned   ones   as   ˜Lx<ixi    =
+be  two  basis  vectors  that  are  not  among  the k  already               − log   e−˜Lx<i− e−Z + e−Lx<ixi .   As  a  result,  the  au-
+selected.   Let  us  evaluate  the  probability  of  the  event              toregressive  sampling  without  replacement  is  described
+that Lx <gx′, which equals to the probability that x′ is                     with the following pseudocode:
+selected in this step conditioned  on the event that either
+x or x′ is selected.
+  This  probability  is  Pr(Lx < Lx′)  =     Pr(lx +Gx <                     Algorithm 1 Autoregressive Gumbel top-K sampling
+lx′ +Gx′) = Pr(Gx−Gx′ < lx′−lx).  Thus, one seeks                             1:  function ARGumbelTopK(pi(xi|x<i); K)
+the probability for the difference ∆G :=Gx−G′x of two                                #  Initialise  the  set  of  partially  sampled
+independent Gumbel variables to be less than the given                           vectors  and  their  (perturbed)  log-probabilities.
+value lx′− lx.   This  probability  is  given  by  the  value                 2:  UG := [(∅, 0, 0)]
+of  the  CDF F∆G(lx′−lx)  of  the  random  variable  ∆G.                      3:      for i from 0 to N− 1 do
+It can be calculated to be F∆G(lx′−lx) =            1                         4:    UG′ := [ ]
+                                                        1+e−(lx′−lx) .        5:           for (x<i,lx<i, ˜Lx<i) inUG do
+Since e−(lx′−lx) = p(x)p(x′), we obtain that Pr(Lx <Lx′) =                                   #  Evaluate  the  unconditioned  log-probs
+   p(x′)                                                                      6:                for xi in{0, 1} do
+p(x)+p(x′).   Thus,  conditioned  on  the  assumption  that                   7:          lx<ixi :=lx<i + logpi(xi|x<i)
+either x or x′ is selected, x′ is selected with the probabil-                 8:          Lx<ixi :=lx<ixi + Gumbel(0)
+ity   p(x′)p(x)+p(x′), whereas x is selected with the probability             9:        Z := max Lx<i0,Lx<i1
+   p(x)                                                                                      #  Evaluate  the  conditioned  log-probs
+p(x)+p(x′), which is precisely what one expects from sam-                    10:                for xi in{0, 1} do
+pling without replacement as per Eq. (10).
+                                                                             11:                        ˜Lx<ixi  := − log e−˜Lx<i− e−Z + e−Lx<ixi
+
+                                                                             12:       UG′.append                 (x<ixi,lx<ixi, ˜Lx<ixi)
+             3.    Autoregressive Gumbel top-K  trick                        13:             SortUG′ in the descending order of  ˜Lx<i+1.
+
+                                                                             14:    UG :=UG′[1 :K].
+  To explain the autoregressive Gumbel top-K sampling                        15:  U := every x inUG.
+let  us  focus  on K  =  1  for  simplicity.   In  this  case  the           16:      returnU
+ordinary Gumbel top-K  trick prescribes evaluating per-
+turbed log-probabilities  for  all  x and finding the single
+maximum  among them.  For N  qubits this  amounts to
+2N  perturbed log-probabilities and is clearly unfeasible.                      A generalisation toK > 1 is achieved by retaining top-
+Hence, the approach of Ref. [47] effectively resorts to a bi-                K  (perturbed) log-probabilities during sampling of each
+nary search to find the x corresponding to the maximum                       qubit, see Ref. [47] for more details.  The complexity of
+of the perturbed log-probabilities.                                          Algorithm1is     O (NunqCNQS),  whereCNQS  is  the  com-
+  The  authors  show  that  given  a  vector x<i  the  max-                  plexity of one ansatz evaluation.  Importantly, the ansatz
+imum  of  perturbed  log-probabilities  of  its  “children”, logp(x<ix≥i) +Gx≥i  is  distributed  asevaluations  can  be  parallelised  over  all x<i  for  a  given
+i.e.     maxx≥i                                                              i using batched GPU operations, and the only required
+logp(x<i) + Gx<i  =: Lx<i.    In  other  words,  the  per-                   loop is over the qubits.  As a result, the total complex-
+turbed log-probability of x<i can serve as an upper bound                    ity of producing Nunq  samples is comparable to that of
+for the perturbed log-probabilities of its children.  Con-                   evaluating their amplitudes,  which is a hallmark of au-
+sequently,  given x<i  one  might  estimate  the  perturbed                  toregressive ansatzes.
+                                                                                                                                               10
+
+        B.    FindCoupledPairs implementations                             Algorithm 2A FindSCx via looping over unique XY(l).
+
+                                                                            1:  function LoopOverTerms(x)
+                   1.    Hamiltonian arithmetic                             2:  SCx := [ ]
+                                                                            3:      for XY    inXY do
+  We  start  our  technical  consideration  of  FindCou-                    4:           x′ := x⊗ XY
+pledPairs  implementation  by  encoding  each  Hamilto-                     5:           if x′ inU
+                                                                            6:     SCx.append (x′)
+nian term as follows. We define the bit vector X(l) encod-                  7:      returnSCx
+ing the information about the positions of   ˆX  operators
+in the Hamiltonian term  ˆP (l)≡NN−1i=0   ˆP (l)i    as follows:
+                            (                                                 Invoking LoopOverTerms  for  all x  inU  results  in
+                              1,  if  ˆP (l)                               the time complexityO (Nunq·NT· (Cbitop +C∈U)).  Here
+                  X(l)i    :=         i    =  ˆX;                          Cbitop is the complexity of a bitwise operation on a pair
+                              0,  otherwise.                               of basis vectors, which, in principle, isO (N).  However,
+                                                                           with the compressed storing ofN-bit vectors as tuples of
+The  bit  vectors Y(l)  and Z(l)  are  defined  in  analogous              integers discussed in SectionIII Dit is possible to reduce
+way.   Thus,  one  can  store  the  information  about  each               the scaling constant by the bit depth of those integers (64
+term as a tuple of four items hl, X(l), Y(l), Z(l).                       in our case).  At the same time,C∈U  is the complexity of
+  Such  representation  gives  rise  to  Hamiltonian  arith-               checking  whether  a  candidate  vector x′  belongs  to  the
+metic:  a set of rules to evaluate⟨x| ˆP (l)|x′⟩ as a sequence             batch of sampled unique vectors.  In Ref. [22]  U is stored
+of  bitwise  operations  on N-bit  vectors  representing  the              as  an  ordered  table  and  the  checking  is  performed  via
+term and basis vectors:                                                    binary search; henceC∈U  =O (logNunq).  However, im-
+                        (0, if x⊗ x′̸= XY                                  plementing binary search posed a significant challenge for
+                                                 (l);                      our GPU-based implementation.  Hence, in Supplemen-
+       ⟨x| ˆP (l)|x′⟩ =   eiϕ(x′, ˆP (l)), otherwise,               (11)   tary  Material  we  propose  an  alternative  approach  with
+                                   Y(l) +πx′⊙ YZ                  similar asymptotic complexity.
+     where ϕ     x′, ˆP (l)  := π                          (l),
+                                 2
+                                                                                                 4.   LoopOverBatch
+where⊕,⊙ and⊗ denote the bitwise OR, AND and XOR
+operations, respectively,|x| :=PN−1i=0 xi is the Hamming                      The   pseudocode   for  LoopOverBatch   is   as   fol-
+weight of a x, XY(l) := X(l)⊕ Y(l) and YZ(l) := Y(l)⊕                      lows:
+Z(l).
+  We see that each  ˆP (l)  couples x to a single x′  which                Algorithm 2B FindSCx via looping overU.
+can be calculated as x′ = x⊗ XY(l).  In other words, a                      1:  function LoopOverBatch(x)
+pair (x, x′) is coupled by a given Hamiltonian term  ˆP (l)                 2:  SCx := [ ]
+if XY(l) equals x⊗ x′.  The matrix element itself is just                   3:      for x′ inU do
+a complex exponent with the phase ϕ              x′, ˆP (l) .               4:           XY  := x⊗ x′
+                                                                            5:           if XY  inXY
+                                                                            6:     SCx.append (x′)
+                                                                            7:      returnSCx
+                         2.    Unique XY
+                                                                              Invoking LoopOverTerms for all x inU results in the
+  Note,  however,  that in realistic molecular Hamiltoni-                  time  complexityO N2unq(Cbitop +C∈XY).   Similarly  to
+ans several  ˆP (l) might have the same XY         representation,         LoopOverTermsC∈XY =O (logNT) is the complexity
+i.e.  the number of unique XY(l) is less than NT.  Let us                  of checking whether each calculated XY             belongs toXY.
+denote the set of all unique XY(l) asXY; the size|XY|                      To implement this check in≪O(NT) operations for each
+of this set is stillO(NT) =O(N4).  For a given x, every                    pair, we create an ordered data structure that lists both
+implementation of  FindCoupledPairs  seeks to find a                       the (x, x′) pairs and the Hamiltonian terms encoded as
+set of x′ such that x⊗ x′∈XY.  We denote such set as                       bit  vectors  in  a  way  enabling  rapid  lookup,  as  further
+SCx :={ x′| x⊗ x′∈XY}.                                                     explained in the Supplementary.
+
+
+                                                                                                      5.    Prefix tree
+                      3.   LoopOverTerms
+                                                                              Prefix tree (also known as trie) is a data structure used
+  The  LoopOverTerms  implementation  can  be  de-                         to store a set of bit vectors (or more generally strings over
+scribed with the following pseudocode:                                     some alphabet) in a compressed way.  Suppose one has to
+                                                                                                                                                     11
+
+store two strings abcd and abce.  Both strings share the                       trees, which we denote asTU  andTXY  correspondingly.
+same prefixabc; to avoid keeping redundant information,                        For  a  given x,  we  traverse  the  prefix  treeTU  level-by-
+one might just store the prefixabc, two possible endingsd                      level  and  keep  only  those  paths  which  correspond  to  a
+ande and the way the endings are connected to the prefix.                      valid prefix of the same length inTXY.  Note that check-
+The prefix tree develops this idea further and applies it                      ing whether XY<i belongs toTXY  does not require any
+to  all  possible  prefixes  in  a  set  of  strings  as  illustrated          search  operations.   Instead,  since  each  prefix  XY<i  is
+in Fig.5.  From a more formal perspective, prefix tree is                      built sequentially starting from the root, one only needs
+a directed tree, where the root node corresponds to the                        to examine whether the node corresponding to XY<i−1
+“start of a string” symbol, ordinary nodes contain string                      has a child corresponding to xi⊗x′i.
+symbols,  and every path in the tree from the root to a
+leaf represents a particular string in the set.
+                                                                               Algorithm 2C FindSCx via prefix tree.
+                                                                                1:  function LoopOverTrie(x)
+                    6.    Prefix tree construction                              2:  TU := ConstructPrefixTree(U)
+                                                                                3:  TXY := ConstructPrefixTree(XY)
+  Algorithm3presents a pseudocode to construct a pre-                                   #  Initialise  a  set  of  coupled  x′<i  and
+fix tree from a set of unique bit vectors.  We store the tree                      corresponding  XY<i.
+T   as  a  list  of  nodes  representing  unique  prefixes.   We                4:  SCXYx := (TU[0],TXY[0])
+presume  that  each  node  is  a  data  structure  with  three                  5:      for i from 0 to N− 1 do
+fields:  value, storingxi; parent, storing the reference to                     6:    SCXY′x := [ ]
+a parent node at the previous level; and array of two ref-
+erences children to children nodes at the next level.  By                       7:           for (u node, xy   node) inSCXYx do
+default, the references are set to None indicating that the                     8:                for x′i in{0, 1} do
+link  between  the  node  and  its  parent/children  has  not                   9:                          newunode := unode.children[x′i]
+been  established  yet.   The  prefix x<i  of  a  node  can  be                10:                          newxynode := xynode.children[xi⊗x′i]
+reconstructed by traversing the prefix tree up via parent                      11:                    if newu node̸= None and new        xy  node̸= None
+references.                                                                    12:        SCXY′x.append ((new                      u  node,  new   xy  node))
+Algorithm 3 Constrution of prefix tree                                         13:                    else
+                                                                               14:                         continue
+ 1:  function ConstructPrefixTree(U)                                           15:    SCXYx :=SCXY′x
+ 2:  T  := [ ]                                                                 16:       ReconstructSCx from every u         node inSCXYx.
+ 3:  T .append (Node(value = ∅))                                               17:      returnSCx
+ 4:      for x inU do
+ 5:              currentnode :=T [0]
+ 6:           for i from 0 to N− 1 do
+ 7:                if  current node.children[xi] = None
+ 8:                          newnode :=  Node(value=xi)
+ 9:                          newnode.parent := current  node
+10:                          currentnode.children[xi] := new   node
+11:       T .append (new                node)
+12:                    currentnode := current    node.children[xi]
+13:      returnT
+
+
+
+                        7.   LoopOverTrie
+
+  As discussed, Algorithm2Bevaluates                   x⊗ x′  for each
+pair of unique basis vectors and then checks whether the
+result belongs toXY.  This requires looping over  every
+bit  in x  and x′.   Importantly,  during  this  loop,  Algo-
+rithm2Bdoes not try to check whether a                partial  XOR
+of x and x′  is valid, i.e. whether it might be a prefix of
+any XY      inXY.   Such  approach  results  in  unnecessary
+calculations, since it might become apparent early in the                      FIG.   5.       Prefix   tree   for   a   set   of   five   bit   vectors
+loop that x and x′ cannot be coupled by any term in  ˆH.                       {001111, 011110, 110110, 111001, 111100}.  One can see that,
+  In Algorithm2Cwe address this issue and remove the                           for example,  the strings 110110 and 111001 are encoded by
+“futil”  pairs  (x<i, x′<i)  from  consideration  as  early  as                the same first two levels of the prefix tree, while the remaining
+possible.  To that end, we store bothU  andXY as prefix                        levels are different for them.
+                                                                                                                                                12
+
+                 8.   LoopOverTrie complexity                               to perform SR gradient postprocessing without worrying
+                                                                            about numerical instability issues arising with complex-
+  To conclude the discussion of LoopOverTrie, let us                        valued subnetworks.
+consider  its  worst  case  computational  complexity.   The                   Each  ANQS  subnetwork  is  a  multi-layer  perceptron
+worst  case  corresponds  to  the  situation  when  all  x  in              with two hidden layers of width 64.  There is a residual
+U  are coupled to each other and  no  paths are dropped                     connection adding the output of the first hidden layer to
+during the traversal ofTU.  Hence,  starting from some                      the output of the second before  the second layer is acti-
+level we have Nunq  paths.  Consequently, the number of                     vated.  The hidden layers are activated with the hyper-
+operations required to traverse through N  levels ofTU                      bolic  tangent  function,  while  no  elementwise  activation
+is bounded from above byO(N·Nunq).  Since we invoke                         is  applied  to  the  last  layer.   Instead,  we  apply  a  global
+LoopOverTrie for each x inU, the total complexity of                        activation to the last layer which we describe below.
+FindCoupledPairs becomesO(N·N2unq).  Thus, we re-
+cover the complexity of all-to-all coupling Algorithm2B,                                        3.    Local pruning strategy
+assuming thatCbitop =O(N).
+  The above discussion leads us to expect LoopOver-                            At each level of the autoregressive tree, we mask un-
+Trie to be at least as fast as LoopOverBatch.  How-                         physical  nodes  (set  their  probabilities  to  zero)  as  de-
+ever,  this is not always the case in practice,  as evident                 scribed in Barrett at al.  [20].  We do not use more sophis-
+from  Fig.3.   This  is  because        LoopOverTrie  requires              ticated masking strategies proposed in our earlier work
+explicit  looping  over N  levels  of  prefix  trees,  and  thus
+loses  the  benefits  of  the  compressed  basis  vector  stor-             [23].  This is due to our lack of understanding how to rec-
+ing.   Nevertheless,  for  large  systems  efficient  exploita-             oncile discarding the samples required by these strategies
+tion of coupling sparsity outweighs this disadvantage, and                  with autoregressive sampling without replacement.
+LoopOverTrie does demonstrate practical speedups.
+
+                                                                                             4.    Grouping qubits into qudits
+               C.    Experimental particulars
+                                                                               We alleviate the expressivity restriction brought about
+                         1.    General setup                                by our masking strategy by grouping multiple qubits into
+                                                                            qudits  and  sampling  the  latter.   The  number N qubit
+                                                                                                                                          qudit  of
+  All experiments were performed on a single NVIDIA                         qubits per qudit is a hyperparameter, which we chose to
+RTX  A5000  GPU  with  24  GB  of  RAM.  For  a  given                      equal 6 as a result of a study described in Supplementary
+molecule and its geometry, we obtain the qubit Hamilto-                     Material .  If N  is not a multiple of N qubit
+                                                                                                                            qudit , the last sub-
+nian with OpenFermion software library [66], which uses                     network  groups  the  remaining          N   mod N qubit       qubits
+PySCF  [67]  and  Psi4  [68]  quantum  chemistry  packages                  into a last qudit.  A further advantage of grouping qubitsqudit
+as underlying backends to calculate one- and two-body                       into qudits is faster sampling and amplitude evaluation,
+integrals.  We study all molecules in the minimal basis set                 which we also cover in Supplementary Material.
+STO-3G,  unless  specified  otherwise.   For  each  molecule
+we  obtain  the  maximum  set  of  symmetries  and  ensure
+symmetry-aware sampling as described in Ref. [23].  For                                            5.    Global activation
+each geometry we run calculations using three different
+seeds of the underlying pseudorandom number generator.                         Once  the  log-amplitude  subnetwork  produces  unnor-
+When  discussing  achieved  energies  we  report  the  mini-                malised values for log|ψ (xi|x<i)|, we apply a global ac-
+mum  value obtained across seeds unless specified other-                    tivation function to them.  Specifically, we shift them by
+wise.  For other metrics we report the  mean  value.  We                    their  average,  i.e.   log|ψ (xi|x<i)| →  log|ψ (xi|x<i)|−
+invite the reader interested in specific values of the hyper-               P
+apameters and/or reproducing the experimental results                          xi log|ψ (xi|x<i)|,  where  the  summation  over xi  in-
+to explore the supplementary GitHub repository [69].                                                N qubit
+                                                                            cludes all possible 2     qudit  values ofi-th qudit.  In our pre-
+                                                                            liminary experiments we observed empirically that such
+                                                                            global activation improves the optimisation convergence.
+                     2.    Ansatz architecture
+
+  We  employ  an  ANQS  architecture  which  represents                                       ACKNOWLEDGMENTS
+each conditional wave function with two real-valued sub-
+networks, separately encoding absolute value log|ψ| and                        MS acknowledges support from the Helmholtz Initia-
+phase φ of an amplitude ψ = elog|ψ|+iφ.  This allows us                     tive and Networking Fund, grant no. VH-NG-1711.
+                                                                                                                                                             13
+
+
+
+
+
+ [1]G.  Carleo  and  M.  Troyer,  Solving  the  quantum  many-                          A. Oh, T. Neumann, A. Globerson, K. Saenko, M. Hardt,
+     body  problem  with  artificial  neural  networks,Science                          and S. Levine (Curran Associates, Inc., 2023) pp. 63461–
+     355, 602 (2017).                                                                   63482.
+ [2]M.   Medvidovi´c   and   J.   R.   Moreno,   Neural-network                   [19]K. Choo,  T. Neupert, and G. Carleo, Two-dimensional
+     quantum    states    for    many-body    physics    (2024),                        frustrated  j  1-  j  2  model  studied  with  neural  network
+     arXiv:2402.11014 [cond-mat.dis-nn].                                                quantum states, Physical Review B 100, 125124 (2019).
+ [3]H. Lange, A. V. de Walle, A. Abedinnia, and A. Bohrdt,                        [20]T.  D.  Barrett,  A.  Malyshev,  and  A.  I.  Lvovsky,  Au-
+     From  architectures  to  applications:  A  review  of  neural                      toregressive  neural-network  wavefunctions  for  ab  initio
+     quantum states (2024),arXiv:2402.09402 [cond-mat.dis-                              quantum chemistry,Nature Machine Intelligence  4, 351
+     nn].                                                                               (2022).
+ [4]J.   Hermann,   J.   Spencer,   K.   Choo,   A.   Mezzacapo,                  [21]T.  Zhao,  J.  Stokes,  and  S.  Veerapaneni,  Scalable  neu-
+     W. M. C. Foulkes, D. Pfau, G. Carleo, and F. No´e, Ab                              ral quantum states architecture for quantum chemistry,
+     initio quantum chemistry with neural-network wavefunc-                             Machine  Learning:   Science  and  Technology  4,  025034
+     tions,Nature Reviews Chemistry         7, 692–709 (2023).                          (2023).
+ [5]K. Choo, G. Carleo, N. Regnault, and T. Neupert, Sym-                         [22]Y. Wu, C. Guo, Y. Fan, P. Zhou, and H. Shang, Nnqs-
+     metries and many-body excitations with neural-network                              transformer:   an  efficient  and  scalable  neural  network
+     quantum states,Phys. Rev. Lett.          121, 167204 (2018).                       quantum  states  approach  for  ab  initio  quantum  chem-
+ [6]K. Choo,  T. Neupert, and G. Carleo, Two-dimensional                                istry, in Proceedings  of  the  International  Conference  for
+     frustrated J1−J2  model  studied  with  neural  network                            High  Performance  Computing,  Networking,  Storage  and
+     quantum states,Phys. Rev. B          100, 125124 (2019).                           Analysis, SC ’23 (Association for Computing Machinery,
+ [7]M. Hibat-Allah, M. Ganahl, L. E. Hayward, R. G. Melko,                              New York, NY, USA, 2023).
+     and J. Carrasquilla, Recurrent neural network wave func-                     [23]A. Malyshev, J. M. Arrazola, and A. I. Lvovsky, Autore-
+     tions, Physical Review Research 2, 023358 (2020).                                  gressive  neural  quantum  states  with  quantum  number
+ [8]L. L. Viteritti, R. Rende, and F. Becca, Transformer vari-                          symmetries (2023),arXiv:2310.04166 [quant-ph].
+     ational wave functions for frustrated quantum spin sys-                      [24]N. Yoshioka, W. Mizukami, and F. Nori, Solving quasi-
+     tems, arXiv preprint arXiv:2211.05504  (2022).                                     particle band spectra of real solids using neural-network
+ [9]H.  Lange,  F.  D¨oschl,  J.  Carrasquilla,  and  A.  Bohrdt,                       quantum states, Communications Physics 4, 1 (2021).
+     Neural network approach to quasiparticle dispersions in                      [25]A.-J. Liu and B. K. Clark, Neural network backflow for
+     doped antiferromagnets (2023),arXiv:2310.08578 [cond-                              ab-initio  quantum  chemistry  (2024),arXiv:2403.03286
+     mat.str-el].                                                                       [physics.chem-ph].
+[10]Y. Nomura, Helping restricted boltzmann machines with                         [26]M. Schmitt and M. Heyl, Quantum many-body dynamics
+     quantum-state  representation  by  restoring  symmetry,                            in two dimensions with artificial neural networks, Physi-
+     Journal of Physics: Condensed Matter 33, 174003 (2021).                            cal Review Letters 125, 100503 (2020).
+[11]C.  Roth  and  A.  H.  MacDonald,  Group  convolutional                       [27]M.  Schmitt,   M.  M.  Rams,   J.  Dziarmaga,   M.  Heyl,
+     neural networks improve quantum state accuracy, arXiv                              and   W.   H.   Zurek,   Quantum   phase   transition   dy-
+     preprint arXiv:2104.05085  (2021).                                                 namics     in     the     two-dimensional     transverse-field
+[12]M. Y. Pei and S. R. Clark, Specialising neural-network                              ising   model,Science   Advances       8,   eabl6850   (2022),
+     quantum  states  for  the  bose  hubbard  model  (2024),                           https://www.science.org/doi/pdf/10.1126/sciadv.abl6850.
+     arXiv:2402.15424 [cond-mat.quant-gas].                                       [28]K. Donatella,  Z. Denis,  A. Le Boit´e, and C. Ciuti, Dy-
+[13]C.  Adams,  G.  Carleo,  A.  Lovato,  and  N.  Rocco,  Vari-                        namics with autoregressive neural quantum states:  Ap-
+     ational  monte  carlo  calculations  of a ≤  4  nuclei  with                       plication to critical quench dynamics,Phys. Rev. A               108,
+     an artificial neural-network correlator ansatz,Phys. Rev.                          022210 (2023).
+     Lett. 127, 022502 (2021).                                                    [29]A.  Sinibaldi,  C.  Giuliani,  G.  Carleo,  and  F.  Vicentini,
+[14]A. Lovato, C. Adams, G. Carleo, and N. Rocco, Hidden-                               Unbiasing  time-dependent  Variational  Monte  Carlo  by
+     nucleons neural-network quantum states for the nuclear                             projected quantum evolution,Quantum            7, 1131 (2023).
+     many-body problem,Phys. Rev. Res.             4, 043178 (2022).              [30]T. Mendes-Santos, M. Schmitt, and M. Heyl, Highly re-
+[15]Y.  L.  Yang  and  P.  W.  Zhao,  Deep-neural-network  ap-                          solved spectral functions of two-dimensional systems with
+     proach to solving the ab initio nuclear structure problem,                         neural  quantum  states,Phys.  Rev.  Lett.          131,  046501
+     Phys. Rev. C 107, 034320 (2023).                                                   (2023).
+[16]D.  Pfau,  J.  S.  Spencer,  A.  G.  D.  G.  Matthews,  and                   [31]T.  Mendes-Santos,  M.  Schmitt,  A.  Angelone,  A.  Ro-
+     W. M. C. Foulkes, Ab initio solution of the many-electron                          driguez,  P.  Scholl,  H.  J.  Williams,  D.  Barredo,  T.  La-
+     schr¨odinger  equation  with  deep  neural  networks,Phys.                         haye,  A.  Browaeys,  M.  Heyl,  and  M.  Dalmonte,  Wave-
+     Rev. Res. 2, 033429 (2020).                                                        function  network  description  and  kolmogorov  complex-
+[17]J.  Hermann,   Z.  Sch¨atzle,  and  F.  No´e,  Deep-neural-                         ity  of  quantum  many-body  systems,Phys.  Rev.  X             14,
+     network solution of the electronic schr¨odinger equation,                          021029 (2024).
+     Nature Chemistry 12, 891 (2020).                                             [32]B.  J´onsson,  B.  Bauer,  and  G.  Carleo,  Neural-network
+[18]K. Neklyudov, J. Nys, L. Thiede, J. Carrasquilla, Q. Liu,                           states  for  the  classical  simulation  of  quantum  comput-
+     M.  Welling,  and  A.  Makhzani,  Wasserstein  quantum                             ing (2018),arXiv:1808.05232 [quant-ph].
+     monte carlo:  A novel approach for solving the quantum                       [33]M. Medvidovi´c and G. Carleo, Classical variational sim-
+     many-body  schr¨odinger  equation,  in  Advances  in  Neu-                         ulation of the quantum approximate optimization algo-
+     ral  Information  Processing  Systems,  Vol.  36,  edited  by                      rithm, npj Quantum Information 7, 1 (2021).
+                                                                                                                                                              14
+
+[34]G. Torlai and R. G. Melko, Latent space purification via                             Mod. Phys. 92, 015003 (2020).
+     neural density operators,Phys. Rev. Lett.            120, 240503              [51]J.  J.  Meyer,  Fisher  Information  in  Noisy  Intermediate-
+     (2018).                                                                             Scale Quantum Applications,Quantum                   5, 539 (2021).
+[35]M. J. Hartmann and G. Carleo, Neural-network approach                          [52]J. Stokes, J. Izaac, N. Killoran, and G. Carleo, Quantum
+     to dissipative quantum many-body dynamics,Phys. Rev.                                Natural Gradient,Quantum   4, 269 (2020).
+     Lett. 122, 250502 (2019).                                                     [53]A.  Chen  and  M.  Heyl,  Efficient  optimization  of  deep
+[36]M. Reh, M. Schmitt, and M. G¨arttner, Time-dependent                                 neural quantum states toward machine precision (2023),
+     variational principle for open quantum systems with ar-                             arXiv:2302.01941 [cond-mat.dis-nn].
+     tificial  neural  networks,Phys.  Rev.  Lett.        127,  230501             [54]R.  Rende,  L.  L.  Viteritti,  L.  Bardone,  F.  Becca,  and
+     (2021).                                                                             S.  Goldt,  A  simple  linear  algebra  identity  to  opti-
+[37]F. Vicentini, A. Biella, N. Regnault, and C. Ciuti, Vari-                            mize large-scale neural network quantum states (2023),
+     ational neural-network ansatz for steady states in open                             arXiv:2310.05715 [cond-mat.str-el].
+     quantum systems,Phys. Rev. Lett.             122, 250503 (2019).              [55]J.  Ansel,  E.  Yang,  H.  He,  N.  Gimelshein,  A.  Jain,
+[38]D. Luo, Z. Chen, J. Carrasquilla, and B. K. Clark, Au-                               M. Voznesensky, B. Bao, P. Bell, D. Berard, E. Burovski,
+     toregressive neural network for simulating open quantum                             G. Chauhan, A. Chourdia, W. Constable, A. Desmaison,
+     systems via a probabilistic formulation,Phys. Rev. Lett.                            Z. DeVito, E. Ellison, W. Feng, J. Gong, M. Gschwind,
+     128, 090501 (2022).                                                                 B. Hirsh, S. Huang, K. Kalambarkar, L. Kirsch, M. La-
+[39]G.  Torlai,   G.  Mazzola,   J.  Carrasquilla,   M.  Troyer,                         zos,  M.  Lezcano,  Y.  Liang,  J.  Liang,  Y.  Lu,  C.  Luk,
+     R. Melko, and G. Carleo, Neural-network quantum state                               B. Maher,  Y. Pan,  C. Puhrsch,  M. Reso,  M. Saroufim,
+     tomography,Nature Physics  14, 447 (2018).                                          M.  Y.  Siraichi,  H.  Suk,  M.  Suo,  P.  Tillet,  E.  Wang,
+[40]E. S. Tiunov, V. V. T. (Vyborova), A. E. Ulanov, A. I.                               X. Wang, W. Wen, S. Zhang, X. Zhao, K. Zhou, R. Zou,
+     Lvovsky, and A. K. Fedorov, Experimental quantum ho-                                A. Mathews, G. Chanan, P. Wu, and S. Chintala, Pytorch
+     modyne tomography via machine learning,Optica             7, 448                    2:   Faster  machine  learning  through  dynamic  python
+     (2020).                                                                             bytecode transformation and graph compilation, in Pro-
+[41]M.  K.  Kurmapu,  V.  Tiunova,  E.  Tiunov,  M.  Ring-                               ceedings  of  the  29th  ACM  International  Conference  on
+     bauer, C. Maier, R. Blatt, T. Monz, A. K. Fedorov, and                              Architectural  Support  for  Programming  Languages  and
+     A. Lvovsky, Reconstructing complex states of a 20-qubit                             Operating  Systems,   Volume  2  (ASPLOS  ’24)  (ACM,
+     quantum simulator,PRX Quantum          4, 040345 (2023).                            2024).
+[42]E. Fedotova, N. Kuznetsov, E. Tiunov, A. E. Ulanov, and                        [56]S.     Sharma     and     A.     Alavi,     Multireference    lin-
+     A.  I.  Lvovsky,  Continuous-variable  quantum  tomogra-                            earized    coupled    cluster    theory    for    strongly    cor-
+     phy of high-amplitude states,Phys. Rev. A          108, 042430                      related     systems     using     matrix     product     states,
+     (2023).                                                                             The    Journal    of    Chemical    Physics   143,    102815
+[43]K.  Choo,   A.  Mezzacapo,  and  G.  Carleo,  Fermionic                              (2015),                   https://pubs.aip.org/aip/jcp/article-
+     neural-network  states  for  ab-initio  electronic  structure,                      pdf/doi/10.1063/1.4928643/15502606/102815                  1 online.pdf.
+     Nature Communications 11, 2368 (2020).                                        [57]S.  Kim,  P.  A.  Thiessen,  E.  E.  Bolton,  J.  Chen,  G.  Fu,
+[44]X.   Li,   J.-C.   Huang,   G.-Z.   Zhang,   H.-E.   Li,   C.-                       A.  Gindulyte,  L.  Han,  J.  He,  S.  He,  B.  A.  Shoemaker,
+     S.   Cao,    D.   Lv,   and   H.-S.   Hu,   A   nonstochastic                       et al., Pubchem substance and compound databases, Nu-
+     optimization    algorithm    for    neural-network    quan-                         cleic Acids Res. 44, D1202 (2016).
+     tum    states,Journal    of    Chemical    Theory    and                      [58]H.  Gao,  S.  Imamura,  A.  Kasagi,  and  E.  Yoshida,  Dis-
+     Computation   19,    8156    (2023),    pMID:    37962975,                          tributed implementation of full configuration interaction
+     https://doi.org/10.1021/acs.jctc.3c00831.                                           for one trillion determinants,Journal of Chemical The-
+[45]F.  Vicentini,  D.  Hofmann,  A.  Szab´o,  D.  Wu,  C.  Roth,                        ory and Computation 20, 1185 (2024), pMID: 38314701,
+     C.  Giuliani,  G.  Pescia,  J.  Nys,  V.  Vargas-Calder´on,                         https://doi.org/10.1021/acs.jctc.3c01190.
+     N.  Astrakhantsev,  and  G.  Carleo,  NetKet  3:   Machine                    [59]M.  Bukov,  M.  Schmitt,  and  M.  Dupont,  Learning  the
+     Learning Toolbox for Many-Body Quantum Systems,Sci-                                 ground state of a non-stoquastic quantum Hamiltonian
+     Post Phys. Codebases , 7 (2022).                                                    in a rugged neural network landscape,SciPost Phys.   10,
+[46]O. Sharir, Y. Levine, N. Wies, G. Carleo, and A. Shashua,                            147 (2021).
+     Deep  autoregressive  models  for  the  efficient  variational                [60]D.  Luo  and  B.  K.  Clark,  Backflow  transformations  via
+     simulation of many-body quantum systems,Phys. Rev.                                  neural networks for quantum many-body wave functions,
+     Lett. 124, 020503 (2020).                                                           Phys. Rev. Lett. 122, 226401 (2019).
+[47]W.  Kool,   H.  Van  Hoof,  and  M.  Welling,  Ancestral                       [61]J. Robledo Moreno, G. Carleo, A. Georges, and J. Stokes,
+     gumbel-top-k  sampling  for  sampling  without  replace-                            Fermionic   wave   functions   from   neural-network   con-
+     ment,  The  Journal  of  Machine  Learning  Research  21,                           strained   hidden   states,   Proceedings   of   the   National
+     1726 (2020).                                                                        Academy of Sciences 119, e2122059119 (2022).
+[48]E.  J.  Gumbel,        Statistical  theory  of  extreme  values  and           [62]J.  Nys,  G.  Pescia,  and  G.  Carleo,  Ab-initio  variational
+     some  practical  applications:  a  series  of  lectures, Vol. 33                    wave  functions  for  the  time-dependent  many-electron
+     (US Government Printing Office, 1954).                                              schr¨odinger  equation  (2024),arXiv:2403.07447  [cond-
+[49]C. J. Maddison, D. Tarlow, and T. Minka,   A∗ Sampling,                              mat.str-el].
+     in  Advances  in  Neural  Information  Processing  Systems,                   [63]S. Humeniuk, Y. Wan, and L. Wang, Autoregressive neu-
+     Vol. 27, edited by Z. Ghahramani, M. Welling, C. Cortes,                            ral  Slater-Jastrow  ansatz  for  variational  Monte  Carlo
+     N.  Lawrence,  and  K.  Weinberger  (Curran  Associates,                            simulation,SciPost Phys.            14, 171 (2023).
+     Inc., 2014).                                                                  [64]N. Astrakhantsev, G. Mazzola, I. Tavernelli, and G. Car-
+[50]S. McArdle, S. Endo, A. Aspuru-Guzik, S. C. Benjamin,                                leo,  Phenomenological  theory  of  variational  quantum
+     and  X.  Yuan,  Quantum  computational  chemistry, Rev.                             ground-state  preparation, Phys.  Rev.  Res.   5,  033225
+                                                                                                                                                            15
+
+     (2023).                                                                            J. P. Misiewicz, M. Scheurer, R. A. Shaw, J. B. Schriber,
+[65]D. Cleland, G. H. Booth, C. Overy, and A. Alavi, Taming                             Y. Xie, Z. L. Glick, D. A. Sirianni, J. S. O’Brien, J. M.
+     the first-row diatomics:  A full configuration interaction                         Waldrop, A. Kumar, E. G. Hohenstein, B. P. Pritchard,
+     quantum  monte  carlo  study, Journal  of  Chemical  The-                          B.  R.  Brooks,  I.  Schaefer,  Henry  F.,  A.  Y.  Sokolov,
+     ory and Computation 8, 4138 (2012), pMID: 26605580,                                K. Patkowski, I. DePrince, A. Eugene, U. Bozkaya, R. A.
+     https://doi.org/10.1021/ct300504f.                                                 King,  F.  A.  Evangelista,  J.  M.  Turney,  T.  D.  Craw-
+[66]J.   R.   McClean,   N.   C.   Rubin,   K.   J.   Sung,   I.   D.                   ford, and C. D. Sherrill, PSI4 1.4:  Open-source software
+     Kivlichan,  X.  Bonet-Monroig,  Y.  Cao,  C.  Dai,  E.  S.                         for high-throughput quantum chemistry,The Journal of
+     Fried,  C.  Gidney,  B.  Gimby,  P.  Gokhale,  T.  H¨aner,                         Chemical Physics 152, 184108 (2020).
+     T. Hardikar, V. Havl´ıˇcek, O. Higgott, C. Huang, J. Izaac,                  [69]A.   Malyshev,   Autoregressive   neural   quantum   states
+     Z.  Jiang,  X.  Liu,  S.  McArdle,  M.  Neeley,  T.  O’Brien,                      for  quantum  chemistry,  https://github.com/Exferro/
+     B.  O’Gorman,  I.  Ozfidan,  M.  D.  Radin,  J.  Romero,                           anqs_quantum_chemistry (2024).
+     N.  P.  D.  Sawaya,  B.  Senjean,  K.  Setia,  S.  Sim,  D.  S.              [70]M.  Reh,  M.  Schmitt,  and  M.  G¨arttner,  Optimizing  de-
+     Steiger,   M.  Steudtner,   Q.  Sun,   W.  Sun,   D.  Wang,                        sign  choices  for  neural  quantum  states,  arXiv  preprint
+     F. Zhang, and R. Babbush, Openfermion:  the electronic                             arXiv:2301.06788  (2023).
+     structure package for quantum computers,Quantum Sci-                         [71]M. Bortone, Y. Rath, and G. H. Booth, Impact of condi-
+     ence and Technology 5, 034014 (2020).                                              tional modelling for a universal autoregressive quantum
+[67]Q. Sun, X. Zhang, S. Banerjee, P. Bao, M. Barbry, N. S.                             state,Quantum         8, 1245 (2024).
+     Blunt,  N.  A.  Bogdanov,  G.  H.  Booth,  J.  Chen,  Z.-H.                  [72]M. Abadi, A. Agarwal, P. Barham, E. Brevdo, Z. Chen,
+     Cui, J. J. Eriksen, Y. Gao, S. Guo, J. Hermann, M. R.                              C. Citro,  G. S. Corrado,  A. Davis,  J. Dean,  M. Devin,
+     Hermes,  K.  Koh,  P.  Koval,  S.  Lehtola,  Z.  Li,  J.  Liu,                     S. Ghemawat, I. Goodfellow, A. Harp, G. Irving, M. Is-
+     N. Mardirossian, J. D. McClain, M. Motta, B. Mussard,                              ard, Y. Jia, R. Jozefowicz, L. Kaiser, M. Kudlur, J. Lev-
+     H.  Q.  Pham,  A.  Pulkin,  W.  Purwanto,  P.  J.  Robin-                          enberg,  D.  Man´e,  R.  Monga,  S.  Moore,  D.  Murray,
+     son,  E.  Ronca,  E.  R.  Sayfutyarova,  M.  Scheurer,  H.  F.                     C. Olah, M. Schuster, J. Shlens, B. Steiner, I. Sutskever,
+     Schurkus,  J. E. T. Smith,  C. Sun,  S.-N. Sun,  S. Upad-                          K.  Talwar,  P.  Tucker,  V.  Vanhoucke,  V.  Vasudevan,
+     hyay, L. K. Wagner, X. Wang, A. White, J. D. Whitfield,                            F.  Vi´egas,   O.  Vinyals,   P.  Warden,   M.  Wattenberg,
+     M. J. Williamson, S. Wouters, J. Yang, J. M. Yu, T. Zhu,                           M.  Wicke,  Y.  Yu,  and  X.  Zheng,TensorFlow:   Large-
+     T. C. Berkelbach, S. Sharma, A. Y. Sokolov, and G. K.-                             scale machine learning on heterogeneous systems(2015),
+     L.  Chan,  Recent  developments  in  the  PySCF  program                           software available from tensorflow.org.
+     package,The Journal of Chemical Physics       153, 024109                    [73]J.  Bradbury,  R.  Frostig,  P.  Hawkins,  M.  J.  Johnson,
+     (2020).                                                                            C. Leary,  D. Maclaurin,  G. Necula,  A. Paszke,  J. Van-
+[68]D. G. A. Smith,  L. A. Burns,  A. C. Simmonett,  R. M.                              derPlas, S. Wanderman-Milne, and Q. Zhang,JAX: com-
+     Parrish, M. C. Schieber, R. Galvelis, P. Kraus, H. Kruse,                          posable  transformations  of  Python+NumPy  programs
+     R. Di Remigio, A. Alenaizan, A. M. James, S. Lehtola,                              (2018).
+                                                                                                                                                16
+
+        Supplementary material:  Neural quantum states and peaked molecular wavefunctions:  curse or blessing?
+
+
+
+  This supplementary consists of two main parts.  In SectionS1we cover the ablation studies mentioned in the main
+text.   Namely,  we  ablate  autoregressive  sampling  without  replacement,  grouping  qubit  into  qudits  and  stochastic
+reconfiguration.  The remaining sections are dedicated to GPU implementation of Evarloc  calculation using primitives of
+PyTorch software library [55].  In SectionS2we introduce a toy problem which we use as illustration in the remaining
+sections.  In SectionS3we cover the general principles behind our implementation:  contiguous storing of information
+and pointer arithmetic.  In SectionS4we explain implementations of               LoopOverBatch and MatrixElement.  In
+SectionS5we discuss how to perform prefix tree operations on a GPU and provide implementation for               LoopOver-
+Trie.   Finally,  the  considered  higher-level  routines  require  auxiliary  lower-level  functions  not  readily  available  in
+PyTorch, and we overview their implementation in SectionS6.
+
+
+                                                      S1.    ABLATION STUDIES
+
+                                                A.    Autoregressive Gumbel sampling
+
+  In this ablation study we compare autoregressive Gumbel sampling to adaptive autoregressive statistics sampling.
+As  discussed  in  the  main  text,  autoregressive  Gumbel  sampling  is  advantageous  due  to  its  ability  to  produce  the
+number of unique samplesNunq exactly as specified by the user.  However, it is possible to obtain the desired number
+of samples at every iteration with the conventional autoregressive statistics sampling [20,23] too.  To that end one
+has to resort to adaptive sampling:  if the number of produced unique samples is less than Nunq, then one increases
+Ns according to some batch size schedule and samples again.
+  Specifically,  we  consider  the  following  adaptive  scheme:  if  the  number  of  produced  unique  samples  is  less  than
+Nunq, we increaseNs by a factor ofαup and sample again.  As soon as the number of obtained unique samples exceeds
+Nunq, we stop sampling and select the first Nunq unique samples with the highest probabilities p(x) produced by the
+ansatz.  In addition, to avoid soaring values of Ns, we decrease the batch size by a factor of αdown = 2 before the first
+sampling attempt of each iteration.  One might consider various other adaptive sampling approaches, however this
+remains outside the scope of this paper.
+  For  our  benchmark  we  optimise  an  ANQS  corresponding  to  the  Li2O  molecule  for  2· 104  iterations  using  plain
+Adam  optimiser  across  a  range  of Nunq.   We  choose  five  possible  values  of αup  ={3, 5, 7, 9}.   In  addition,  we  run
+calculations using only autoregressive Gumbel sampling.
+  The results of optimisation are presented in Fig.S1.  One can see in Fig.S1A that the energy errors achieved by all
+sampling strategies are similar to a good degree of accuracy, with no sampling scheme having a competitive edge over
+others.  At the same time all sampling approaches apart from Gumbel require on average more than one sampling per
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+FIG. S1.  An ablation study comparing Gumbel sampling to adaptive statistics sampling strategies for several values of αup. A.
+Achieved energy differences with respect to EFCI; the grey shaded area corresponds to the energy differences within chemical
+accuracy of 1.6 mHa.  B. Number of resamplings required to obtain the desired number of unique samples.  C. Ratio of the
+actual number of unique samples produced during the last resampling to the desired Nunq. D. Slowdown in the total iteration
+time brought by adaptive sampling as compared to the Gumbel sampling iteration time.
+                                                                                                                                                  17
+
+iteration as displayed in Fig.S1B. Evidently, the number of resamplings decreases as     αup grows, since it takes fewer
+attempts to reach higher values of Ns.  However, this comes at a cost of increased computational burden as shown
+in Fig.S1C: the actual number of unique samples produced during each successful sampling attempt is larger than
+Nunq for all adaptive sampling strategies.  As a result, every adaptive sampling scheme increases iteration time with
+respect to Gumbel sampling as presented in Fig.S1D. Notably, lower values of    αup slow down the computation more,
+since restarting sampling multiple times is more expensive than producing more unique samples as long as the batch
+of unique samples fits in the GPU RAM.
+  Finally,  let  us  note  that  while  the  slowdowns  displayed  in  Fig.S1D  are  rather  moderate,  this  is  mainly  due  to
+sampling taking less than 15% of the total iteration time as shown in Fig.4of the main text.  However, we expect
+the advantage of Gumbel sampling to become more pronounced for larger molecules, with sampling taking a larger
+part of iteration time.
+
+
+                                                    B.    Grouping qubits into qudits
+
+
+
+
+
+
+                                                                                                       N qubit    Np
+                                                                                                         qudit
+                                                                                                          1     317,048
+                                                                                                          2     161,528
+                                                                                                          3     112,288
+                                                                                                          4     97,128
+                                                                                                          5     85,376
+                                                                                                          6     91,648
+                                                                                                          7     118,408
+                                                                                                          8     148,224
+
+
+
+
+FIG. S2.  An ablation studying the impact of grouping qubits into qudits. A. Achieved energy differences with respect toEFCI;
+the grey shaded area corresponds to the energy differences within chemical accuracy of 1.6 mHa.  B. Iteration time averaged
+across seeds.
+
+  In this ablation study we investigate the impact of grouping qubits into qudits.  Similarly to above, we optimise
+the ANQS representing the Li2O molecule for 2· 104 iterations without resorting to SR. We consider every possible
+value  of N qubit
+              qudit  from  1  to  8  and  show  the  results  in  Fig.S2.   One  can  see  in  Fig.S2A  that  low  values  of         N qubitqudit
+such  as  1  and  2  consistently  perform  the  worst  in  terms  of  the  achieved  energy  error,  even  though  they  have  the
+largest number of parameters as shown in the table in Fig.S2.  This is in agreement with previous reports indicating
+that masking conditional wave functions required for correct symmetry-aware sampling reduces the expressivity of
+an ANQS [23,70,71].  At the same time, increasing      N qubit
+                                                                       qudit  results in steady improvement of the achieved accuracy,
+with N qubit
+         qudit  = 5, 6 providing the best energies at Nunq = 20000.  Importantly, these values of N qubitqudit  also result in the
+least time spent on sampling and amplitude evaluation as depicted in Fig.S2.  This is due to the fact that larger
+N qubit
+  qudit  amount to fewer conditional wave functionsψ(xi|x<i) constituting the ansatz (the number of conditional wave
+functions is given by           N     ).
+                             N qubit
+                               qudit
+  Similar regularities were obtained in our preliminary experiments on other molecules.  As a result, we choseN qubit
+                                                                                                                                             qudit  =
+6 for all numerical experiments described in the main text.
+
+
+                                                     C.    Stochastic reconfiguration
+
+  In  the  final  ablation  study  we  investigate  how  SR  affects  the  accuracy  and  computational  efficiency  of  ANQS
+quantum chemistry calculations.  Prior to comparing the optimisation with and without SR, we select the optimal
+hyperparameter NSRunq.   Similarly  to  the  previous  ablation  studies,  we  consider  the  Li2O  molecule  and  run  ANQS
+optimisation with different values of NSRunq∈{1, 10, 25, 50, 100, 200}; as well we run optimisation instances which do
+                                                                                                                                                 18
+
+not employ stochastic reconfiguration.  We run each optimisation configuration with 5 different seeds of the underlying
+pseudorandom number generator and in each run we measure the minimum achieved energy.
+  In Fig.S3A and Fig.S3B we show, respectively, the minimum and median achieved energies across the five seeds.
+Generally, larger values ofNSRunq result in lower achieved energies, with NSRunq = 100 providing the best energy starting
+from Nunq  = 103.  Rather surprisingly, stochastic reconfiguration does not always translate into the improved con-
+vergence:  for example, NSRunq = 1 and NSRunq = 25 provide worse energies than purely Adam-based optimisation.  The
+larger value ofNSRunq, namely 200, does not result in better energies either, even though one might na¨ıvely expect it to
+provide a more accurate estimate of the metric tensor S.  We attribute such behaviour to sharp singular spectrum of
+S typical for NQS. A largerNSRunq gives rise to multiple, very small singular values, introducing numerical noise which
+affects the accuracy of the inversion of S.
+  In Fig.S4we show exemplary training curves for optimisation of the Li            2O molecule with Nunq = 104.  Specifically,
+we show how Evar changes with the iteration number (Fig.S4A) and elapsed time (Fig.S4B) for two optimisations
+run (i) with NSRunq = 100 and (ii) without SR. It can be seen that the SR-driven optimisation achieves lower energies
+substantially  earlier.   However,  once  the  required  iteration  time  is  taken  into  account,  the  optimisation  performed
+without SR catches up and might eventually achieve similar energies in a similar  time.  The optimal strategy could
+therefore be to start the training with SR and switch it off as soon as the iterations “break through” to energies below
+a certain threshold.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+FIG.  S3.   Impact  of  hyperparameter NSRunq  in  stochastic                   FIG.  S4.   Example  training  curves  for  Li2O  molecule  at
+reconfiguration.   We  plot  the  achieved  energy  differences                 Nunq = 10000.  We show median energy differences to the
+with respect toEFCI; the grey shaded area corresponds to                        exact diagonalisation (FCI) result as a function of (A) it-
+energy differences within the chemical accuracy of 1.6 mHa.                     eration number; (B) wall clock time.  The coloured shaded
+Figures  A  and  B  show  minimum  and  median  statistics                      areas depict the spread of values from minimum to max-
+calculated across five seeds respectively.                                      imum across seeds.  The grey shaded areas correspond to
+                                                                                the energy differences within chemical accuracy of 1.6 mHa.
+
+
+
+
+                                    S2.    GPU IMPLEMENTATION: MODEL PROBLEM
+
+  This section sets the stage for the subsequent discussion of GPU-based Evarloc  calculation.  First, we fill the gap left
+in the main text and discuss the subtleties of evaluating Hamiltonian matrix elements Hxx′.  Second, we introduce a
+toy problem and provide a detailed calculations of Evarloc (x) values.  The results of this calculation will be used as an
+illustrative example in the sections covering GPU operations.
+
+
+                                         A.    Calculating the Hamiltonian matrix element
+
+  Let MatrixElement be a function which calculates Hxx′  for a given pair of x and x′.  To calculate the Hamil-
+tonian matrix element between two basis vectors, one needs to sum the values hl⟨x| ˆP (l)|x′⟩ over the set of all  ˆP (l)
+corresponding to the same XY.  We define this set as follows:
+                                                 n  ˆP (l)≡                                               o
+                                      PXY    :=               hl, X(l), Y(l), Z(l)  XY(l) = XY            .                                          (12)
+
+In this case, the matrix element Hxx′  can be calculated using the following algorithm:
+                                                                                                                                                       19
+
+           ˆP (l)                    Y(l)                                        XY(l)                                         YZ(l)
+l   hl                    Bin                   Dec                    Bin                    Dec                    Bin                    Dec
+0  0.9      ˆI           0000                     0                    0000                     0                    0000                    0
+1  0.1    ˆZ1 ˆZ2        0000                     0                    0000                     0                    0110                    6
+2  -0.2   ˆX0 ˆX2        0000                     0                    1010                    10                    0000                    0
+3  -0.2   ˆX1 ˆX3        0000                     0                    0101                     5                    0000                    0
+4  0.3    ˆY1 ˆY2        0110                     6                    0110                     6                    0110                    6
+
+TABLE S1.  Decomposition of toy Hamiltonian terms into bit strings Y, XY                      and YZ.  The columns Bin and Dec show binary
+and decimal representations of bit vectors correspondingly.
+
+
+Algorithm 3 Calculating the Hamiltonian matrix element
+ 1:  function MatrixElement(x, x′)
+ 2:   Hxx′ := 0
+ 3:      XY := x⊗ x′
+ 4:      for   hl, X(l), Y(l), Z(l) Y(l) +πx′⊙ YZinPXYdo
+ 5:     ϕ := π                               (l)
+                   2
+ 6:     Hxx′ +=hl·eiϕ
+ 7:      return Hxx′
+
+   The setPXY        for every unique XY         can be precalculated at the start of optimisation and accessed from the memory
+on demand.
+
+
+                                                              B.    Toy Hamiltonian
+
+   We consider the following “toy” Hamiltonian acting on the Hilbert space of four qubits:
+                                    ˆH = 0.9·    ˆI|{z}+0.1·  ˆZ1 ˆZ2|{z}−0.2·  ˆX0 ˆX2|{z}−0.2·  ˆX1 ˆX3|{z}+0.3· ˆY1 ˆY2|{z}.                                    (13)
+
+                                                ˆP (0)          ˆP (1)          ˆP (2)          ˆP (4)          ˆP (4)
+This Hamiltonian does not correspond to any particular molecule; we select it exclusively for the purpose of illustration.
+TableS1contains  information  about  each  of  five  Hamiltonian  terms,  including  the  bit  vectors          Y,  XY                         and YZ
+introduced above.  For each bit vector we provide both its binary and decimal representations.
+   It can be seen that there are only four  unique XY                  in TableS1which we denote as follows             1:
+                                   XY0 := 0000;    XY1 := 1010;    XY2 := 0101;    XY3 := 0110;
+                           Dec(XY0) = 0;    Dec(XY1) = 10;    Dec(XY2) = 5;    Dec(XY3) = 6;                           (14)
+Thus,  the  set  of  unique XY         is  as  follows: XY  = [XY0, XY1, XY2, XY3].  Finally,  the  setsPXY                           of  Hamiltonian
+terms corresponding to the same XY                are as follows:
+                                     h ˆP (0), ˆP (1)i               h ˆP (2)i                h ˆP (3)i               h ˆP (4)i
+                         PXY0 =                      ; PXY1 =                 ; PXY2 =                ; PXY3 =                 .                        (15)
+
+In other words, there are  two  terms corresponding to XY0, while the rest of XY                               inXY  are represented by single
+terms.
+
+
+                                                                C.    Unique batch
+
+   Suppose our batch of unique samples contains only three basis vectorsU = [x0, x1, x2] which are as follows:
+                                                   x0 := 1100;    x1 := 1001;    x2 := 0110;
+                                             Dec(x0) = 12;    Dec(x1) = 9;    Dec(x2) = 6.                                                (16)
+
+
+
+
+1 One should be careful to distinguish between three similarly look-
+                           (l)  denotes the XY                                    tor XY; (iii) finally, XYm is the m-th bit vector XY         in the set
+  ing notations:  (i) XY                          vector corresponding            XY.
+  to l-th Hamiltonian term; (ii) XY     i denotes the i-th bit of a vec-
+                                                                                                                                                20
+
+In addition, we assume that these basis vectors have the following (unnormalised) amplitudes:
+
+                                                 ψ(x0) = 2;  ψ(x1) = 1;  ψ(x2) =−1.                                                       (17)
+
+  The first step to evaluate local energies of the basis vectors is to find the coupled pairs.  To that end, we compose
+the following tables:
+
+                                        x0     x1     x2            x0   x1   x2            x0      x1      x2
+                                  x0   0000   0101   1010   ≡   x0   0    5   10  ≡   x0  XY0     XY2     XY1
+                                  x1   0101   0000   1111       x1   5    0   15      x1  XY2     XY0
+                                  x2   1010   1111   0000       x2  10   15   0       x2  XY1             XY0
+
+Here at the intersection of a row xi  with a column xj  we put the value of xi⊗ xj.  In the first table we display its
+binary  representation,  in  the  second  table  we  put  its  decimal  representation  and  in  the  third  table  we  specify  the
+corresponding XY        inXY.  In our case the sets of coupled basis vectors are as follows:
+
+                                     SCx0 = [x0, x1, x2] ; SCx1 = [x0, x1] ; SCx2 = [x0, x2].                                        (18)
+
+In other words, each basis vector is coupled to itself and in addition the basis vector x0 is coupled to both x1 and x2.
+
+
+                                                           D.    Matrix elements
+
+  The corresponding matrix elements are obtained with straightforward algebraic calculations:
+
+                 ˆHx0x0 = 0.9⟨x0| ˆP (0)|x0⟩ + 0.1⟨x0| ˆP (1)|x0⟩ = 0.9⟨1100|1100⟩| {z      } +0.1⟨1100| ˆZ1 ˆZ2|1100⟩|{z} = 0.8;
+
+                                                                                    +1                        −1
+                                    ˆHx0x1 =−0.2⟨x0| ˆP (3)|x1⟩ =−0.2⟨1100| ˆX1 ˆX3|1001⟩|{z        } =−0.2;
+
+                                                                                         1
+                                    ˆHx0x2 =−0.2⟨x0| ˆP (2)|x2⟩ =−0.2⟨1100| ˆX0 ˆX2|0110⟩|{z        } =−0.2;
+
+                                                                                         1
+
+                 ˆHx1x1 = 0.9⟨x1| ˆP (0)|x1⟩ + 0.1⟨x1| ˆP (1)|x1⟩ = 0.9⟨1001|1001⟩| {z      } +0.1⟨1001| ˆZ1 ˆZ2|1001⟩|{z} = 1.0;
+
+                                                                                    +1                        +1
+                                    ˆHx1x0 =−0.2⟨x1| ˆP (3)|x0⟩ =−0.2⟨1001| ˆX1 ˆX3|1100⟩|{z        } =−0.2;
+
+                                                                                         1
+
+                 ˆHx2x2 = 0.9⟨x2| ˆP (0)|x2⟩ + 0.1⟨x2| ˆP (1)|x2⟩ = 0.9⟨0110|0110⟩| {z      } +0.1⟨0110| ˆZ1 ˆZ2|0110⟩|{z} = 1.0;
+
+                                                                                    +1                        1
+                                    ˆHx2x0 =−0.2⟨x2| ˆP (2)|x0⟩ =−0.2⟨0110| ˆX0 ˆX2|1100⟩|{z        } =−0.2;
+
+                                                                                         1
+
+
+                                                             E.    Local energies
+
+  Finally, we bring together the computed matrix elements and the amplitudes produced by the ansatz to calculate
+the local energy values:
+
+               Evarloc (x0) =     1ψ(x0)ψ(x0) ˆHx0x0 +ψ(x1) ˆHx0x1 +ψ(x2) ˆHx0x2              = 0.8− 12· 0.2 + 12· 0.2 = 0.8;
+
+                             Evarloc (x1) =     1ψ(x1)ψ(x0) ˆHx1x0 +ψ(x1) ˆHx1x1          =−2· 0.2 + 1.0 = 0.6;
+
+                              Evarloc (x2) =     1ψ(x2)ψ(x0) ˆHx2x0 +ψ(x2) ˆHx2x2          = 2· 0.2 + 1.0 = 1.4.
+                                                                                                                                                  21
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                        FIG. S5.  An example of storing the relevant data structures as contiguous pointers.
+
+
+
+                                 S3.    GPU IMPLEMENTATION: GENERAL PRINCIPLES
+
+
+  At the core of every deep learning framework such as PyTorch [55], TensorFlow [72] and Jax [73] lies a library of
+GPU-accelerated tensor algebra primitives.  These primitives operate on contiguous arrays of known size that store
+relevant numerical quantities (e.g.  network parameters and real-world data).  Such arrays are often manipulated in a
+vectorised (batched) manner so that the number of explicit loops is reduced to a minimum.
+  The toy example of previous section suggests that implementing our optimisation procedure using tensor algebra
+primitives  is  not  straightforward.   For  example,  the  size  of  eachSCx  set  is  dynamic  and  depends  on  the  batchU
+sampled  at  the  current  iteration.   In  addition,  finding  out  coupled  pairs  requires  a  search  operation  to  determine
+which of XY      = x⊗ x′ corresponds to a Hamiltonian term.
+  In  principle,  one  might  still  leverage  GPU  parallelism  by  writing  a  specialised  CUDA  code  implementing  the
+variational optimisation.  However,  this is beyond our ability.  Instead,  in the remainder of this Supplementary we
+discuss  how  to  implement  key  components  of  ANQS  variational  optimisation  using  only  a  stringent  set  of  tensor
+algebra primitives, specifically that of PyTorch software library.
+  In this Section we outline the main principles behind our implementation, while specific routines such as FindCou-
+pledPairs and MatrixElement are covered in the subsequent sections.  We illustrate every non-trivial operation
+with the arrays corresponding to the model problem considered in SectionS2.
+
+
+
+
+
+                                                          A.    Contiguous arrays
+
+
+  The first guiding principle of our implementation is storing information  contiguously,  as illustrated in Fig.S5A,
+which  enables  the  use  of  vectorised  PyTorch  primitives.   As  discussed  in  the  main  text,  we  represent N-bit  basis
+vectors as tuples of N int             N      integers, where N bits
+                            vec  :=  N bits                          int  is the number of bits contained in a single integer number.
+                                        int
+In our case N  = 4 and thus we assume only one integer is needed per basis vectors.  As a result, the batch of three
+unique samples is stored as an integer arrayU  of length 3, or, equivalently, of shape [Nunq, 1].  For the sake of clarity,
+in our diagrams, the first and second dimensions of each tensor are depicted horizontally and vertically, respectively.
+This representation is opposite to the conventional notion where a tensor with shape [N, 1] is viewed as a columnh                            i
+vector.  If more than one integer is required to represent a basis vector,U becomes an array of shape                            Nunq,N int     .  In
+                                                                                                                                           vec
+this case all procedures described in this supplementary can be generalised to account for the extra array dimension
+(see our code for more details [69]).
+  In  Fig.S5we  emphasise  that  all  procedures  return  contiguous  arrays  too.   For  example,  one  can  see  that  the
+FindCoupledPairs  procedure  takes  an  arrayU  as  input  and  outputs  two  arrays x  and x′.   These  arrays  store
+concatenated first and second elements in each pair of everySCx respectively.
+                                                                                                                                               22
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+FIG. S6.  A. Efficient evaluation of ansatz amplitudes using Gather routine.  The amplitudes are calculated only for unique
+basis vectors and then distributed as necessary. B. An example Gather operation.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+FIG. S7.  A. Efficient evaluation of Evarloc  where the dynamic range summations are performed with ScatterAdd routine.  B.
+An example ScatterAdd operation.
+
+
+
+                                                         B.    Pointer arithmetic
+
+  The second key aspect of our code is the use of pointer arithmetic.  Suppose one has an array  A of length LA.  We
+assume that an array (B→ A) is an array of pointers to A if (B→ A) is an array of integer numbers ranging from 0 to
+LA− 1 inclusively.  In this case we interpret thei-th element of (B→ A) as a pointer to the (B→ A) [i]-th element of A.
+Arrays (x→U) and (x′→U) depicted in Fig.S5are specific examples of pointer arrays.  They represent arrays          x and
+x′ by storing not x0, x1,... themselves, but their indices instead.  For example, x[3] = x1 and thus (x→U) [3] = 1.
+  The pointer arithmetic is crucial for our implementation for two reasons.  First, it allows one to avoid redundant
+computation, as illustrated in Fig.S6A. One obtains the amplitudes for each        x′ inSC by reusing the known values of
+amplitudes for basis vectors inU, rather than evaluating them directly.  The substitution is performed with a standard
+tensor algebra routine Gather depicted in Fig.S6B. As input, this routine takes a            src array and an array index of
+pointers to src.  As output, it produces the result array defined as result[i] = src[index[i]].  We call this process
+dereferencing  of  index with respect to src.  Note that the same pointer array might be dereferenced with respect to
+different source arrays.  For example, Gather(src :ψ(U), index : (x′→U)) =ψ(x′), while Gather(src :U, index :
+(x′→U)) = x′.
+  The second advantage of pointer arithmetic is that it enables summation over dynamically defined ranges of indices
+                                                                                                                                                23
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                          FIG. S8.  Storing the Hamiltonian as a set of tensors.
+
+
+as illustrated in Fig.S7A. Suppose we employed          MatrixElement function to obtain the arrayHxx′ of Hamiltonian
+matrix elements.  To obtain Evarloc (x) one has to perform three following steps:
+
+   1.Multiply it elementwise by an array  ψ(x′);
+
+   2.Divide it elementwise by an array  ψ(x);
+
+   3.Sum the values  Hxx′ψ(x′)ψ(x)  corresponding to the same unique x.
+
+The summation at the last stage can be performed with another tensor algebra routine known as ScatterAdd.  This
+routine adds thei-th element of an array src to the index[i]-th element of array result and is depicted in Fig.S7B.
+
+
+
+                                                          C.    Notation remarks
+
+  Let us make two remarks regarding the notation and the diagrams representing GPU operations.  First, the names
+of  arrays  which  store  pointers  of  any  kind  will  necessarily  include  the  symbol →.   Second,  we  use  different  font
+styling to display the content of arrays of different nature:  (i) we depict in bold the content of arrays storing values
+corresponding to N-bit vectors, e.g.  x and x′; (ii) we display in italics  the content of arrays storing pointers of any
+kind, e.g.  (x→U); (iii) we use normal styling for the content of arrays storing genuine floating point or integer values,
+e.g. ψ(x) or Evarloc (x).
+
+
+
+                                                              D.    Preparation
+
+  Before the start of each simulation we preprocess the Hamiltonian to represent it as a set of tensors stored on a
+GPU as depicted in Fig.S8.  For example,     hl is a contiguous array storing the weights of all Hamiltonian terms, i.e.
+hl[0] =h0.  The arrays XY(l), Y(l) and YZ(l) are constructed in a similar way.
+  We also introduce three auxiliary arrays to represent the fact that each unique XY(l)  might correspond to sev-
+eral  terms  constituting  the  set PXY.    In  Fig.S8we  show  how  elements  of  the  arrays     hl,  Y(l)  and  YZ(l)  are
+grouped  into  the  corresponding  sets.   For  example,  the  zeroth  and  first  elements  of  these  arrays  correspond  to
+PXY0,  which  we  denote  for  brevity  asP0.   The  first  auxiliary  arrayXY  is  an  array  of  unique XY                     vectors  them-
+selves.  Second,     XY→ Index(P(0)XY)           stores pointers to the first elements inPXY            for each XY     inXY.  For example,
+                                                                                                                               (l).  Finally, the
+ XY→ Index(P(0) stores the number of terms inPXYXY)[1] = 2 since the setP1  starts from the position 2 in arrays hl, Y(l)  and YZ
+arrayPXY                                                   for each unique XY.  These three arrays will prove instrumental for
+our implementation of MatrixElement discussed further.
+                                                                                                                                           24
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+FIG. S9.  Two first stages of LoopOverBatch A. One evaluates candidate XY                   bit vectors in a vectorised manner.  B. One
+invokes custom a FindAInB function to obtain a boolean mask indicating whether a candidate XY                     belongs toXY.  As well,
+one obtains an array of pointers from “successful” candidate XY           toXY.
+
+
+                                  S4.    GPU IMPLEMENTATION: MAIN FUNCTIONS
+
+  In this section we cover two key procedures of ANQS optimisation: LoopOverBatch and MatrixElement.  The
+implementation of LoopOverTerms is similar to that of LoopOverBatch and can be found in our code [69].  The
+discussion on implementation of LoopOverTrie is left for SectionS5.
+
+
+                                               A.    LoopOverBatch implementation
+
+  We split GPU implementation of LoopOverBatch algorithm into three main stages.
+
+
+                                                      Stage 1:  Find candidate XY
+
+  The first stage is illustrated in Fig.S9A. It in a vectorised way all possible candidate vectors         XY        = x⊗x′,∀x, x′∈U;
+we denote an array of such candidates as XY?.  To that end, one applies the bitwise XOR operation to two copies
+ofU, with one reshaped into a column vector.  The broadcasting rules of PyTorch ensure that the resulting 2D array
+XY? is a matrix of sizeNunq×Nunq.  At the end of this stage one flattens XY? into a 1D array by concatenating its
+rows.
+
+
+                                                      Stage 2:  Filter candidate XY
+
+  The second stage is shown in Fig.S9B. It invokes a custom function       FindAInB to find which of the candidate
+XY? correspond to bit vectors inXY.
+  To  explain FindAInB  functioning,  suppose  we  feed  it  two  integer  arrays,  A  and  B.  We  presume  that  there  are
+no  repeated  values  in  the  array  B,  while  there  might  be  some  in  A. FindAInB  produces  two  output  arrays.   The
+first output array A∈ B is a boolean mask indicating whether the elements of  A can be found in B. In our example
+(A∈ B)[1] = True since XY?[1] = 5 belongs toXY.  At the same time (A∈ B)[5] = False since XY?[5] = 15 does
+not  belong toXY
+  The second output array ((A∩ B)→ B) contains the pointers from those elements of  A which belong to B (i.e.  A∩ B)
+to their corresponding positions in B.  Its length is equal to the number of elements in A which belong to B and the
+                                                                                                                                          25
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ FIG. S10.  The last stage of LoopOverBatch.  One obtainsSC by masking off the pointers to uncoupled pairs of x and x′.
+
+
+order between elements is the same as in the initial array A. For example, (((A∩ B)→ B))[1] = 2  because the second
+element in XY? corresponds to the third element inXY.
+  In what follows we refer to the array A∈ B as XY?∈XY, and to the array ((A∩ B)→ B) as (XY                                →XY).  Since
+(XY   →XY) corresponds to all correctly coupled x and x′, its length is equal to the length of (x→U) and (x′→U)
+representingSC.
+
+
+                                                           Stage 3:  ObtainSC
+
+  The third stage is depicted in Fig.S10.  During this stage one uses the boolean mask         XY?∈XY to obtain (x→U)
+and (x′→U).  To that end, one forms a 2D array of candidate pointers from x toU  which we denote as (x?→U).
+The first row of this array contains only zeros since it corresponds to all XY? formed with x0 being the first element
+in the pair.  Correspondingly,  the second row contains only ones,  the third contains only twos and so on.  The 2D
+array (x′?→U) is constructed in a similar way, except for its  columns  consisting of the same values.  One flattens
+(x?→U) and (x′?→U) and applies the boolean mask XY?∈XY to filter out only those pointers which correspond
+to the actually coupled pairs (x, x′).
+
+
+                                               B.    MatrixElement implementation
+
+  The GPU implementation of MatrixElement consists of three consecutive stages.
+
+
+                                                      Stage 1:  Expand the pointers
+
+  The  first  stage  is  illustrated  in  Fig.S11.   Since  each            XYmight  correspond  to  several  terms  in  Hamiltonian,
+this stage substitutes every pointer in (XY           →XY) with a sequence of pointers to YZ                corresponding to the given
+XY.  Let us provide an example.  The first element of (XY                 →XY) is  0  and thus it points to the first element of
+XY.  This elementXY[0] corresponds to XY                = 0 which is represented with Hamiltonian terms  ˆP0  and  ˆP1.  Thus,
+((XY   →XY))[0] should be expanded to pointers  0  and  1.  We store these pointers contiguously in a larger array
+
+ PXY    →  ˆP (l) .  In addition, we keep the reverse pointers from each element inPXY                   to its parent XY      in an array
+ PXY   → XY of the same size as           PXY    →  ˆP (l) .   In more details this stage proceeds as follows.
+                                                                                                                                                 26
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+FIG. S11.  The first stage of  MatrixElement.  For each coupling XY                   one substitutes its pointer toXY  with a contiguous
+sequence of pointers  ˆP (l) inPXY.  To that end, one employs a custom ExpandPointers function described fin SectionS6.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+FIG. S12.  The second stage of MatrixElement.  One employs the pointers to  ˆP (l) to evaluate the matrix elements⟨x| ˆP|x′⟩
+for all  ˆP  coupling each pair (x, x′).
+
+                                                                                                                               by  dereferencing
+   1.First,  one  uses  the    Gather  operation  to  obtain  arrays              XY    → Index(P(0)XY     )    and PXY
+       the  pointers  (XY      →XY)  with  respect  to  the  arrays           XY→ Index(P(0)XY)            and|PXY|.   Thus,  each  element
+       of   XY    → Index(P(0)XY)        stores a pointer to the first Hamiltonian term in the setPXY.  Similarly, the array
+       PXY stores the sizes  of the correspondingPXY              sets.
+                                                                                                                                              27
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+FIG. S13.  The third stage of MatrixElement.  One employs ScatterAdd function to sum all h⟨x| ˆP|x′⟩ corresponding to
+each pair (x, x′) into Hxx′.
+
+
+   2.As a second step, one expands pointers to the first PXY                  elements (which we further refer to as starts) and the
+       sizes ofPXY     into a contiguous array containing pointers to all elements inPXY.  This is achieved with a custom
+       function ExpandPointers, which is explained in more details in Section             S6.  The resulting pointers are stored
+       in the array     PXY    →  ˆP (l)
+   3.Finally, one obtains the    reverse pointers PXY            → XY by repeating the index of each XY               elementPXY times
+
+       as illustrated in the last line of Fig.S11.  This can be easily achieved with the standard            RepeatInterleave
+       routine of the PyTorch software library.
+
+
+
+                                                Stage 2:  Calculate term expectation values
+
+  The  second  stage  of  MatrixElement  calculation  is  shown  in  Fig.S12.   First,  one  dereferences  the  pointers
+ PXY    →  ˆP (l)  with respect to the array YZ(l)  to obtain an array of YZ                   corresponding to each element inPXY.
+Second, one dereferences the pointers PXY             → XY with respect to the array x′.  Thus, one obtains an array x′(PXY)
+
+which contains all x′ required to evaluate⟨x| ˆP|x′⟩.  Finally, one feeds both YZ                 and x′(PXY) into a simple arithmetic
+function calculating eiπ|x′⊙YZ| elementwise.  As a result, one obtains the array containing the values of⟨x| ˆP|x′⟩.
+
+
+
+                                                 Stage 3:  Scatter term expectation values
+
+  The third stage is depicted in Fig.S13.  First,  one dereferences the pointers                       PXY   →  ˆP (l)   with respect to the
+array hl.  Thus, one fetches the weights of Hamiltonian terms for corresponding⟨x| ˆP|x′⟩.  Second, one multiplies h
+and⟨x| ˆP|x′⟩ elementwise to obtain an array hl⟨x| ˆP|x′⟩.  Finally, one employs the ScatterAdd routine to sum the serves as the
+values of hl⟨x| ˆP|x′⟩ corresponding to the same XY.  During ScatterAdd the array  PXY                                → XY
+index input argument.
+                                                                                                                                               28
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                            FIG. S14.  The prefix tree data structures for the batch of unique samplesU.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+       FIG. S15.  The prefix tree data structures for the setXY of unique XY                strings representing Hamiltonian terms.
+
+
+                            S5.    GPU IMPLEMENTATION: PREFIX TREE OPERATIONS
+
+                                                    A.    Prefix tree data structures
+
+  In our GPU implementation we store the prefix tree nodes as contiguous arrays,  as opposed to storing them as
+individual data structures introduced in the main text.  As an example, let us consider the batch of unique samplesU,TUi,↑ andTUi,↓
+and its prefix treeTU.  For the i-th level of the prefix tree we store three  arrays denoted as U→TUi
+as depicted in Fig.S14.
+   1.The array  U→TUi            has a shape [Nunq, 1].  Itsk-th element points to a node at the i-th level of the prefix tree
+       that corresponds to the k-th basis vector inU.  For example, at the level 2 of the prefix tree U→TU2                             [0] = 2
+       since the first two symbols of x0 are 11, and this prefix path leads to the node 2 of level 2.  At the same time,
+        U→TU0       [k] = 0∀k since all  vectors inU  start from an empty string ∅.
+
+   2.The array TUi,↑ has a shapeTUi          , 2, whereTUi    is the number of nodes at the i-th prefix tree level.  It stores
+
+       in  a  contiguous  way  the  fields  value  and  parent  of  the Node  data  structure  introduced  in  the  main  text.
+                                                                                                                                                29
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                  FIG. S16.  An iteration of the ConstructPrefixTree algorithm.
+
+
+       Specifically,TUi,↑[l, 0] stores xi,  whileTUi,↑[l, 1] keeps the pointer to the parent node at the previous level.  For
+       example, the bit value of node 2 at level 2 is equal to 1, and thusTU2,↑[2, 0] = 1.  At the same time, its parent
+       is node 1 at level 1, and thusTU2,↑[2, 1] = 1.  Let us note thatTU0,↑  always has a shape [1, 2] and we fill it with
+       NaNs, since this node does not have a definite value and does not have a parent node.
+   3.The array TUi,↓ has a shapeTUi           , 2 too.  It stores in a contiguous way the children field of the Node data
+
+       structure.  In particular,TUi,↓[l, 0] stores the pointer to a child with the value of 0 of the nodel.  Similarly,TUi,↓[l, 1]
+       stores the pointer to a child with the value 1.  In our diagrams these children nodes are to the left and to the
+       right of the parent node correspondingly.  If a node does not have a child, we store NaN instead of a pointer.
+       For example, the node 0 at level 2 does not have a child with the value 0, and thusTUi,↓[2, 0] = ?.  At the same
+       time, the same node does have a child with the bit value 1, which is a node 0 at level 3.  Thus,TUi,↓[2, 0] = 0.  At
+       the last prefix tree level nodes do not have children and thusTUN,↓ is a redundant array filled with NaNs.
+For the sake of completeness, in Fig.S15we provide the prefix tree data structures for the set    XY.
+
+
+                                             B.    ConstructPrefixTree implementation
+
+ U→TU0The idea of ConstructPrefixTree is to obtain the relevant prefix tree structures level by level starting from andTU0,↑.  We illustrate how the arrays of level 1 can be obtained from the arrays of level 0 in Fig.S16
+                                                                                                                                         .
+More generally, the same procedure is applicable to obtain the arrays of level i from the arrays of level i− 1. to form an
+   1.First, one stacks the array containing  i-th bits of all vectors inU  on top of the array U→TUi−1
+       array of shape [Nunq, 2].  This array essentially contains all non-unique prefixes ati-th level:  the first row stores
+       node values, while the second row contains pointers to the parents.
+   2.Two non-unique prefixes that have the same bit value and a parent are considered identical and should be merged
+       into a single prefix.  Thus, one feeds non-unique prefixes into a UniqueColumns function which produces two, 2 containing only unique prefixes; by inspection
+       output arrays.  The first output is a 2D array of shapeTUi
+       it can be seen that this array is equivalentTUi,↑.  The second output is an array containing pointers from non-
+       unique prefixes to the unique ones.  Since each non-unique prefix is associated with a basis vector inU, this array.  The UniqueColumns is our custom lower-level function and we cover it in Section
+       represents U→TUi                                                                                                               S6.
+                                                                                                                                                  30
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                   FIG. S17.  Arrays obtained during one full run of LoopOverTrie.
+
+
+   3.Finally, one uses the obtained arrays to fill the array TUi−1,↓  at the  previous  level.  First, one creates an array
+       filled with NaNs of the same shape asTUi−1,↑.  Then, one scatters into it the values from arrayTUi,↓ according to
+       the following rule:
+                                                TUi−1,↓[TUi,↑[l, 1],TUi,↑[l, 0]] =l∀l∈ 1..TUi   .                                                     (19)
+
+
+       In other words, for each node inTUi   we find its parent nodeTUi,↑[l, 1] and indicate that this node has a child l
+       having the bit valueTUi,↑[l, 0]
+
+
+                                                  C.    LoopOverTrie implementation
+
+  The LoopOverTrie algorithm described in Methods builds coupled pairs (x, x′) bit by bit.  For a given x and
+prefix tree level i it calculates all acceptable prefixes x′<i  and the corresponding coupling XY<i.  The idea of our
+GPU implementation is to store the pointers to valid x′<i and XY<i in an array for each x and update them level by
+level.  In addition, we concatenate all such pointer arrays to vectorise the algorithm across all x inU.
+  Specifically, for each prefix tree level we obtain three arrays shown in Fig.S17:
+   1.The array (  x<i→U) serves the vectorisation purpose and indicates chunks of other arrays which correspond to
+       different x being input to ConstructPrefixTree.  For example, at the level 0 we start with empty prefixes
+       ∅ corresponding to every vector inU  and thus (x<0→U) = [0, 1, 2].
+   2.The array  x′<i→TUi            stores pointers to valid x′<i prefixes for every x inU.  For example, at level 0 any vector
+       inU  can be coupled only to a single prefix ∅ and thus x′<0→TU0                        = [0, 0, 0].
+
+   3.The array  XY                        stores pointers to valid XY                                                              .
+                           <i→TXYi                                            <i prefixes in a way similar to x′<i→TUi
+  A single iteration of the algorithm which produces level 2 arrays given the arrays at level 1 is shown in Fig.S18.
+More generally, obtaining arrays for level i from the arrays of level i− 1 involves the following steps.
+   1.First, we substitute every pointer to a valid prefix    x′<i−1  (XY<i−1) with the pointers to its possible children and
+       (including NaNs for non-existing children).  This produces the arrays of candidate pointers x′<i?→TUi
+        XY                   twice the length of the initial arrays.  Specifically, entries of the array  x′<i?→TUi                        are as
+             <i?→TXYi
+       follows:
+                                                       x′<i→TUi       [2k] =TUi−1,↓[k, 0];
+                                                     x′<i→TUi       [2k + 1] =TUi−1,↓[k, 1];                                                          (20)
+                                                                                                                                            31
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                  FIG. S18.  An iteration of LoopOverTrie GPU implementation.
+
+       In other words, the k-th valid prefix pointer in the array x′<i−1→TUi−1 is substituted with the pointers to its
+       left and right children at the positions 2k and 2k + 1 respectively.  The array XY                                  is obtained in a
+                                                                                                           <i?→TXYi                          
+       similar way, however, with a subtlety: for a given XY<i−1 the order of its children in the array XY [2k] corresponds to moving to the left child<i?→TXYi
+       depends on thei-th bits of both x and x′.  For example, x′<i→TUi                                                                  [2k]
+       of x′<i−1, i.e.  appending 0 to it.  However, if xi = 1, then XYi = xi⊗ 0 = 1, and thus XY [k].   This  is  expressed  with  the  following<i?→TXYi
+       should  contain  the  pointer  to  the  right  child  of  XY<i−1→TXYi−1
+       equations:
+                                              XY                 [2k] =TXY
+                                                   <i→TXYi                  i−1,↓[k, 0⊗ xk[i]];
+                                            XY                 [2k + 1] =TXY
+                                                 <i→TXYi                      i−1,↓[k, 1⊗ xk[i]];                                                 (21)
+
+       Finally, to keep track of the vectorised x, we double each element in (x<i−1→U):
+
+                                     (x<i→U) [2k] = (x<i→U) [2k + 1] = (x<i−1→U) [k]                                          (22)
+
+       The new arrays can be obtained using a combination of Tile, Gather and Reshape PyTorch primitives and
+       we refer the reader to our code for more details [69].
+
+   2.Once the arrays are produced, we calculate a boolean mask which is equal to    True only if child pointers are and XY.
+       not NaN for both  x′<i→TUi                        <i→TXYi
+
+   3.Finally, we use this boolean mask to obtain arrays of valid prefixes for the current level  i.
+
+The array (x<N→U) obtained at the last level of LoopOverTrie is clearly equivalent to the array (x′→U) pro-
+duced by FindCoupledPairs procedure.  The arrays (x′→U) and (XY by using the correspondence between the indices of the nodes at the last level of a prefix tree,→XY) can be obtained from x′<N→TUN
+and XY<N→TXYN
+and their indices in the initial bit vector set.  As described above, this correspondence is expressed with the arrays
+ U→TUN      and XY→TXY obtained during ConstructPrefixTree.
+                               N
+                                                                                                                                             32
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+FIG. S19.  The first stage of FindAInB. One concatenates arrays A and B to find unique elements in their union.  As well, one
+obtains the positions of those unique elements in the initial arrays.
+
+
+                               S6.    GPU IMPLEMENTATION: AUXILIARY FUNCTIONS
+
+                                                   A.    FindAInB implementation
+
+  As mentioned in SectionS4 A           FindAInB is a function which takes two arrays A and B as input and produces two
+arrays A∈ B and ((A∩ B)→ B) as output.  Crucially, the array B should not contain any repeated values.  We split its
+implementation into three stages.
+
+
+                                            Stage 1:  Find unique elements in A and B union
+
+  We concatenate the arrays  A and  B into a single array and apply our custom function UniqueColumns  to the
+concatenated array.  We use UniqueColumns instead of default PyTorch Unique function because, in general, when
+several integers are used per x, the arrays A and B will be two-dimensional, with integer values for each x stored in
+columns.   Since  the  default  PyTorch Unique  function  works  only  with  1D  arrays,  we  have  to  employ  our  custom
+UniqueColumns function explained further in this section.
+  As depicted in Fig.S19,           UniqueColumns returns two arrays.  The first array Unq(BA) contains unique elements
+found in the union of  A and B arrays.  The second array (BA→ Unq(BA)) can be considered as a concatenation of two
+arrays (B→ Unq(BA)) and (A→ Unq(BA)), each containing pointers from elements in  B and A to the found unique
+values Unq(BA).
+
+
+                                                Stage 2:  Finding the reverse pointers to B
+
+  The  purpose  of  this  stage  is  to  find  the  reverse  pointers  from  Unq(BA)  to  B.  To  that  end,  we  create  an  array
+(Unq(BA)→ B)  of  the  same  shape  as  Unq(BA)  filled  with  NaNs.   Then,  we  Scatter  into  this  array  indices  of
+elements in B. For example, the second element in the (B→ Unq(BA)) array is 2, which means that B[1] is the third
+element of Unq(BA).  Thus, we scatter 2 to the third position in the array (Unq(BA)→ B) as depicted in Fig.S20.  If,
+after this operation, some values are still equal to NaN, it means that there are values in Unq(BA) that can be found
+in A but not in B. Hence, one can apply a standard IsANumber function to (Unq(BA)→ B) and obtain a boolean
+mask indicating which elements of Unq(BA) belong to B.
+
+
+                                                  Stage 3:  Finding pointers from A to B
+
+  At  the  final  stage  we Gather  pointers  (Unq(BA)→ B)  using  the  array  (A→ Unq(BA))  as  index.   As  shown  in
+Fig.S20B, we thus obtain an array (            A→ B) with pointers from A to B (if some element in (A→ Unq(BA)) is NaN, it
+                                                                                                                                               33
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+FIG. S20.  The two last stages of  FindAInB. A. Having the pointers from  B to Unq(BA), one employs Scatter to find the
+reverse  pointers from Unq(BA) to  B. As well, one obtains a boolean mask indicating whether an element in Unq(BA) can be
+found in B. B. One uses Gather to fetch the pointers from Unq(BA) to B for every element in A and thus obtains the pointers
+(A→ B).  In addition, one obtains a boolean mask indicating whether an element in A can be found in B.
+
+
+means that the corresponding element in  A does not belong to B). In a similar way, we can Gather boolean mask
+Unq(BA)∈ B and obtain A∈ B.  Finally, we apply the boolean mask A∈ B to (A→ B) to keep only the valid pointers
+to B, as required by the use of FindAInB in FindCoupledPairs.
+
+
+                                                          Computational complexity
+
+  The  dominating  cost  of  FindAInB  is  finding  unique  columns  with UniqueColumns.   As  discussed  further  in
+Section ?? it of complexityO ((|A| +|B|) log (|A| +|B|)), which matches the figures given in Methods.
+
+
+                                                B.    ExpandPointers implementation
+
+  The ExpandPointers procedure serves the following purpose.  Suppose one has an array memory whose elements
+are  grouped  into  contiguous  chunks  of  various  length.   This  is  akin  to  such  Hamiltonian  data  arrays  as hl,  Y(l)
+and  YZ(l)  which  can  be  grouped  according  to  their  XY.   ExpandPointers  is  a  function  which  allows  one  to
+retrieve  those  contiguous  chunks  of  memory  by  specifying  their  starting  positions  starts  and  their  lengths  nums.
+As  output ExpandPointers  produces  an  array  pointers  which  replaces  each  starting  pointer  starts[i]  with  a
+sequence  of nums[i] consecutive pointers to each element in the corresponding contiguous chunk.  An example of the
+ExpandPointers action is given in Fig.S21.  We split its implementation into the following steps:
+
+   1.We represent    pointers as a sum of two arrays:  offsets and relative.  For each expanded pointer in pointers,
+       the  offsets array contains the starting position of the chunk to which the expanded pointer belongs to.  As
+       illustrated in Fig.S22A it is trivially obtained with the standard PyTorch routine            RepeatInterleave:  each
+       element of starts[i] array is repeated nums[i] times.  The relative array contains the relative position of each
+       extended pointer with respect to the chunk start.  Obtaining relative is slightly more involved and is performed
+       in the next steps.
+
+   2.To calculate    relative we represent it as a difference of two arrays:  incline and platoes.  The incline array
+       is an arithmetic progression of integers with the step 1 starting from 0.  This progression represents the fact
+                                                                                                                                              34
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+FIG. S21.  An example of the ExpandPointers routine.  A starts[i] pointer is substituted with a set of nums[i] consecutive
+(i.e starts[i], starts[i] + 1,..., starts[i] + nums[i]− 1).  For the sake of simplicity, the final array of pointers is represented as
+a sum of two arrays offsets and saw.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    FIG. S22. A. Calculation of  starts array. B. Decomposition of  saw array into a sum of  incline and platoes arrays.
+
+
+       that the neighbouring expanded pointers belonging to the same chunk should differ by one.  This array can be
+       easily obtained using the standard Cumsum PyTorch function as shown in Fig.S23A.
+
+   3.However,    incline does not account for the fact that this progression breaks down at the chunk borders, where
+       increments should start from scratch.  The array platoes corrects for it by counting the number of increments
+       that are accumulated by the start of each chunk and belong to the previous chunks.  The calculation of platoes
+       is shown in Fig.S23B.
+
+
+
+                                                C.    UniqueColumns implementation
+
+  As discussed, both ConstructPrefixTree and FindAInB require finding unique elements in an array, where
+each element is represented with more than one integer value.  Since the standard PyTorch Unique routine operates
+only with 1D arrays, we develop a custom function UniqueColumns to find unique elements of a 2D array, where
+integer values representing each value are stored along the second dimension (i.e.  in columns).  Our implementation
+is based on the following idea:  we devise an algorithm to assign to each column an integer label so that identical
+columns have identical labels.  Then, we apply conventional PyTorch Unique function to these labels and find unique
+among them.  Finally,  we map the unique labels back to columns.  More specifically,  let is consider an example of
+columns of size 2; its generalisation to larger column sizes is straightforward and can be found in our code.
+
+   1.Suppose we are given an array    array of shape [L, 2].  Let row1 := array[:, 0] and row2 := array[:, 1] be its first
+       and second row correspondingly.
+                                                                                                                                            35
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                       FIG. S23. A. Calculation of the incline array. B. Calculation of the platoes array.
+
+
+   2.We  apply  the  PyTorch    Unique  function  to  row1  and  obtain  an  array  of  its  unique  values  unq                    row1  :=
+       Unique(row1). We also obtain an array of pointers from row1 to unq                  row1, which we refer to as unq       row1   inv :=
+       (row1→ unq      row1). We apply the PyTorch Unique function to row2 to obtain the analogously defined unq                         row2
+       and unq   row2   inv.
+   3.We note that there are |unq          row1|·|unq      row2| possible pairs of unique elements in the first and second rows,
+       where|·| denotes the array length. We assign to a pair (unq            row1[i], unq    row2[j]) an integer label|unq       row2|·i+j.
+
+   4.The arrays    unq    row1   inv and unq    row2   inv store indicesi andj of the corresponding unique elements. Thus, for
+       non-unique columns of array we calculate the array of labels as follows:  labels :=|unq                     row2|· unq    row1   inv +
+       unq  row2   inv.
+   5.We  employ  the  PyTorch     Unique  function  to  obtain  unique  labels   unq                   labels,   as  well  as  the  array
+       unq  labels    inv of pointers from  labels to unq          labels.  Since there is a one-to-one correspondence between
+       labels and array columns, unq          labels    inv is actually an array of pointers from array to its unique columns:
+       unq  labels    inv≡ (array→ UniqueColumns(array)).
+   6.Finally, we obtain the unique columns themselves.  To that end, for each unique label we calculate the indices
+       i  and j  introduced  above.   This  is  achieved  as  follows:   i  :=  unq       labels  // |unq      row2|;  j  :=  unq    labels
+       mod |unq     row2|, where // denotes integer division.  Having i and j for each unique column, it is straightforward
+       to obtain the columns by applying the Gather operation to the arrays unq                       row1 and unq      row2 and stacking
+       the results.
+
+
+                                                        Computational complexity
+
+  The dominating cost of UniqueColumns corresponds to the repeated calls of the Unique PyTorch routine, which
+finds the unique elements of an array by sorting it withO (L logL) complexity.

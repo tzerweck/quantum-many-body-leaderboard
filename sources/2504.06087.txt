@@ -1,0 +1,1276 @@
+                      Accurate Ab-initio Neural-network Solutions to
+                           Large-Scale Electronic Structure Problems
+
+         Michael Scherbela1*, Nicholas Gao2*, Philipp Grohs1,3, and Stephan G¨unnemann2
+
+          1Faculty of Mathematics, University of Vienna, Oskar-Morgenstern-Platz 1, A-1090 Vienna, Austria
+           2Department of Computer Science & Munich Data Science Institute, Technical University of Munich
+          3Johann Radon Institute for Computational and Applied Mathematics, Austrian Academy of Sciences,
+                                              Altenbergerstrasse 69, 4040 Linz, Austria
+                                         *Equal contribution, order determined by coin flip
+
+
+
+                                                                Abstract
+       We present finite-range embeddings (FiRE), a novel wave function ansatz for accurate large-scale  ab-initio
+       electronic structure calculations.  Compared to contemporary neural-network wave functions, FiRE reduces
+       the asymptotic complexity of neural-network variational Monte Carlo (NN-VMC) by ∼ nel, the number of
+       electrons.  By restricting electron-electron interactions within the neural network, FiRE accelerates all key
+       operations – sampling, pseudopotentials, and Laplacian computations – resulting in a real-world 10× accel-
+       eration in now-feasible 180-electron calculations.  We validate our method’s accuracy on various challenging
+       systems, including biochemical compounds, conjugated hydrocarbons, and organometallic compounds.  On
+       these systems, FiRE’s energies are consistently within chemical accuracy of the most reliable data, includ-
+       ing experiments, even in cases where high-accuracy methods such as CCSD(T), AFQMC, or contemporary
+       NN-VMC  fall  short.   With  these  improvements  in  both  runtime  and  accuracy,  FiRE  represents  a  new
+       ‘gold-standard’  method  for  fast  and  accurate  large-scale  ab-initio  calculations,  potentially  enabling  new
+       computational studies in fields like quantum chemistry, solid-state physics, and material design.
+1  Introduction                                                        the recent advent of neural-network VMC (NN-VMC),
+                                                                       which use a neural-network ansatz for the wave func-
+Solving  the  electronic  Schr¨odinger  equation  unlocks              tion.   Due  to  the  superior  expressive  power  of  neural
+the  computational  analysis  of  molecular  and  mate-                networks compared to classical ansatze, NN-VMC fre-
+rial  properties  and  structures.   Unfortunately,  its  so-          quently achieves the to-date most accurate energies for
+lution,  the  ground-state  electronic  wave  function,  is            small molecules.  However, this gain in accuracy comes
+only  known  analytically  for  the  simplest  of  systems.            at the price of an increased cost ofO(nel4) per step,
+Consequently, approximations trade off computational                   which  severely  limits  the  system  sizes  for  which  the
+efficiency  and  accuracy  on  various  scales  depending              method  is  computationally  tractable  [3].   The  slow-
+on the problem, its properties, and the computational                  down  arises  because  contemporary  neural  wave  func-
+budget.   Some  methods,  such  as  Density  Functional                tions  do  not  support  two  critical  operations  that  are
+Theory  (DFT),  scale  favorably  with  system  size  but              needed  in  VMC:  (1)  efficient  Laplacian  calculations,
+fail to predict experiments for strongly correlated sys-               which are necessary for energy evaluation, and (2) wave
+tems.   Other  methods,  such  as  Coupled  Cluster,  of-              function updates if few electrons are moved, which are
+ten correctly predict experiments, but their computa-                  crucial for sampling and pseudopotentials.  Thus, there
+tional cost increases dramatically with the number of                  exists a clear gap between both flavors as conventional
+electronsnel, e.g.,O(nel7) for CCSD(T). Furthermore,                   VMC is scalable but inaccurate, and NN-VMC is slow
+applying these highly accurate methods frequently re-                  but accurate.  The purpose of this paper is to signifi-
+quires expert knowledge in choosing basis sets, initial-               cantly narrow this gap, as we will now describe.
+ization,  active  spaces,  and  optimization  parameters,              In conventional VMC, one typically chooses a Slater-
+even for small systems.                                                Jastrow wave function
+
+In  theory,  Variational  Monte  Carlo  (VMC)  promises                                    Ψ(r) =J (r) det [Φ(r)]                    (1)
+both a favorable runtime by scaling onlyO(nel3) per
+step in the number of electrons nel, and being easy to
+apply,  as  it  directly  parametrizes  the  real-space  elec-         where a symmetric Jastrow factorJ  : Rnel×3→ R is
+tron  wave  function  Ψ  :  Rnel×3 →  R  [1].   However,               multiplied with a Slater determinant det[Φ(r)], which
+conventional  VMC  has  long  been  touted  in  practice               enforces  fermionic  antisymmetry.   For  readability,  we
+as  a  low-accuracy  method  that  may  only  be  used  as             have  omitted  spin  and  limited  the  model  to  a  single
+initial  guesses  for  accurate  simulations  like  diffusion          determinant.  In the absence of a backflow   [4, 5], the
+Monte  Carlo  [2].   This  fundamentally  changed  with                orbital matrix Φ(r) = [Φil(r)]neli,l=1∈ Rnel×nel  consists
+
+
+                                                                     1
+Figure 1: Conceptual overview: a) For each-single electron move, e.g., during sampling or pseudopotentials,
+we only update the orbitals of electrons within the cutoff of its old and new positions.  b) FiRE enables effi-
+cient Laplacian computations by exploiting the sparsity patterns within the Jacobian∇Φ(r) to only compute
+non-zero entries. c) All components of VMC that are accelerated by FiRE.
+
+
+of single-electron orbitals ϕl : R3→ R:                                 optimization step [12, 13], reducing the number of op-
+                                                                        timization  steps  required  [14,  15],  or  amortizing  the
+                        Φil(r) =ϕl(ri).                          (2)    cost across several systems [16, 17].  Nevertheless, none
+                                                                        of these change the overall computational complexity,
+While  the  orbitals  being  single-electron  functions  en-            and system sizes studied by NN-VMC are typically still
+ables  efficient  single-electron  updates  and  Laplacian              limited to nel≈ 80 in 10,000 GPU hours [10].
+calculations   of   the   wave   function   in O(nel2)   and            In this work, we connect the favorable computational
+O(nel3),  respectively  [6],  their  constrained  functional            scaling of conventional VMC and the accuracy of NN-
+form prohibits the accurate representation of strongly                  VMC  by  introducing  a  novel  neural  wave  function
+correlated systems [7].                                                 based  on  finite-range  embeddings  (FiRE).  FiRE  re-
+
+In NN-VMC, one lifts this constraint by replacing the                   duces the computational scaling of NN-VMC byO(nel)
+single-electron orbitals with many-electron neural net-                 toO(nel3),  yielding  speed-ups  of≈  10×  for  relevant
+works hi  : Rnel×3→ Rndim  multiplied  with  envelope                   system  sizes.   This  enables  the  application  to  larger
+functionsφl : R3→ R to ensure the correct long-range                    systems at lower runtimes while maintaining highly ac-
+behavior:                                                               curate relative energies, yielding a new ‘gold standard’
+                                                                        for fast and accurate ab-initio electronic structure cal-
+                 Φil(r) = (hi(r)Twl)φl(ri),                 (3)         culations.
+                  hi(r) = h      ri,{rj}j̸=i    .                    (4)As electron interactions are most pronounced at short
+                                                                        ranges, we focus the electron’s embedding on its vicin-
+The ith  electron’s  embedding hi(r)  depends  in  this                 ity by limiting its dependence on the electrons within
+formulation  on  the  position  of  all  other  electrons,              some cutoff c.  Thus, instead of the extrema of single-
+indicated  by  the  (multi-)set {rj}j̸=i.    By  choosing               electron conventional VMC and all-electron NN-VMC,
+permutation-equivariant architectures like graph neu-                   FiRE defines theith electron’s embedding, from which
+ral networks [8, 9], or transformers [10] for h, antisym-               the  orbital  matrix  Φ(r)  is  derived  (Eq.  (3)),  via  the
+metry is preserved.  For several small molecules, NN-                   neighborhoodNri  defined by the cutoff c∈ R+:
+VMC achieves energy estimates outperforming conven-                                 hi(r) = h(ri,{rj}j∈Nri ),                          (5)
+tional ‘gold-standard’ methods such as Coupled Clus-
+ters (CCSD(T)) or Multireference Configuration Inter-                                 Nri ={j|j̸=i∧|ri− rj|≤c}.           (6)
+action  (MRCI)  [3,  11].   However,  as  the  orbital  ma-
+trix  elements  depend  on  all  electrons,  the  Laplacian             This  ansatz  can  trivially  represent  single-electron  or-
+requiresO(nel4) operations, and efficient low-rank up-                  bitals  (Eq.  (2)),  including  arbitrarily  delocalized  or-
+dates  are  impossible.    Several  fruitful  improvements              bitals, by lettingc = 0, i.e,Nri =∅. Further, thanks to
+have reduced the cost of NN-VMC, accelerating each                      the dependence on the close-by electrons, FiRE is a su-
+
+
+                                                                     2
+Figure 2: Runtime for cumulene chains of varying length.  Runtimes for equivalent batch size of 4096 on
+a single A100 GPU. FiRE models use a cutoff c = 3a0 a) Time required to update the wave function Ψ after
+single-electron move. b) Time required to compute the kinetic energy ∆Ψ. c) Total time per optimization step.
+d) Breakdown of the runtime of a single optimization step for different architectures.
+
+
+perset of Slater-Jastrow wave functions asJ  may rep-                 electron interactions and is typically the computational
+resent any many-body Jastrow factor depending on all                  bottleneck for medium-sized molecules.  However, eval-
+electrons within the cutoff.  As c→∞,Nri→{rj}i̸=j                     uating  the  determinant,  which  scalesO(nel3),  deter-
+approaches  the  fully-connected  limit  and  we  recover             mines  the  asymptotic  scaling  of  the  wave  function.
+contemporary neural wave functions (Eq. (3)).  To cap-                Thus, replacing a fully connected embedding with our
+ture  electron  correlation  beyond  the  cutoff,  we  intro-         finite-range  embedding  (FiRE)  does  not  change  the
+duce a novel global attention-based Jastrow factor, de-               asymptotic scaling and only provides modest speedups
+tailed in Sec. 4.2.                                                   as  shown  in  Fig.  2d,  where  we  compare  this  ‘Naive
+We show in Sec. 2.1 that FiRE speeds up all relevant                  FiRE’  against  state-of-the-art  neural  wave  functions.
+aspects of NN-VMC byO(nel), in particular sampling                    The key advantage of FiRE is that its sparsity enables
+from the wave function, evaluating its energy and en-                 us to speed up two critical operations that determine
+ergy  gradient,  and  evaluating  non-local  operators  re-           the actual scaling of VMC: updating Ψ(r) after moving
+quired  for  effective  core  potentials  (ECPs),  or  spin-          a small number of electrons and computing the Lapla-
+related quantities as visualized in Fig. 1.                           cian ∆Ψ.
+
+In  Sec.  2.2,  we  demonstrate  the  accuracy  of  our  ap-          Several operations of a VMC optimization require wave
+proach by applying it to various challenging systems,                 function updates,  i.e.,  evaluating Ψ(r′) when Ψ(r) is
+such as non-covalent interactions, large hydrocarbons,                known,  and r′  differs from r  in only a few electrons’
+and  organometallic  compounds.    We  find  that  even               positions.  This occurs during Monte Carlo sampling,
+small cutoffs yield highly accurate wave functions, and               where new electron coordinates r′ are proposed at each
+compared to existing NN-VMC approaches, we obtain                     Markov  Chain  step  via  single-electron  updates  from
+more  accurate  relative  energies  at  a  fraction  of  com-         r.    Wave  function  updates  are  also  necessary  when
+putational cost.  On several of these systems, we find                evaluating non-local parts for effective core potentials
+FiRE  to  accurately  reconstruct  experimental  results,             (ECPs) and spin-operators, such asS2 [18] orS+ [19].
+even obtaining better predictions than ‘gold-standard’                In all three cases, a single optimization step typically
+methods like CCSD(T) or AFQMC.                                        requiresO(nel) updates, yielding the naive asymptotic
+As we can now scale NN-VMC to unprecedented sizes,                    per-step cost ofO(nel4).  However, when using FiRE,
+we analyze the convergence rates of NN-VMC both in                    we  can  exploit  that  moving  a  single  electron  affects
+system sizes and optimization steps in Sec. 2.3.  Inter-              only the embeddings and orbitals of electrons in its old
+estingly, we observe consistent convergence rates across              and new neighborhood.  Instead of fully recomputing
+different systems.                                                    all orbitals,  we only recompute the affected electrons
+                                                                      (see Fig. 1a) and, instead of naively computing the de-
+                                                                      terminantnel×nel, we use low-rank updates scaling as
+2  Results                                                            O(nel2), as shown in Sec. 4.3.  These low-rank updates
+                                                                      reduce the scaling of our updates byO(nel).  Fig. 2a
+2.1Improved runtime                                                   shows  that  we  can  obtain  similar  speedups  in  prac-
+                                                                      tice: While for previous neural wave functions comput-
+Computing the embeddings h for fully connected archi-                 ing a wavefunction update empirically scales between
+tectures scales asO(nel2) due to the pairwise electron-               Tupd∼ nel2.0  and Tupd∼ nel2.2,  FiRE only grows as
+
+
+                                                                    3
+Tupd∼nel1.3, achieving an approximate speedup pro-                     LapNet’s 2.3 mEh.  Thus, even small cutoffs are suffi-
+portional to nel.                                                      cient for capturing complex long-range interactions.
+
+A similar improvement can be applied to the evaluation                 Among  the  previous  systems,  the  T-shaped  benzene
+of the kinetic energy, which requires the Laplacian of                 dimer is a particularly well-studied system where a va-
+Ψ, which in turn requires Jacobians of all intermediates               riety  of  NN-VMC  methods  [10,  13,  28]  attempted  to
+of the neural network, including the orbitals Φ.  In ex-               reconstruct  the  experimental  results  by  Grover  et  al.
+isting neural wave functions, every entry of Φ depends                 [29] and Krause et al. [30].  We compare all NN-VMC
+on every electron, and therefore the Jacobian∇rΦ is                    methods to the zero-point vibrational energy (ZPVE)
+dense, containingO(nel3) entries.  Propagating this Ja-                corrected experimental results and CCSD(T)/CBS [21]
+cobian forward requiresO(nel4) operations as detailed                  in Fig. 3b.  Furthermore, we study the cutoff effect by
+in Sec. 4.4.  In contrast, FiRE’s Jacobian is sparse as                evaluating FiRE withc∈{3a0, 5a0, 7a0}.  While previ-
+depicted in Fig. 1b, yielding anO(nel) speedup, which                  ous works like Ren et  al. [28] overestimate the energy
+we again can see in empirical runtimes in Fig. 2b.                     gap significantly, von Glehn et al. [10]’s calculations are
+By combining these techniques,  all crucial operations                 inconsistent  in  that  the  generally  more  accurate  Psi-
+for VMC training are accelerated byO(nel) as sketched                  former significantly underestimates the gap compared
+in Fig. 1c and measured in Fig. 2c.  Our empirical mea-                to FermiNet.  For FiRE, results with all tested cutoffs
+surements  show  that  our  total  runtime  per  step Ttot             are within the experimental uncertainty.  At c = 3a0
+grows  only Ttot∼ nel2.3  up  to  500  valence  electrons,             andc = 5a0 FiRE probably slightly underestimates the
+instead  of Ttot∼ nel3.0  for  existing  neural  wavefunc-             true interaction energy, yielding 2.9 mEh  and 3.6 mEh
+tions.  When comparing absolute runtimes for a 200 va-                 respectively.  At c = 7a0  FiRE yields 4.6 mEh,  which
+lence electron system, our approach yields 12× to 16×                  is  in  almost  perfect  agreement  with  both  CCSD(T)
+speedups over existing neural wave functions (Fig. 2d)                 (4.3 mEh) and the ZPVE corrected experimental value
+and even larger speedups for larger molecules. Notably,                of 4.4 mEh by Grover et al., which is considered to be
+these speedups are on top of the speedups obtained by                  the more accurate experiment [28, 31].
+the forward Laplacian [13], a recent efficient method to
+evaluate the Laplacian of Ψ.  Thus, speedups are even                  Singlet-triplet  gaps    Beyond  interaction  energies,
+greater compared to the original FermiNet [3, 27] and                  we investigate the singlet-triplet gaps on a series of in-
+Psiformer [10] implementation.                                         creasingly  larger n-acenes  from  naphthalene  (C10H8)
+
+                                                                       to  hexacene  (C26H16).    Previous  work  found  accu-
+2.2Accurate relative energies                                          rate methods such as CCSD(T)/FPA [32], ACI-DSRG-
+In   the   following,   we   demonstrate   that   FiRE   not           MRPT2 [33], and AFQMC [34] to be in disagreement
+only  accelerates  NN-VMC  but  maintains  high  accu-                 with  experimental  results  [22–26].    We  demonstrate
+racy in various settings, such as non-covalent binding,                that larger cutoffs are unnecessary for covalently bound
+singlet-triplet  gaps,  or  ionization  potentials.   We  test         organic compounds, and c = 3a0 suffices to obtain ac-
+these tasks on diverse systems,  including biochemical                 curate energies.  We obtain the respective states by set-
+compounds,  hydrocarbons,  and  organometallic  com-                   ting the magnetic spin number sz =N↑−N↓ to 0 for
+pounds.                                                                singlet and 2 for triplet states and enforce state purity
+                                                                       with the S+  loss from Li  et  al. [19].  For naphthalene
+                                                                       and  anthracene,  energies  converged  well  within  50k
+Non-covalent  interactions    When  restricting  the                   steps, and the remaining molecules were optimized for
+range of electron embeddings, a natural question is how                100k steps. The resulting state gaps of FiRE, AFQMC,
+this  affects  the  model’s  ability  to  capture  long-range          CCSD(T), and ACI-DSRG-MRPT2, depending on the
+non-covalent interactions.  We investigate this behavior               system size, are visualized in Fig. 3c whereas Fig. 3d
+by comparing FiRE, LapNet [13], and CCSD(T)/CBS                        shows the error relative to the ZPVE corrected exper-
+interaction  energies  for  11  non-covalent  interactions             imental results.  Notably, CCSD(T) and AFQMC con-
+from  the  S22  dataset  [20,  21].   The  systems  include            sistently  overestimate  the  energy  gap,  whereas  ACI-
+hydrogen bonds, dispersion energies, and mixed inter-                  DSRG-MRPT2 underestimates it.  Despite the shrink-
+actions.   For  FiRE,  we  set  the  cutoff  to c  =  5a0  as          ing  energy  gaps  in n,  the  reference  methods’  errors
+determined by our ablation study in App. A. This is                    increase  with  system  size.   On  the  other  hand,  FiRE
+larger than the shortest distance between the interact-                remains  closest  to  the  experimental  results,  exhibit-
+ing  molecules  but  substantially  smaller  than  the  size           ing  minimal  deviations  across  all  systems.   On  aver-
+of  each  entire  complex.   Like  Li  et  al.  [13],  we  com-        age, FiRE’s MAE to the experimental gap is 1.7 mEh,
+pare the energy of the bound system with the energy                    whereas CCSD(T), ACI-DSRG-MRPT2, and AFQMC
+of  the  molecules  separated  by  10 ˚A.   The  errors  rel-          deviate  by  4.6 mEh,  4.1 mEh,  and  4.4 mEh,  respec-
+ative  to  CCSD(T)  are  plotted  in  Fig.  3a.   It  is  ap-          tively.  Interestingly, as seen in our ablations in App. C,
+parent that FiRE accurately reconstructs the interac-                  our  attention-based  Jastrow  factor,  which  introduces
+tion energies, yielding a mean absolute error (MAE) of                 global-ranged correlation without affecting the overall
+0.5 mEh when using energy extrapolation (see App. H)                   scaling of FiRE (see 4.2), contributes substantially to
+and 2.3 mEh  without any extrapolation,  compared to                   this accuracy.
+
+
+                                                                    4
+Figure 3:  Relative energies on a series of challenging strongly-correlated systems.  a) Energy deviations versus
+CCSD(T) for non-covalent interaction energies of 11 systems of the S22 dataset [20, 21]. b) Detailed comparison
+of benzene dimer interaction energy across methods. c) Singlet-triplet energy gap in n-acene from naphthalene
+to  hexacene.   d) n-acene  energy  gap  error  to  ZPVE  corrected  experimental  results  [22–26].   Shaded  region
+corresponds to typical experimental uncertainty: ±1 kcal/mol for S22 (a) and acenes (c-d), and experimental
+uncertainty for benzene dimer (b).
+
+
+Organometallic compounds    Organometallic com-                       CCSD(T)  approximation  in  the  complete  basis  set
+pounds  are  of  interest  due  to  their  widespread  use            limit  (CBS)  deviates  by  8 mEh.   Only  when  combin-
+in  catalysis.    However,  their  description  is  compu-            ing DLPNO-CCSD(T)/CBS energies with a CCSD(T)
+tationally  challenging:   methods,  such  as  MRCI  and              correction at the DZ level (denoted as CCSD(T)/FPA)
+CCSD(T), are either too costly to be applied in suffi-                do the energies match FiRE’s accuracy.
+ciently large basis sets or require additional correction             Even   more   challenging   is   the   protonation   of   the
+terms for an accurate assessment.                                     iron-sulfur complex [HFe2S(CH2)(SCH3)4]3–, which has
+
+As a first example, we compute the ionization poten-                  been studied as a model system for catalysis in nitro-
+tial  (IP)  of  chloroferrocene,  a  known  failure  case  of         genase [38].  This iron-sulfur complex has four compet-
+DFT [35]. Like the singlet-triplet gaps, we set the FiRE              ing binding sites for an added proton:  HC, HS, HFe,
+cutoff  to c  =  3a0  because  the  system  composes  only            and HFe2.  Zhai  et  al. [38] found that even CCSD(T)
+short bond lengths.  The convergence of the IP in the                 in the complete basis set limit (CBS) is insufficient to
+number of optimization steps is visualized in Fig. 4a.                resolve  the  energy  differences  between  these  binding
+FiRE converges to an energy gap of 256.5 mEh close to                 sites at chemical accuracy.  Their final best estimate is
+the experimental results of 258 mEh  [36].  This agree-               a compound estimate, requiring a relativistic coupled
+ment  is  unmatched  by  various  other  methods,  e.g.,              cluster calculation, perturbative triplets, CBS extrap-
+DFT with B3LYP [37] deviates by 20 mEh, and 15 mEh                    olation, and estimation of multireference effects based
+with the PBE0 functional.  CCSD(T) in a ccpvDZ ba-                    on  a  separate  DMRG  calculation.   Omitting  any  of
+sis – the largest CCSD(T) calculation we could afford                 these  corrections  substantially  increases  the  error,  as
+– underestimates the IP by 13 mEh, and the DLPNO-                     depicted  in  Fig.  4b.   We  use  FiRE  with c  =  5a0  to
+
+
+                                                                    5
+Figure 4: Organometallic compounds: a) Ionization potential of chloroferrocene as a function of optimiza-
+tion steps. b) Mean absolute error for protonation of iron-sulfur complex for conventional methods and FiRE.
+Inset:  relative energies of 3 protonation sites vs HC site.
+
+
+account for larger bond lengths between the iron and                  their analysis is not directly applicable to our setting,
+sulfur cores.  Relativistic effects are part of the corre-            we give a short comparison in App. J. Extrapolating
+lation consistent effective core potentials (ccECP) [39]              from our empirical rates, to reach a given error in ab-
+used  throughout  this  work.   Unlike  CCSD(T),  FiRE                solute energy, the number of optimization steps needs
+                                                                                             β
+does not require any corrections and still agrees with                to scale as t∼nel      α≈nel2.3.
+Zhai  et  al.’s  compound  estimate  within  chemical  ac-
+curacy,  with  a  mean  absolute  error  of  only  1.3 mEh,
+outperforming  CCSD(T)/CBS  which  has  a  mean  ab-
+solute  error  of  2.4 mEh.   With  180  electrons,  this  is
+not only the largest NN-VMC calculation done so far
+but also demonstrates the generality of FiRE even in
+cases where CCSD(T)/CBS does not achieve chemical
+accuracy.
+Overall,  we  demonstrated  that  FiRE  accurately  de-
+scribes  non-covalent  interactions,  singlet-triplet  gaps,
+and ionization potentials on various systems.  At this
+accuracy,  it  is  unclear  whether  the  remaining  errors
+are due to errors in references, e.g., CCSD(T) errors,
+comparing  0 K  gas  phase  to  experimental  conditions,
+or structural relaxations which may affect relative en-
+ergies [33].
+
+2.3Convergence rates for NN-VMC
+Our ability to optimize neural wave functions for such
+large systems enables us to study the scaling behavior
+of  NN-VMC  for  the  first  time.   When  analyzing  the
+errors in absolute energies for acenes (Sec. 2.2) and cu-
+mulenes (App. B), as a function of system size nel and
+number of optimization stepst, we find good agreement
+with a power law of the form
+             E(t,nel)−E(∞,nel)∝t−αnelβ,             (7)               Figure  5:   Convergence  rates  for  neural  wave
+
+as depicted in Fig. 5.  Interestingly, we find similar ex-            functions:  Absolute energy error as a function of op-
+ponents of α≈ 1 and β≈ 2.3 across systems.  Some                      timization  steps  for  molecules  of  increasing  size:  a)
+recent theoretical work on convergence rates of VMC                   cumulenes b) acenes.  For both systems, the optimiza-
+has also obtained polynomial convergence in the num-                  tion curves are well approximated by a powerlaw with
+ber  of  steps,  although  at  lower  rates  [40,  41].   While       similar exponents.
+
+
+                                                                    6
+3  Discussion                                                         clear physics [46], positron chemistry [47], polaritonic
+                                                                      chemistry [48] or the study of topological materials [49].
+We have pushed the boundary of NN-VMC in the two
+most  important  dimensions:   efficiency  and  accuracy.             4  Methods
+Unlike traditional VMC, FiRE qualitatively and quan-
+titatively reconstructs experimental results on various               4.1Variational Monte Carlo
+challenging  systems,  even  in  cases  where  contempo-
+rary  NN-VMC  disagrees.    At  the  same  time,  FiRE                We seek to solve the stationary Schr¨odinger equation
+accelerates NN-VMC byO(nel),  yielding speedups of                    within the Born-Oppenheimer approximation
+up  to  an  order  of  magnitude  for  the  systems  investi-                                   ˆH|Ψ⟩ =E|Ψ⟩                           (8)
+gated.  With FiRE, we obtain highly accurate energies
+for  system  sizes,  which  become  inaccessible  to  many            where  ˆH  :H2→L2  is the Hamiltonian operator and
+high-accuracy methods, and the remaining ones require                 Ψ : Rnel×3→ R is the electronic wave function.  Here,
+expert  knowledge  to  be  applied  correctly.   Compared             we  follow  standard  practice  and  use  a  spin-assigned
+to  methods  like  MR-CI  or  CCSD(T),  our  NN-VMC                   wavefunction where the first N↑  electrons are spin-up
+works out of the box and requires no method combi-                    and the latternel−N↑ are spin-down.  In atomic units,
+nations, basis sets, or active space, reducing the need               the Hamiltonian for a molecular system is given by
+for expert knowledge for high-accuracy quantum chem-                                   nelX 3X           nelX
+istry.   Furthermore,  unlike  other  methods,  NN-VMC                    ˆH :=− 1               ∂2               1
+yields accurate energies and provides the correspond-                               2 i=1  k=1  ∂r2ik +  j>i  |ri− rj|
+ing wave function, thus giving, in principle, access to                             nelX NnX                   NnX                    (9)
+any ground-state property.  While NN-VMC has so far                              −                Zm                   ZmZn
+rarely been applied to practical chemical problems, we                              i=1 m=1   |ri− Rm| +      n>m   |Rm− Rn|.
+firmly believe FiRE is fast and accurate enough to earn
+a place in the practitioner’s toolbox.                                We assume that the minimum of the spectrum of  ˆH is
+                                                                      given as an isolated eigenvalueE0 of finite multiplicity,
+Still,  open  questions  and  challenges  remain.    While            which we call the ground-state energy and correspond-
+we  obtain  state-of-the-art  results  for  several  systems          ing eigenfunctions are referred to as ground states.  To
+containing a variety of non-local interactions,  the as-              compute ground states/ground-state energies and solve
+sumptions  of  our  FiRE  may  fail  for  some  classes  of           Equation 8, we seek to minimize the variational energy
+systems.  Compared to dense NN-VMC, FiRE’s abso-                                                         h                    i
+lute  energies  are  less  accurate  when  choosing  an  ag-             E [Ψ] =⟨Ψ|  ˆH|Ψ⟩⟨Ψ|Ψ⟩    = EρΨ   Ψ(r)−1[ ˆHΨ](r)      ≥E0,
+gressive cutoff.  In agreement with previous works [10],                                                 |         {z         }
+we observed that larger systems require more optimiza-                                                           EL(r)
+tion steps, an issue that is not unique to NN-VMC –                                                                                  (10)
+conventional methods are also increasingly complicated                where ρΨ(r) =  Ψ(r)2
+to  converge  with  increasing  system  size  and  require                                 ⟨Ψ|Ψ⟩.  By the Raleigh-Ritz principle,
+careful tuning of optimization parameters [42].  FiRE                 upper  bounds  the  ground-state  energy E0.   To  com-
+also adds some implementation complexity compared                     puteE[Ψ], we use importance sampling to evaluate the
+to  dense  NN-VMC  because  implementations  for  low-                expectation  in  Eq.  (10)  using  the  Metroplis-Hastings
+rank updates, sparse forward-mode Laplacian compu-                    algorithm.   The  so-called  local  energy EL(r)  can  be
+tations, and padding for GPUs are necessary (App. I).                 computed via
+Finally, while in the limit of many electrons, the scal-
+ing  remains  the  same  for  periodic  or  bulk  systems;               EL(r) =−12        ∆ ln|Ψ(r)| + (∇ ln|Ψ(r)|)2 +V (r)
+densely  packed  structures  increase  the  neighborhood                             |                  {z                   }
+                                                                                                  kinetic energy
+size, yielding higher compute times.                                                                                                 (11)
+
+We expect future work to investigate these aspects and                where V   is  the  potential  energy,  i.e.,  the  last  three
+further improve our approach’s accuracy and compute                   terms in Eq. (9).  Note that we, in practice, use pseu-
+time,  at  last,  by  transferring  deep  learning  advance-          dopotentials as described by Li et al. [12].
+ments  to  ab-initio  quantum  chemistry.   Further,  we              We aim to approximate E0 by minimizing θ7→ E[Ψθ]
+hope  that  our  quantitative  convergence  rate  results             over  a  parametrized  class {Ψθ}  of  (neural  network-
+serve  as  the  basis  for  further  research  into  how  NN-         based)  wave  functions.   To  this  end  we  use  gradient-
+VMC  scaling  depends  on  system  properties,  such  as              based optimization
+the spectral gap, and optimization choices, such as pre-                                      θt+1 =θt−ηtδt                        (12)
+conditioning and learning rate scheduling.  Beyond the
+study of  gas-phase molecules,  we  expect  FiRE to ac-               with learning rate ηt∈ R+ and update δt.  While one
+celerate  progress  in  various  fields  of  the  physical  sci-      could naively use the gradient of the energy
+ences as it is directly applicable to the many domains                  ∇θE[Ψ]∝ EρΨ [(EL(r)− EρΨ [EL(r)])∇θ ln|Ψ(r)|]
+in which NN-VMC has shown early promise,  such as                                                                                    (13)
+photochemistry  [43],  solid-state  physics  [44,  45],  nu-
+
+
+                                                                    7
+as    the    update,     quasi-Newton    optimizers    yield            learning [52].  The vector ˆhnucm ∈ Rd is a trainable em-
+faster   convergence.      Thus,   we   use   the   stochastic          bedding representing the mth nucleus and Γm : R4→
+reconfiguration-inspired  SPRING  algorithm  [14,  15]                  Rd is a spatial filter of the mth nucleus that featurizes
+to obtain the parameter updates                                         the distance and ensures a smooth decay to 0 at cnuc,
+              ¯OT ¯O +λI −1 ϵ− ¯Oηδt−1 +ηδt−1    (14)                  i.e., x0≥cnuc  =⇒  Γm(x) = 0:
+  δt = ¯O                                                                    Γm(x) =σ(xWm + bm)W⊙χ(x0)Wenv,        (20)
+where   ¯Oi   = ∇θ ln Ψ(r(i))−   1           PN                                χ(x) =fcut(x)⊙ Concat[exp(−σ2ix2)]d0i=1      (21)
+                                       PNN      j=1∇θ ln Ψ(r(j))
+and  ϵi     =  EL(r(i)) −    1N           j=1EL(r(j))    for    a       where χ : R+→ Rd0  is a set of nuclei-centered Gaus-
+batch   of N   samples  r(i) ∼  ρΨ.       This   essen-                 sian  multiplied  with  the  polynomial  cutoff  function
+tially  corresponds  to  a  numerical  approximation  of                fcut  : R+ → R+  function  from  Gasteiger  et  al.  [53].
+stochastic   reconfiguration/natural   gradient   descent               The  parameters σi  control  the  width  of  additional
+δt   =  EρΨ   ∇θ lnρΨ(r)∇θ lnρΨ(r)T−1∇θE[Ψ]  with                     Gaussian envelope functions.  This way, the wave func-
+momentum.                                                               tion  is  smooth  if  an  electron  moves  in  or  out  of  the
+                                                                        cutoff range.  Next, we update the ith electron based
+                                                                        on the embeddings of all electrons within the cutoff c
+4.2Wave function ansatz                                                 by performing a single message passing step to obtain
+As  alluded  to  in  the  introduction,  our  wave  function                h1i  =h0i + m∥i + m∦i,                                          (22)
+follows the form of neural-network Slater-Jastrow wave                    mαi  = X        Γ(eij)⊙σ Concat[h0i,h0j, ¯eij]W + b
+functions  like  Eq.  (1)  with  a  linear  combination  of  a
+small number of determinants                                                      j∈Nαri
+
+                                 NdetX                                                                                                  (23)
+                Ψ(r) =J (r)           det[Φd(r)].              (15)     with Γ of the same form as the Γm above but without a
+                                 d=1                                    dependence on any nucleus andc instead ofcnuc.  Here,
+The  entries  of  the  orbital  matrices  Φ  do  not  depend            Nαri  denotes the set of electron indices that are within
+on just a single electron ri, but instead on a so-called                cutoffc and have either parallelα =∥ or opposing spin
+embedding  vector hi  (see  Eq.  (3)),  which  represents               α =∦.  The features  ¯eij  are rescaled electron-electron
+the electroni and its environment.  The Jastrow factor                  distance vectors analogous to ˆ¯eim.  Finally, we apply a
+J  further includes range-unlimited electron correlation                multi layer perceptron (MLP) to the electron embed-
+effects.                                                                dings
+                                                                                                hi = MLP(h1i ).                        (24)
+Finite-range  embeddings    The  efficiency  of  our                    We purposefully avoid multiple rounds of message pass-
+neural  wave  function  ansatz  rests  on  the  locality  as-           ing as this would introduce costly long-range dependen-
+sumption  of  electron  correlation  effects.     As  men-              cies at diminishing returns [9].  Instead, we recommend
+tioned  above,  we  construct  the  wave  function’s  elec-             increasing the cutoff when higher accuracy is required.
+tron  embeddings  hi  such  that  it  only  depends  on                 From these electron embeddings, we construct orbitals
+{rj  :|rj− ri|≤ c} for some cutoff c.  We accomplish                    via linear projections and envelopesφl : R3→ R which
+this with a modified version of Gao  et  al. [9]’s graph                ensure exponential decay (as known to hold for ground
+neural network-like ansatz.  Before detailing the archi-                states [54]):
+tecture, we define pairwise features eij∈ R4  for pairs
+of electrons and  ˆeim∈ R4 for electron-nucleus pairs:                                      Φdil = hiWdl⊙φl(ri).                  (25)
+
+             eij = Concat[|ri− rj|,ri− rj],              (16)           For  the  envelopes,  we  use  the  improved  exponential
+            ˆeim = Concat[|ri− Rm|,ri− Rm].         (17)                envelopes from Gao et al. [17]:
+
+                                                                                                 NnX NenvX
+We start with constructing initial electron embeddings                               φl(r) =               πlmeeσme|r−Rm|.          (26)
+h0i  given  the  nuclear  position R  and  charges Z,  i.e.,                                    m=1   e=1
+independent of all other electrons:
+                 NnX                  ˆhnucm   + ˆ¯eimW !               Global  electron  correlation  effects    Beyond  the
+  h0i  =GLU            Γm(ˆeim)⊙                             .   (18)   finite-range multi-electron orbitals, which capture cor-
+                 m=1                                                    relation effects within the cutoff range, our ansatz con-
+                                                                        tains  several  mechanisms  to  capture  global  electron
+Here, ˆ¯eim is a rescaled electron-nuclei distance vector               correlations.  Our ansatz is the sum of a small number
+                                                                        of determinants (typically Ndet  = 4),  which captures
+               ˆ¯eim = log(1 +|ri− Rm|)                                 static  correlation,  see  Eq.  (15).   To  capture  dynamic
+                             |ri− Rm|        ˆeim,             (19)     correlation, we additionally use a 3-term permutation-
+                                                                        symmetric Jastrow factor:
+as proposed by [10], and GLU is a gated linear unit [50]                       J (r) =Jcusp(r) +JMLP(r) +Jatt(r).         (27)
+with LayerNorm [51] as common in contemporary deep
+
+
+                                                                     8
+To enforce the electronic cusp conditions, we use von                 these efficient low-rank updates, we store all interme-
+Glehn et al. [10]’s cusp Jastrow factor                               diate embeddings of the network when computing Ψ.
+                                                                     When changing the positions ofK <nel electrons with
+                         X             ωparα2par                   indices ι1,...,ιK  to  positions  ˆrι1,..., ˆrιK,  we  deter-
+  Jcusp(r) = exp                                                      mine  the  update  setU  ={ι1,...,ιK}∪SKk=1Nrιk∪
+                        0<i<j≤N↑,     αpar +|ri− rj|                  Nr′ιk of all electron indicesi which are within the cutoff
+                        N↑<i<j≤nel                            (28)    c of a moved electron’s previous or new location.  For
+                                                                     any  physically  plausible  molecule  Coulomb  repulsion
+                +   X                    ωantiα2anti                 spreads  the  electrons  across  the  molecule,  such  that
+                    0<i≤N↑<j≤nel     αanti +|ri− rj|                  the  average  number  of  electrons  within  a  given  cut-
+                                                                      off radius does not scale with system size.  Therefore,
+with learnable parameters wpar,wanti,αpar,αanti∈ R.                   given a large enough system, the size of the update set
+In addition to this constrained Jastrow factor, we add                |U| is independent ofnel.  We then only recompute the
+two  neural  network-based  Jastrow  factors.   The  first            embeddings hi  for  this  bounded  number  of  electrons
+one is a per-electron MLP-based Jastrow factor                        i∈U.  The same technique is applied to all other parts
+                      nelX               ! nelX                !      of the wave function, such as the Jastrow factor.
+ JMLP(r) = exp              MLP1(hi)              MLP2(hi)            Of particular importance is the update of the determi-
+                       i=1                    i=1                     nant  in  equation  1.   If  only  the  rows i∈U  of  Φ  are
+                                                              (29)    changed,  we  can  express  the  resulting  orbital  matrix
+from Gao et al. [55] where in addition to the log read-               Φ′ as a low rank update
+out via MLP1, we add a node-inducing component via                          Φ′ = Φ +X        ei(Φ′i− Φi)T  = Φ + UVT.        (32)
+MLP2.  Note that the MLPs in this Jastrow factor still
+only  have  access  to  the  local  environment  of  individ-                           i∈U
+ual elements,  with the total Jastrow factor being the                Here,  ei ∈  Rnel   denotes  the ith  unit  vector,  and
+sum of the individual electrons, limiting the correlation             U,V ∈ Rnel×|U| denote the matrices of all unit vectors
+effects that can be captured.                                         ei  and  changes  in  the  orbital  matrix Vi  =  (Φ′i− Φi)
+To capture global electron correlation effects, one could             for i∈U.  Like conventional VMC [57], the matrix de-
+apply  an  MLP  to  an  average  electron  embedding,                 terminant  lemma  and  the  Woodbury  matrix  identity
+but  such  a  Jastrow  factor  would  lose  access  to  high-         enable us to compute updates for det[Φ] and Φ−1
+frequency  information  due  to  the  averaging.   Instead
+we propose a novel Jastrow factor based on cross at-                            A :=(I|U| + VT Φ−1U),                             (33)
+tention  to  so-called  registers  [56].   For  each  register             det[Φ′] = detΦ + UVT = det[Φ] det[A],       (34)
+r ∈ {1,...,Nreg},  we  define  a  query qr ∈ RD,  and                         Φ′−1 =Φ−1− Φ−1UA−1V Φ−1.                   (35)
+weights WVr ∈ RD×dreg.  We perform cross attention
+between  the  electron  embeddings H ∈ Rnel×D  (used                  Constructing A  requiresO(nel·|U|2)  operations  and
+as keys) and the register queries to obtain the register              since A is only in R|U|×|U|, computing its inverse and
+embeddings                                                            determinant only scales asO(|U|3).  We note that we
+               vr = softmax (Hkr)T HWVr .             (30)            can compute the determinant and the inverse of A from
+                                                                      the same LU decomposition,  requiring low additional
+Similar  to  the  per-electron  MLP  Jastrow  factor,  we             computational effort.  The same idea can also be used
+perform  a  2-step  readout  on V   =  Concat[vr]Nregr=1 ∈            when computing the original full inverse Φ−1 from the
+RNregdreg:                                                            LU obtained during determinant computation.
+       Jatt(r) = exp (MLP1 (V )) MLP2 (V ).          (31)             We use low-rank updates during Monte Carlo sampling
+                                                                      and when evaluating non-local operators such as the ef-
+We demonstrate the importance of this Jastrow factor                  fective core potential and the S+ spin operator.  All of
+in App. C, where we observe an approximately 10 mEh                   these require evaluating ratios of the form Ψ(r′)/Ψ(r).
+improvement of absolute energies and 2 mEh  for rela-                 For single electron moves during Monte Carlo sampling
+tive energies.  Note that while this Jastrow factor can               and the non-local effective core potential, r′ and r dif-
+capture correlation between electron embeddings at ar-                fer in only a single electron.  For theS+ operator, they
+bitrary distance, a forward pass through this Jastrow                 differ in only two electrons.
+factor scales linearly with the number of electrons and
+therefore does not affect overall scaling of our method.              4.4Efficient Laplacian
+4.3Low-rank wave function updates                                     Our finite-range embeddings allow for a more efficient
+                                                                      computation  of  the  Laplacian  of  the  wave  function,
+Updates of the wavefunction after moving a small num-                 which is required for the kinetic energy.  For a compos-
+ber of electrons are the key step for Monte Carlo sam-                ite function f =fN◦...◦ f1 of some input x1∈ Rd1,
+pling  or  evaluation  of  pseudopotentials.    To  enable            the forward Laplacian framework [13] propagates the
+
+
+                                                                    9
+primal xi∈ Rdi, the Jacobian∇xi∈ Rdi×d1, and the                        O(nel4) since each of theO(nel3) entries ofM is a con-
+Laplacian ∆xi∈ Rdi:                                                     traction over dimension nel.  However, for finite-range
+                                                                        embeddings, the Jacobian∇ndΦij is sparse, thus yield-
+      xi+1 =fi(xi),                                                 (36)ing corresponding sparsity inM, reducing the memory
+    ∇xi+1 =Jfi(xi)∇xi,                                        (37)      and compute cost byO(nel).
+    ∆xi+1 =Jfi(xi)∆xi + Tr(∇xi)THfi(xi)∇xi
+                                                               (38)
+                                                                        4.5Improved Monte Carlo sampling
+where Jfi(xi) and Hfi(xi) are the Jacobian and Hes-                     We use the Metropolis-Hastings algorithm [58] to sam-
+sian of fi  at xi.  Most of the computation is here fre-                ple  electron  coordinates r  from  the  wavefunction  Ψ.
+quently dominated by the propagation of the Jacobian                    The  standard  proposal  distributions ρ(r′|r)  in  NN-
+∇x which scales linearly with the domain off and the                    VMC  propose  new  electron  positions  by  perturbing
+computation of Tr(∇xi)THfi(xi)∇xi.                                    the previous electronic coordinates with noiseρ(r′|r) =
+Our local  updates  accelerate  the Laplacian  computa-                 N (r′|r,σ2I).  While working well in covalent systems,
+tion due to sparse Jacobians∇hi as an electron’s em-                    it may lead to non-variational energies in largely sepa-
+bedding only depends on the electrons in its vicinity.                  rated sub-systems.  If the gap between two sub-systems
+This way, we avoid materializing the full Jacobian but                  is too large, the probability of moving an electron from
+instead  propagate  sparse  tensors,  reducing  the  Jaco-              one sub-system to the other decays to zero due to the
+bian propagation costs byO(nel).  The case of the de-                   exponential envelopes.  In such cases, the samples may
+terminant  is  particularly  noteworthy.   The  Jacobian                not represent the wave function’s distribution well.
+and  Hessian  of  the  logarithm  of  the  determinant  are
+given as                                                                We  propose  to  additionally  use  global  single-electron
+                                                                        jumps to eliminate this issue.  While non-local moves
+                    Jln detij     (Φ) = Φ−1ji                             (39)have  a  history  in  diffusion  Monte  Carlo  (DMC)  [59,
+                   Hln detij,km(Φ) =−Φ−1jk Φ−1mi.                  (40) 60], there, they obey a specific form that ensures cor-
+                                                                        rect convergence but is costly to evaluate.  In contrast,
+To  compute  the  forward  propagations  in  Eqs.  (37)                 VMC’s  proposal  distribution’s  support  set  must  only
+and (38), we define the tensor M∈ Rnel×nel×nel×ndim                     cover the target distribution’s support set.  Thus,  we
+as  the  product  of  the  Jacobian  of  the  orbital  matrix           define a Gaussian Mixture Model (GMM) proposal dis-
+with its inverse                                                        tribution
+
+                 Mik,nd =X(∇ndΦij)Φ−1jk.               (41)                                              NnX
+                               j                                         ρglobal(r′) =         1PNn          ZmN (r′|Rm,σ2gI).  (46)
+                                                                                             m=1Zm      m=1
+The  required  terms  for  Eqs.  (37)  and  (38)  are  then
+given as                                                                Unlike  local  Gaussian  moves,  these  global  moves  do
+               Jln det(Φ)∇Φ =X          Mii,nd                   (42)   not have a symmetrical proposal distribution, and we,
+                                                                        therefore, need to adjust the acceptance probability by
+                                     i                                  a factor of
+               Jln det(Φ)∆Φ =X          ∆ΦijΦ−1ji                (43)                           ρ(r|r′)
+                                    ij
+                                      ndimX   nelX                                              ρ(r′|r) = ρ(r)ρ(r′),                       (47)
+Tr(∇Φ)THln det(Φ)∇Φ =−                            Mik,ndMki,nd.
+                                      d=1  i,k,n=1                      to obtain unbiased estimates.  While one traditionally
+                                                               (44)     optimizes the proposal distribution to yield an accep-
+                                                                        tance  ratio  of≈  50%  by  adjusting  the  scale  parame-
+For fully correlated orbitals, the last sum containsnel3                ter σ2  on  the  fly,  i.e.,  with  lower σ2  yielding  higher
+terms for each combination of the indices i,k,n.  For                   acceptance  ratios  as σ2 →  0    =⇒     Ψ2(r′)Ψ2(r) →  1,  the
+finite-range  orbitals,  however,  we  can  utilize  the  fact          same cannot trivially be done with ρglobal.  Due to the
+that Mik,and = 0 if n /∈Ni, because in that case, the                   magnitude  of  the  perturbation,  we  observe  lower  ac-
+Jacobian for electroni w.r.t.  electronn is zero.  There-               ceptance ratios for these global moves.  To set σg, we
+fore, we can restrict this sum to                                       compared  acceptance  ratios  for σg ∈{1, 2, 3}  on  the
+
+    nelX                       nelX  X                                  benzene  dimer  and  chose σg  =  2,  which  yielded  the
+          Mik,ndMki,nd =                    Mik,ndMki,nd,  (45)         highest acceptance ratio of≈ 10%.  We find that this
+ i,k,n=1                       n=1  i,k∈Nn                              acceptance rate depends weakly on system size, rang-
+                                                                        ing from 12% for C4H4 to 6% for C16H4.  To maximize
+which reduces the complexity of this contraction from                   computational  efficiency,  we  alternate  between  tradi-
+O(nel3)  to O(nelnnb2).    Another  large  advantage  of                tional single-electron moves,  perturbing a single elec-
+range-limited  orbitals  arises  in  Eq.  (41).    For  fully           tron’s  position  with  noise,  and  global  single-electron
+correlated  orbitals,  this  contraction  has  complexity               jumps.
+
+
+                                                                     10
+5  Code availability                                                   6. Fahy, S., Wang, X. W. & Louie, S. G. Variational
+                                                                            Quantum Monte Carlo Nonlocal Pseudopotential
+All code and data will be made openly available upon                        Approach to Solids: Formulation and Application
+publication.                                                                to Diamond, Graphite, and Silicon.  Physical  Re-
+                                                                            view B 42, 3503–3522 (Aug. 1990).
+                                                                       7. Motta,  M.     et  al.  Towards  the  Solution  of  the
+                                                                            Many-Electron Problem in Real Materials: Equa-
+Acknowledgements                                                            tion of State of the Hydrogen Chain with State-
+                                                                            of-the-Art Many-Body Methods. Physical Review
+We  greatly  appreciate  Gunnar  Arctaedius’  and  Leon                     X  7, 031059 (Sept. 2017).
+Gerard’s support on prototyping this approach.  This                   8. Hermann, J., Sch¨atzle, Z. & No´e, F. Deep-Neural-
+work  has  been  funded  by  the  Austrian  Science  Fund                   Network  Solution  of  the  Electronic  Schr¨odinger
+FWF Project I 3403,  the WWTF Project ICT19-041                             Equation.  Nature  Chemistry  12,  891–897  (Oct.
+and  the  Federal  Ministry  of  Education  and  Research                   2020).
+(BMBF) and the Free State of Bavaria under the Ex-                     9. Gao,  N.  &  G¨unnemann,  S.     Generalizing  Neural
+cellence  Strategy  of  the  Federal  Government  and  the                  Wave  Functions  in  International  Conference  on
+L¨ander.    Computations  were  achieved  with  the  Vi-                    Machine Learning (Feb. 2023). arXiv:2302.04168.
+enna Scientific Cluster, Leonardo (Project L-AUT 005)                       (2023).
+and the Munich Center for Machine Learning Cluster                   10.von Glehn, I., Spencer, J. S. & Pfau, D.       A  Self-
+(MCML) hosted at the Leibniz Supercomputing Centre                          Attention  Ansatz  for  Ab-initio  Quantum  Chem-
+(LRZ). The funders had no role in study design, data                        istry in The Eleventh International Conference on
+collection and analysis, decision to publish or prepara-                    Learning Representations  (Feb. 2023). (2023).
+tion of the manuscript.                                              11.Gerard,   L.,   Scherbela,   M.,   Marquetand,   P.
+                                                                            &  Grohs,  P.  Gold-Standard  Solutions  to  the
+                                                                            Schr¨odinger Equation Using Deep Learning: How
+Author contributions statement                                              Much Physics Do We Need? Advances  in  Neural
+                                                                            Information Processing Systems  (May 2022).
+MS and NG jointly conceived the project, implemented                 12.Li,  X.,  Fan,  C.,  Ren,  W.  &  Chen,  J.  Fermionic
+the approach,  ran the experiments,  and analyzed the                       Neural  Network  with  Effective  Core  Potential.
+data.   MS  focused  on  the  sparse  forward  Laplacian,                   Physical Review Research 4, 013021 (Jan. 2022).
+MCMC, efficient JAX implementation, finding test sys-                13.Li, R.      et al. A Computational Framework for Neu-
+tems, and running reference calculations.  NG focused                       ral Network-Based Variational Monte Carlo with
+on  the  architecture,  low-rank  updates,  pseudopoten-                    Forward Laplacian.  Nature  Machine  Intelligence
+tials,S+ operator, and optimization.  MS, NG and PG                         6, 209–219 (Feb. 2024).
+wrote  the  paper.   SG  and  PG  provided  funding  and             14.Rende, R., Viteritti, L. L., Bardone, L., Becca, F.
+feedback on the manuscript.                                                 & Goldt, S. A  Simple  Linear  Algebra  Identity  to
+                                                                            Optimize  Large-Scale  Neural  Network  Quantum
+                                                                            States  2023. Oct. [arXiv:2310.05715].
+                                                                     15.Goldshlager,  G.,  Abrahamsen,  N.  &  Lin,  L.  A
+References                                                                  Kaczmarz-inspired  Approach  to  Accelerate  the
+                                                                            Optimization of Neural Network Wavefunctions.
+ 1. Foulkes, W. M. C., Mitas, L., Needs, R. J. & Ra-                        Journal  of  Computational  Physics  516,  113351
+      jagopal,  G.  Quantum  Monte  Carlo  Simulations                      (Nov. 2024).
+      of Solids.  Reviews  of  Modern  Physics  73, 33–83            16.Scherbela, M., Gerard, L. & Grohs, P. Towards a
+      (Jan. 2001).                                                          Transferable Fermionic Neural Wavefunction for
+ 2. Umrigar, C. J., Nightingale, M. P. & Runge, K. J.                       Molecules. Nature Communications 15, 120 (Jan.
+      A  Diffusion  Monte  Carlo  Algorithm  with  Very                     2024).
+      Small Time-step Errors. The Journal of Chemical                17.Gao, N. & G¨unnemann, S.      Neural Pfaffians: Solv-
+      Physics 99, 2865–2890 (Aug. 1993).                                    ing  Many  Many-Electron  Schr¨odinger  Equations
+ 3. Pfau, D., Spencer, J. S., Matthews, A. G. D. G. &                       in The Thirty-eighth Annual Conference on Neu-
+      Foulkes, W. M. C. Ab Initio Solution of the Many-                     ral Information Processing Systems  (Sept. 2024).
+      Electron  Schr¨odinger  Equation  with  Deep  Neu-                    (2024).
+      ral Networks. Physical Review Research 2, 033429               18.Szab´o,  P.  B.,  Sch¨atzle,  Z.,  Entwistle,  M.  T.  &
+      (Sept. 2020).                                                         No´e,   F.   An   Improved   Penalty-Based   Excited-
+ 4. Feynman,  R.  P.  &  Cohen,  M.  Energy  Spectrum                       State     Variational     Monte     Carlo     Approach
+      of the Excitations in Liquid Helium. Physical Re-                     with     Deep-Learning     Ansatzes     2024.     May.
+      view 102, 1189–1204 (June 1956).                                      [arXiv:2405.17089].
+ 5. Luo,  D.  &  Clark,  B.  K.  Backflow  Transforma-               19.Li,  Z.       et  al.  Spin-Symmetry-Enforced  Solution
+      tions  via  Neural  Networks  for  Quantum  Many-                     of  the  Many-Body  Schr¨odinger  Equation  with  a
+      Body  Wave-Functions.  Physical  Review  Letters                      Deep Neural Network. Nature Computational Sci-
+      122, 226401 (June 2019).                                              ence 4, 910–919 (Dec. 2024).
+
+
+                                                                  11
+20.Jureˇcka,  P.,       ˇSponer,  J.,   ˇCern´y,  J.  &  Hobza,              and Dynamical Correlation in Oligoacenes. Jour-
+      P.  Benchmark  Database  of  Accurate  (MP2  and                       nal  of  Chemical  Theory  and  Computation  14,
+      CCSD(T) Complete Basis Set Limit) Interaction                          6295–6305 (Dec. 2018).
+      Energies of Small Model Complexes, DNA Base                     34.Shee,  J.,  Arthur,  E.  J.,  Zhang,  S.,  Reichman,
+      Pairs, and Amino Acid Pairs. Physical Chemistry                        D.  R.  &  Friesner,  R.  A.  Singlet–Triplet  Energy
+      Chemical Physics 8, 1985–1993 (Apr. 2006).                             Gaps of Organic Biradicals and Polyacenes with
+21.Marshall, M. S., Burns, L. A. & Sherrill, C. D. Ba-                       Auxiliary-Field  Quantum  Monte  Carlo.  Journal
+      sis Set Convergence of the Coupled-Cluster Cor-                        of  Chemical  Theory  and  Computation 15, 4924–
+      rection,δCCSD(T)MP2       : Best Practices for Benchmark-              4932 (Sept. 2019).
+      ing Non-Covalent Interactions and the Attendant                 35.Toma,  M.,  Kuvek,  T.  &  Vrˇcek,  V.  Ionization
+      Revision  of  the  S22,  NBC10,  HBC6,  and  HSG                       Energy  and  Reduction  Potential  in  Ferrocene
+      Databases. The Journal of Chemical Physics 135,                        Derivatives: Comparison of Hybrid and Pure DFT
+      194102 (Nov. 2011).                                                    Functionals. The Journal of Physical Chemistry A
+22.Angliker, H., Rommel, E. & Wirz, J. Electronic                            124, 8029–8039 (Oct. 2020).
+      Spectra of Hexacene in Solution (Ground State.                  36.Vondr´ak,  T.  Electronic  Structure  of  Halogeno-
+      Triplet  State.  Dication  and  Dianion).  Chemical                    ferrocenes Studied by He(I) Photoelectron Spec-
+      Physics Letters 87, 208–212 (1982).                                    troscopy.  Journal  of  Organometallic  Chemistry
+23.Birks, J. B.       Photophysics  of  Aromatic  Molecules                  275, 93–97 (Oct. 1984).
+      (1970).                                                         37.Inkpen,  M.  S.       et  al.  The  Unusual  Redox  Prop-
+24.Burgos, J., Pope, M., Swenberg, C. E. & Alfano,                           erties  of  Fluoroferrocenes  Revealed  through  a
+      R. R. Heterofission in Pentacene-doped Tetracene                       Comprehensive   Study   of   the   Haloferrocenes.
+      Single Crystals. physica status solidi (b) 83, 249–                    Organometallics 34, 5461–5469 (Nov. 2015).
+      256 (Sept. 1977).                                               38.Zhai, H.       et  al. Multireference Protonation Ener-
+25.Schiedt,  J.  &  Weinkauf,  R.  Photodetachment                           getics  of  a  Dimeric  Model  of  Nitrogenase  Iron–
+      Photoelectron Spectroscopy of Mass Selected An-                        Sulfur  Clusters.  The  Journal  of  Physical  Chem-
+      ions: Anthracene and the Anthracene-H2O Clus-                          istry A 127, 9974–9984 (Nov. 2023).
+      ter. Chemical physics letters 266, 201–205 (1997).              39.Bennett, M. C.      et al. A New Generation of Effec-
+26.Siebrand,  W.  Radiationless  Transitions  in  Poly-                      tive Core Potentials for Correlated Calculations.
+      atomic Molecules. II. Triplet-Ground-State Tran-                       The  Journal  of  Chemical  Physics  147,  224106
+      sitions  in  Aromatic  Hydrocarbons.  The  Journal                     (Dec. 2017).
+      of Chemical Physics 47, 2411–2422 (1967).                       40.Abrahamsen, N., Ding, Z., Goldshlager, G. & Lin,
+27.Spencer,  J.  S.,  Pfau,  D.,  Botev,  A.  &  Foulkes,                    L. Convergence of Variational Monte Carlo Simu-
+      W.   M.   C.   Better,   Faster   Fermionic   Neural                   lation and Scale-Invariant Pre-Training.  Journal
+      Networks.  3rd  NeurIPS  Workshop  on  Machine                         of Computational Physics, 113140 (May 2024).
+      Learning and Physical Science (Nov. 2020).                      41.Li,   T.,   Chen,   F.,   Chen,   H.   &   Wen,   Z.
+28.Ren, W., Fu, W., Wu, X. & Chen, J. Towards the                            Convergence   Analysis   of   Stochastic   Gradient
+      Ground  State  of  Molecules  via  Diffusion  Monte                    Descent   with   MCMC   Estimators   2024.   Mar.
+      Carlo  on  Neural  Networks.  Nature  Communica-                       [arXiv:2303.10599].
+      tions 14, 1860 (Apr. 2023).                                     42.Lehtola,  S.,  Blockhuys,  F.  &  Van  Alsenoy,  C.
+29.Grover, J. R., Walters, E. A. & Hui, E. T. Disso-                         An  Overview  of  Self-Consistent  Field  Calcula-
+      ciation Energies of the Benzene Dimer and Dimer                        tions  Within  Finite  Basis  Sets.  Molecules  25,
+      Cation.  The  Journal  of  Physical  Chemistry  91,                    1218 (Jan. 2020).
+      3233–3237 (June 1987).                                          43.Pfau, D., Axelrod, S., Sutterud, H., von Glehn, I.
+30.Krause,  H.,  Ernstberger,  B.  &  Neusser,  H.  J.                       & Spencer, J. S. Accurate Computation of Quan-
+      Binding   Energies   of   Small   Benzene   Clusters.                  tum  Excited  States  with  Neural  Networks.  Sci-
+      Chemical   Physics   Letters  184,  411–417  (Oct.                     ence 385, eadn0137 (Aug. 2024).
+      1991).                                                          44.Li, X., Li, Z. & Chen, J. Ab Initio Calculation of
+31.Sinnokrot, M. O., Valeev, E. F. & Sherrill, C. D.                         Real  Solids  via  Neural  Network  Ansatz.  Nature
+      Estimates of the Ab Initio Limit for Π−π Interac-                      Communications 13, 7895 (Dec. 2022).
+      tions:  The Benzene Dimer. Journal of the Amer-                 45.Gerard, L., Scherbela, M., Sutterud, H., Foulkes,
+      ican  Chemical  Society  124,  10887–10893  (Sept.                     M.  &  Grohs,  P.  Transferable  Neural  Wavefunc-
+      2002).                                                                 tions for Solids (May 2024).
+32.Hajgat´o,  B.,  Huzak,  M.  &  Deleuze,  M.  S.  Fo-               46.Lovato,  A.,  Adams,  C.,  Carleo,  G.  &  Rocco,
+      cal Point Analysis of the Singlet–Triplet Energy                       N.   Hidden-Nucleons   Neural-Network   Quantum
+      Gap of Octacene and Larger Acenes. The Journal                         States for the Nuclear Many-Body Problem 2022.
+      of  Physical  Chemistry  A 115,  9282–9293  (Aug.                      June. [arXiv:2206.10021].
+      2011).                                                          47.Cassella,   G.,   Foulkes,   W.   M.   C.,   Pfau,   D.
+33.Schriber, J. B., Hannon, K. P., Li, C. & Evange-                          &  Spencer,  J.  S.   Neural   Network   Variational
+      lista,  F.  A.  A  Combined  Selected  Configuration                   Monte Carlo for Positronic Chemistry 2023. Oct.
+      Interaction and Many-Body Treatment of Static                          [arXiv:2310.05607].
+
+
+
+                                                                   12
+48.Tang,  Y.        et   al.   Deep   Quantum   Monte   Carlo                 works  in  The  Eleventh  International  Conference
+      Approach  for  Polaritonic  Chemistry  2025.  Mar.                      on Learning Representations (Feb. 2023). (2023).
+      [arXiv:2503.15644].                                              56.Darcet, T., Oquab, M., Mairal, J. & Bojanowski,
+49.Li, X.      et al. Deep Learning Sheds Light on Integer                    P.  Vision  Transformers  Need  Registers  in  The
+      and Fractional  Topological Insulators  2025. Mar.                      Twelfth   International   Conference   on   Learning
+      [arXiv:2503.11756].                                                     Representations  (Oct. 2023). (2025).
+50.Shazeer, N.       GLU  Variants  Improve  Transformer               57.McDaniel, T., D’Azevedo, E. F., Li, Y. W., Wong,
+      2020. Feb. [arXiv:2002.05202].                                          K. & Kent, P. R. C. Delayed Slater Determinant
+51.Ba, J. L., Kiros, J. R. & Hinton, G. E.      Layer Nor-                    Update Algorithms for High Efficiency Quantum
+      malization 2016. July. [arXiv:1607.06450].                              Monte  Carlo.  The  Journal  of  Chemical  Physics
+52.Touvron,   H.        et   al.   LLaMA:   Open   and   Effi-                147, 174107 (Nov. 2017).
+      cient  Foundation  Language  Models   2023.  Feb.                58.Metropolis,  N.,  Rosenbluth,  A.  W.,  Rosenbluth,
+      [arXiv:2302.13971].                                                     M. N., Teller, A. H. & Teller, E. Equation of State
+53.Gasteiger,   J.,   Yeshwanth,   C.   &   G¨unnemann,                       Calculations  by  Fast  Computing  Machines.  The
+      S.   Directional   Message   Passing   on   Molecular                   journal of chemical physics 21, 1087–1092 (1953).
+      Graphs  via  Synthetic  Coordinates  in  Advances                59.Casula,  M.  Beyond  the  Locality  Approximation
+      in  Neural  Information  Processing  Systems  (Nov.                     in the Standard Diffusion Monte Carlo Method.
+      2021).                                                                  Physical Review B 74, 161102 (Oct. 2006).
+54.Agmon,  S.  in       Schr¨odinger  Operators:  Lectures             60.Casula, M., Moroni, S., Sorella, S. & Filippi, C.
+      given  at  the  2nd  1984  Session  of  the  Centro                     Size-Consistent Variational Approaches to Nonlo-
+      Internationale  Matematico  Estivo  (CIME)  held                        cal Pseudopotentials: Standard and Lattice Regu-
+      at   Como,   Italy,   Aug.   26–Sept.   4,   1984   1–38                larized Diffusion Monte Carlo Methods Revisited.
+      (Springer, 2006).                                                       The Journal of chemical physics 132 (2010).
+55.Gao, N. & G¨unnemann, S.       Sampling-Free  Infer-
+      ence for Ab-Initio Potential Energy Surface Net-
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                    13
+                                  Supplementary Information
+                          Accurate Ab-initio Neural-network Solutions to
+                              Large-Scale Electronic Structure Problems
+
+A Effect of cutoff:  H    10
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure S1:  Impact of cutoff on accuracy for H10 hydrogen-chain a)  error in absolute energy relative
+to MRCI+Q b) error in relative energy ∆E = E2.8−E1.8  relative to MRCI+Q c) standard deviation of the
+sampled energies
+
+To investigate the effect of the cutoff radius c on accuracy,  we compute energies for H10 hydrogen chains at
+inter-atomic  spacings d  =  1.8 a0  and d  =  2.8 a0.   This  toy  system  has  been  used  to  benchmark  many  high-
+accuracy methods [1] because, despite its small size, even methods like CCSD(T) miss relative energies by up
+to 15 mHa.  Fig. S1 depicts the errors in absolute energy, relative energy, and energy standard deviation.  We
+find that all quantities rapidly converge with increasing cutoff, reaching convergence at c≈ 3− 5 a0, which is
+much smaller than the length of the molecule (16-26 a0).  We also find our energies to be in good agreement
+with other high-accuracy methods, like FermiNet [2] and AFQMC [1].  For cutoffsc≥ 5 a0, we even obtain lower
+absolute energies than FermiNet despite being range-limited and having fewer determinants.  For the impact of
+hyperparameters other than the cutoff, see the ablation study in App. C.
+Notably,  in a densely packed system and for a sufficiently large nel,  the average number of neighbors of any
+electron nnb  scale  linearly  in  the  volume,  i.e.,O(c3).   Consequently,  the  wave  function  update  saclesO(c9).
+We  fix  the  cutoff  to c  =  3a0  for  comparing  ionization  potentials  and  singlet-triplet  gaps  and c  =  5a0  when
+computing interaction energies to optimize the tradeoff between compute time and accuracy.  We found this to
+be a favorable tradeoff between the accuracy of relative energies and compute time.
+
+B Non-local interactions in hydrocarbons:  cumulene
+Cumulenes form an interesting test system because they contain long-range interactions.  For short chains, the
+equilibrium geometry is planar with a singlet ground state.  The twisted geometry, with the methylene groups
+at each end twisted by 90 degrees, is higher in energy with a triplet ground state.  This system has been used to
+investigate long-range interactions in neural-network potentials [3], and ethylene, the smallest of these molecules,
+has been used as a benchmark system for neural wave functions [4].  We compute the energy difference between
+the twisted and planar geometryEtwisted−Eplanar for cumulenes of increasing size fromn = 2 ton = 16 carbon
+atoms,  using  the S+  spin  operator  [5]  to  enforce  singlet  and  triplet  states  respectively.   Fig.  S2  depicts  the
+energy difference as a function of the number of carbon atomsn, compared to several other quantum chemistry
+methods.  We find that we can still accurately resolve this energy difference even with a small cutoff of c = 3 a0,
+which is substantially smaller than the distance between the two methylene groups.  For short chain lengths
+where it is possible to run a CCSD(T) calculation, we find our method to be in good agreement with CCSD(T)
+with a maximum deviation of 2 mHa.
+
+
+
+                                                                 14
+Because we use this system as a simple benchmark system,  we have not re-optimized the geometry for each
+geometry and spin state.  Thus, these energy differences may change when considering fully relaxed geometries.
+Convergence of CCSD(T) calculations is nontrivial for this system due to strong spin contamination in unre-
+stricted Hartree Fock calculations.  We find that only when using unrestricted Kohn Sham orbitals as a reference
+state –where spin contamination is much less severe – does CCSD(T) converge to the correct solution.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure  S2:  Cumulenes:  energy  difference  between  twisted  and  planar  geometry  of  cumulenes  of  increasing
+length, comparing our approach (FiRE) to CCSD(T) and density functional theory using the PBE0-functional.
+
+C Model ablations
+We investigate the importance of crucial hyperparameters of our neural wave function beyond the cutoff radius
+c.  For this, we investigate the singlet-triplet gap in naphthalene as in Fig. 3c.  We compare four models, our
+standard FiRE with hyperparameters as defined in App. L, one with only a single determinant Ndet = 1, one
+with 16 determinants Ndet  = 16,  and one without the attention Jastrow factor from Sec. 4.2.  The absolute
+energy for both states and the relative energy independence on the optimization steps are shown in Fig. S3.
+While enlarging the number of determinants to 16 improves absolute energies, convergence is slower, and the
+relative energy takes longer to converge.  Notably,  FiRE accurately reconstructs the relative energy between
+the two states within 50k optimization steps, even with a single determinant.  Crucially, the attention Jastrow
+factor is important in accurately reconstructing the relative energy.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                 Figure S3:  Ablation study on the network architecture.
+
+
+D Measuring speedups
+To test the effect of these speed-ups in practice, we compare the runtime of our ansatz against FermiNet [2],
+Psiformer [6] and LapNet [7].  For all three architectures we use the implementations in the LapNet codebase
+and use the forward Laplacian to accelerate kinetic energy computations [7].  We use cumulenes, fully double-
+bonded  hydrocarbon  chains  of  the  form  CH2            Cn   CH2  as  test  systems.   We  determine  the  runtime  of  all
+components required for a single optimization step:  MCMC sampling,  calculation of the kinetic energy,  and
+
+
+                                                                  15
+potential evaluation of effective core potentials (ECP) and spin operators.  The two key runtimes are Tupd, the
+time required to update the wave function after a single electron move (Fig. 2a), and Tkinetic, the time required
+to compute the kinetic energy (Fig. 2b).  The total runtime Ttot per step is then given as
+
+                                                 Ttot =Tsampling +Tkinetic +TECP +Tspin                                             (S1)
+                                          Tsampling =Tfull wf +NsweepsnelTupd                                                           (S2)
+                                               TECP =nelNquadTupd                                                                            (S3)
+                                               Tspin = nel2 Tupd                                                                                     (S4)
+
+where in our experiments Nsweeps = 2 is the number of Monte Carlo steps per electron, and Nquad = 4 is the
+number of quadrature points for estimating the non-local ECP. For FermiNet, Psiformer, and LapNet, the time
+for a wave function update Tupd  equals the time for a full wave function evaluation Tfull wf,  whereas for our
+approachTupd≪Tfull wf.  We use a batch size of 4096 samples on a single A100 GPU. For larger systems where
+not  all  samples  fit  into  memory,  we  use  the  largest  possible  batch  size  per  operation  and  method  and  scale
+the runtime accordingly.  To compare the empirical scaling of various methods,  we fit the power laws of the
+form T∼nelη.  We also compute energies for these cumulenes up to C16H4 and compare them to CCSD(T) in
+App. B, finding good agreement.
+
+E Low-rank updates in    S+ operator
+To ensure pure states when comparing singlet and triplet states, we use the S+ loss from Li et al. [5].  There, in
+addition to minimizing the energy, we seek to minimize
+
+                                                          PS+ = (⟨S+Ψ|S+Ψ⟩)2                                                               (S5)
+                                                ⟨S+Ψ|S+Ψ⟩ =  N↓                    Rβ(r)2,                                                    (S6)
+                                                                    N↑ + 1EρΨ
+                                                                          N↑X
+                                                        Rβ(r) = 1−            Ψ(πα,β(r))
+                                                                         α=0      Ψ(r)                                                             (S7)
+
+where πα,β  is the permutation operator swapping the αth electron with the βth electron.  Evaluating the wave
+function ratio involves evaluating the wave function with two electrons being permuted.  The gradient of the
+PS+  is given by
+
+                                   ∇θPS+ = 2P+EρΨ [2 (Rβ(r)−P+)∇θ ln Ψ(r) +∇θRβ(r)]                                    (S8)
+
+Thanks to our local embeddings, we can efficiently compute this update to the wave function by only updating
+the electrons’ embeddings within a c radius of either swapped electron.  We efficiently compute the gradients
+of Rβ  through our local updates in two parts.  Let ϑ denote the cached intermediate variables for our low-rank
+updates.  We decompose the gradient
+                                                 ∇θRβ(r) = ∂Rβ(r)                         ∂ϑ
+                                                                     ∂θ     + ∂Rβ(r)∂ϑ    ∂θ.                                                     (S9)
+By aggregating ∂Rβ∂ϑ   for all swaps first, we avoid repeated backward passes for the gradient computation.
+
+F Non-hermitian operator gradients in Spring
+We generally precondition gradients with Spring as in Eq. (14), though, this requires that the unpreconditioned
+gradient∇θL of some lossL can be written as∇θL = ¯O ∂L∂ ln Ψ  like the energy gradient where  ∂E∂ ln Ψ =EL(r)−
+EρΨ [EL(r)].  While  any gradient of  a hermitian  operator can  be  written  this way,  it  does not  hold for  non-
+hermitian operators like the S+ operator due to the derivative through Rβ in Eq. (S8).  Thus, we would like to
+apply the general natural gradient update rule
+                                                   δ = EρΨ    ∇θ lnρΨ∇θ lnρΨT−1 ˜δ                                                      (S10)
+
+
+for some general gradient ˜δ.  For a finite batch size, this can be written as
+
+                                                              δ = ( ¯O ¯OT )−1˜δ                                                                   (S11)
+
+which may be non-invertible if  ¯O ¯OT  is not full-rank.  Thus, one adds a damping factor to ensure invertibility
+
+                                                          δ = ( ¯O ¯OT +λI)−1˜δ.                                                              (S12)
+
+
+                                                                       16
+which, after applying the Woodbury matrix identity, can be efficiently computed as
+
+                                                 δ =  1λ ˜δ− ¯O( ¯OT ¯O +λI)−1 ¯OT ˜δ.                                                     (S13)
+
+Crucially, if  ˜δ /∈ span( ¯O), i.e., it cannot be written as  ˜δ =  ¯O˜ϵ, the part that is not in  ¯O will be upscaled by
+1
+λ = 1000 for the typical choice of λ =    11000.  This generally leads to unstable optimization.
+We tackle this issue by splitting ˜δ = ˜δ∈ + ˜δ/∈ into ˜δ∈∈ span( ¯O) and ˜δ/∈ = ˜δ− ˜δ∈, since we can write ˜δ∈ = ¯O˜ϵ,
+we simply add it to ϵ in Eq. (14).  We add ˜δ/∈ directly to the final gradient update.  Thus, the final gradient is
+                                                     ¯OT ¯O +λI −1 ϵ + ˜ϵ− ¯Oηδt−1 +ηδt−1.                                   (S14)
+                                   δt = ˜δ/∈ + ¯O
+
+To obtain the part that is within the span, we use the identity
+
+                                                  ˜δ∈ = ¯O( ¯OT ¯O)−1 ¯OT ˜δ = ¯O ¯O+˜δ                                                      (S15)
+
+where  ¯O+  is  the  Moore-Penrose  pseudoinverse  of  ¯O,  which  we  compute  from  the  same  hermitian  eigende-
+composition used to compute ( ¯OT ¯O +λI)−1.  Note that we compute ˜ϵ =  ¯O+˜δ  in the process and use it for
+Eq. (S14).
+
+G Effective core potential
+We use the cc-ECP by Bennett  et  al. [8].  Unlike prior applications of ECPs to NN-VMC by Li  et  al. [9], we
+do not use a constant number of quadrature points Nquad  to evaluate the non-local part but use a different
+Nquad per atom species.  For systems like chloroferrocene, with a single iron atom and 10 carbon atoms, we can
+substantially reduce the number of wave function evaluations by using Nquad = 12 for Fe but only Nquad = 4
+for carbon, thus reducing the cost of ECP evaluation by≈ 3×.  We also use effective core potentials for purely
+organic systems, such as acenes, where only 2 core electrons are removed per atom.  Due to the extra cost of
+evaluating the non-local ECP, we obtain little to no speed-up vs an all-electron calculation.  However, we can
+substantially reduce the energy variance induced by the core electrons, thereby accelerating convergence.
+
+H Energy extrapolation
+When computing interaction energies, the energies for both geometries do not necessarily converge at the same
+rate.  Estimating the energy difference at a fixed number of optimization steps can, therefore, introduce a bias.
+To reduce this effect’s impact, we extrapolate each geometry’s energy to its full-optimization limit.  Fu et al. [10]
+have proposed extrapolating the energy based on the energy variance, but we find that using the norm of the
+preconditioned energy gradients yields even better extrapolation accuracy.  Given iterates of the mean energy
+Et and gradient gt as a function of optimization steps t, we fit models of the form
+
+                                                           Et =E∞ +k|gt|2                                                                 (S16)
+
+with the same slopek for both geometries. E∞ corresponds to the extrapolated energy, which would be obtained
+at the hypothetical limit of full convergence at zero gradients.  Tab. S3 lists interaction energies with and without
+extrapolations, showing that extrapolation typically changes relative energies by less than 1 mEh, but removes
+a≈ 9 mEh bias for H-bonded Uracil, where the dissociated geometry converges substantially faster.
+Fig. S4 demonstrates the energy extrapolation on the example of the interaction energy of the phenol dimer.
+For  this  molecule,  the  equilibrium  geometry  converges  slightly  faster  compared  to  the  dissociated  geometry,
+reaching lower energy, variance, and gradient norm for a given number of optimization steps.  Computing the
+energy  difference  after  a  fixed  number  of  steps  introduces  a  bias,  which  is  remedied  by  extrapolating  to  the
+same variance or gradient norm.  Fig. S4 also shows that the gradient norm is less noisy and yields a better
+correlation with the energy compared to the variance.
+
+I  Implementation in JAX
+Like other neural-network VMC code [11], we rely on JAX [12] to accelerate our code on GPUs.  JAX traces the
+program to record tensor shapes and operations to create a directed acyclic graph (DAG) of the program.  This
+DAG is subsequently optimized and compiled into an accelerator-friendly program.  This process requires the
+tensor shapes to be fixed and known; calling the program with different input sizes triggers new time-intensive
+compiling processes.  On the one hand, using the largest possible tensor shapes eliminates the purpose of our
+finite-ranged embeddings and yields the same speed as running dense neural networks.  On the other hand, using
+
+
+                                                                    17
+Figure S4: Energy extrapolation for the phenol dimer a) based on variance. b) based on preconditioned
+gradient norm. Energy as a function of variance / gradient norm for the dissociated geometry and the equilibrium
+geometry.
+
+
+tensor shapes that are too small results in incorrect computations, as non-zero elements need to be dropped.
+To  dynamically  adjust  to  the  current  wave  function  and  avoid  an  abundance  of  compilations,  we  compute
+the necessary tensor shapes to execute this step at every call.  In particular, we log the numbers of electron-
+nuclei  edges,  electron-electron  edges,  affected  electrons  in  single-electron  moves  (local  and  global),  electrons
+close to pseudopotentials, and the triplets in Eq. (45).  In subsequent steps, we use these as lower bounds with
+some padding as tensor shapes and pad the necessary tensors to fixed shapes, avoiding recompilation for every
+possible neighborhood combination.  This way, the first call may be numerically incorrect due to non-aligned
+tensor  shapes,  but  subsequent  calls  minimize  the  amount  of  padding  while  maintaining  exact  computation.
+Laplacian computations were done with folx [13].
+
+J  Theoretical VMC convergence rates
+Recent work [14, 15] has investigated theoretical convergence bounds for NN-VMC in conjunction with MCMC-
+based SGD methods.  The theoretically established convergence rates areα = 1/4 for convergence to a first-order
+stationary point [14, Corollary 4.4] and α = 2/11 for convergence to an approximate second-order stationary
+or a low-variance point [15, Theorem 3].  While the polynomial nature of these convergence results is consistent
+with  our  empirical  findings,  our  empirical  rate  of α  =  1  is  considerably  higher  than  the  rates  suggested  by
+theory.  Potential reasons for this discrepancy could be our use of preconditioning during optimization or the
+fact  that  the  variance  of  the  sampling  distribution  tends  to  zero  as  an  eigenvector  is  approached,  thereby
+improving the sampling complexity.  We also mention that under additional assumptions (most importantly a
+Polyak-Lojasiewicz condition), an optimal rate α = 1 can be established for standard SGD-type methods [16].
+While this rate would match our empirical findings, it is unclear if a Polyak-Lojasiewicz condition holds in our
+setting.  Furthermore, the results of [14, 15] are not directly applicable to our setting because they monitor the
+loss gradient instead of the energy error and also rely on certain boundedness/mixing assumptions that may
+not be satisfied in our case.  A more comprehensive analysis would be highly desirable but lies beyond the scope
+of this work.
+
+K Conventional quantum chemistry calculations
+All conventional calculations were performed using ORCA 6.0.1 [17] using correlation consistent basis cc-pVXZ
+sets by Dunning [18] for CCSD(T) calculations and def2-XVP basis sets for DFT calculations.  We extrapolate
+results  to  the  complete  basis  set  (CBS)  limit  by  extrapolating  the  Hartree-Fock  energy  from  calculations  at
+the  triple-  and  quadruple-zeta  levels.   The  correlation  energy  is  extrapolated  from  calculations  performed  at
+the double- and triple-zeta levels, where affordable.  Calculations denoted as  DZ  correspond to Hartree-Fock
+energy at the CBS level and correlation energy obtained at the double-zeta level.  For basis set extrapolation,
+we use the relationships published by Neese et al. [19].  For DFT calculations, we use the PBE0 [20] exchange-
+correlation-functional with the D3BJ dispersion correction [21].  ZPVE for the benzene dimer at the MP2-level
+were taken from [22]; for chloroferrocene, we calculated them at the PBE0/D3BJ level.  Subtracting them from
+
+
+                                                                   18
+                                                             Table S1:  Hyperparameters
+
+                                            Hyperparameter                                        Value
+                                            Wave Function
+                                               Determinants Ndet                                    4
+                                               Cutoff c
+                                                  (non-)covalent interactions                  5 a0
+                                                  ionization/singlet-triplet gap               3 a0
+                                               Cutoff cn                                                20 a0
+                                               Hidden dim d                                          256
+                                               Edge MLP widths                                 [16, 8]
+                                               Edge number of Gaussians d0                  32
+                                               Jastrow factor MLP widths                [256, 256]
+                                               Number of registers Nreg                          16
+                                               Register dimensions dreg                          16
+                                               Number of envelopes per nucleus              8
+                                            Pseudopotential
+                                               ECP                                                      ccECP
+                                               Nquad, Li – Ne                                          4
+                                               Nquad, Na – Ar                                         6
+                                               Nquad, K – Kr                                          12
+                                            Batch size Nwalker                                      4096
+                                            Optimization
+                                               Steps                                                     50.000
+                                               Learning rate                                                     0.11+  t
+                                                                                                            10000
+                                               Damping λ                                             0.001
+                                               Spring decay η                                        0.99
+                                               Local energy clipping                           5 MAE
+                                               Clipping statistic                                 Median
+                                            Spin operator gradient norm                        2
+                                            MCMC
+                                               Target acceptance ratio                          50 %
+                                               Number of steps                                     2nel
+                                               Number of global moves                          20
+                                            Pretraining
+                                               Basis set                                          ccecp-ccpvdz
+                                               Steps                                                      2000
+                                               Optimizer                                              Adam
+                                               Learning rate                                                      11+ t
+                                                                                                            1000
+
+
+the experimental energies shifts the experimental relative energies by +0.55 mEh and−0.2 mEh, respectively.
+
+L Hyperparameters
+If  not  explicitly  stated,  experiments  in  this  study  use  the  hyperparameters  provided  in  Tab.  S1.   Notable
+hyperparameters  are  the  cutoff c  that  we  investigate  in  App.  A  and  the  number  of  optimization  steps.   In
+general, one needs to increase the number of optimization steps with the system size.
+
+MTables of energies
+In  the  following,  we  list  all  energy  estimates  from  Fig.  3.   Tab.  S3  lists  the  interaction  energies  for  the  S22
+dataset, Tab. S4 for the benzene dimer, Tab. S2 for the n-acenes, and Tab. S6 for ferrocene.
+
+
+
+
+
+
+
+
+
+
+
+                                                                               19
+                             Table S2: n-acene singlet-triplet gaps in mEh, corresponding to Fig. 3c
+
+                                       Experiment                  FiRE
+                                       (ZPE corrected)             c = 3a0      CCSD(T)/FPA    ACI-DSRG-MRPT2            AFQMC
+                 naphthalene                      103.0    103.4(3)                     105.3                 99.5    108.8(19)
+                 anthracene                         72.6      74.4(4)                      77.1                 69.1      73.9(19)
+                 tetracene                            49.9      46.2(4)                      53.6                 45.3      54.4(25)
+                 pentacene                           34.1      34.5(5)                      40.5                 28.8      40.3(25)
+                 hexacene                             21.9      24.0(5)                      28.3                 18.2                 –
+
+
+                    Table S3:  Interaction energies for the S22 dataset in mEh, corresponding to Fig. 3a
+
+                   molecule                              FiRE, c = 5a0               FiRE, c = 5a0
+                                                            raw                      extrapolated         LapNet      CCSD(T)
+                   Water dimer                                7.54(4)                8.14(4)            7.25(8)           7.95
+                   Formic acid dimer                     27.0(1)                28.9(1)            26.4(2)           29.88
+                   Formamide dimer                      23.2(1)                24.4(1)            22.6(1)           25.60
+                   Uracil dimer h-bonded              21.7(2)                31.7(2)            37.0(4)           32.89
+                   Methane dimer                            0.69(3)                0.91(3)            0.3(1)             0.84
+                   Ethene dimer                              1.68(5)                2.27(5)            1.6(1)             2.35
+                   Uracil dimer stack                     11.0(2)                14.7(2)            11.7(4)           15.63
+                   Ethene-ethyne complex               2.06(5)                2.43(5)            1.30(8)           2.38
+                   Benzene-water complex              4.77(9)                5.16(9)            2.9(2)             5.22
+                   Benzene dimer T-shaped            3.4(1)                 3.6(1)              2.6(1)             4.33
+                   Phenol dimer                             12.7(2)                11.8(2)              8.0(3)           11.31
+
+
+Table S4:  Benzene dimer binding energy in mEh, cor-                                 Table  S5:   Energy  difference  between  (singlet)  and
+responding to Fig. 3b                                                                twisted (triplet) cumulene in mEh, corresponding to
+                                                                                     Fig. S2
+  method                                         interaction energy
+  Experiment, Grover et al                         4.4(8)                                molecule    FiRE, c = 3a0     CCSD(T)     PBE0
+  Experiment, Krause et al                         3.1(4)                                C4H4                62.7(1)            63.2              50.5
+  CCSD(T)/CBS, Marshall et al                4.3                                         C6H4                44.3(2)            43.9              31.3
+  FermiNet VMC, Ren et al                      18.2(6)                                   C8H4                34.9(2)            34.0              21.5
+  FermiNet DMC, Ren et al                       9.2(5)                                   C12H4               24.0(3)            24.2              11.2
+  FermiNet VMC, Glehn et al                    4.6(8)                                    C16H4               17.9(3)            18.7               5.7
+  Psiformer, Glehn et al                              0.7(3)
+  LapNet, Li et al                                       2.6(1)
+  FiRE, c = 3a0, raw                                   2.3(2)
+  FiRE, c = 3a0, extrapolated                    2.9(2)
+  FiRE, c = 5a0, raw                                   3.4(1)
+  FiRE, c = 5a0, extrapolated                    3.6(1)
+  FiRE, c = 7a0, raw                                   4.1(1)
+  FiRE, c = 7a0, extrapolated                    4.6(1)
+
+
+                      Table S6:  Chloroferrocene ionization potential in mEh, corresponding to Fig. 4a
+
+                                                       method                                   IP
+                                                       Experiment                        257.8
+                                                       B3LYP/TZ                         237.4
+                                                       PBE0/CBS                         242.5
+                                                       DLPNO-CCSD(T)/CBS    249.6
+                                                       CCSD(T)/DZ                     245.3
+                                                       CCSD(T)/FPA                  255.8
+                                                       FiRE                                  256.1(3)
+
+
+
+                                                                                20
+Table S7:  Energies corresponding to Fig. 4b.  Relative energies for the four protonation sites and mean absolute
+error (MAE) to the conventional best estimate, in mEh
+
+             method                                                HC             HS             HFe           HFe2MAE
+             Conventional best est.      −53.9   −2.3            33.9            22.2                               0.0
+             FiRE, c = 5a0, raw       −56.2(3)  −0.1(3)       33.7(3)       22.6(3)                                 1.3(2)
+             No (T): CCSD/CBS+DMRG   −67.0  −11.4            41.0            37.4                                 11.1
+             No CBS: CCSD(T)/TZ+DMRG −49.2              1.6            28.7            18.9                         4.3
+             No DMRG: CCSD(T)/CBS   −57.3   −3.7            34.9            26.1                                    2.4
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                   21
+                    Supplementary Information References
+
+ 1. Motta, M.    et al. Towards the Solution of the Many-Electron Problem in Real Materials: Equation of State
+      of the Hydrogen Chain with State-of-the-Art Many-Body Methods.  Physical  Review  X  7, 031059 (Sept.
+      2017).
+ 2. Pfau, D., Spencer, J. S., Matthews, A. G. D. G. & Foulkes, W. M. C. Ab Initio Solution of the Many-
+      Electron Schr¨odinger Equation with Deep Neural Networks.  Physical  Review  Research  2, 033429 (Sept.
+      2020).
+ 3. Frank, T., Unke, O. & M¨uller, K.-R. So3krates: Equivariant Attention for Interactions on Arbitrary Length-
+      Scales in Molecular Systems. Advances in Neural Information Processing Systems 35, 29400–29413 (2022).
+ 4. Scherbela, M., Gerard, L. & Grohs, P. Towards a Transferable Fermionic Neural Wavefunction for Molecules.
+      Nature Communications 15, 120 (Jan. 2024).
+ 5. Li, Z.    et al. Spin-Symmetry-Enforced Solution of the Many-Body Schr¨odinger Equation with a Deep Neural
+      Network. Nature Computational Science 4, 910–919 (Dec. 2024).
+ 6. von Glehn, I., Spencer, J. S. & Pfau, D.    A Self-Attention Ansatz for Ab-initio Quantum Chemistry in The
+      Eleventh International Conference on Learning Representations  (Feb. 2023). (2023).
+ 7. Li, R.    et al. A Computational Framework for Neural Network-Based Variational Monte Carlo with Forward
+      Laplacian. Nature Machine Intelligence 6, 209–219 (Feb. 2024).
+ 8. Bennett,  M.  C.     et  al.  A  New  Generation  of  Effective  Core  Potentials  for  Correlated  Calculations.  The
+      Journal of Chemical Physics 147, 224106 (Dec. 2017).
+ 9. Li, X., Fan, C., Ren, W. & Chen, J. Fermionic Neural Network with Effective Core Potential.     Physical
+      Review Research 4, 013021 (Jan. 2022).
+10.Fu, W., Ren, W. & Chen, J. Variance Extrapolation Method for Neural-Network Variational Monte Carlo.
+      Machine Learning: Science and Technology 5 (Jan. 2024).
+11.Spencer, J. S., Pfau, D., Botev, A. & Foulkes, W. M. C. Better, Faster Fermionic Neural Networks.       3rd
+      NeurIPS Workshop on Machine Learning and Physical Science  (Nov. 2020).
+12.Bradbury, J.      et al. JAX: Composable Transformations of Python+NumPy Programs  2018.
+13.Gao, N., K¨ohler, J. & Foster, A.      Folx - Forward Laplacian for JAX  2023.
+14.Abrahamsen, N., Ding, Z., Goldshlager, G. & Lin, L. Convergence of Variational Monte Carlo Simulation
+      and Scale-Invariant Pre-Training. Journal of Computational Physics, 113140 (May 2024).
+15.Li, T., Chen, F., Chen, H. & Wen, Z.      Convergence Analysis of Stochastic Gradient Descent with MCMC
+      Estimators  2024. Mar. [arXiv:2303.10599].
+16.Khaled, A. & Richt´arik, P. Better Theory for SGD in the Nonconvex World.       Transactions  on  Machine
+      Learning Research (Sept. 2022).
+17.Neese, F. Software Update: The ORCA Program System—Version 5.0.      WIREs Computational Molecular
+      Science 12, e1606 (2022).
+18.Dunning Jr., T. H. Gaussian Basis Sets for Use in Correlated Molecular Calculations. I. The Atoms Boron
+      through Neon and Hydrogen. The Journal of Chemical Physics 90, 1007–1023 (Jan. 1989).
+19.Neese, F. & Valeev, E. F. Revisiting the Atomic Natural Orbital Approach for Basis Sets: Robust Sys-
+      tematic Basis Sets for Explicitly Correlated and Conventional Correlated Ab Initio Methods?  Journal of
+      Chemical Theory and Computation 7, 33–43 (Jan. 2011).
+20.Perdew, J. P., Ernzerhof, M. & Burke, K. Rationale for Mixing Exact Exchange with Density Functional
+      Approximations. The Journal of Chemical Physics 105, 9982–9985 (Dec. 1996).
+21.Becke, A. D. & Johnson, E. R. Exchange-Hole Dipole Moment and the Dispersion Interaction.      The Journal
+      of Chemical Physics 122, 154104 (Apr. 2005).
+22.Sinnokrot, M. O., Valeev, E. F. & Sherrill, C. D. Estimates of the Ab Initio Limit for Π  −π Interactions:
+      The Benzene Dimer. Journal of the American Chemical Society 124, 10887–10893 (Sept. 2002).
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                 22

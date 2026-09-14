@@ -206,7 +206,7 @@ p("with twelve authors across four countries counts once, for the first author."
 // Science paper. But that paper has 33 authors across 8 countries, so filing all of
 // them under its first author's institution would put ~half the table in one country
 // on the strength of an author-list ordering. They get their own line instead.
-const isVarbenchBaseline = r => /github\.com\/varbench\/methods/.test(r.reference || "");
+const isVarbenchBaseline = r => r.baseline === true;
 const cc = {}, byCountryInst = {};
 let ccKnown = 0, ccBaseline = 0, ccNoAffil = 0;
 for (const i of instances) {

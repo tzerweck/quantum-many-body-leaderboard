@@ -169,6 +169,33 @@ below the best variational energy, i.e. an unclaimed record, and on 8x8 it beats
 and flagged `energy-variance-inconsistent`. Note what is *not* claimed: there is no exact
 reference at either size, so nothing here is proof of error, only grounds for objection.
 
+### 8.2 `baseline`: collected versus computed
+
+VarBench did two different things, and the imported rows must say which. A row whose
+reference cites a **paper** is one VarBench *collected* from the literature. A row whose
+only reference is a run script in `varbench/methods` is one VarBench *computed itself*,
+and carries `baseline: true`. Of the 578 imported rows, **369 are computed and 209
+collected**.
+
+The distinction matters because the two are different kinds of claim. A collected row is
+somebody's published result, defended in a paper. A computed row is a **reference
+calculation** - the same ansatz run across the instance set so the V-score would have
+something to measure against. `Jastrow baseline` is named as one. Nobody ever claimed
+state of the art for a plain `RBM (alpha = 1)`; it is the floor, not a contender.
+
+The evidence that these are reference runs rather than results is in what they report.
+Rows VarBench computed carry `energy_variance` **76%** of the time and `sigma` 46%; rows
+citing a paper carry variance **35%** and sigma **90%**. That inversion is the V-score's
+fingerprint: the metric needs Var(E), almost no paper publishes it, so the benchmark had
+to produce it. The same ansatz then recurs across dozens of instances - exact
+diagonalization on 74, `RBM (alpha = 1)` on 44, `Jastrow baseline` on 44.
+
+A baseline row is a full citizen of the table: it ranks, it can hold a record, and it is
+cited to the VarBench paper. The flag changes nothing about eligibility. It exists so
+that "record held by `RBM (alpha = 1)`" reads as *nobody has published a better number
+for this instance*, rather than as a defended claim - because those are the instances
+worth attacking, and one of those readings finds them and the other does not.
+
 ## 9. Validation
 
 `scripts/validate.mjs` runs on every change and checks:

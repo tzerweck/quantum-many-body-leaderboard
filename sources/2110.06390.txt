@@ -1,0 +1,1215 @@
+             Learning ground states of quantum Hamiltonians with graph networks
+
+        Dmitrii Kochkov,1 Tobias Pfaﬀ,2 Alvaro Sanchez-Gonzalez,2 Peter Battaglia,2 and Bryan K. Clark3
+
+
+                                                             1Google Research
+
+
+                                                                 2DeepMind
+
+
+                                             3University of Illinois at Urbana-Champaign
+
+                  Solving for the lowest energy eigenstate of the many-body Schrodinger equation is a cornerstone
+               problem that hinders understanding of a variety of quantum phenomena. The diﬃculty arises from
+               the exponential nature of the Hilbert space which casts the governing equations as an eigenvalue
+               problem of exponentially large, structured matrices. Variational methods approach this problem by
+               searching for the best approximation within a lower-dimensional variational manifold. In this work
+               we use graph neural networks to deﬁne a structured variational manifold and optimize its parameters
+               to ﬁnd high quality approximations of the lowest energy solutions on a diverse set of Heisenberg
+               Hamiltonians. Using graph networks we learn distributed representations that by construction
+               respect underlying physical symmetries of the problem and generalize to problems of larger size. Our
+               approach achieves state-of-the-art results on a set of quantum many-body benchmark problems and
+               works well on problems whose solutions are not positive-deﬁnite. The discussed techniques hold
+               promise of being a useful tool for studying quantum many-body systems and providing insights into
+               optimization and implicit modeling of exponentially-sized objects.
+
+
+
+                                                         I.    INTRODUCTION
+
+
+Extreme eigenvectors play an important role in understanding the underlying structure of linear operators.  In
+scientiﬁc computing the governing equations are often formulated as an eigenvalue problem of sparse, structured,
+high-dimensional matrices. In quantum physics such matrices represent Hamiltonians, which describe interactions
+between quantum degrees of freedom. Depending on the structure of the Hamiltonian matrix the underlying system
+might exhibit exotic properties such as superconductivity [3], fractionalization [28] or topological ordering [49]. While
+writing down highly accurate governing equations is easy, ﬁnding even approximate solutions is extremely challenging
+due to the exponential scaling of the dimensionality of the underlying matrices.
+
+While the ﬁnal goal of studying the quantum many body problem is to develop eﬀective analytical descriptions of
+the underlying processes, approximate numerical solutions are routinely used at all stages: from discovering model
+problems and providing structural insights to validating the results.
+
+Variational Monte Carlo (VMC) is an important approach to tackling the quantum many body problem. In this
+approach the extreme eigenvectors of exponential size are parameterized implicitly using a compact representation. The
+goal is to ﬁnd the best approximation to the exact answer within the selected variational manifold. This methodology
+has been critical in development of the theory of fractional quantum Hall eﬀect [28], superconductivity [29], etc.
+The central challenge of the VMC approach is to design a suitable variational ansatz that can accurately capture
+the structure of the lowest energy eigenstate. This is commonly accomplished by deriving parameterized analytical
+solutions. Because constructing high quality analytical approximations is extremely challenging and introduces strong
+bias, there is a lot of interest in developing ﬂexible parameterizations suitable for a wide class of problems.
+
+Owning to the highly structured nature of the eigenvectors there has been a lot of interest in using neural networks
+to represent the lowest energy states. This is motivated by the hope that neural networks can take advantage of
+hidden structure of the eigenvectors and learn eﬃcient, high-quality approximations. The other advantage of using
+neural networks is that they have lower bias compared to parameterized solutions due to their expansive expressivity;
+analytical solutions are often constrained to a particular physical phenomena.
+
+At present, most of the neural network (NN) based wave-functions have been successful in two settings: (1) when
+the lowest energy state (ground state) is positive deﬁnite, and (2) when the NN-based model is combined with a
+standard variational ansatz that is well suited for approximating the phase structure of the target eigenstate. The
+former is restricted to the class of problems for which eﬀective alternative methods exist [39, 42]; the latter relies on
+the existence of high quality models and introduces a strong bias towards a particular structure. While progress has
+                                                                                                                                              2
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 1. (a)-(b) Visualization of small unit cells of the square lattice and associated Heisenberg Hamiltonian matrices, whose
+dimensionality grows exponentially with the system size N as C(N,N//2). (c) Visualization of square, triangular, honeycomb
+and kagome lattices. Orange dots denote spin- 12 degrees of freedom and blue lines indicate exchange interactions.
+
+
+been made to learn approximations to the full complex-valued lowest energy states ‘from scratch’[11, 44, 46], current
+results have been largely limited to simple systems.
+
+In this work we present a variational model based on graph networks that advances the state-of-the-art in learning
+lowest energy eigenstates on a diverse set of challenging benchmark problems among existing variational methods. Our
+key innovation is to learn distributed latent representations of wave-function amplitudes that respect the underlying
+physical symmetries of the problem. We demonstrate that this approach not only enables high quality approximations,
+but also makes it possible to extend the solutions to larger system sizes without retraining. This allows us to scale
+our model to approximate solutions of Heisenberg Hamiltonians with hundreds of quantum degrees of freedom while
+having lower variational energies than the best analytical constructions such as projected mean-ﬁeld states.
+
+
+
+                                        II.    BACKGROUND AND RELATED WORK
+
+
+In quantum mechanics a pure state of a physical system is described by a wave-function|ψ⟩ that assigns a complex-
+valued amplitude ψ(ci) for each possible system conﬁgurationci. The set of distinct, simultaneously measurable
+system conﬁgurations{ci} is called a computational basis, which is used to represent wave-functions as vectors in the
+Hilbert space|ψ⟩ = ∑iψ(ci)|ci⟩. All properties of the underlying state can be computed from the vector amplitudes
+ψ(ci)≡ψi; in particular|ψi|2 corresponds to the unnormalized probability of observing the system in conﬁgurationci.
+
+The size of the computational basis grows exponentially with the number of quantum degrees of freedom N. As a
+working illustration we consider an arrangement of 2-state systems called spin- 12. A single spin- 12 can be observed
+in two states, up and down: {|↑⟩,|↓⟩}. System of two spins has four conﬁgurations:{|↑↑⟩,|↑↓⟩,|↓↑⟩,|↓↓⟩}. For
+N degrees of freedom the size of the computational basis is  2N, which makes direct simulations of large systems
+prohibitively expensive.1
+
+In equilibrium, quantum systems settle into distinct phases, determined by the interactions between the underlying
+degrees of freedom. The interactions are described by a Hamiltonian operator  ˆH, or equivalently the Hamiltonian
+matrix Hij =⟨ci| ˆH|cj⟩. Because interactions are typically restricted to spatially nearest neighbors, the Hamiltonian
+matrix is usually sparse and highly structured. The structure is determined by the spatial patterns in which the
+
+
+
+
+1 Even storing the full vector describing the state of the system becomes impossible for large N
+                                                                                                                                           3
+
+degrees of freedom are arranged and the nature of the interactions. Spatial lattices considered in this work, together
+with sample small scale Hamiltonian matrices are shown in Fig. 1.
+
+The Hij matrix deﬁnes the relationship between energy levelsEn and energy eigenstates|ψn⟩ via the stationary
+Schrodinger equation (Eq. 1). In the rest of the paper we use the Einstein notation in which repeated indices are
+assumed to be summed over:⟨ci| ˆH|ψ⟩ = ∑jHijψ(cj)≡Hijψj.
+                                          ˆH|ψn⟩ =En|ψn⟩⇐⇒ ∑            Hijψn(cj) =Enψn(ci)                            (1)
+
+                                                                     j
+The equilibrium properties of the system are dominated by the low energy eigenstates. In many cases the nature of the
+underlying phase of matter can be understood from the hidden patterns encoded in the lowest energy eigenstate|ψ0⟩.
+
+
+
+                                                   A.    Variational Monte Carlo
+
+
+Variational Monte Carlo (VMC) is an eﬃcient technique for approximating lowest energy eigenstates. It addresses the
+exponential complexity of the Hilbert spaceH by:
+
+   1.Working with low dimensional variational manifold V⊆H
+   2.Using stochastic sample-based approximations for evaluation and optimization
+
+The manifoldV is deﬁned implicitly (Eq. 2) by a set of vectors|ψf,w⟩, where f is a variational model (commonly
+referred to as ansatz) and w are the variational parameters.
+                         |ψf,w⟩ = ∑     f(w,ci)|ci⟩   f :w,ci→ψf,w(ci)  V ={|ψf,w⟩, w∈ Rm}                (2)
+                                      i
+While specifying a wave-function using a variational ansatz is easy, exact evaluation of its properties still requires an
+exponential number of queries to the function f. This complexity is alleviated by replacing exact evaluations with
+stochastic approximations based on Monte Carlo sampling.
+
+The goal of the VMC algorithm is then to ﬁnd the best parametersw∗ that correspond to vector|ψf,w∗⟩ that most
+closely approximates the lowest energy eigenstate|ψ0⟩. The success of VMC approach heavily depends on the quality
+of the variational ansatz f.
+
+Variational  models  Variational ansatz f are designed to be: (1)  expressive and (2)  easy  to  optimize.  The
+expressiveness enables accurate approximations, as well as reduces the bias introduced by the model. Optimizability
+makes it possible to eﬃciently navigate the variational manifold in the search for the best approximation of|ψ0⟩. This
+motivates the use of neural networks as variational ansatz - they are highly expressive and amendable to optimization
+with gradient based methods.
+
+Evaluation  VMC uses stochastic estimates of physical observables to evaluate the performance. Ideally, the quality
+of the approximation ψf,w∗ would be measured by estimating the overlapO =|⟨ψ0|ψf,w∗⟩| between the normalized
+variational state|ψf,w∗⟩ and the exact lowest energy eigenvector|ψ0⟩. Since|ψ0⟩ is not known, the success is typically
+evaluated by the Rayleigh quotient⟨E⟩ (Eq. 3), commonly referred to as energy expectation.
+                                                         ∑
+                                 ⟨E⟩ =⟨ψ| ˆH|ψ⟩             i|ψi|2([Hijψj]/ψi)∑
+                                           ⟨ψ|ψ⟩   =                i|ψi|2            = E|ψ|2([Hijψj])/ψi                      (3)
+The lowest energy eigenstate|ψ0⟩ establishes the lower bound⟨E⟩ =E0 based on the Schrodinger equation (Eq. 1),
+hence states with lower values of⟨E⟩ are considered better approximations.
+
+Note that the ﬁnal expression for⟨E⟩ consists of the ratio of terms weighted by the probability distribution|ψ|2. This
+enables eﬃcient estimation using important sampling techniques such as Markov-Chain Monte Carlo. The process boils
+down to computing the average of [Hijψj]/ψi for system conﬁgurationsci sampled from the probability distribution
+|ψ|2. We will use the notation E|ψ|2 to refer to such averaging. While in principle the matrix-vector product [Hijψj]
+could contain exponentially many terms, real world Hamiltonians are sparse and it is tractable to compute all non-zero
+entries.
+                                                                                                                                           4
+
+Optimization  The variational parametersw can be optimized by several methods. The two most common techniques
+are based on (1) energy gradient and (2) imaginary time evolution. In energy gradient the parameter update δw
+is driven by the gradient of the stochastic estimate∇w⟨E⟩, optimizing the evaluation metric. In imaginary time
+evolution δw is chosen such, as to maximize the overlap between|ψf,w+δw⟩ and (1−βHij)|ψf,w⟩. This procedure is
+motivated by the fact that|ψ0⟩ is a ﬁxed point of the matrix exponential operatorexp(−β(Hij−E0)) as β→∞.
+
+We note that in the VMC setting operations of computing the gradient∇w [□] and the expectation value⟨□⟩ do
+not commute, as the gradient must take into account how the change of model parameter w aﬀects the probability
+distribution|ψf,w(ci)|2. These details, together with an overview of the two optimization methods are discussed in
+Appendix A4.
+
+
+
+
+
+                                                           B.    Related work
+
+
+There has been a large body of research focused on improving and analyzing properties of the quantum states
+represented with neural networks [6, 11, 13, 17, 25, 36, 37, 44]. The two most active research threads include (1)
+extending the applicability of fully learned wave-functions [11, 17, 25, 46, 48, 56] which learn the wave-function without
+the input of a-priori physics knowledge and are therefore unbiased and (2) a hybrid model using neural networks
+in combination with standard variational models which incorporate assumptions about the underlying physics by
+starting with a simpliﬁed wave-function which is in the correct phase [13, 31, 36, 37]. Our work primarily contributes
+to the former goal developing wave-functions which are not biased by a-priori assumptions about the physics, while
+performing on par or better with respect to most hybrid models.
+
+To enable learning of both magnitudes and phases a common approach is to use complex-valued network weights
+and custom activation functions [9, 11, 12, 48]. While for many cases exact solutions were analytically constructed,
+many works found the direct optimization diﬃcult, resulting in the need to initialize the model with a particular sign
+structure. A diﬀerent approach introduced in parallel with this work is based on using separate neural networks to
+predict the magnitude and the phase of the wave-function [46], where authors compute the phase of the wave-function
+as the argument of a sum of phasors. Our approach is diﬀerent, as we predict phase of the wave-function directly. Our
+experiments show that this choice is critical to enable eﬀective generalization of the learned sign structure.
+
+Similar to [25, 56] our models use sum-based reduction to enable system size generalization. Here we show that this
+technique eﬀectively applies not only to scaling the magnitudes, but also the phase information. This suggests that
+when empowered with proper structural mechanisms, neural networks can generalize when predicting the sign structure,
+which has been an active discussion topic [51].
+
+While in this paper we test our models in the context of quantum spin systems, there has been a substantial eﬀort
+showing that similar approaches could be applied to problems of quantum chemistry. For example, in [10] authors
+show how molecular problems can be approached by mapping fermionic problems onto spin Hamiltonians. Other
+examples of applying ML-powered variational ansatz to quantum chemistry include PauliNet [16], FermiNet[38].
+
+
+
+
+
+                                                             III.    MODEL
+
+
+We specify a variational model f introduced in Section IIA using a deep neural network. The network representing
+f implicitly deﬁnes a complex-valued vector|ψf,w⟩  = ∑iψf,w(ci)|ci⟩, by establishing a mapping between basis
+conﬁgurationsci and corresponding amplitudes ψf,w(ci)∈ C.
+
+For a systems of N spin- 12 degrees of freedom, each ci is represented by N values in{±1}, indicating the conﬁguration
+of each spin. Our model computes ψf,w(ci) by predicting the scalar values log(|ψf,w(ci)|) and arg(ψf,w(ci)) as outputs.
+The choice to work with the logarithm of the wave-function rather than ψ(ci) directly is motivated by the same
+numerical stability considerations as in using log-likelihood in generative models. This is equivalent to choosing exp as
+ﬁnal activation function, motivation for which is discussed in Appendix A1.
+                                                                                                                                              5
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 2. (a) Our model predicts scalar outputs (log/arg(log(ψi))) from an input basis element ci represented as a graph. (b)
+Encode-process-decode module maps sublattice augmented input conﬁgurationX to a distributed latent representation Y. (c)
+Mapping from basis elements to amplitudes implicitly deﬁnes a full vector. (d) Example of sublattice encodingss used in this
+work as auxiliary inputs.
+
+
+Architecture  Our model uses graph neural networks (GNN) to compute log(|ψf,w(c)|) and arg(ψf,w(c)) from an
+input basis conﬁgurationc∈{ci} in four steps, also shown in Fig.2(a)
+
+   1.Input basis element  c and a static sublattice encoding s are used to initialize a graph X
+
+   2.Distributed latent representation  Y is computed via an encode-process-decode graph network
+   3.Final latent vector  Z is obtained by concatenating sum-pooled node and edge features
+   4.Latent vector  Z is processed with a linear layer to predict scalar outputs
+
+
+First, an initial graph tuple X  = (vi,ejk) is constructed based on the input conﬁgurationc and ﬁxed sublattice
+encoding s. Nodes vi are initialized by concatenating c and s, and edges ejk between interacting spins are initialized
+to zero. The sublattice encoding s is a one-hot vector, denoting the node’s location in a unit cell that respect all of the
+symmetries of the lattice up to a relabeling of the one-hot vectors. This concept is related to the algebraic symmetry
+group of the lattice and has been successfully used in constructing variational states for classical [34] and quantum[50]
+systems. We show some of the sublattices used in this work in Fig. 2(c) and discuss it in more detail in AppendixA7.
+
+Next, we use a GNN model with encode-process-decode [4] architecture (Fig 2(b)) to compute a distributed latent
+representation Y. The encoder maps nodes and edges of input graph X to latent features of width 64. Next, the
+processor performs M rounds of message passing, updating the graph as Gt = Gt−1 +GNt(Gt−1). The residual
+GraphNet blocks GNt [41] use MLP node and edge functions. The decoder computes the ﬁnal latent edge and node
+featuresY fromGM, by processing them using a MLP. More details on the architecture can be found in Appendix A6.
+
+Finally, we obtain scalar outputs by sum-pooling the latent features over nodes and edges; concatenating the results
+into a single vector Z of size 128; and processing it with a linear layer. We consider two model variants: (1) GNN, an
+                                                                                                                                            6
+
+ansatz that uses a single network with the ﬁnal linear layer of size two; (2) GNN-2, an ansatz which computes each
+output using a separate network with output size of one. Other variations are discussed in Appendix A6b.
+
+Graph neural networks are a natural choice for modeling this problem, as they implicitly embed the spatial symmetries
+of the lattice into the variational model. Combining GNNs with sum-based reduction makes our model ‘size consistent’
+– the variational manifold automatically factorizes into a product of individual states if the physical system is separated
+into non-interacting components. Exploiting the underlying structure of the problem not only makes the problem
+easier to solve, but improves generalization, and even allows zero-shot transfer to problems of larger size.
+
+Evaluation  Because our model has the same input/output structure as traditional variational ansatz, we can
+embed them inside of a VMC code, which consists of (1) sampling conﬁgurationsci from the probability distribution
+∝|ψf,w(ci)|2 and (2) computing physical quantities such as Hijψj. The sampling is accomplished via Metropolis-
+Hastings algorithm, where new conﬁgurations are accepted or rejected based on the detailed balance condition. The
+observables such as Hijψj can be computed directly, since Hamiltonian matrices are sparse. To obtain accurate
+estimates we run multiple sampling chains in parallel. All MCMC hyperparameters are summarized in Appendix A2.
+
+Training  We optimized the parameters of our models using imaginary time supervised wave-function optimization
+(IT-SWO)[25]. This approach works iteratively, optimizing the parameters w of the model to maximize the overlap
+between the current variational ansatz|ψf,w⟩ and an imaginary-time evolved state|φ⟩ = (1−β ˆH)|ψf,r⟩ with frozen
+parameters r. Each iteration is accomplished via an inner loop of multiple steps. Depending on the length of the inner
+loop, IT-SWO interpolates between following the energy gradient∇w⟨E⟩ and the natural gradient[2]  ˜∇w⟨E⟩. We
+used an intermediate value of 30 updates per iteration which worked well for models with large number of parameters.
+More details on the optimization are discussed in Appendix A9.
+
+
+
+                                                       IV.    TEST PROBLEMS
+
+
+To evaluate the performance of our models we consider a set of Heisenberg Hamiltonians (Eq. 4), where⟨i,j⟩ and
+⟨⟨i,j⟩⟩ corresponds to indices of nearest and next-nearest neighbors respectively.
+                                                      ˆH = ∑     ˆSi ˆSj +J2 ∑     ˆSi ˆSj                                    (4)
+
+
+                                                            ⟨i,j⟩           ⟨⟨i,j⟩⟩
+The lowest energy states of such Hamiltonians are strongly inﬂuenced by the underlying geometry of the problem
+and relative interaction strength J2 between next nearest and nearest neighbors.  Our test suite includes four
+routinely studied geometric variations:  square[11, 15, 18, 37, 40], honeycomb[1, 30, 35], triangular[21, 23, 52, 53] and
+kagome[8, 19, 26] lattices. All of these models feature complex patterns in the lowest energy spectrum for which a lot
+of analytical and numerical methods have been developed.
+
+Each of these Hamiltonians features multiple phases, including disordered domains. For each phase a diﬀerent structure
+emerges in the lowest energy eigenstates. For square and honeycomb lattices the disorder regime occurs atJ2 = 0.5 and
+J2 = 0.2, induced directly by interactions with next nearest neighbors.  Triangular and kagome lattices additionally
+feature geometric frustration, leading to even larger quantum ﬂuctuations and harder to model structures. We provide
+a more detailed account for these problems in Appendix A5.
+
+
+
+                                                             V.    RESULTS
+
+
+We tested the performance of our models on the test suite of frequently studied Heisenberg Hamiltonians (Section
+IV). For each Hamiltonian speciﬁcation we trained our models and compared their performance to ML-based and
+traditional variational models from the literature. Our main ﬁnding is that our models are able to approximate lowest
+energy states with high accuracy for a variety of diﬀerent problems without relying on any prior knowledge about the
+structure of the target state, as well as scale and even generalize to larger system sizes.
+
+We ﬁrst evaluated the performance of our models on the test problems with system size of36/32. This is close to the
+largest system size for which exact solutions are feasible. We found that our models approximate the lowest energy
+                                                                                                                                              7
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 3. Our models accurately approximate the structure of the lowest energy state across diﬀerent problems and interaction
+parameters. Columns show energy per spin as a function of relative interaction strength J2 between next and nearest neighbors
+on diﬀerent lattices. System sizesN are annotated on each plot. Color diﬀerentiates exact solutions, our GNN models and
+analytically constructed DSL model, provided for a reference. Arrow indicates the value of J2 for which DSL model is believed
+to be most appropriate. GNN-2 model (not shown) achieves similar results to GNN on this evaluation.
+
+
+states with high accuracy, both across diﬀerent systems and interactions strengths. In Fig. 3 we show variational
+energies of our GNN model compared to the exact energies and best known analytical baselines developed for the
+disordered regimes. The GNN-2 variant produces identical results on this task and is omitted from the plot. The close
+tracking of energy as we change the interaction strength J2 reassures that the model is ﬂexible enough to discover the
+transitions between diﬀerent hidden structures. To the best of our knowledge this is the ﬁrst time a single NN-based
+model is shown to accurately approximate solutions across diﬀerent interaction parameters on a non-square geometry
+without building on top of an existing ansatz.
+
+Model comparison  We compared our models to a suite of analytical variational models: Dirac spin liquid (DSL)[20],
+projected BCS (pBCS)[23]; pure ML-based wave-functions: (CNN-C)[11], (CNN-P)[46]; hybrid approaches: neural
+Gutzwiller-projected ansatz (GW-RBM)[13], neural network backﬂow (NN-BF)[31]; as well as our own baseline ResNet,
+which replaces the graph-network part of our model with a MLP-based residual neural network. We use relative
+error ϵ = E−E0E0  as the comparison metric, where for small system sizes E0 denotes the exact ground state energy
+and E∗0 denotes the extrapolated values for large system sizes (speciﬁed in Appendix A5b). Fig. 4 (a)-(b) shows the
+performance on square and triangular lattices at J2 = 0, when the system is in the ordered phases. We ﬁnd that both
+GNN and GNN-2 models perform well on this task (relative errors   10−3), with GNN-2 ansatz consistently ﬁne tuning
+closer to the ground state energy.
+
+Next, in Fig.4 panel (e) we compare model performance at Hamiltonian conﬁgurations that feature disordered phases,
+which are much harder to model. We ﬁnd that our models achieve similar performance to other ML-based approaches
+on the square lattice2, while also being able to eﬃciently tackle other geometries. In particular, our model achieves
+almost 50% higher overlap with the ground state on the kagome lattice on 36-site system compared to DSL (Fig.4(d))
+and almost matches the performance of a hybrid approach NN-BF[31] (Fig.4 (c)) on 48 spin system. As the system
+size is increased, we ﬁnd that in the disordered regime the performance gap reduces, which suggests that additional
+mechanisms might be needed to eﬀectively capture the underlying structures.
+
+When compared to the ResNet baseline, our model performs similarly on small system sizes, but features a signiﬁcant
+improvement on larger clusters. We speculate that this is related to the ability of the distributed representation to
+uniformly take into account contributions from all parts of the system, while an unstructured model needs to learn
+those explicitly.
+
+System size generalization  Because the computation learned by graph networks is local, our models can be applied
+to systems of diﬀerent size without retraining. When variational wave-function is evaluated a on a larger system, it
+needs to accurately capture an exponentially larger space of amplitudes to have good variational energies. This requires
+accurate predictions of both magnitudes and highly oscillatory phases for each conﬁguration in computational basis.
+Our models are able to accomplish this because they predict both components that are ‘size consistent’ by construction
+
+
+
+
+2 The best model for the square lattice is RBM-PP [37], which we use as an extrapolated ground state energy.
+                                                                                                                                                8
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 4. Our models compares favorably to learned and analytical baselines on a wide range of test problems. (a)-(b) Relative
+error of variational energies with respect to the estimated ground state energies of our model and baselines in ordered regime on
+square and triangular lattices. (c) Comparison of variational energies on kagome lattice with 48 spins. (d) Comparison of the
+overlap with the exact lowest energy eigenstate to a DSL ansatz on a 36-site kagome lattice. (e) Relative error of variational
+energies in the harder-to-model disordered regimes for square, honeycomb, triangular and kagome lattices on small and large
+systems. The system sizes N are annotated on each plot.
+
+
+
+and combine contributions from each subsystem uniformly. In Fig. 5 we show the performance of our models across
+system sizes. We note that the system size on which the models were optimized aﬀects the generalization, with models
+optimized on smaller system sizes performing slightly worse on larger systems and vice-versa. This is to be expected,
+as to achieve the lowest energy state on a small system the model needs to exploit the ﬁnite-size eﬀects of the physical
+system, which are not system size invariant. The fact that the rules learned from a system of a diﬀerent size generalize
+to larger domains further suggests that GNN-based models discover the underlying patterns. This property of the
+model is important as it allows to greatly simplify training on large system sizes by starting with an already good
+approximation. In our evaluations we found that GNN-2 model is consistently better at obtaining lower energies on
+larger domains and seems to be better at generalizing to larger system. We suggest that this is related to the coupling
+of variational parameters responsible for highly oscillatory phases and slower varying magnitudes in the GNN model.
+
+Sublattice encoding ablation  We found that including sublattice encodings to the input of a graph network
+is critical to achieve high approximation accuracy and enable generalization across system sizes. Naively, it would
+seem that the role of providing the sublattice codes is to simply break the symmetry of the solution. We note that
+this is not the case. For the ablation study we consider a simple 1D lattice with 16 degrees of freedom. The true
+solution is symmetric with respect to all of the lattice transformations that leave the Hamiltonian invariant. We train
+two models that diﬀer only by the presence of the sublattice encodings. We inspect the symmetry properties of the
+models throughout the optimization, their performance measured by overlap with the exact lowest energy eigenstate
+O =⟨ψ0|ψnn⟩, as well as energy expectation⟨E⟩. The result are presented in Fig. 6. The model that uses sublattice
+encodings performs signiﬁcantly better at approximating the target state. Note that towards the end of training the
+model restores the symmetry broken by the sublattice encodings, as indicated in panel (c) of Fig. 6. A fully symmetric
+model, despite being naturally placed in the correct symmetry sector, struggles to ﬁnd an accurate approximation.
+Interestingly, this problem does not arise in a simpler setting when the model is provided with exact phases (sign
+structure), suggesting that it is the modeling of the highly oscillatory phases that beneﬁts from being able to represent
+                                                                                                                                                 9
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 5. By learning distributed representations our models can generalize across system sizes without signiﬁcant loss of
+accuracy. Columns show variational energies per spin as a function of system size for models with frozen weights on diﬀerent
+lattices. Line style diﬀerentiates the system size on which models were trained on. We also provide extrapolated exact energies
+and traditional variational models for reference. The relative interaction strength J2 is annotated on each plot. Error bars are
+smaller than the marker size.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 6. Including sublattice encodings dramatically improves the performance of the GNN models. (a) Overlap between the
+exact lowest energy state and the model as a function of training iterations. (b) Energy throughout the optimization process.
+(c) Fraction of the symmetric component throughout the optimization. Color indicates whether sublattice encodings are used.
+
+
+the underlying structure in the symmetry-broken hypothesis space and "restore" the symmetry. In Appendix A7 we
+provide additional details and discuss sublattice encodings in the light of non-universality of graph networks.
+
+
+
+
+                                                          VI.    CONCLUSIONS
+
+
+We presented a simple - yet eﬃcient - machine learning framework for learning high quality approximations of
+lowest energy solutions of the quantum many body problem. Our model uses graph networks to learn a distributed
+representation of the wave-function that respects the underlying symmetries of the problem.  Our experimental
+results demonstrate that the same architecture is able to accurately capture the changes in the ground states of
+Heisenberg models across diﬀerent lattices and interaction patterns, advancing the state of the art results on several
+challenging problems. Of particular interest is the ability to accurately represent ground state wave-functions which
+have complicated sign structures. A key strength of our approach is that it does not rely on a-priori knowledge of
+physics avoiding the bias that is introduced in using such knowledge. We ﬁnd that learning distributed representation
+not only helps achieve higher accuracy, but also enable generalization to larger problem sizes without signiﬁcant loss of
+accuracy.
+
+It is worth noting that the presented approach still features limitations related to variational nature of the method. We
+                                                                                                                                                    10
+
+believe that the proposed models are most suited for studying quantum phenomena in systems with regular geometry,
+local interactions and intermediate system sizes.
+
+While here we focused on advancing the performance and generality of fully learned models, our approach could be
+easily combined with stronger physical priors to further improve the approximation accuracy. For example, it would
+be interesting to consider product states of GNN ansatz and projected pair states similar to [37], as well as construct a
+symmetry-enhanced backﬂow wave-functions[31].
+
+More broadly, the approaches to modeling and optimization of exponentially large objects discussed in this paper
+might prove useful to other applications of machine learning to scientiﬁc problems.
+
+
+
+
+
+
+ [1] A. Albuquerque, D. Schwandt, B. Hetenyi, S. Capponi, M. Mambrini, and A. Läuchli. Phase diagram of a frustrated
+     quantum antiferromagnet on the honeycomb lattice: Magnetic order versus valence-bond crystal formation. Physical Review
+     B, 84(2):024406, 2011.
+ [2]S.-I. Amari. Natural gradient works eﬃciently in learning.   Neural computation, 10(2):251–276, 1998.
+ [3]J. Bardeen, L. N. Cooper, and J. R. Schrieﬀer. Theory of superconductivity.  Physical review, 108(5):1175, 1957.
+ [4] P. W. Battaglia, J. B. Hamrick, V. Bapst, A. Sanchez-Gonzalez, V. Zambaldi, M. Malinowski, A. Tacchetti, D. Ra-
+     poso, A. Santoro, R. Faulkner, et al. Relational inductive biases, deep learning, and graph networks. arXiv preprint
+     arXiv:1806.01261, 2018.
+ [5] L. Capriotti, A. E. Trumper, and S. Sorella. Long-range néel order in the triangular heisenberg model. Physical review
+     letters, 82(19):3899, 1999.
+ [6] G. Carleo and M. Troyer. Solving the quantum many-body problem with artiﬁcial neural networks.Science, 355(6325):602–
+     606, 2017.
+ [7] H. J. Changlani, J. M. Kinder, C. J. Umrigar, and G. K.-L. Chan. Approximating strongly correlated wave functions with
+     correlator product states. Physical Review B, 80(24):245116, 2009.
+ [8] H. J. Changlani, D. Kochkov, K. Kumar, B. K. Clark, and E. Fradkin. Macroscopically degenerate exactly solvable point in
+     the spin-1/2 kagome quantum antiferromagnet. Physical review letters, 120(11):117202, 2018.
+ [9] K. Choo, G. Carleo, N. Regnault, and T. Neupert. Symmetries and many-body excitations with neural-network quantum
+     states. Physical review letters, 121(16):167204, 2018.
+[10] K. Choo, A. Mezzacapo, and G. Carleo.  Fermionic neural-network states for ab-initio electronic structure.  Nature
+     communications, 11(1):1–7, 2020.
+[11] K. Choo, T. Neupert, and G. Carleo. Two-dimensional frustrated j 1- j 2 model studied with neural network quantum
+     states. Physical Review B, 100(12):125124, 2019.
+[12]D.-L. Deng, X. Li, and S. D. Sarma. Machine learning topological states.    Physical Review B, 96(19):195145, 2017.
+[13] F. Ferrari, F. Becca, and J. Carrasquilla. Neural gutzwiller-projected variational wave functions. Physical Review B,
+     100(12):125131, 2019.
+[14]R. Feynman and M. Cohen. Energy spectrum of the excitations in liquid helium.    Physical Review, 102(5):1189, 1956.
+[15] S.-S. Gong, W. Zhu, D. Sheng, O. I. Motrunich, and M. P. Fisher. Plaquette ordered phase and quantum phase diagram in
+     the spin-1 2 j 1- j 2 square heisenberg model. Physical review letters, 113(2):027201, 2014.
+[16] J. Hermann, Z. Schätzle, and F. Noé. Deep-neural-network solution of the electronic schrödinger equation. Nature Chemistry,
+     12(10):891–897, 2020.
+[17] M. Hibat-Allah, M. Ganahl, L. E. Hayward, R. G. Melko, and J. Carrasquilla. Recurrent neural network wave functions.
+     Physical Review Research, 2(2):023358, 2020.
+[18] W.-J. Hu, F. Becca, A. Parola, and S. Sorella. Direct evidence for a gapless z 2 spin liquid by frustrating néel antiferromag-
+     netism. Physical Review B, 88(6):060402, 2013.
+[19] W.-J. Hu, W. Zhu, Y. Zhang, S. Gong, F. Becca, and D. Sheng. Variational monte carlo study of a chiral spin liquid in the
+     extended heisenberg model on the kagome lattice. Physical Review B, 91(4):041124, 2015.
+[20] Y. Iqbal, F. Becca, S. Sorella, and D. Poilblanc. Gapless spin-liquid phase in the kagome spin-1 2 heisenberg antiferromagnet.
+     Physical Review B, 87(6):060405, 2013.
+[21] Y. Iqbal, W.-J. Hu, R. Thomale, D. Poilblanc, and F. Becca. Spin liquid nature in the heisenberg j 1- j 2 triangular
+     antiferromagnet. Physical Review B, 93(14):144411, 2016.
+[22] Z.-A. Jia, L. Wei, Y.-C. Wu, G.-C. Guo, and G.-P. Guo. Entanglement area law for shallow and deep quantum neural
+     network states. New Journal of Physics, 22(5):053022, 2020.
+[23] R. Kaneko, S. Morita, and M. Imada. Gapless spin-liquid phase in an extended spin 1/2 triangular heisenberg model.
+     Journal of the Physical Society of Japan, 83(9):093707, 2014.
+[24]D. P. Kingma and J. Ba. Adam: A method for stochastic optimization.    arXiv preprint arXiv:1412.6980, 2014.
+[25] D.KochkovandB.K.Clark. Variationaloptimizationintheaiera: Computationalgraphstatesandsupervisedwave-function
+     optimization. arXiv preprint arXiv:1811.12423, 2018.
+[26] F. Kolley, S. Depenbrock, I. P. McCulloch, U. Schollwöck, and V. Alba. Phase diagram of the j 1- j 2 heisenberg model on
+                                                                                                                                                     11
+
+     the kagome lattice. Physical Review B, 91(10):104418, 2015.
+[27] A. M. Läuchli, J. Sudan, and R. Moessner. S= 1 2 kagome heisenberg antiferromagnet revisited. Physical Review B,
+     100(15):155142, 2019.
+[28] R. B. Laughlin. Anomalous quantum hall eﬀect: an incompressible quantum ﬂuid with fractionally charged excitations.
+     Physical Review Letters, 50(18):1395, 1983.
+[29] J. P. LeBlanc, A. E. Antipov, F. Becca, I. W. Bulik, G. K.-L. Chan, C.-M. Chung, Y. Deng, M. Ferrero, T. M. Henderson,
+     C. A. Jiménez-Hoyos, et al. Solutions of the two-dimensional hubbard model: Benchmarks and results from a wide range of
+     numerical algorithms. Physical Review X, 5(4):041041, 2015.
+[30] P. Li, R. Bishop, D. J. Farnell, and C. Campbell. Phase diagram of a frustrated heisenberg antiferromagnet on the
+     honeycomb lattice: The j 1-j 2-j 3 model. Physical Review B, 86(14):144404, 2012.
+[31] D. Luo and B. K. Clark. Backﬂow transformations via neural networks for quantum many-body wave functions.Physical
+     review letters, 122(22):226401, 2019.
+[32] H. Maron, E. Fetaya, N. Segol, and Y. Lipman. On the universality of invariant networks. In International conference on
+     machine learning, pages 4363–4371. PMLR, 2019.
+[33] W. Marshall. Antiferromagnetism. Proceedings of the Royal Society of London. Series A. Mathematical and Physical
+     Sciences, 232(1188):48–68, 1955.
+[34]L. Messio, C. Lhuillier, and G. Misguich. Lattice symmetries and regular magnetic orders in classical frustrated antiferro-
+     magnets. Physical Review B, 83(18):184401, 2011.
+[35] H. Mosadeq, F. Shahbazi, and S. Jafari. Plaquette valence bond ordering in a j1–j2 heisenberg antiferromagnet on a
+     honeycomb lattice. Journal of Physics: Condensed Matter, 23(22):226006, 2011.
+[36] Y. Nomura, A. S. Darmawan, Y. Yamaji, and M. Imada. Restricted boltzmann machine learning for solving strongly
+     correlated quantum systems. Physical Review B, 96(20):205152, 2017.
+[37] Y. Nomura and M. Imada. Dirac-type nodal spin liquid revealed by machine learning. arXiv preprint arXiv:2005.14142,
+     2020.
+[38] D. Pfau, J. S. Spencer, A. G. Matthews, and W. M. C. Foulkes. Ab initio solution of the many-electron schrödinger equation
+     with deep neural networks. Physical Review Research, 2(3):033429, 2020.
+[39] P. J. Reynolds, D. M. Ceperley, B. J. Alder, and W. A. Lester Jr. Fixed-node quantum monte carlo for moleculesa) b). The
+     Journal of Chemical Physics, 77(11):5593–5603, 1982.
+[40] J. Richter, N. Ivanov, and K. Retzlaﬀ. On the violation of marshall-peierls sign rule in the frustrated j1-j2 heisenberg
+     antiferromagnet. EPL (Europhysics Letters), 25(7):545, 1994.
+[41] A. Sanchez-Gonzalez, N. Heess, J. T. Springenberg, J. Merel, M. Riedmiller, R. Hadsell, and P. Battaglia. Graph networks
+     as learnable physics engines for inference and control. In International Conference on Machine Learning, pages 4470–4479.
+     PMLR, 2018.
+[42]A. W. Sandvik. Stochastic series expansion method with operator-loop update.    Physical Review B, 59(22):R14157, 1999.
+[43] H. Schulz, T. Ziman, and D. Poilblanc. Magnetic order and disorder in the frustrated quantum heisenberg antiferromagnet
+     in two dimensions. Journal de Physique I, 6(5):675–703, 1996.
+[44] O. Sharir, Y. Levine, N. Wies, G. Carleo, and A. Shashua. Deep autoregressive models for the eﬃcient variational simulation
+     of many-body quantum systems. Physical review letters, 124(2):020503, 2020.
+[45] S. Sorella, M. Casula, and D. Rocca. Weak binding between two aromatic rings: Feeling the van der waals attraction by
+     quantum monte carlo methods. The Journal of chemical physics, 127(1):014105, 2007.
+[46] A. Szabó and C. Castelnovo. Neural network wave functions and the sign problem. Physical Review Research, 2(3):033075,
+     2020.
+[47] C. Trabelsi, O. Bilaniuk, Y. Zhang, D. Serdyuk, S. Subramanian, J. F. Santos, S. Mehri, N. Rostamzadeh, Y. Bengio, and
+     C. J. Pal. Deep complex networks. arXiv preprint arXiv:1705.09792, 2017.
+[48] A. Valenti, E. Greplova, N. H. Lindner, and S. D. Huber. Correlation-enhanced neural networks as interpretable variational
+     quantum states. arXiv preprint arXiv:2103.05017, 2021.
+[49]X.-G. Wen. Topological orders in rigid states.    International Journal of Modern Physics B, 4(02):239–271, 1990.
+[50]X.-G. Wen. Quantum orders and symmetric spin liquids.    Physical Review B, 65(16):165113, 2002.
+[51] T. Westerhout, N. Astrakhantsev, K. S. Tikhonov, M. I. Katsnelson, and A. A. Bagrov. Generalization properties of neural
+     network approximations to frustrated magnet ground states. Nature communications, 11(1):1–8, 2020.
+[52] A. Wietek and A. M. Läuchli. Chiral spin liquid and quantum criticality in extended s= 1 2 heisenberg models on the
+     triangular lattice. Physical Review B, 95(3):035141, 2017.
+[53] H.-Q. Wu, S.-S. Gong, and D. Sheng. Randomness-induced spin-liquid-like phase in the spin-1 2 j 1- j 2 triangular heisenberg
+     model. Physical Review B, 99(8):085141, 2019.
+[54] K. Xu, W. Hu, J. Leskovec, and S. Jegelka. How powerful are graph neural networks? arXiv preprint arXiv:1810.00826,
+     2018.
+[55] S. Yan, D. A. Huse, and S. R. White. Spin-liquid ground state of the s= 1/2 kagome heisenberg antiferromagnet. Science,
+     332(6034):1173–1176, 2011.
+[56] L. Yang, W. Hu, and L. Li. Scalable variational monte carlo with graph neural ansatz. arXiv preprint arXiv:2011.12453,
+     2020.
+                                                                                                                                       12
+
+                                                      Appendix A: Appendix
+
+
+                            1.    Motivation for modeling the logarithm of the wave-function
+
+
+Variational models for low energy eigenstates commonly use exp nonlinearity in the ﬁnal step of the computations,
+which is often accomplished by working with the logarithm of the wave-function throughout the VMC code. This
+choice is well supported by several observations:
+
+   1.Typically only a small subset of all conﬁgurations have large magnitudes.
+   2.Exponential form of  ψi avoids ill-behaved gradients.
+
+   3.Solutions of the form  ψ = exp(−Z) arise in quantum/stat-mech correspondence.
+
+The ﬁrst observation is empirical and suggests that the model should have a mechanism to produce near zero outputs
+for a large fraction of an input domain. The second observation follows from the terms∇wψi/ψi in the expression for
+the energy gradient (Eq. A2). With exponential ﬁnal activation this term is well behaved even for inputsci for which
+ψi is small. The last observation stems from the duality between d dimensional quantum mechanics and statistical
+mechanics in d + 1 dimensions.
+
+
+
+                               2.    Stochastic estimations with Markov Chain Monte Carlo
+
+
+We use Markov Chain Monte Carlo (MCMC) based on Metropolis-Hasting algorithm to stochastically estimate sums
+over exponentially-sized Hilbert space. The sampling is deﬁned by the unnormalized probability distributionP and a
+proposal functiong. P is given by the variational model as|ψf,w(ci)|2. Forg we use a random spin exchange operation,
+that swaps two random spins of opposite orientation.
+
+For eﬃciency we maintain a batch of MCMC chains, which evolves throughout optimization. We follow the rule of
+thumb of performing N MCMC steps between sampling from the chain to reduce autocorrelation eﬀects, whereN
+is equal to the number of degrees of freedom. We make sure that each chain is independent by explicitly providing
+diﬀerent random seeds.
+
+
+
+                                                3.    Stochastic overlap estimation
+
+
+We estimate the overlapO between two states|ψ⟩ and|φ⟩ using MCMC (Eq. A1). This process involves sampling
+conﬁgurations from two independent Markov chains, one for each probability distribution.
+                                                  √           √              √  ∑                √∑
+                     O =  ⟨ψ|φ⟩√                     ⟨ψ|φ⟩       ⟨ψ|φ⟩             i|ψi|2φi/ψi∑       i|φi|2ψi/φi∑
+                              ⟨ψ|ψ⟩⟨φ|φ⟩ =           ⟨ψ|ψ⟩       ⟨φ|φ⟩  =             i|ψi|2              i|φi|2               (A1)
+                                                                             √             √
+                                                                          =     E|φ|2(ψiφi ) E|ψ|2(φiψi )
+
+
+
+
+                         4.    Energy minimization and supervised wave-function optimization
+
+
+Here we provide a concise summary of two optimization methods: (1) energy minimization; (2) imaginary-time
+supervised wave-function optimization; Both are iterative optimization schemes that rely on diﬀerent gradient estimates.
+                                                                                                                                     13
+
+In this work we used the latter approach with hyperparameters discussed in A9. For both methods it is important to
+take into account how the parameter updates aﬀect the distribution of samples used to compute stochastic estimates
+of the quantities being optimized. For both optimization methods we provide derivations of relevant gradients in terms
+of α(c) =Re[log(ψ(c))] and β(c) =Im[log(ψ(c))] which are magnitude and phase of the wave-function and outputs of
+our models. In all derivation we omit the explicit dependence on the parameters w to reduce visual noise.
+
+Energy minimization is based on direct minimization of⟨E⟩ (Eq.3). This process is driven by the energy gradient
+with respect to variational parameters (Eq.A2-A6).
+
+
+
+                                                                                  ∇w⟨E⟩ =∇w⟨ψ| ˆH|ψ⟩⟨ψ|ψ⟩   =             (A2)
+
+                       (⟨∇wψ| ˆH|ψ⟩ +⟨ψ| ˆH|∇wψ⟩)⟨ψ|ψ⟩−⟨ψ| ˆH|ψ⟩(⟨∇wψ|ψ⟩ +⟨ψ|∇wψ⟩)
+                                                             |⟨ψ|ψ⟩|2                                                     =             (A3)
+                            (⟨∇wψ| ˆH|ψ⟩ +⟨ψ| ˆH|∇wψ⟩)                       ⟨∇wψ| ˆH|ψ⟩ +⟨ψ| ˆH|∇wψ⟩
+                                        |⟨ψ|ψ⟩|     −⟨ψ| ˆH|ψ⟩⟨ψ|ψ⟩                      ⟨ψ|ψ⟩                  =             (A4)
+                                ∑               i Hijψj      ijψ∗j∇wψi            ∑                        i
+                                   i|ψi|2(∇wψ∗ψ∗i∑ ψi    + H∗ψ∗i    ψi   )           i|ψi|2(∇wψi∑ψi    +∇wψ∗ψ∗i   )
+
+                                                   i|ψi|2      −⟨E⟩                           i|ψi|2              =             (A5)
+                              2E|ψ|2[Re(Hijψjψi    )∇wα +Im(Hijψjψi    )∇wβ]− 2E|ψ|2[Hijψjψi    ] E|ψ|2[∇wα]             (A6)
+
+
+
+where in A5 we inserted an identity ∑i|ci⟩⟨ci| in each bracket.
+
+The imaginary-time supervised wave-function optimization method interpolates between the energy gradient and
+stochastic reconﬁguration[45] approaches. The optimization process is iterative, where each iteration is accomplished
+via multiple SGD updates directed to maximize the overlap between the current state|ψw⟩ and the target state|φr⟩,
+where w and r denote parameters of the states. The target state|φr⟩ is updated once at the beginning and each
+iteration and is kept ﬁxed throughout. The imaginary-time implementation uses|φr⟩ = (1− ˆH)|ψr⟩, which corresponds
+to a small step along the imaginary-time evolution trajectory. In this case, the update of|φr⟩ at the end of the iteration
+reduces to setting r←w, which advances the|φr⟩ further along the imaginary-time path. The intermediate steps are
+accomplished by following the gradient of the negative logarithm overlap, which is derived in Eq. A7-A10.
+
+
+                                                       √
+                          ∇w− 2 logO =−∇w log             ⟨ψ|φ⟩⟨φ|ψ⟩
+                                                          ⟨ψ|ψ⟩⟨φ|φ⟩ =−∇w log(⟨ψ|φ⟩⟨φ|ψ⟩⟨ψ|ψ⟩⟨φ|φ⟩) =                (A7)
+                               ⟨∇wψ|ψ⟩ +⟨ψ|∇wψ⟩
+                                         ⟨ψ|ψ⟩    −⟨∇wψ|φ⟩⟨φ|ψ⟩ +⟨ψ|φ⟩⟨φ|∇wψ⟩⟨ψ|φ⟩⟨φ|ψ⟩                    =                (A8)
+                                               ⟨∇wψ|ψ⟩ +⟨ψ|∇wψ⟩
+                                                         ⟨ψ|ψ⟩    −⟨∇wψ|φ⟩⟨ψ|φ⟩ −⟨φ|∇wψ⟩⟨φ|ψ⟩    =                (A9)
+                                      ∑              i               ∑              iφi    ∑          i∇wψi
+                                        i|ψi|2(∇wψ∗∑ψ∗i    +∇wψiψi   )  i|ψi|2∇wψ∗ψ∗iψi       i|ψi|2φ∗ψ∗iψi
+                                                                        ∑               −     ∑                                  (A10)
+                                                 i|ψi|2    −               i|ψi|2φiψi            i|ψi|2φ∗iψ∗i
+
+
+
+The ﬁnal expression can be further simpliﬁed by introducing MCMC averagesrre =Re[E|ψ|2φiψi ]; rim =Im[E|ψ|2φiψi ];
+γ = E|ψ|2(Re[φiψi ]∇wα +Im[φiψi ]∇wβ); η = E|ψ|2(Im[φiψi ]∇wα−Re[φiψi ]∇wβ); δ =arg(rre +irim); using which Eq.A10
+translates to:
+
+
+
+                                         − 2∇w logO = E|ψ|2[∇wα]− (γ cosδ +η sinδ)√r2re +r2im                                    (A11)
+                                                                                                                                                 14
+
+                                                         5.    Test problem details
+
+
+                                                           a.  Test problem clusters
+
+
+We have trained our models to approximate the lowest energy eigenstates of the Heisenberg Hamiltonians on square,
+triangular and kagome lattices on diﬀerent ﬁnite size clusters with periodic boundary conditions. In Table I we list the
+lattice vectors and periodic vectors for each cluster size.
+
+
+                                           Lattice      N      ⃗a1        ⃗a2         ⃗b1           ⃗b2
+                                           Square       36    (1, 0)     (0, 1)      (6, 0)        (0, 6)
+                                           Square       64    (1, 0)     (0, 1)      (8, 0)        (0, 8)
+                                           Square      100    (1, 0)     (0, 1)     (10, 0)       (0, 10)
+                                                              √3        √3
+                                        Honeycomb       32  (√2 ,  32)(√2 ,− 32)   (4√3, 6)     (4√3,−6)
+                                        Honeycomb       98  (   3     (  3         ( 7√3       ( 7√3
+                                                               2 ,  32) 2 ,− 3√2)    2 ,  212 )   2 ,− 212 )
+                                         Triangular     36    (1, 0)   ( 1    3      (6, 0)      (3, 3√3)
+                                                                        2,  √2  )
+                                         Triangular     48    (1, 0)   ( 1    3    (6, 2√3)     (6,−2√3)
+                                                                        2,  √2  )
+                                         Triangular    108    (1, 0)   ( 1    3    (9, 3√3)     (9,−3√3)
+                                                                        2,  √2  )
+                                          Kagome        36    (1, 0)   ( 1    3   (6,−2√3)       (0, 4√2)
+                                                                        2,  √2  )
+                                          Kagome        48    (1, 0)   ( 1    3      (4, 0)      (2, 2√3)
+                                                                        2,  √2  )
+                                          Kagome       108    (1, 0)   ( 1    3      (6, 0)      (3, 3√3)
+                                                                        2,   2  )
+
+                                               Table I. Parameters of the ﬁnite size clusters.
+
+
+
+
+
+
+
+                                                 b.  Estimates of the ground state energies
+
+
+For small system sizes we use exact values for E0 whenever available. For larger system sizes exact energies are not
+known and we use extrapolated values E∗0. For the kagome lattice the current consensus[55] is that the energy per
+spin does not change noticeably beyond system size of 48. For triangular and honeycomb lattices the ﬁnite size eﬀects
+are believed to scale as C×N−1.5 with the system size due to proximity to the Neel/120◦ phases [1, 5]. We assumed
+this scaling for our estimates and extract the constant C using exact and extrapolated thermodynamic limit values.
+All values of E0, E∗0 and corresponding references are shown in Table II. In other cases the estimates are borrowed
+from the corresponding references.
+
+
+                                    Lattice        J2      System size      Energy per site       Reference
+                                    Square         0.5     36               -0.503810             [43]
+                                    Square         0.5     100              -0.497629             [37]
+                                    Triangular     0       36               -0.5603734            [5]
+                                    Triangular     0       TDL              -0.551                [21]
+                                    Triangular     0.125   36               -0.515564             [21]
+                                    Triangular     0.125   108              -0.5126               [21]
+                                    Honeycomb      0.2     32               -0.460650             [1]
+                                    Honeycomb      0.2     TDL              -0.4527               [1]
+                                    Kagome         0       36               -0.43837653           [8]
+                                    Kagome         0       48               -0.438703897          [27]
+                                    Kagome         0       108              -0.4386               [55]
+
+                           Table II. Estimates of the lowest energy eigenstates used for model comparison.
+                                                                                                                                            15
+
+                                                     6.    Additional model details
+
+
+                                                           a.  Model architecture
+
+
+For all test problems we used the same architecture parameters to accentuate generality of the proposed method. Node
+and edge functions of the Encoder, Processor and Decoder are implemented as MLPs with 3 hidden layers with
+ReLU activations. The node and edge embeddings have size 64, while hidden layers width 128. We use 6 message
+passing steps with residual connections in the Processor. The ﬁnal linear layer maps128-dimensional latent vector to
+2(1) outputs for GNN(GNN-2) models.
+
+For sublattice encodings ablation we used a smaller model with 2 message passing steps; node and edge embeddings of
+size 16; and hidden layers of length 16. The reduction of the model capacity was done solely to make ablation easily
+reproducible in an interactive setting.
+
+
+
+
+
+
+                                                            b.  Model variations
+
+
+We studied several architectural variations of our model. The most notable diﬀerence is related to using separate
+networks to predict phases and magnitudes of the wave-functions, to which we referred to as GNN-2 in the main
+text. This diﬀerence persisted even in experiments where the total number of parameters between the two models was
+comparable.
+
+Additionally we have considered diﬀerent mechanisms for aggregating the distributed representationY (see Section
+III) into a latent vector Z. In our experiments excluding all nodes or excluding all edges from the representation did
+not signiﬁcantly impact the performance.
+
+When varying the capacity of our models we found that in the regimes where the underlying eigenstate is ordered, even
+small networks perform competitively. In disordered regimes we saw a noticeable improvement in the performance as
+we increase the number of message passing steps, as shown in Fig.7. Similar, albeit weaker eﬀect was observed when
+the capacity of edge and node features was increased. In addition, our selective experiments show that using shared
+weights in the processor module generally achieves similar performance to the unshared variation. This suggests that
+more sophisticated models that select the number of message passing steps adaptively are good candidates for further
+improvement.
+
+
+
+
+
+
+                                               c.  Physical properties of the GNN ansatz
+
+
+From a dimensionality argument it is clear that polynomially sized variational ansatz can not represent and arbitrary
+quantum state. Hence it’s important to understand the limitations for each class of variational wave-functions, as well
+as their relations to other classes.
+
+Because by construction our ansatz represents a product of terms with local support, it can be seen as an eﬀective
+implementation of a quasi-product states introduced in [22]. This suggests that the entanglement entropy of the state
+can obey at most an area law.
+
+The other class of wave-functions that graph-nets ansatz is related to is correlator product states [7]. While any wave-
+function representable by our ansatz can be written as a correlator product state, it has the advantage of computational
+eﬃciency, as it works with latent representations of local states, rather than enumerating them exhaustively. This
+signiﬁcantly decreases the number of parameters one needs to optimize.
+                                                                                                                                               16
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 7. Varying the number of message passing steps aﬀects the appoximation accuracy of the GNN models more when
+modeling disordered states. (a) Variational energy of GNN-2 model per spin as a function of optimization steps and number of
+message passing steps in a disordered regime on kagome lattice and J2 = 0. (b) Variational energy of GNN-2 model per spin as
+a function of optimization steps and number of message passing steps in an ordered regime on square lattice andJ2 = 0. System
+size is N = 36 for both systems.
+
+
+                                                        7.    Sublattice encodings
+
+
+                                                    a.  Symmetric sublattice encodings
+
+
+Our models use sublattice encoding as auxiliary input to provide a reference point for distributed computation. To
+enable generalization across problems of diﬀerent size the encodings must respect the symmetry structure of the
+lattice. Our approach is inspired by regular states [34], in which sublattices emerge from conﬁguration that obey
+lattice symmetries up to a global transformation of underlying degrees of freedom.
+
+All sublattices considered in this work are shown in Fig. 8. Table III indicates sublattices used for diﬀerent values of
+J2 for all 4 lattices.
+
+                                  Lattice         Square      Honeycomb          Triangular          Kagome
+                               J2 condition    ≤ 0.5  > 0.5   ≤ 0.5   > 0.5    ≤ 0.14    > 0.14   ≥ 0   √  < 0
+                                 Sublattice    Neel   Orth.    AF    Cubic   Coplanar     Tetr.   q=0     3×√3
+
+                         Table III. Sublattice encodings used for diﬀerent values of interaction strengthsJ2.
+
+
+
+
+                                                     b.  Square lattice ablation results
+
+
+As stated in the main text, we found it critical to include sublattice information to obtain high quality approximations
+to the lowest energy eigenstates. In our ablation study, besides poor performance of a model without sublattice
+encodings on a 1 dimensional spin chain, we found a diﬀerent failure mode presented below.
+
+When the number of message passing steps of a GNN(GNN-2) model is large enough to propogate information across
+the entire system, the model can learn a system-size dependent approximation of the lowest energy eigenstate, which
+                                                                                                                                                17
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                      Figure 8. Sublattices used as auxiliary inputs to our model.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 9. GNN models without sublattice encodings can learn system size dependent representations that fail to generalize to
+larger systems. (a) Overlap with the exact ground state on 16 site square lattice. (b) Energy of the models on 16 site square
+lattice. (c) Energy of the models on 36 site square lattice. (d) Fraction of the state in a fully symmetric subspace. Color
+indicates whether GNN model uses sublattice encodings.
+
+
+does not generalize to larger system sizes. In Fig.9 we show a similar ablation study on a square lattice. The model is
+optimized on a system with 16 degrees of freedom and is additionally tested on a 36 site system. While the model
+without sublattice encodings succeeds in approximating the lowest energy eigenstate, it fails to generalize to a larger
+system size. The variant with sublattice encodings performs well on both system sizes.
+
+
+
+
+                                    c.  Sublattice encodings and non-universality of graph networks
+
+
+An alternative view on our use of sublattice encodings stems from non-universality of graph networks in their standard
+implementation [32, 54]. By introducing a symmetry breaking encoding as an additional input to the network, we
+enlarge the scope of functions that can be approximated by suﬃciently expressive networks. In an extreme example,
+if all encodings are distinct, then the corresponding graph network recovers the universal approximation property,
+but looses all of the spatial symmetry priors. For cases studied in this paper we found that slight symmetry breaking
+consistent with the underlying symmetry of the structure is usually enough to noticeably improve the performance.
+                                                                                                                                          18
+
+                                                   8.    Model comparison details
+
+
+                                                           a.  Baseline models
+
+
+In model comparison paragraph in section V we have compared the performance of our GNN and GNN-2 models to a
+suite of variational baselines. Here we discuss major diﬀerences in inductive biases and neural network architectures.
+
+Dirac spin liquid (DSL)[20] and projected Bardeen-Cooper-Schrieﬀer (pBCS)[23] ansatz are projected mean-ﬁeld wave-
+functions. They are canonical examples of variational models that support long-range entanglement, fractionalization
+and topological order in spin systems[20, 21, 26].  These models have very few variational parameters and are
+interpretable, which on the other hand makes it hard to systematically improve the approximation accuracy. While
+our models use many more variational parameters, they systematically produce more accurate approximation to low
+energy states for moderate system sizes.
+
+Neural network quantum states (CNN-C)[11] is a variational ansatz based on a deep convolutional neural network with
+complex-valued weights. Both amplitudes log|ψi| and phasesarg(ψi) are predicted simultaneously via a single network
+pass, where a generalized ReLU[47] is used as an activation function. To stabilize the process of learning the phase
+structure of the low energy states this model additionally includes a reference sign structure given by the Marshal sign
+rule[33]. Our models diﬀer from this architecture in several ways: (1) GNN-2 models amplitudes and phases separately;
+(2) both GNN models are applicable to arbitrary lattices and incorporate lattice symmetries beyond translation.
+
+In [46] (CNN-P), authors propose to model amplitudes log|ψi| and phases arg(ψi) separately, similar to our GNN-2
+model. Two main diﬀerences between GNN-2 and CNN-P include: (1) applicability of GNN based models to arbitrary
+lattices; (2) parameterization of the phase prediction. In CNN-P the phase is computed by summing locally predicted
+phasors of unit length and computing the global angle. This is equivalent to sum-based reduction over sin and cos
+components of the predicted phases. GNN-2 uses sum-based reduction directly over the angles, which makes it possible
+for a local change to noticeably aﬀect the phase of the wave-function, which is known to be highly oscillatory.
+
+Neural Gutzwiller-projected states (GW-RBM)[13] and neural net backﬂow (NN-BF)[31] are examples of hybrid
+approaches that use ML to build on-top of existing variational models. GW-RBM extends the projected mean-ﬁeld
+approach by weighting the contributions of orbitals, with coeﬃcients predicted by a RBM architecture. NN-BF
+draws on the ideas of backﬂow[14], where the single particle orbitals are made conﬁguration dependent. GNN models
+considered in this paper do not include such inductive biases and hence do not rely on existence of a reference ansatz.
+
+
+
+
+
+                                                          b.  Model performance
+
+
+We provide numeric values of variational energies for our GNN, GNN-2 models and ResNet baseline in Table IV. All
+results were computed using MCMC using 2∗ 105 samples from equilibrated Markov chains. The stochastic estimation
+error bars are marked by parenthesis around the last signiﬁcant digit.
+
+
+
+
+
+                                                      c.  Computational eﬃciency
+
+
+Computational complexity of variational approach is largely determined by the eﬃciency of evaluating the wave-function
+amplitudes for a batch of conﬁgurations. To measure computational eﬃciency we have timed the process of evaluating
+7200 batches of 32 basis conﬁguration within a MCMC process. The GNN-2 model took17.4 seconds to accomplish
+this task, while our unstructured ResNet baseline ﬁnishes in2.14 seconds. While GNN-based models are 4− 8× slower,
+they outperform the unstructured models in approximation quality (even when the number of training iterations of
+the unstructured model is increased appropriately).
+                                                                                                                                             19
+
+                     Lattice     Parameters                GNN                     GNN-2                    ResNet
+                                       J2              0           0            0            0           0            0
+                      Square            N                   100                      100                      100
+                                     ⟨E⟩/N              -0.6708(0)               -0.5023(5)                -0.6705(2)
+                                       J2             0.5         0.5          0.5          0.5         0.5          0.5
+                      Square            N             36          100          36          100           36          100
+                                     ⟨E⟩/N       -0.5022(4)   -0.4955(4)   -0.5023(5)   -0.4960(5)  -0.5017(7)    -0.488(7)
+                                       J2             0.2         0.2          0.2          0.2         0.2          0.2
+                   Honeycomb            N             32           98          32           98           32          98
+                                     ⟨E⟩/N       -0.4563(6)   -0.4528(2)   -0.4564(7)   -0.4536(5)  -0.4561(1)   -0.4496(4)
+                                       J2              0           0            0            0           0            0
+                   Triangular           N                   108                      108                      108
+                                     ⟨E⟩/N              -0.5508(8)               -0.5519(4)                -0.5451(2)
+                                       J2           0.125        0.125        0.125       0.125        0.125        0.125
+                   Triangular           N             36          108          36          108           36          108
+                                     ⟨E⟩/N        -0.512(2)    -0.500(9)   -0.5131(8)   -0.5069(8)  -0.5007(5)    -0.488(9)
+                                       J2              0           0            0            0           0            0
+                     Kagome             N             36          108          36          108           36          108
+                                     ⟨E⟩/N        -0.434(1)   -0.4302(1)   -0.4338(6)   -0.4314(7)   -0.433(0)    -0.424(9)
+
+           Table IV. Numerical values of variational energies per spin for GNN, GNN-2 models and ResNet baseline.
+
+
+                                                    9.    Optimization parameters
+
+
+We optimized all models using IT-SWO[25]. We used 30 iterations in the inner loop and chose imaginary time constant
+β based on the relative scale of the energy spectrum for diﬀerent problems. The exact values are listed in Table V.
+Each iteration was performed using adam optimizer[24] with b1 = 0.9; b2 = 0.99 and learning rate that was decayed
+exponentially with the rate of 0.1 over 8∗ 105 updates starting with 7∗ 10−4 (4∗ 10−4 for ResNet baseline, which
+resulted in better performance). During training we use the same MCMC parameters as for evaluation discussed in
+Appendix A2.
+
+We optimized all GNN models for 8∗ 105 iterations (≈ 26000 IT-SWO steps). For larger system sizes we initialized the
+weights with values from smaller system sizes. When training a partial ResNet baseline we used same parameters but
+trained it for 2∗ 106 steps.
+
+All models were optimized using Google’s Cloud TPU v4. All models trained within a day.
+
+                                        System       Square     Honeycomb     Triangular     Kagome
+                                        N           36    100    32     98     36    108    36    108
+                                        β          0.04 0.007   0.04   0.01   0.04   0.01  0.05  0.015
+
+        Table V. Parameters of the imaginary time evolution step parameter used for optimization on diﬀerent systems.

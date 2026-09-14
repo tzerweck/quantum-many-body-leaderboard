@@ -1,0 +1,1041 @@
+                       A Self-Attention Ansatz for Ab-initio Quantum Chemistry
+
+                                      Ingrid  von  Glehn,  James  S.  Spencer,  and  David  Pfau
+                                            DeepMind,  London  N1C  4DL,  United  Kingdom∗
+
+                  We present a novel neural network architecture using self-attention, the Wavefunction Transformer
+                (Psiformer),  which  can  be  used  as  an  approximation  (or  Ansatz)  for  solving  the  many-electron
+                Schr¨odinger equation, the fundamental equation for quantum chemistry and material science.  This
+                equation can be solved from ﬁrst principles, requiring no external training data. In recent years, deep
+                neural networks like the FermiNet and PauliNet have been used to signiﬁcantly improve the accuracy
+                of these ﬁrst-principle calculations, but they lack an attention-like mechanism for gating interactions
+                between  electrons.   Here  we  show  that  the  Psiformer  can  be  used  as  a  drop-in  replacement  for
+                these  other  neural  networks,  often  dramatically  improving  the  accuracy  of  the  calculations.   On
+                larger  molecules  especially,  the  ground  state  energy  can  be  improved  by  dozens  of  kcal/mol,  a
+                qualitative leap over previous methods.  This demonstrates that self-attention networks can learn
+                complex quantum mechanical correlations between electrons, and are a promising route to reaching
+                unprecedented accuracy in chemical calculations on larger systems.
+
+
+                    I.    INTRODUCTION                                       which can be used as an approximate numerical solution
+                                                                             (or  Ansatz) for the fundamental equations of the quan-
+  The laws of quantum mechanics describe the nature of                       tum mechanics of electrons.  We test the Psiformer on a
+matter at the microscopic level, and underpin the study                      wide  variety  of  benchmark  systems  for  quantum  chem-
+of chemistry, condensed matter physics and material sci-                     istry and ﬁnd that it is signiﬁcantly more accurate than
+ence.  Although these laws have been known for nearly                        existing  neural  network  Ansatzes  of  roughly  the  same
+a  century  [45],  the  fundamental  equations  are  too  dif-               size.   The  increase  in  accuracy  is  more  pronounced  the
+ﬁcult  to  solve  analytically  for  all  but  the  simplest  sys-           larger  the  system  is  –  as  much  as  75  times  the  normal
+tems.  In recent years, tools from deep learning have been                   standard for “chemical accuracy” – suggesting that the
+used to great eﬀect to improve the quality of computa-                       Psiformer is a particularly attractive approach for scal-
+tional quantum physics [7].  For the study of chemistry in                   ing neural network Ansatzes to larger, more challenging
+particular,  it is the quantum behavior of  electrons that                   systems.  In what follows, we will provide an overview of
+matters, which imposes certain constraints on the possi-                     the variational quantum Monte Carlo approach to com-
+ble solutions.  The use of deep neural networks for suc-                     putational  quantum  mechanics  (Sec.  II),  introduce  the
+cessfully computing the quantum behavior of molecules                        Psiformer architecture in detail (Sec. III), present results
+was introduced almost simultaneously by several groups                       on a wide variety of atomic and molecular benchmarks
+[10,  25,  43],  and  has  since  led  to  a  variety  of  exten-            (Sec. IV) and wrap up with a discussion of future direc-
+sions  and  improvements  [26].   However,  follow-up  work                  tions (Sec. V).
+has mostly focused on applications and iterative improve-
+ments to the neural network architectures introduced in
+the ﬁrst set of papers.                                                                           II.    BACKGROUND
+  At the same time, neural networks using self-attention
+layers,  like  the  Transformer  [55],  have  had  a  profound                       A.    Quantum Mechanics and Chemistry
+impact on much of machine learning.  They have led to
+breakthroughs  in  natural  language  processing  [13],  lan-                   The fundamental object of study in quantum mechan-
+guage modeling [6],  image recognition [14],  and protein                    ics  is  the  wavefunction,  which  represents  the  state  of
+folding [29].  The basic self-attention layer is also permu-                 all  possible  classical  conﬁgurations  of  a  system.   If  the
+tation equivariant, a useful property for applications to                    wavefunction is known, then all other properties of a sys-
+chemistry, where physical quantities should be invariant                     tem can be calculated from it.  While there are multiple
+to the ordering of atoms and electrons [18].  Despite the                    ways of representing a wavefunction, we focus on the ﬁrst
+manifest successes in other ﬁelds, no one has yet inves-                     quantization approach, where the wavefunction is a map
+tigated  whether  self-attention  neural  networks  are  ap-                 from possible particle states to a complex amplitude. The
+propriate  for  approximating  solutions  in  computational                  state of a single electron x∈ R3×{↑,↓} can be repre-
+quantum mechanics.                                                           sented by its position r∈ R3 and spin σ∈{↑,↓}.  Then
+  In  this  work,  we  introduce  a  new  self-attention  neu-               the wavefunction for an N-electron system is a function
+ral network, the Wavefunction Transformer (Psiformer),                       Ψ :(R3×{↑,↓})N→ C.  Let x ≜ x1,..., xN  denote the
+                                                                             set of all electron states.  The wavefunction is constrained
+                                                                             to have unit 𝓁2  norm∫ dx|Ψ|2(x) = 1, and|Ψ|2  can be
+                                                                             interpreted  as  the  probability  of  observing  a  quantum
+∗Electronic address:  {ingridvg,jamessspencer,pfau}@deepmind.com             system in a given state when measured.
+                                                                                                                                                 2
+
+  Not  all  functions  are  valid  wavefunctions  –  particles             1 kcal/mol of the ground truth are generally considered
+must  be  indistinguishable,  meaning|Ψ|2  should  be  in-                 “chemically accurate”.  Mean-ﬁeld methods are typically
+variant  to  changes  in  ordering.   Additionally,  the  Pauli            within about 0.5% of the true total energy. The diﬀerence
+exclusion principle states that the probability of observ-                 between the mean-ﬁeld energy and true energy is known
+ing  any  two  electrons  in  the  same  state  must  be  zero.            as the correlation energy, and chemical accuracy is usu-
+This is enforced by requiring the wavefunction for elec-                   ally less than 1% of this correlation energy.  For example,
+tronic systems to be antisymmetric. In this paper, we will                 the binding energy of the benzene dimer (investigated in
+focus on how to learn an unnormalized approximation to                     Section IV E) is only∼4 mHa.
+Ψ by representing it with a neural network.
+  The physical behavior of non-relativistic quantum sys-
+tems  is  described  by  the  Schr¨odinger  equation.   In  its                     B.    Variational Quantum Monte Carlo
+time-independent  form,  it  is  an  eigenfunction  equationˆHΨ(x) =EΨ(x) where  ˆH is a Hermitian linear operator
+                                                                              There are a wide variety of computational techniques
+called the Hamiltonian and the scalar eigenvalueE corre-                   to ﬁnd the ground state solution of the Hamiltonian in
+sponds to the energy of that particular solution.  In quan-                Eq  1.   We  are  particularly  interested  in  solving  these
+tum chemistry, atomic units (a.u.)  are typically used, in                 equations  from  ﬁrst  principles (ab-initio), that is,  with-
+which the unit of distance is the Bohr radius (a0), and                    out any data other than the atomic positions.  The ab-
+the unit of energy is Hartree (Ha).                                        initio  method  most  compatible  with  the  modern  deep
+  The  physical  details  of  a  system  are  deﬁned  through              learning  paradigm  is  variational  quantum  Monte  Carlo
+the  choice  of  Hamiltonian.   For  chemical  systems,  the               (VMC,  [17]).   In  VMC,  a  parametric  wavefunction  ap-
+only details which need to be speciﬁed are the locations                   proximation (or Ansatz) is optimized using samples from
+and  charges  of  the  atomic  nuclei.   In  quantum  chem-                the Ansatz itself, in much the same way that deep neural
+istry  it  is  standard  to  approximate  the  nuclei  as  clas-           networks are optimized by gradient descent on stochas-
+sical particles with ﬁxed positions,  known as the Born-                   tic minibatches.  VMC is variational in the sense that it
+Oppenheimer approximation, in which case the Hamilto-                      minimizes  an  upper  bound  on  the  energy  of  a  system.
+nian becomes:                                                              Therefore  if  two  VMC  solutions  give  diﬀerent  energies,
+               ∑                    1                  ZI                  the one with the lower energy will be closer to the true
+    ˆH =− 12        ∇2i +∑      |ri− rj|−∑         |ri− RI|                energy, even if the true energy is not known.
+                 i         i>j                 iI                             In VMC, we start with an unnormalized wavefunction
+                     ZIZJ                                         (1)      Ansatz Ψθ :(R3×{↑,↓})N→ R with parametersθ.  The
+          +∑      |RI− RJ|,                                                expected energy of the system is given by the Rayleigh
+             I>J                                                           quotient:
+                                                                                                      ∫ dxΨθ(x) ˆHΨθ(x)
+where∇2i  = ∑3j=1 ∂2∂r2ij  is  the  Laplacian  w.r.t.   the ith               Lθ =⟨Ψθ ˆHΨθ⟩                ∫ dxΨ2θ(x)
+particle andZI and RI,I∈{1,...,Nnuc} are the charges                                    ⟨Ψ2θ⟩     =[               ]
+and coordinates of the nuclei.                                                    = Ex∼Ψ2θ     Ψ−1θ   (x) ˆHΨθ(x)    = Ex∼Ψ2θ [EL(x)],   (2)
+  Two simpliﬁcations follow from this.  First, since  ˆH  is
+a Hermitian operator,  solutions Ψ must be real-valued.                       where we have rewritten the Rayleigh quotient as an
+Thus we can restrict our attention to real-valued wave-                    expectation over a random variable proportional to Ψ2θ on
+functions.  Second, since the spins σi do not appear any-                  the right hand side.  The term EL(x) = Ψ−1(x) ˆHΨ(x)
+where in Eq. 1, we can ﬁx a certain number of electrons                    is known as the local energy.  Details on how to compute
+to be spin up and the remainder to be spin down before                     the local energy and unbiased estimates of the gradient of
+beginning  any  calculation  [17].   The  appropriate  num-                the average energy are given in Sec. A 1 in the appendix.
+ber for the lowest energy state can usually be guessed by                     In VMC, samples from the distribution proportional to
+heuristics such as Hund’s rules.                                           Ψ2 are generated by Monte Carlo methods, and unbiased
+  While the time-independent Schr¨odinger equation de-                     estimates of the gradient are used to optimize the Ansatz,
+ﬁnes the possible solutions of constant energy, at the en-                 either by standard stochastic gradient methods, or more
+ergy scales relevant for most chemistry the electrons are                  advanced  methods  [48,  54].   Notably,  the  samples x∼
+almost always found near the lowest energy state, known                    Ψ2θ  can be generated from  the  Ansatz  itself, rather than
+as the ground state.  Solutions with higher energy, known                  requiring external data.
+as excited  states, are relevant to photochemistry, but in                    The  form  of  Ψ  must  be  restricted  to  antisymmetric
+this paper we will restrict our attention to ground states.                functions to avoid collapsing onto non-physical solutions.
+  For a typical small molecule, the total energy of a sys-                 This is most commonly done by taking the determinant of
+tem is on the order of hundreds to thousands of Hartrees.                  a matrix of single-electron functions Ψ(x) = det [Φ(x)],
+However the relevant energy scale for chemical bonds is                    where  Φ(x)  denotes  the  matrix  with  elements φi(xj),
+typically much smaller – on the order of 1 kilocalorie per                 since the determinant is antisymmetric under exchange
+mole (kcal/mol), or∼1.6 mHa – less than one part in one                    of rows or columns.  This is known as a  Slater  determi-
+hundred thousand of the total energy. Calculations within                  nant, and the minimum-energy wavefunction of this form
+                                                                                                                                                 3
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                (a) FermiNet / FermiNet+SchNet                                                        (b) Psiformer
+
+FIG. 1:  Comparison of (a) FermiNet and FermiNet+SchNet and (b) the Psiformer.  The FermiNet variants have two
+       streams, acting on electron-nuclear and electron-electron features, which are merged via concatenation or
+   continuous-ﬁlter convolution operations.  In contrast, the Psiformer uses a single stream of self-attention layers,
+     acting on electron-nuclear features only.  Electron-electron features appear only via the Jastrow factor.  The
+FermiNet+SchNet also includes a nuclear embedding stream and separate spin-dependant electron-electron streams,
+                                                              not pictured here.
+
+
+gives  the  mean-ﬁeld  solution  to  the  Schr¨odinger  equa-               work on machine learning for density functional theory
+tion.  While φi  is a function of one electron in a Slater                  (DFT) [31, 41], which is an intermediate between classical
+determinant, any permutation-equivariant function of all                    and all-electron quantum chemistry, but even this is still
+electrons can be used as input to Φ and Ψ will still be                     primarily a supervised learning problem and relies on ab-
+antisymmetric.                                                              initio calculations for data.  Here instead, we are focused
+  The potential energy becomes inﬁnite when particles                       on improving the ab-initio methods themselves.
+overlap, which places strict constraints on the form of the                   For  a  thorough  introduction  to   ab-initio  quantum
+wavefunction  at  these  points,  known  as  the  Kato  cusp                chemistry, we recommend [24] and [52].  Within this ﬁeld,
+conditions [30].  The cusp conditions state that the wave-                  VMC was considered a simple but low-accuracy method,
+function must be non-diﬀerentiable at these points, and                     failing to match the performance of sophisticated meth-
+give exact values for the average derivatives at the cusps.                 ods [40], but often used as a starting point for diﬀusion
+This can be built into an Ansatz by multiplying by a Jas-                   Monte Carlo (DMC) calculations, which are more accu-
+trow  factor  which  satisﬁes  these  conditions  analytically              rate, but do not produce an explicit functional form for
+[15].                                                                       the wavefunction [17].  These VMC calculations typically
+                                                                            used  a  Slater-Jastrow  Ansatz  [34],  which  consists  of  a
+                                                                            large  linear  combination  of  Slater  determinants  multi-
+                       C.    Related work                                   plied by a Jastrow factor.  They also sometimes include
+                                                                            backﬂow, a coordinate transformation that accounts for
+  Machine learning has found numerous applications to                       electron correlations with a ﬁxed functional form [16].
+computational chemistry in recent years, but has mostly                       Recently, the use of neural network Ansatzes in VMC
+focused on problems at the level of classical physics [3, 18,               was  shown  to  greatly  improve  the  accuracy  of  many-
+21, 46, 47], which all rely on learning from large datasets                 electron  calculations,  often  making  them  competitive
+of  experiments  or  ab-initio  calculations.   There  is  also             with, or in some circumstances superior to, methods like
+                                                                                                                                                  4
+
+DMC or coupled cluster [10, 23, 25, 37, 43, 53].  In ﬁrst
+quantization, these Ansatzes used a sum of a small num-
+ber  of  determinants  to  construct  antisymmetric  func-
+tions,   but  used  very  general  permutation-equivariant
+functions of all electrons as inputs, rather than the single-
+electron  functions  used  in  Slater  determinants.   Some,
+like  the  PauliNet  [25],  used  Jastrow  factors,  while  the
+FermiNet  [43]  used  non-diﬀerentiable  input  features  to
+learn the cusp conditions.
+  Most  follow-up  work,  as  surveyed  in  [26],  integrated
+these Ansatzes with other methods and applications, but
+did  not  signiﬁcantly  alter  the  architecture  of  the  neu-
+ral networks.  The most signiﬁcant departure in terms of
+the neural network architecture was [20], which extended
+the FermiNet – generally recognized to be the most ac-
+curate  neural  network  Ansatz  up  to  that  point  –  and                   FIG. 2:  FermiNet and Psiformer accuracy on small
+integrated it with several details of the PauliNet,  espe-                    molecules.  Geometries and CCSD(T)/CBS reference
+cially the continuous-ﬁlter convolutions also used by the                    energies are taken from [43].  The grey region indicates
+SchNet [46],  claiming to reach even higher accuracy on                      chemical accuracy (1 kcal/mol or 1.6 mHa) relative to
+several challenging systems.  We refer to this architecure                                        the reference energies.
+as the FermiNet+SchNet.
+
+                                                                            is kept ﬁxed during training, it breaks the symmetry be-
+                  III.    THE PSIFORMER                                     tween spin up and spin down electrons, so that columns
+                                                                            of Φkθ  are only equivariant under exchange of same-spin
+  The Psiformer has the basic form:                                         electrons.  This is a notable departure from the FermiNet
+                                                                            and PauliNet, where the diﬀerence between spin-up and
+                                       Ndet∑                                spin-down electrons is instead built into the architecture.
+            Ψθ(x) = exp (Jθ(x))             det[Φkθ(x)],           (3)         The input features f0i  are next projected into the same
+                                       k=1                                  dimension  as  the  attention  inputs  by  a  linear  mapping
+                                                                            h0i  = W0f0i ,  and then passed into a sequence of multi-
+whereJθ  :  (R3×{↑,↓})N → R  and Φkθ  :  (R3×{↑,↓                           headed self-attention layers followed by linear-nonlinear
+})N→ RN×N  are functions with learnable parametersθ.                        layers, both with residual connections:
+This  is  similar  to  the  Slater-Jastrow  Ansatz,  FermiNet
+and PauliNet, with the key diﬀerence being that in the                         f𝓁+1i     = h𝓁i + W𝓁oconcath[
+Psiformer, Φkθ consists of a sequence of multiheaded self-                             SelfAttni(h𝓁1,..., h𝓁N; W𝓁hq , W𝓁hk , W𝓁hv  )],   (4)
+attention layers [55].  The key motivation for this is that
+the electron-electron dependence in the Hamiltonian in-                        h𝓁+1i     = f𝓁+1i     + tanh(W𝓁+1f𝓁+1i     + b𝓁+1),                 (5)
+troduces  subtle  and  complex  dependence  in  the  wave-
+function.   Self-attention  is  one  way  of  introducing  this             where h  indexes  the  diﬀerent  attention  heads,  concath
+without  a  ﬁxed  functional  form.   The  high-level  struc-               denotes  concatenation  of  the  output  from  diﬀerent  at-
+ture of the Psiformer is shown in Fig. 1(b),  where it is                   tention  heads,  and  SelfAttn  denotes  standard  self-
+contrasted with the FermiNet (and SchNet extension) in                      attention:
+Fig. 1(a).
+  Because a self-attention layer takes a sequence of vec-                             SelfAttni(h1,..., hN; Wq, Wk, Wv) =
+tors as input,  only features of single electrons are used                                          1  ∑
+as input to Φkθ.  The input feature vector f0i  for electron                                       √        σj(qT1 ki,..., qTNki) vj,       (6)
+i is similar to the one-electron stream of the FermiNet,                                             d   j
+which uses a concatenation of electron-nuclear diﬀerences                               ki = Wkhi, qi = Wqhi, vi = Wvhi,           (7)
+ri−RI and distances|ri−RI|,I = 1,...,Nnuc, with two
+key  diﬀerences.   First,  we  found  that  for  systems  with                               σi(x1,...,xN) =     exp(xi)∑
+widely separated atoms, using FermiNet one-electron fea-                                                              j exp(xj),                (8)
+tures caused self-attention Ansatzes to become unstable,
+so we rescale the inputs in the Psiformer by a factor of                       where d is the output dimension of the key and query
+log(1+|ri−RI|)/|ri−RI|, so that the input vectors grow                      weights.    In  principle,  multiple  linear-nonlinear  layers
+logarithmically with distance from the nucleus.  Second,                    could  be  used  in-between  self-attention  layers,  but  we
+we concatenate the spin σi into the input feature vector                    found that adding a deeper MLP between self-attention
+itself (mapping↑ to 1 and↓ to -1).  While this spin term                    layers was less eﬀective than adding more self-attention
+                                                                                                                                                5
+
+layers.   While  a  smooth  nonlinearity  must  be  used  to                             A.    Revisiting Small Molecules
+guarantee that a wavefunction is smooth everywhere ex-
+cept the cusps, we found that using activation functions                      In [43], they compared the FermiNet against CCSD(T)
+other than tanh had a marginal impact on performance.                      extrapolated to the complete basis set (CBS) limit on a
+  A  ﬁnal  linear  projection  into  a NNdet  dimensional                  number of small molecules (4-30 electrons) from the G3
+space  is  applied  to  the  activations,   and  the  output               database [11].  While the FermiNet captured more than
+is   multiplied   by   a   weighted   sum   of   exponentially-            99% of the correlation energy relative to CCSD(T)/CBS
+decaying  envelopes,  Φkij   =   ΩkijwkTi   hLj ,  where  Ωkij   =         for  systems  as  large  as  ethene  (16  electrons),  the  qual-
+∑                                                                          ity of the FermiNet calculation began to decline as the
+   IπkiI exp(−σkiI|rj− RI|).  This is so that the bound-                   system  size  grew.   While  some  of  this  discrepancy  was
+ary condition lim|r|→∞ Ψθ(r) = 0 is enforced, and is the                   reduced simply by changing to a framework with better
+same form as the envelope used by the FermiNet in [50].                    numerics [50], the reported diﬀerence in energy for bicy-
+The matrix elements Φkij are then passed intok determi-                    clobutane was still greater than 20 mHa.  Here we revisit
+nants and the output summed together.                                      these systems, comparing the FermiNet with training im-
+  As  the  distances |ri− RI|  are  inputs  to  the  Psi-                  provements against the Psiformer.
+former,  it  is  capable  of  learning  the  electron-nuclear                 To  investigate  whether  the  Psiformer  performance
+cusp conditions, much like the FermiNet.  However, the                     could  be  reproduced  by  simply  making  the  FermiNet
+self-attention  part  of  the  Psiformer  does  not  take  pair-           larger, we investigated both a “small” and “large” con-
+wise electron distances as inputs, so it cannot learn the                  ﬁguration  for  the  Psiformer  and  FermiNet.   The  small
+electron-electron cusp conditions.  Instead, the Psiformer                 FermiNet  has  the  same  layer  dimensions  and  determi-
+uses a conventional Jastrow factor only for the electron-                  nants as the one used in [43], while the large conﬁgura-
+electron cusps.  We use a particularly simple Jastrow fac-                 tion has twice as many determinants and a one-electron
+tor:                                                                       stream twice as wide, similar to the largest networks in
+                                                                           [50]. The Psiformer conﬁgurations have the same number
+          Jθ(x) =  ∑            −1         α2par                           of determinants and the MLP layers are the same width
+                                   4 αpar +|ri− rj|                        as the FermiNet one-electron stream, though due to the
+                     i<j;σi=σj                                             self-attention weights the small Psiformer has a number
+                                             α2anti               (9)      of parameters between that of the large and small Fer-
+                     + ∑          −12  αanti +|ri− rj|,                    miNet.  Exact details are given in Table VII in the ap-
+                        i,j;σi⁄=σj                                         pendix.  On these systems, the small Psiformer ran in a
+                                                                           similar amount of time to the large FermiNet, though for
+which has only two free parameters, αpar and αanti, and                    even larger systems, the diﬀerence in wall time between
+works well in practice.                                                    the  small  FermiNet  and  small  Psiformer  became  much
+                                                                           smaller (see Table IX in the appendix).
+                                                                              The results on small molecules can be seen in Fig. 2.
+                                                                           While increasing the size of the FermiNet increases the
+                    IV.    EXPERIMENTS                                     accuracy  somewhat,  the  small  Psiformer  is  more  accu-
+                                                                           rate  than  the  large  FermiNet,  despite  having  fewer  pa-
+                                                                           rameters, while the large Psiformer is the most accurate
+  Here  we  present  an  evaluation  of  the  Psiformer  on  a             of all.  This is true for all systems investigated.  The im-
+wide variety of benchmark systems. Where it is not speci-                  provement from the Psiformer is particularly dramatic on
+ﬁed, all results with the FermiNet and FermiNet+SchNet                     ozone and bicyclobutane – on ozone, the large Psiformer
+are with our own implementation, forked from [51].  We                     is  within  1  kcal/mol  of  CCSD(T)/CBS,  while  even  the
+use Kronecker-factored Approximate Curvature (KFAC)                        largest FermiNet has an error more than 4 times larger
+[38] to optimize the Psiformer.  The use of KFAC for self-                 than this.  On all molecules, the large Psiformer captures
+attention has been investigated in [59].  We show the ad-                  more than 99% of the correlation energy relative to the
+vantage of KFAC, and how it interacts with LayerNorm,                      reference energy.
+in Sec. A 2 c of the appendix.  We use hyperparameters
+and a Metropolis-Hastings MCMC algorithm similar to
+the original FermiNet paper, though we have made sev-                      B.    Comparison Against FermiNet with SchNet-like
+eral modiﬁcations which help for larger systems:  we pre-                                            Convolutions
+train for longer, we generate samples for pretraining from
+the target wavefunction, we take more MCMC steps be-                          While  the  performance  of  the  Psiformer  relative  to
+tween parameter updates, we propose updates for subsets                    the  FermiNet  is  impressive,  recent  work  has  proposed
+of electrons rather than all electrons simultaneously, and                 several  innovations  to  reach  even  lower  energies  [20].
+we slightly change the gradient computation to be more                     The  primary  innovations  of  this  work  were  the  Fer-
+robust to outliers.  Details are given in Sec. A 2 d of the                miNet+SchNet  architecture  and  new  hyperparameters
+appendix.                                                                  they claim led to much faster optimization.  They showed
+                                                                                                                                                             6
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+   FIG. 3:  Comparison of the Psiformer (ΨF), with and without LayerNorm (LN) against the FermiNet (FN) and
+ FermiNet+SchNet (FN+SN) using training hyperparameters from [43] and [20].  Learning curves from the original
+                  FN+SN implementation in [20] are in green.  Energies are smoothed over 4000 iterations.
+
+
+
+                     System                   FermiNet                        FermiNet+SchNet                         Psiformer                   Expt.Small              Large              Small              Large              Small               Large
+
+                     K (Ha)     -599.9133(2)    -599.9149(2)    -599.9153(2)    -599.9175(3)    -599.9202(2)   -599.9205(1)
+                    K+ (Ha)    -599.7561(2)  -599.7679(2)   -599.7578(2)    -599.7601(2)    -599.7589(1)     -599.7617(1)
+                    IPK (eV)       4.278(9)          4.000(9)          4.286(8)           4.28(1)           4.388(6)          4.321(5)      4.32631
+                     Fe (Ha)    -1263.6363(5)  -1263.6381(4)  -1263.6464(5)  -1263.6385(5)  -1263.6595(3)  -1263.6613(3)
+                    Fe+ (Ha)  -1263.3570(5)  -1263.3616(4)  -1263.3620(4)  -1263.3676(4)  -1263.3746(3)  -1263.3768(3)
+                    IPFe (eV)       7.60(2)            7.52(2)            7.74(2)            7.37(2)          7.75(1)            7.74(1)        7.84194
+                     Zn (Ha)   -1779.4101(7)  -1779.4131(6)  -1779.4195(6)  -1779.4267(5)  -1779.4304(4)  -1779.4365(5)
+                    Zn+ (Ha)  -1779.0778(6)  -1779.0846(6)  -1779.0843(7)  -1779.0909(5)   -1779.102(1)   -1779.1054(3)
+                    IPZn (eV)       9.04(2)            8.94(2)            9.12(2)          9.14(2)           8.94(3)             9.01(2)        9.24695
+
+TABLE I: Energies of third-row neutral atoms and cations.  Ionization potentials are compared against experimental
+results from [32].  Total energies are in Hartree while ionization potentials are in eV. Chemical accuracy is 0.043 eV.
+
+
+an  especially  large  improvement  on  heavy  atoms  like                                             C.    Third-Row Atoms
+potassium (K) and iron (Fe), and some improvement on
+larger molecules like benzene.                                                       The  FermiNet,  FermiNet+SchNet  and  Psiformer  all
+   We attempted to reproduce the results of [20] with our                         seem to perform well on the potassium and iron atoms,
+own FermiNet+SchNet implementation, with somewhat                                 but it is diﬃcult to judge how close to the ground truth
+surprising results in Fig. 3.  First, the changes in train-                       these  results  are.   Prior  work  had  shown  that  the  Fer-
+ing  used  for  the  FermiNet  seem  to  be  enough  to  close                    miNet can achieve energies within chemical accuracy of
+the gap with the published FermiNet+SchNet results on                             exact results for atoms up to argon [50], but exact cal-
+heavy  atoms.   For  instance,  ablation  studies  suggested                      culations  are  impractical  for  third-row  atoms.   Instead,
+that modifying the hyperparameters plus adding SchNet-                            comparison  to  experimental  results  is  a  more  practical
+like convolutions accounts for a 38.9 mHa improvement in                          evaluation metric.  The ionization potential – the amount
+accuracy on the potassium atom at 105 iterations, but in                          of energy it takes to remove one electron – is a partic-
+our experiments the FermiNet with default hyperparam-                             ularly  simple  comparison  for  which  good  experimental
+eters  is  within  a  few  mHa  of  the  published  result.   On                  data  exists  [32].   Here  we  compare  the  FermiNet,  Fer-
+benzene,  both  the  SchNet-like  convolutions  and  modi-                        miNet+SchNet and Psiformer for estimating the ioniza-
+ﬁed hyperparameters improved the ﬁnal energy by a few                             tion potential of potassium, iron and zinc.  To compare
+mHa, though still fell slightly short of the published re-                        the relative importance of size and architecture, we also
+sults.  Most importantly,  the Psiformer is clearly either                        looked  at  both  a  small  and  large  conﬁguration  of  all
+comparable to the best published FermiNet+SchNet re-                              Ansatzes, with parameters described in Table V the ap-
+sults, as on K, or better by a wide margin, as on benzene.                        pendix.
+These results also give us conﬁdence that the FermiNet
+is as strong a baseline as any other published method for                            Results  are  shown  in  Table  I.  For  atoms  this  heavy,
+further comparison.                                                               all methods showed some amount of run-to-run variabil-
+                                                                                                                                                  7
+
+ity,  usually small,  but on occasion as large as 10 mHa,
+which may explain some outlier results.  On potassium,
+the diﬀerence between Ansatzes was within the range of
+run-to-run  variability,  but  the  Psiformer  still  did  quite
+well, and reached the most accurate ionization potential.
+On  heavier  atoms,  the  diﬀerence  between  architectures
+became  more  pronounced,  and  the  improvement  of  the
+Psiformer  relative  to  other  models  on  absolute  energy
+was  more  robust.   The  results  on  ionization  potentials
+were  more  mixed,  and  no  Ansatz  came  within  chemi-
+cal accuracy of the ground truth.  This shows that even
+the Psiformer is not yet converged to the ground truth,
+though it is the Ansatz closest to reaching it so far.
+
+                                                                                FIG. 4:  The T-shaped benzene dimer equilibrium.
+                    D.    Larger Molecules
+
+  Much  of  the  promise  for  deep  neural  networks  for                  the FermiNet,  which is itself the most accurate Ansatz
+QMC comes from the fact that they can, in theory, scale                     for many smaller systems.
+much better than other all-electron methods, though this
+promise has yet to be realized.  While CCSD(T) scales
+with  number  of  electrons  asO(N7),  a  single  iteration                                    E.    The Benzene Dimer
+of wavefunction optimization for a ﬁxed neural network
+size scales asO(N4) in theory, and in practice is closer                       Finally,  we  look  at  the  benzene  dimer,  a  challenging
+to cubic for system sizes of several dozen electrons.  Self-                benchmark  system  for  computational  chemistry  due  to
+attention  has  been  especially  powerful  when  scaling  to               the weak van der Waals force between the two molecules,
+extremely  large  problems  in  machine  learning  –  here                  and  the  largest  molecular  system  ever  investigated  us-
+we  investigate  whether  the  same  holds  true  for  QMC,                 ing neural network Ansatzes [44].  The dimer has several
+by applying both the FermiNet and Psiformer to single                       possible equilibrium conﬁgurations, many of which have
+molecules much larger than those which have been inves-                     nearly equal energy [1, 49], making it additionally chal-
+tigated in most prior work.                                                 lenging  to  study  computationally,  but  here  we  restrict
+  Results on systems from benzene (42 electrons) to car-                    our attention to the T-shaped structure (Fig. 4) so that
+bon  tetrachloride  (CCl4,  74  electrons)  are  given  in  Ta-             we can directly compare against [44].
+ble II. On these systems, CCSD(T) becomes impractical                          Results  are  given  in  Table  III.  The  results  from  [44]
+for us to run without approximations,  so we only com-                      are from a small FermiNet (3 layers) trained for 2 million
+pare against other QMC results.  Due to computational                       iterations.   Even  our  “small”  4-layer  FermiNet  baseline
+constraints, we were only able to run the small network                     (which is larger than their FermiNet) trained for 200,000
+conﬁgurations  on  these  systems.   Additionally,  to  help                iterations is able to reach the same accuracy as their small
+MCMC convergence, we updated half the electron posi-                        FermiNet trained for 800,000 iterations ([44] Supplemen-
+tions at a time in each MCMC move, rather than moving                       tary  Figure  7a).   The  Psiformer  reaches  a  signiﬁcantly
+all electrons simultaneously, as all-electron moves become                  lower energy than the FermiNet with the same number
+less eﬃcient for larger systems.                                            of training iterations,  again surpassing the DMC result
+  In  Table  II,  it  can  be  seen  that  the  Psiformer  is  not          by a few mHa.
+only signiﬁcantly better on benzene than the FermiNet,                         We  also  tried  to  estimate  the  dissociation  energy  by
+as in Fig. 3, but it is better than the best previously pub-                similar  means  as  [44]  –  comparing  against  the  energy
+lished  DMC energy,  a remarkable feat.  For even larger                    of the same model trained with a bond length of 10 ˚A,
+molecules, there are no results in the literature with neu-                 and twice the energy of the same model trained on the
+ral network wavefunctions to compare against, so we only                    monomer.  Ironically, our FermiNet baseline, which had
+compare the Psiformer and FermiNet directly.  The Psi-                      the  worst  absolute  energy,  had  the  best  relative  energy
+former outperforms the FermiNet by an ever larger mar-                      between  conﬁgurations.   While  every  model  underesti-
+gin on larger systems,  reaching 120 mHa (75 kcal/mol)                      mated the energy relative to twice the monomer, the dis-
+on CCl4. On the three hydrocarbon systems investigated,                     crepancy was lowest with DMC. It should be noted that
+LayerNorm has only a small impact.  However for CCl4                        the zero-point vibrational energy (ZPE) is not included,
+LayerNorm  has  a  signﬁcant  impact,  accounting  for  70                  the dissociation energies from [44] in Table III are esti-
+mHa  of  the  total  120  mHa  improvement  over  the  Fer-                 mates based on their ﬁgures, and there is disagreement
+miNet.  While we do not claim these are the best varia-                     over the exact experimental energy [22, 33], so this com-
+tional results in the literature, it is clear that on larger                parison should be considered a rough estimate only.  Our
+molecules the Psiformer is a signiﬁcant improvement over                    main result is that the absolute energy of the Psiformer is
+                                                                                                                                                          8
+
+
+                                                                   Ours                                        Best Published
+                              System         FermiNet                    Psiformer                      VMC            DMC
+                                                            No LayerNorm    LayerNorm
+                             Benzene     -232.2205(2)  -232.2400(1)    -232.2393(1)   -232.2267a  -232.2370(3)b
+                             Toluene     -271.5274(2)    -271.5494(1)   -271.5538(1)         –                   –
+                          Naphthalene  -385.8147(4)    -385.8679(2)   -385.8685(2)         –                   –
+                               CCl4        -1878.684(1)    -1878.734(1)   -1878.804(1)         –                   –
+
+ TABLE II: Energies for molecules with between 42 and 74 electrons.  For benzene, the best published results using
+                                         neural network Ansatzes are either from a[20] or b[44].
+
+
+
+                                                              Ours                                                 [44]
+                                           FermiNet                    Psiformer                       VMC             DMCExpt.
+                                                        No LayerNorm    LayerNorm
+                           Equilibrium  -464.3770(5)    -464.4624(2)   -464.4667(2)  -464.4067(3)  –464.4640(2)
+                            Dissociated  -464.3724(6)  -464.4674(2)    -464.4660(2)
+                             ∆Emono       -0.0640(6)       -0.0176(2)        -0.0119(2)       -0.0219(3)    -0.0020(5)   0.0038(6)
+                              ∆E10˚A      0.0046(8)       -0.0050(3)         0.0007(3)        0.0183(5)       0.0092(4)    0.0038(6)
+
+TABLE III: Energies for the benzene dimer, with center separation of 4.95 ˚A  (equilibrium) and 10 ˚A  (dissociated),
+ and the estimated dissociation energy from taking the diﬀerence of the equilibrium energy from twice the mononer
+energy (∆Emono) and the dissociated energy (∆E10˚A).  All ∆Emono results are based on comparing like-for-like dimer
+and monomer calculations.  ∆E10˚A results from [44] are estimated from ﬁgures.  Experimental energies are from [22].
+
+
+a vast improvement over the FermiNet, and we leave it to                        studying  the  most  challenging  molecules  and  materials
+future work to properly apply the Psiformer to predicting                       in silico with unprecedented accuracy.
+binding energies.
+
+
+                        V.    DISCUSSION                                                                 Author Contributions
+
+   We  have  shown  that  self-attention  networks  are  ca-                        IVG implemented the Psiformer, ran experiments and
+pable of learning quantum mechanical properties of elec-                        wrote the paper.  JSS reproduced the FermiNet+SchNet,
+trons far more eﬀectively than comparable methods.  The                         ran experiments and wrote the paper.  DP suggested im-
+advantage  of  self-attention  networks  seems  to  become                      provements to the model, ran experiments and wrote the
+most pronounced on large systems, suggesting that these                         paper.
+models should be the focus of future eﬀorts to scale to                                                    Acknowledgments
+even larger systems.  In addition to the strong empirical
+results,  using  standard  attention  layers  means  that  we
+can  leverage  existing  work  on  improving  scalability,  ei-                     We would like to thank Alex G. de G. Matthews for
+ther by architectural advances [9, 27, 28, 56, 57] or soft-                     suggesting  the  model  name,  Alex  Botev  for  assistance
+ware implementations optimized for specialized hardware                         with KFAC, Michael Scherbela and Leon Gerard for pro-
+[12], which could make it possible to scale these models                        viding data for ﬁgures,  and James Kirkpatrick for sup-
+even  further.   This  presents  a  promising  path  towards                    port and encouragement.
+
+
+
+
+
+ [1]  Sam Azadi and R. E. Cohen.  Chemical Accuracy from                              Nicola   Molinari,   Tess   E.   Smidt,   and   Boris   Kozin-
+     Quantum Monte Carlo for the Benzene Dimer. The Jour-                             sky.  E(3)-Equivariant Graph Neural Networks for Data-
+     nal of Chemical Physics, 143(10):104301, 2015.                                   Eﬃcient  and  Accurate  Interatomic  Potentials.    Nature
+ [2]  Jimmy Lei Ba, Jamie Ryan Kiros, and Geoﬀrey E Hinton.                           Communications, 13(1):1–11, 2022.
+     Layer Normalization.   arXiv  preprint  arXiv:1607.06450,                    [4]  Aleksandar  Botev  and  James  Martens.    KFAC-JAX,
+     2016.                                                                            2022.  URL http://github.com/deepmind/kfac-jax.
+ [3]  Simon  Batzner,  Albert  Musaelian,  Lixin  Sun,  Mario                     [5]  James    Bradbury,     Roy    Frostig,     Peter    Hawkins,
+     Geiger,   Jonathan   P   Mailoa,   Mordechai   Kornbluth,                        Matthew James Johnson,  Chris Leary,  Dougal Maclau-
+                                                                                                                                                          9
+
+     rin,  George  Necula,  Adam  Paszke,  Jake  VanderPlas,                          Duvenaud,  Jos´e  Miguel  Hern´andez-Lobato,  Benjam´ın
+     Skye  Wanderman-Milne,  and  Qiao  Zhang.   JAX:  com-                           S´anchez-Lengeling,   Dennis  Sheberla,   Jorge  Aguilera-
+     posable  transformations  of  Python+NumPy  programs,                            Iparraguirre,  Timothy  D.  Hirzel,  Ryan  P.  Adams,  and
+     2018.  URL http://github.com/google/jax.                                         Al´an Aspuru-Guzik.  Automatic Chemical Design Using
+ [6]  Tom Brown, Benjamin Mann, Nick Ryder, Melanie Sub-                              a Data-Driven Continuous Representation of Molecules.
+     biah, Jared D. Kaplan, Prafulla Dhariwal, Arvind Nee-                            ACS Central Science, 4(2):268–276, 2018.
+     lakantan, Pranav Shyam, Girish Sastry, Amanda Askell,                       [22]  J.  R.  Grover,  E.  A.  Walters,  and  E.  T.  Hui.   Dissocia-
+     et al. Language Models are Few-Shot Learners. Advances                           tion Energies of the Benzene Dimer and Dimer Cation.
+     in Neural Information Processing Systems, 33:1877–1901,                          Journal of Physical Chemistry, 91(12):3233–3237, 1987.
+     2020.                                                                       [23]  Jiequn  Han,  Linfeng  Zhang,  and  E  Weinan.    Solving
+ [7]  Giuseppe Carleo and Matthias Troyer. Solving the Quan-                          Many-Electron  Schr¨odinger  Equation  Using  Deep  Neu-
+     tum  Many-Body  Problem  with  Artiﬁcial  Neural  Net-                           ral  Networks.   Journal  of  Computational  Physics,  399:
+     works.  Science, 355(6325):602–606, 2017.                                        108929, 2019.
+ [8]  Gino  Cassella,  Halvard  Sutterud,  Sam  Azadi,  N.  D.                   [24]  Trygve  Helgaker,   Poul  Jorgensen,   and  Jeppe  Olsen.
+     Drummond,    David   Pfau,    James   S.   Spencer,    and                       Molecular  Electronic-Structure  Theory.   John  Wiley  &
+     W.  M.  C.  Foulkes.   Discovering  Quantum  Phase  Tran-                        Sons, 2014.
+     sitions with Fermionic Neural Networks.  arXiv  preprint                    [25]  Jan  Hermann,  Zeno  Sch¨atzle,  and  Frank  No´e.   Deep-
+     arXiv:2202.05183, 2022.                                                          Neural-Network  Solution  of  the  Electronic  Schr¨odinger
+ [9]  Rewon   Child,   Scott   Gray,   Alec   Radford,   and   Ilya                   Equation.  Nature Chemistry, 12(10):891–897, 2020.
+     Sutskever.     Generating  Long  Sequences  with  Sparse                    [26]  Jan  Hermann,  James  Spencer,  Kenny  Choo,  Antonio
+     Transformers.  arXiv preprint arXiv:1904.10509, 2019.                            Mezzacapo,  W.  M.  C.  Foulkes,  David  Pfau,  Giuseppe
+[10]  Kenny Choo, Antonio Mezzacapo, and Giuseppe Carleo.                             Carleo,   and  Frank  No´e.     Ab-initio  Quantum  Chem-
+     Fermionic Neural-Network States for Ab-initio Electronic                         istry with Neural-Network Wavefunctions. arXiv preprint
+     Structure.  Nature Communications, 11(1):1–7, 2020.                              arXiv:2208.12590, 2022.
+[11]  Larry  A  Curtiss,  Krishnan  Raghavachari,  Paul  C  Red-                 [27]  Andrew   Jaegle,   Sebastian   Borgeaud,   Jean-Baptiste
+     fern,  and John A Pople.  Assessment of gaussian-3 and                           Alayrac,  Carl  Doersch,  Catalin  Ionescu,  David  Ding,
+     density functional theories for a larger experimental test                       Skanda  Koppula,  Daniel  Zoran,  Andrew  Brock,  Evan
+     set.  J. Chem. Phys., 112(17):7374–7383, May 2000.                               Shelhamer,  et  al.    PerceiverIO:  A  General  Architec-
+[12]  Tri Dao, Daniel Y Fu, Stefano Ermon, Atri Rudra, and                            ture  for  Structured  Inputs  &  Outputs.   arXiv  preprint
+     Christopher  R´e.    FlashAttention:   Fast  and  Memory-                        arXiv:2107.14795, 2021.
+     Eﬃcient  Exact  Attention  with  IO-Awareness.     arXiv                    [28]  Andrew   Jaegle,   Felix   Gimeno,   Andy   Brock,   Oriol
+     preprint arXiv:2205.14135, 2022.                                                 Vinyals,  Andrew  Zisserman,  and  Joao  Carreira.    Per-
+[13]  Jacob   Devlin,   Ming-Wei   Chang,   Kenton   Lee,   and                       ceiver:  General Perception with Iterative Attention.  In
+     Kristina Toutanova. BERT: Pre-training of Deep Bidirec-                          International conference on machine learning, pp. 4651–
+     tional Transformers for Language Understanding.  arXiv                           4664. PMLR, 2021.
+     preprint arXiv:1810.04805, 2018.                                            [29]  John  Jumper,  Richard  Evans,  Alexander  Pritzel,  Tim
+[14]  Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov,                          Green,  Michael  Figurnov,  Olaf  Ronneberger,  Kathryn
+     Dirk  Weissenborn,  Xiaohua  Zhai,  Thomas  Unterthiner,                         Tunyasuvunakool,  Russ  Bates,  Augustin  ˇZ´ıdek,  Anna
+     Mostafa  Dehghani,  Matthias  Minderer,  Georg  Heigold,                         Potapenko,  et  al.    Highly  Accurate  Protein  Structure
+     Sylvain  Gelly,  et  al.   An  Image  is  Worth  16x16  Words:                   Prediction with AlphaFold.  Nature, 596(7873):583–589,
+     Transformers  for  Image  Recognition  at  Scale.     arXiv                      2021.
+     preprint arXiv:2010.11929, 2020.                                            [30]  Tosio Kato. On the Eigenfunctions of Many-Particle Sys-
+[15]  N.  D.  Drummond,  M.  D.  Towler,  and  R.  J.  Needs.                         tems in Quantum Mechanics.  Communications  on  Pure
+     Jastrow  Correlation  Factor  for  Atoms,  Molecules,  and                       and Applied Mathematics, 10(2):151–177, 1957.
+     Solids.  Physical Review B, 70(23):235119, 2004.                            [31]  James Kirkpatrick, Brendan McMorrow, David HP Tur-
+[16]  RP  Feynman  and  Michael  Cohen.   Energy  spectrum  of                        ban, Alexander L. Gaunt, James S. Spencer, Alexander
+     the excitations in liquid helium. Physical Review, 102(5):                       G. D. G. Matthews, Annette Obika, Louis Thiry, Meire
+     1189, 1956.                                                                      Fortunato,  David Pfau,  et al.  Pushing the Frontiers of
+[17]  W. M. C. Foulkes, Lubos Mitas, R. J. Needs, and Guna                            Density  Functionals  by  Solving  the  Fractional  Electron
+     Rajagopal. Quantum Monte Carlo Simulations of Solids.                            Problem.  Science, 374(6573):1385–1389, 2021.
+     Reviews of Modern Physics, 73(1):33, 2001.                                  [32]  Toshikatsu Koga, Hidenori Aoki, JM de la Vega, and Hi-
+[18]  Fabian Fuchs, Daniel Worrall, Volker Fischer, and Max                           roshi Tatewaki.  Atomic Ionization Potentials and Elec-
+     Welling.      SE(3)-Transformers:    3D   Roto-Translation                       tron  Aﬃnities  with  Relativistic  and  Mass  Corrections.
+     Equivariant Attention Networks.  Advances in Neural In-                          Theoretical Chemistry Accounts, 96(4):248–255, 1997.
+     formation Processing Systems, 33:1970–1981, 2020.                           [33]  H. Krause, B. Ernstberger, and H. J. Neusser.  Binding
+[19]  Nicholas Gao and Stephan G¨unnemann.  Sampling-Free                             Energies  of  Small  Benzene  Clusters.   Chemical  Physics
+     Inference  for  Ab-initio  Potential  Energy  Surface  Net-                      Letters, 184(5-6):411–417, 1991.
+     works.  arXiv preprint arXiv:2205.14962, 2022.                              [34]  Yongkyung Kwon, DM Ceperley, and Richard M Martin.
+[20]  Leon  Gerard,  Michael  Scherbela,  Philipp  Marquetand,                        Eﬀects of Three-Body and Backﬂow Correlations in the
+     and  Philipp  Grohs.    Gold-Standard  Solutions  to  the                        Two-Dimensional Electron Gas.   Physical  Review  B, 48
+     Schr¨odinger Equation using Deep Learning:  How Much                             (16):12037, 1993.
+     Physics Do We Need?   Advances  in  Neural  Information                     [35]  Xiang  Li,   Cunwei  Fan,   Weiluo  Ren,   and  Ji  Chen.
+     Processing Systems, 2022.                                                        Fermionic Neural Network with Eﬀective Core Potential.
+[21]  Rafael   G´omez-Bombarelli,   Jennifer   N.   Wei,   David                      Physical Review Research, 4(1):013021, 2022.
+                                                                                                                                                         10
+
+[36]  Jeﬀmin   Lin,   Gil   Goldshlager,   and   Lin   Lin.      Ex-             [51]  James  S.  Spencer,   David  Pfau,   and  FermiNet  Con-
+     plicitly   Antisymmetrized   Neural   Network   Layers   for                     tributors.   FermiNet,  2020.   URL  http://github.com/
+     Variational  Monte  Carlo  Simulation.     arXiv  preprint                       deepmind/ferminet.
+     arXiv:2112.03491, 2021.                                                     [52]  Attila  Szabo  and  Neil  S.  Ostlund.    Modern  Quantum
+[37]  Di Luo and Bryan K Clark.  Backﬂow Transformations                              Chemistry:   Introduction  to  Advanced  Electronic  Struc-
+     via  Neural  Networks  for  Quantum  Many-Body  Wave                             ture Theory.  Courier Corporation, 2012.
+     Functions.     Physical   Review   Letters,   122(22):226401,               [53]  Michele  Taddei,  Michele  Ruggeri,  Saverio  Moroni,  and
+     2019.                                                                            Markus Holzmann.  Iterative Backﬂow Renormalization
+[38]  James  Martens  and  Roger  Grosse.   Optimizing  Neural                        Procedure for Many-Body Ground-State Wave Functions
+     Networks with Kronecker-factored Approximate Curva-                              of Strongly Interacting Normal Fermi Liquids.  Physical
+     ture.   In  Proceedings  of  the  32nd  International  Confer-                   Review B, 91(11):115106, 2015.
+     ence  on  Machine  Learning  -  Volume  37, pp. 2408–2417.                  [54]  C.  J.  Umrigar,  Julien  Toulouse,  Claudia  Filippi,  San-
+     PMLR, 2015.                                                                      dro Sorella,  and Richard G. Hennig.  Alleviation of the
+[39]  James  Martens,  Andy  Ballard,  Guillaume  Desjardins,                         Fermion-Sign  Problem  by  Optimization  of  Many-Body
+     Grzegorz   Swirszcz,   Valentin   Dalibard,   Jascha   Sohl-                     Wave Functions. Physical Review Letters, 98(11):110201,
+     Dickstein,  and  Samuel  S  Schoenholz.   Rapid  Training                        2007.
+     of Deep Neural Networks Without Skip Connections or                         [55]  Ashish  Vaswani,  Noam  Shazeer,  Niki  Parmar,  Jakob
+     Normalization Layers Using Deep Kernel Shaping. arXiv                            Uszkoreit, Llion Jones, Aidan N Gomez,   Lukasz Kaiser,
+     preprint arXiv:2110.01765, 2021.                                                 and  Illia  Polosukhin.   Attention  is  All  You  Need.   Ad-
+[40]  Mario  Motta,  Claudio  Genovese,  Fengjie  Ma,  Zhi-Hao                        vances  in  Neural  Information  Processing  Systems,  30,
+     Cui, Randy Sawaya, Garnet Kin-Lic Chan, Natalia Chep-                            2017.
+     iga, Phillip Helms, Carlos Jim´enez-Hoyos, Andrew J Mil-                    [56]  Sinong Wang, Belinda Z Li, Madian Khabsa, Han Fang,
+     lis,  et  al.    Ground-State  Properties  of  the  Hydrogen                     and  Hao  Ma.    Linformer:   Self-Attention  with  Linear
+     Chain:  Dimerization, Insulator-to-Metal Transition, and                         Complexity.  arXiv preprint arXiv:2006.04768, 2020.
+     Magnetic Phases. Physical Review X, 10(3):031058, 2020.                     [57]  Yunyang Xiong, Zhanpeng Zeng, Rudrasis Chakraborty,
+[41]  Ryo Nagai, Ryosuke Akashi, and Osamu Sugino.  Com-                              Mingxing  Tan,  Glenn  Fung,  Yin  Li,  and  Vikas  Singh.
+     pleting Density Functional Theory by Machine-Learning                            Nystr¨omformer:   A  Nystr¨om-Based  Algorithm  for  Ap-
+     Hidden  Messages  from  Molecules.    npj  Computational                         proximating Self-Attention.  In Proceedings of the AAAI
+     Materials, 6(1):43, 2020.  ISSN 2057-3960.  doi:  10.1038/                       Conference  on  Artiﬁcial  Intelligence,  volume  35,  pp.
+     s41524-020-0310-0.                                                               14138–14148, 2021.
+[42]  Shivesh Pathak and Lucas K. Wagner.  A Light Weight                        [58]  Yang You, Jing Li, Sashank Reddi, Jonathan Hseu, San-
+     Regularization for Wave Function Parameter Gradients                             jiv Kumar, Srinadh Bhojanapalli, Xiaodan Song, James
+     in Quantum Monte Carlo.  AIP Advances, 10(8):085213,                             Demmel, Kurt Keutzer, and Cho-Jui Hsieh. Large Batch
+     2020.                                                                            Optimization for Deep Learning:  Training BERT in 76
+[43]  David   Pfau,   James   S.   Spencer,   Alexander   G.   G.                     Minutes.   Eighth  International  Conference  on  Learning
+     Matthews,  and  W.  M.  C.  Foulkes.    Ab-initio  Solution                      Representations (ICLR), 2020.
+     of  the  Many-Electron  Schr¨odinger  Equation  with  Deep                  [59]  Guodong Zhang, Lala Li, Zachary Nado, James Martens,
+     Neural Networks. Physical Review Research, 2(3):033429,                          Sushant  Sachdeva,   George  Dahl,   Chris  Shallue,   and
+     2020.                                                                            Roger  B  Grosse.   Which  algorithmic  choices  matter  at
+[44]  Weiluo  Ren,  Weizhong  Fu,  and  Ji  Chen.   Towards  the                      which  batch  sizes?     Insights  from  a  noisy  quadratic
+     Ground  State  of  Molecules  via  Diﬀusion  Monte  Carlo                        model.  Advances in Neural Information Processing Sys-
+     on  Neural  Networks.   arXiv  preprint  arXiv:2204.13903,                       tems (NeurIPS), 32, 2019.
+     2022.
+[45]  Erwin  Schr¨odinger.   An  Undulatory  Theory  of  the  Me-
+     chanics of Atoms and Molecules.  Physical Review, 28(6):
+     1049, 1926.
+[46]  Kristof  T  Sch¨utt,  Huziel  E  Sauceda,  P-J  Kindermans,
+     Alexandre Tkatchenko, and K-R M¨uller.  Schnet–a Deep
+     Learning Architecture for Molecules and Materials.  The
+     Journal of Chemical Physics, 148(24):241722, 2018.
+[47]  Marwin H. S. Segler, Mike Preuss, and Mark P. Waller.
+     Planning  Chemical  Syntheses  with  Deep  Neural  Net-
+     works  and  Symbolic  AI.     Nature,  555(7698):604–610,
+     2018.
+[48]  Sandro  Sorella.     Green  Function  Monte  Carlo  with
+     Stochastic Reconﬁguration.  Physical  Review  Letters, 80
+     (20):4558, 1998.
+[49]  Sandro Sorella, Michele Casula, and Dario Rocca.  Weak
+     Binding Between Two Aromatic Rings:  Feeling the Van
+     der Waals Attraction by Quantum Monte Carlo Methods.
+     The Journal of Chemical Physics, 127(1):014105, 2007.
+[50]  James  S.  Spencer,  David  Pfau,  Aleksandar  Botev,  and
+     W. M. C. Foulkes.  Better, Faster Fermionic Neural Net-
+     works.  arXiv preprint arXiv:2011.07125, 2020.
+                                                                                                                                                11
+
+                   Appendix A: Appendix                                     while here we use:
+                                                                                ˆEL(x) =clipmedian (EL(x);ρMADmedian(EL))
+        1.    Calculating Energies and Gradients                                           ⟨( ˆEL(x)−     ⟨ ˆEL⟩       )                ⟩
+                                                                                                                          ∇log|Ψ(x)|
+                                                                                                                  mean                   mean(A4)
+  It is generally more numerically stable to work directly
+with the log wavefunction, and the local energy can be
+expressed as                                                                While this may seem like a subtle diﬀerence, it has a great
+                           [                                                eﬀect on larger systems, especially heavier atoms.  A sim-
+                   N∑   3∑                      (∂log|Ψ(x)|     )2]         ilar technique was used to stabilize training the FermiNet
+ EL(x) =− 1                  ∂2log|Ψ(x)|                                    with pseudopotentials [35], but instead of clipping outlier
+                2 i=1  j=1        ∂r2ij        +       ∂rij                 local energies, the outlier walkers were removed entirely
+            +V (x)                                                      (A1)for that minibatch.  We found that clipping with proper
+                                                                            centering was more eﬀective than removing the walkers
+where V (x) is the potential energy (the last three terms                   entirely.
+of Eq 1).
+  The gradient of the energy is given by                                                               2.    Training
+
+ ∇Ex∼Ψ2 [EL(x)] = 2Ex∼Ψ2[ (EL(x)− Ex′∼Ψ2[EL(x′)])                              In this section we give details on training and further
+                                     ∇log|Ψ(x)|]                 (A2)       diﬀerences from the original FermiNet [43].
+
+where  the  local  energy EL(x)  =  Ψ−1(x) ˆHΨ(x).   Note                                        a.    Dense determinants
+that the EL(x)− Ex′∼Ψ2[EL(x′)] term is the diﬀerence
+between  the  local  energy  at x  and  the  average  energy                   The  original  FermiNet  and  PauliNet  Ansatzes  used
+over all x′.                                                                block-diagonal  determinants  for  spin-up  and  spin-down
+  We make a small but critical change to how the gradi-                     electrons [25, 43],  such that each determinant could be
+ents are computed relative to [43] which stabilizes train-                  factorized into the product of a determinant of spin-up
+ing for all models considered here.  The local energy of-                   electrons of sizeN↑×N↑ and a determinant of spin-down
+ten  has  very  large  tails  due  to  numerical  issues,  espe-            electronsN↓×N↓, as is the case with conventional VMC
+cially near cusps (where two particles overlap) and nodes                   ansatzes [17]:
+(where the wavefunction goes to zero) [42].  To mitigate                                            ⏐⏐⏐⏐⏐                 ⏐⏐⏐⏐⏐
+this, the local energy is often truncated in practice.  Let                                          Φ↑(x↑)      0
+⟨EL⟩mean denote the mean local energy for one minibatch                             det [Φ(x)] =
+of walkers and⟨EL⟩median  denote the median.  Then in                                                    0      Φ↓(x↓)
+[43], the local energies were clipped to be within a con-                                        = det [Φ↑(x↑)] det [Φ↓(x↓)].          (A5)
+stant multiple ρ of the mean absolute deviation around∑
+the mean:  MADmean(EL) =  1N              i|EL(xi)−⟨EL⟩mean|.               where xσ denotes the set of electron states with the spec-
+While this is more robust than the standard deviation, it                   iﬁed spin and diﬀerent functions are used for electrons of
+is still susceptible to large outliers because it is centered               diﬀerent spins.  The FermiNet authors subsequently pro-
+at the mean. Instead, we use the mean absolute deviation                    posed  simply  using  dense  determinants  of  size N×N,
+around the median to determine the window for clipping:∑                    N =N↑ +N↓ [51]:
+MADmedian(EL) =  1N           i|EL(xi)−⟨EL⟩median|.                                                          ⏐⏐⏐Φ↑(x↑)  Φ↓(x↓)⏐⏐⏐             (A6)
+  Secondly,     in    [43],     the    average    energy    term                            det [Φ(x)] =
+Ex′∼Ψ2[EL(x′)]   in   the   gradient   was   approximated
+by the mean local energy⟨EL⟩mean of a minibatch.  That                      where  now  each  block  is  of  dimension N×Nσ.   This
+meant  that  outliers  were  still  included  in  this  term.               has  largely  become  the  default  choice  for  FermiNet  ar-
+We  instead  use  the  mean  of  the  clipped  local  energies.             chitectures  and  has  shown  to  provide  improved  accu-
+This guarantees that the mean over a minibatch of the                       racy  at  small  additional  cost  for  a  myriad  of  systems
+energy diﬀerence term is always zero, improving stability                   [8, 19, 20, 36, 44].
+during  optimization.     If  we  let  clipmean/median (x;σ)
+denote  the  functions  that  clip x  to  be  in  the  range
+[⟨x⟩mean/median−σ,⟨x⟩mean/median +σ], then the gradient                                b.    Implementation of FermiNet+SchNet
+for one batch in [43] was:
+                                                                               To  best  reproduce  the  results  from  [20],  we  imple-
+  ˆEL(x) =clipmean (EL(x);ρMADmean(EL))                                     mented the changes to the FermiNet which they claimed
+             ⟨( ˆEL(x)−⟨EL⟩mean)                        ⟩        (A3)       made the largest diﬀerence.  All experiments in this pa-
+                                          ∇log|Ψ(x)|                        per,  including  the  FermiNet,  used  dense  determinants.
+                                                          mean
+                                                                                                                                                   12
+
+
+                                                                                                           Parameter                  Value
+                                                                                                       Training iterations             2e5
+                                                                                  Training          Learning rate at time t lr0(1 +   t
+                                                                                                                                          t0 )−1
+                                                                                                    Initial learning rate lr0         0.05
+                                                                                                    Learning rate decay t0          1e5
+                                                                                                    Local energy clipping ρ          5.0
+
+                                                                                  Pretraining       Pretraining optimizer        LAMBPretraining iterations     2e4 or 1e5
+
+                                                                                                     Pretraining basis set        STO-6G
+
+                                                                                  MCMC                      Batch size                   4096Decorrelation steps             30
+
+                        (a) S2, R=1.9202 ˚A                                       KFAC                   Norm constraint              1e-3Damping                    1e-3
+
+
+                                                                                TABLE IV: Table of default hyperparameters used.
+
+
+
+                                                                             mate  curvature  (KFAC)  [38].   To  see  if  the  same  holds
+                                                                             true  for  the  Psiformer,  here  we  compare  training  with
+                                                                             KFAC against ADAM on several systems.  Additionally,
+                                                                             when  trained  with  ADAM,  self-attention  layers  usually
+                                                                             require  LayerNorm  [2].   However,  other  work  has  sug-
+                                                                             gested that in some contexts normalization may not be
+                                                                             necessary  when  using  KFAC  [39],  so  we  also  compare
+                                                                             the  Psiformer  with  and  without  LayerNorm.   Figure  5
+                             (b) Fe atom                                     shows  a  comparison  for  the  Psiformer  on  the  sulphur
+                                                                             dimer and the iron atom.  Consistent with the FermiNet,
+       FIG. 5:  Comparison of diﬀerent optimization                          the Psiformer consistently converges faster and to lower
+algorithms (KFAC and ADAM) for the Psiformer on (a)                          energies with KFAC. With LayerNorm,  the situation is
+   the sulphur dimer and (b) the iron atom, with and                         more ambiguous.  On the sulphur dimer, it seems to have
+without LayerNorm.  While there is a clear advantage to                      marginal  impact,  while  on  the  iron  atom,  it  deﬁnitely
+     using KFAC on both systems, LayerNorm has a                             improves  training  with  ADAM,  and  seems  to  improve
+   marginal impact on the sulphur dimer.  On the iron                        stability when using KFAC.
+  atom, however, LayerNorm improves the accuracy of
+ ADAM and the stability of KFAC. A learning rate of
+  3e-4 was used for ADAM. A rolling mean of the last                                                 d.    Hyperparameters
+       1000 iterations is used to smooth the energy.
+                                                                                Table IV shows the default hyperparameters used for
+                                                                             training all models implemented in this work.  Note that
+We added the SchNet-like continuous ﬁlter convolutions,                      [43] took the sum over gradients across the batch on each
+as  well  as  the  nuclear  embedding  stream  and  separate                 device and averaged over devices, whereas here the gra-
+streams for same-spin and diﬀerent-spin electrons in the                     dients are averaged over the entire batch.  This amounts
+two-electron stream. We also compared their training hy-                     to a scaling of the learning rate, meaning that the same
+perparameters against ours, except for batch size, which                     learning rate as in [43] cannot be used.
+was kept at 4096 for all experiments.  We did not imple-                        As in previous FermiNet implementations, we pretrain
+ment their local input features or envelope initialization,                  all networks to match Hartree-Fock (HF) orbitals com-
+as  their  results  suggested  they  did  not  make  as  signiﬁ-             puted using PySCF. Here, we use the LAMB optimizer
+cant a diﬀerence,  and our longer pretraining likely had                     [58]  as  the  pretraining  optimizer.   We  ﬁnd  that  longer
+the same eﬀect as changing the envelope initialization.                      pretraining stabilises training for all models considered.
+                                                                             In  addition,  during  pretraining,  we  draw  samples  from
+                                                                             the HF orbitals only, instead of the neural network wave-
+           c.    Choice of Optimizer and LayerNorm                           function.    A  smaller  number  of  pretraining  iterations
+                                                                             (20,000)  was  used  for  small  molecules  in  Section  IV A,
+  The original FermiNet was only able to reach high ac-                      while  100,000  iterations  were  used  for  third-row  atoms
+curacy  when  trained  with  Kronecker-factored  approxi-                    and larger molecules.
+                                                                                                                                                  13
+
+
+            Parameter                       FermiNet      PsiformerSmall  Large  Small  Large
+
+            Determinants                   16       32       16       32
+           Network layers                   4         4         4         4
+          Attention heads               N/A   N/A      4         8
+        Attention dimension           N/A   N/A     64       64
+ MLP hidden dims:  one-electron   256     512     256     512
+ MLP hidden dims:  two-electron    32       32     N/A   N/A
+
+  TABLE V: Table of network parameters used for the
+                    Psiformer and FermiNet.
+
+
+                                                                                                      (a) N2, R=1.094 ˚A
+  To generate samples from Ψ2, we use the Metropolis-
+Hastings algorithm with symmetric Gaussian proposals,
+as  in  [43].    We  increase  the  number  of  decorrelation
+MCMC  steps  between  optimization  iterations  from  10
+in  [43]  to  30.   Additionally,  for  larger  systems,  we  do
+not  update  all  electron  positions  simultaneously  in  one
+Metropolis step.  Instead, we split the electrons into mul-
+tiple blocks, and iteratively update each block once per
+step.   This  is  an  intermediate  between  the  all-electron
+and one-electron moves commonly used in VMC.
+  Note that while all models were trained for 200,000 op-
+timization iterations, this does not mean that all systems
+required that many iterations to converge.  Many smaller
+systems converged in far fewer iterations than this, but                                                   (b) ethanol
+the same number was used for all systems to minimize
+confusion.                                                                     FIG. 6:  Ablation studies for the Psiformer without a
+  Not all systems used identical parameters - for larger                       Jastrow factor or input rescaling on (a) the nitrogen
+systems we increased the number of pretraining steps and                      dimer and (b) ethanol.  A rolling mean of the last 1000
+blocks per MCMC update, and LayerNorm was not used                           iterations is used to smooth the energy.  The divergence
+for small molecules in Table 2.  In Table VI we specify                        of the energy without using input rescaling, as shown
+which systems were trained with which settings.                              here for ethanol, is typical for medium or large systems.
+  In  Section  IV A,  the  performance  of  “small”  and
+“large” FermiNet and Psiformer models was investigated
+on a set of small and medium molecules.  Table V gives                       tional resources to run as the benzene molecule, though
+the  network  parameters  used  for  these  models.   In  all                the number of atoms also played a signiﬁcant role in tim-
+other experiments, unless otherwise speciﬁed, the ‘small’                    ing.  For systems with very large numbers of atoms, like
+network conﬁgurations were used.  Table VII contains the                     the benzene dimer,  the FermiNet and Psiformer ran at
+number of parameters used by each model for this set of                      nearly  the  same  speed.   This  is  likely  because  the  de-
+molecules.                                                                   terminants and envelope, which are similar between the
+                                                                             FermiNet and Psiformer, make up a larger share of the
+                                                                             total  run  time  as  the  systems  become  larger.   Geome-
+                 3.    Computational Details                                 tries  are  taken  from  [11]  and  given  in  Table  VIII  or  in
+                                                                             [43].  The benzene dimer geometry is obtained via a rigid
+  All models were implemented in JAX [5] based upon                          translation and rotation of two monomers.
+the public FermiNet [51] and KFAC implementations [4],
+and  trained  in  parallel  using  between  16  and  64  A100
+GPUs,  depending  on  the  system  size.   All  calculations                                       4.    Ablation studies
+were done at standard single precision, as we found that
+TensorFloat-32 calculations on A100 had numerical ac-                           Two modiﬁcations to the self-attention network proved
+curacy issues.  A table of total training time – including                   critical to stability for the Psiformer - the Jastrow fac-
+pretraining – for several models is given in Table IX. Em-                   tor  ensuring  correct  behaviour  at  electronic  cusps,  and
+pirically, the time per iteration scaled roughly cubically,                  rescaling  the  input  distances.   Here  we  show  ablation
+i.e.  the benzene dimer required∼8 times the computa-                        studies without these modiﬁcations.
+                                                                                                                                                                             14
+
+
+                                                  Systems                Pretraining Steps  MCMC Blocks  LayerNorm
+                                      Small molecules (Fig. 2)            20,000                     1                   No
+                                     Third-row atoms (Table I)         100,000                    2                  Yes
+                                     Large molecules (Table II          100,000                    2                 Both
+                                             Benzene dimer                   100,000                    4                 Both
+
+                                       TABLE VI: Variations in hyperparameters between experiments.
+
+
+
+                               System                                                       FermiNet                                         Psiformer
+                                                                          [43]        Small              Large              Small              Large
+                                 LiH                    Energy     -8.0705(1)     -8.07050(1)    -8.070515(8)    -8.070528(5)    -8.070536(4)
+                                             # parameters          668128            683744          2610400          1593858          6366210
+                                 Li2                    Energy  -14.99475(1)    -14.99480(2)    -14.99484(2)    -14.99486(1)    -14.99485(2)
+                                             # parameters          676960            700384          2676448          1602178          6399234
+                                 NH3                   Energy  -56.56295(8)    -56.56347(4)    -56.56387(3)    -56.56367(2)    -56.56381(2)
+                                             # parameters          703968            741088          2823392          1621506          6470658
+                                 CH4                   Energy  -40.51400(7)    -40.51430(3)    -40.51450(3)    -40.51454(2)    -40.51461(1)
+                                             # parameters          708640            744800          2830816          1622850          6473346
+                                 CO                    Energy  -113.3218(1)  -113.32354(7)  -113.32444(5)  -113.32416(4)  -113.32466(3)
+                                             # parameters          712288            766944          2940640          1635458          6531330
+                                  N2                    Energy  -109.5388(1)  -109.54046(6)  -109.54148(6)  -109.54137(4)  -109.54179(4)
+                                             # parameters          712288            766944          2940640          1635458          6531330
+                                C2H4                  Energy    -78.5844(1)    -78.58604(5)    -78.58701(6)    -78.58762(3)    -78.58794(3)
+                                             # parameters          743648            799968          3039456          1649922          6576642
+                            methylamine             Energy    -95.8554(2)    -95.85917(6)    -95.86010(5)    -95.86050(4)    -95.86096(3)
+                                             # parameters          759712            821344          3114976          1660098          6613378
+                                  O3                    Energy  -225.4145(3)    -225.4226(2)    -225.4268(1)  -225.43061(9)  -225.43231(8)
+                                             # parameters          763360            854752          3280096          1678850          6700034
+                               ethanol                 Energy  -155.0308(3)    -155.0419(1)    -155.0455(1)  -155.04656(7)  -155.04759(6)
+                                             # parameters          815904            899936          3403232          1698370          6755458
+                           bicyclobutane            Energy  -155.9263(6)    -155.9388(1)    -155.9432(1)  -155.94619(8)  -155.94836(7)
+                                             # parameters          845920            940000          3548896          1717890          6827266
+
+TABLE VII: Energies and number of parameters in network for set of small molecules studied in [43].  Note [43] used
+  block diagonal determinants and did not report precise parameter counts; parameters counts for their results are
+  estimated using their published settings and the FermiNet JAX implementation [51].  Our FermiNet experiments
+     used the envelope function proposed in [50] and dense determinants, resulting in slightly diﬀerent numbers of
+                             parameters between the networks of [43] and our FermiNet (Small) networks.
+
+
+   Figure 6 shows the Psiformer on (a) the nitrogen dimer                                  at  equilibrium  and  dissociated  geometry  respectively.
+and  (b)  ethanol,  without  a  Jastrow  factor  and  without                              Each attention map shows the output of the dot product
+input  feature  rescaling.   In  the  absence  of  an  electron-                           between key and query vectors before the softmax oper-
+electron  Jastrow  factor  to  enforce  cusp  conditions,  the                             ation.  Four attention maps are shown for each network
+energy is very noisy. If the input features are not rescaled,                              layer, one per attention head.  The ordering of the elec-
+the energy is often unstable.  For smaller systems, as in                                  trons is chosen to highlight the structure of the attention
+the nitrogen dimer shown, training may recover from the                                    maps in relation to electron distances:  the electrons are
+instability, but especially for medium or larger systems,                                  grouped according to their closest atom, where the atoms
+the energy often diverges.                                                                 of  each  benzene  molecule  are  ordered  around  the  ring.
+                                                                                           The  block  structure  of  the  attention  weights  is  clearly
+                                                                                           visible,  where  electrons  attend  more  to  other  electrons
+                          5.    Attention Maps                                             around the same molecule.
+
+   Figures 7 and 8 show attention maps of the Psiformer
+for a sample electron conﬁguration, for the benzene dimer
+                                                                                                                15
+
+
+    System     atom             position (a0)
+    benzene        C     0.00000   2.63664   0.00000
+                     C     2.28339   1.31832   0.00000
+                     C     2.28339  -1.31832   0.00000
+                     C     0.00000  -2.63664   0.00000
+                     C    -2.28339  -1.31832   0.00000
+                     C    -2.28339   1.31832   0.00000
+                     H     0.00000   4.69096   0.00000
+                     H     4.06250   2.34549   0.00000
+                     H     4.06250  -2.34549   0.00000
+                     H     0.00000  -4.69096   0.00000
+                     H    -4.06250  -2.34549   0.00000
+                     H    -4.06250   2.34549   0.00000
+    toluene        C    -0.01831   1.72486   0.00000
+                     C    -0.01297   0.37035   2.27060
+                     C    -0.01297   0.37035  -2.27060
+                     C    -0.01297  -2.26452   2.27703
+                     C    -0.01297  -2.26452  -2.27703
+                     C    -0.00900  -3.59169   0.00000
+                     C     0.05583   4.56877   0.00000
+                     H     2.00464   5.26559   0.00000
+                     H    -0.88281   5.33834  -1.67217
+                     H    -0.88281   5.33834   1.67217
+                     H    -0.01841  -3.28187   4.06225
+                     H    -0.01841  -3.28187  -4.06225
+                     H    -0.01415  -5.64576   0.00000
+                     H    -0.02402   1.39270   4.05592
+                     H    -0.02402   1.39270  -4.05592
+ naphthalene    C     0.00000   0.00000   1.35203
+                     C     0.00000   0.00000  -1.35203
+                     C     0.00000   2.34349   2.64930
+                     C     0.00000  -2.34349   2.64930
+                     C     0.00000   2.34349  -2.64930
+                     C     0.00000  -2.34349  -2.64930
+                     C     0.00000  -4.59147   1.33509
+                     C     0.00000   4.59147   1.33509
+                     H     0.00000   2.34107   4.70689
+                     H     0.00000  -2.34107   4.70689
+                     C     0.00000  -4.59147  -1.33509
+                     C     0.00000   4.59147  -1.33509
+                     H     0.00000   2.34107  -4.70689
+                     H     0.00000  -2.34107  -4.70689
+                     H     0.00000  -6.37654   2.35261
+                     H     0.00000   6.37654   2.35261
+                     H     0.00000  -6.37654  -2.35261
+                     H     0.00000   6.37654  -2.35261
+      CCl4          C     0.00000   0.00000   0.00000
+                    Cl     1.93005   1.93005   1.93005
+                    Cl    -1.93005  -1.93005   1.93005
+                    Cl    -1.93005   1.93005  -1.93005
+                    Cl     1.93005  -1.93005  -1.93005
+
+TABLE VIII: Molecular geometries in Bohr.
+                                                                                                                                                              16
+
+
+                                              System          FermiNet    FermiNet+SchNet    PsiformerSmall  Large  Small      Large      Small  Large
+
+                                          Bicyclobutane    484     789       –             –            712    1412
+                                                 Zn             592    1200    808         1365        1317   1600
+                                              Benzene        1224      –      1608           –           1768      –
+                                         Benzene Dimer  10576     –         –             –          10695     –
+
+                            TABLE IX: Number of A100 GPU hours required to train several systems.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+FIG. 7:  Attention maps for the Psiformer for a sample electron conﬁguration from the benzene dimer at equilibrium
+geometry.  For each network layer, the attention maps for 4 attention heads are shown.  The electrons are grouped by
+                                                                       nearest atom.
+                                                                                                                                            17
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+FIG. 8:  Attention maps for the Psiformer for a sample electron conﬁguration from the benzene dimer at dissociated
+geometry.  For each network layer, the attention maps for 4 attention heads are shown.  The electrons are grouped by
+                                                               nearest atom.

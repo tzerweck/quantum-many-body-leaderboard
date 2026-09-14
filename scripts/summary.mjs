@@ -34,6 +34,10 @@ export function summarize(instances) {
     instances: instances.length, rows: 0,
     by_bound: {}, by_source: {}, by_provenance: {},
     vscore_rows: 0, no_variance: 0, no_sigma: 0, no_error_metrics: 0, flagged: 0,
+    // Rows VarBench computed itself rather than collected from a paper, and the subset
+    // of those that currently hold a record - i.e. instances where no published result
+    // has ever beaten the benchmark's own reference run.
+    baseline_rows: 0, baseline_records: 0,
     records: { held: 0, none_exact_only: 0, none_no_sigma: 0, none_other: 0 },
     // Sampled variational energies published without an error bar: listed, ranking for
     // nothing. `would_take_record` is the subset sitting below their instance's current
@@ -52,6 +56,7 @@ export function summarize(instances) {
       if (r.energy_variance == null || Number.isNaN(r.energy_variance)) s.no_variance++;
       if (r.sigma == null || Number.isNaN(r.sigma)) s.no_sigma++;
       if (noErrorMetrics(r)) s.no_error_metrics++;
+      if (r.baseline) s.baseline_rows++;
       if (r.defect) s.flagged++;
       if (!r.bound_type) s.needs_review.push(`${inst.instance_id}: "${r.method}"`);
     }
@@ -65,7 +70,7 @@ export function summarize(instances) {
     s.blocked_on_sigma.rows += blockedHere;
     if (blockedHere) s.blocked_on_sigma.instances++;
 
-    if (rec) { s.records.held++; continue; }
+    if (rec) { s.records.held++; if (rec.baseline) s.baseline_records++; continue; }
     // Why an instance has no record decides whether it is an invitation or a fact of
     // life: a solved instance has nothing to compete for, whereas one blocked only by
     // a missing error bar becomes rankable the moment an author sends it.

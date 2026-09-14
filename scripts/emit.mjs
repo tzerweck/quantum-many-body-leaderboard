@@ -31,9 +31,19 @@ for (const it of instances()) {
     const key = bound_type || "needs-review";
     summary.by_bound[key] = (summary.by_bound[key]||0)+1;
     if (review) summary.needs_review.push(`${it.model}/${it.stem}: "${method}"`);
+    // VarBench did two different things, and its Reference column is where they are
+    // told apart. A row citing a paper is one VarBench COLLECTED from the literature.
+    // A row whose only reference is a run script in varbench/methods is one VarBench
+    // COMPUTED itself - a baseline, run across the instance set to give the V-score a
+    // denominator, not a result anybody published as state of the art. Conflating the
+    // two makes a reference calculation look like a defended SOTA claim.
+    const reference = r["reference"] || "";
+    const citesPaper = /\[paper\]|arxiv|doi\.org|10\.\d{4}\//i.test(reference);
+    const baseline = !citesPaper && /github\.com\/varbench\/methods/.test(reference);
     return { energy, sigma, energy_variance: variance, dof, einf, v_score,
              method, bound_type, bound_type_reason: reason,
-             reference: r["reference"]||"", source: "varbench@2024-10-22", provenance: "imported" };
+             reference, source: "varbench@2024-10-22", provenance: "imported",
+             ...(baseline ? { baseline: true } : {}) };
   });
   const out = { model: it.model, lattice, n_sites: num(N), boundary: BC, params,
                 instance_id: `${it.model}/${it.stem}`, rows };
