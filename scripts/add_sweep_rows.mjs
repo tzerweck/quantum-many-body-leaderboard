@@ -31,7 +31,7 @@ ADD["Hubbard/rectangular-4x16_64_P_28_8"] = { hubbard:true, rows: [
 ]};
 ADD["J1J2/square_100_P_0.5"].rows.push({ eps:-0.49782, err:3e-5, m:"Holographic Quantum Transformer (HQT), zero-shot 8x8->10x10 transfer", src:HQT, note:"Abstract: \"This zero-shot protocol yields an energy of E/N = -0.49782(3), statistically consistent with the variational state of the art\". It is not consistent: it is 1.3e-4 BELOW the best variational energy (CNN-MPS -0.4976939(2)) and 1.05e-4 below the zero-variance extrapolated ground state -0.497715(9), i.e. below the ground state itself, which no variational energy can be. See the defect flag." });
 ADD["J1J2/square_64_P_0.5"] = { rows: [
-  { eps:-0.5001, err:1e-4, m:"Holographic Quantum Transformer (HQT)", src:HQT, note:"Abstract: \"HQT reaches a ground-state energy per site of -0.5001(1)\" on 8x8 at J2=0.5. That is 1.1e-3 below the best known variational energy for this instance (RBM+PP, -0.4989635), on a well-studied lattice. See the defect flag." },
+  { eps:-0.5001, err:1e-4, varPerSite:1.4e-3, m:"Holographic Quantum Transformer (HQT)", src:HQT, note:"Abstract: \"HQT reaches a ground-state energy per site of -0.5001(1)\" on 8x8 at J2=0.5. That is 1.1e-3 below the best known variational energy for this instance (RBM+PP, -0.4989635), on a well-studied lattice. See the defect flag." },
 ]};
 let n=0;
 for (const [id, spec] of Object.entries(ADD)) {
@@ -41,8 +41,11 @@ for (const [id, spec] of Object.entries(ADD)) {
   const r0 = inst.rows[0], dof = r0 ? r0.dof : spec.create.dof, einf = r0 ? r0.einf : spec.create.einf;
   const f = spec.hubbard ? inst.n_sites : 4 * inst.n_sites;
   for (const r of spec.rows) {
-    inst.rows.push({ energy:+(r.eps*f).toPrecision(12), sigma: r.err==null?null:+(r.err*f).toPrecision(6),
-      energy_variance:null, dof, einf, v_score:null, method:r.m, bound_type:"variational",
+    const energy = +(r.eps*f).toPrecision(12);
+    const varTot = r.varPerSite == null ? null : +(r.varPerSite*inst.n_sites*16).toPrecision(8);
+    inst.rows.push({ energy, sigma: r.err==null?null:+(r.err*f).toPrecision(6),
+      energy_variance: varTot, dof, einf,
+      v_score: varTot == null ? null : (dof * varTot) / (energy - einf) ** 2, method:r.m, bound_type:"variational",
       bound_type_reason:"variational ansatz; energy is a strict upper bound (assigned during source verification)",
       reference:r.src.ref, peer_reviewed:r.src.pr, source:"sweep-2026-09-13", provenance:"primary",
       verified:{ checked_on:CHECKED, method:"arXiv HTML parsed locally, no LLM transcription",
