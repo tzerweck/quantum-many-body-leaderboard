@@ -45,10 +45,40 @@ const affiliations = w => ({
   countries: [...new Set((w.authorships || []).flatMap(a => a.countries || []))],
 });
 
+// DataCite mints the arXiv DOIs, so it has every preprint the moment it is posted -
+// including the recent ones OpenAlex has not indexed yet. Thinner data (rarely any
+// affiliation), but it is authors and a year where the alternative is nothing.
+// Names arrive as "Chen, Ao", which is flipped here so one surname rule serves both.
+async function resolveDatacite(id) {
+  const doi = id.doi || `10.48550/arXiv.${id.arxiv}`;
+  const j = await get(`https://api.datacite.org/dois/${doi}`);
+  const a = j?.data?.attributes;
+  if (!a) return null;
+  const authors = (a.creators || []).map(c => {
+    const n = c.name || [c.givenName, c.familyName].filter(Boolean).join(" ");
+    const m = n.match(/^([^,]+),\s*(.+)$/);
+    return m ? `${m[2]} ${m[1]}` : n;
+  });
+  const institutions = [...new Set((a.creators || [])
+    .flatMap(c => (c.affiliation || []).map(x => x.name || x).filter(Boolean)))];
+  return {
+    key: id.key, resolved_via: doi, openalex: null,
+    doi: id.doi ?? doi,
+    title: a.titles?.[0]?.title ?? null,
+    year: a.publicationYear ?? null,
+    type: a.types?.resourceTypeGeneral?.toLowerCase() ?? "preprint",
+    venue: a.publisher ?? null,
+    authors, institutions, countries: [],
+    affiliations_from: null,
+    source_api: "datacite",
+    checked_on: new Date().toISOString().slice(0, 10),
+  };
+}
+
 async function resolve(id) {
   const doi = id.doi || `10.48550/arXiv.${id.arxiv}`;
   let w = await get(`https://api.openalex.org/works/doi:${encodeURIComponent(doi)}`);
-  if (!w) return null;
+  if (!w) return resolveDatacite(id);
 
   let { institutions, countries } = affiliations(w);
   let merged_from = null;
@@ -81,6 +111,7 @@ async function resolve(id) {
     // Recorded so a later reader can tell a genuine "no affiliation data" from one we
     // patched in from the published version of the same paper.
     affiliations_from: merged_from,
+    source_api: "openalex",
     checked_on: new Date().toISOString().slice(0, 10),
   };
 }

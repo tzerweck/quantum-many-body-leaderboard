@@ -52,6 +52,9 @@ And **21 rows carry no error metric we could find** (&#9675;). Those numbers sta
 table and in the ranking — the marker only says the row still needs verification or a word
 from the people who produced it.
 
+More views of the same data — which records nobody has ever challenged, which have stood
+longest, and whether symmetrising actually wins — are in [the back pages](STATS.md).
+
 <!-- END LEADERBOARD -->
 
 ## How the ranking works

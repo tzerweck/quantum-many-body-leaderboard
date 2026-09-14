@@ -6,10 +6,17 @@
 // large part of its table - keep the code link and are visibly marked as such.
 import { sourceOf, sources } from "./enrich_sources.mjs";
 
-// Last name for the citation. Takes the trailing word, which is right for the
-// overwhelming majority of names here and wrong for some particles ("van der Waals");
-// the full author list is in data/_sources.json when the exact form matters.
-const surname = name => (name || "").trim().split(/\s+/).pop();
+// Last name for the citation. Both registries are inconsistent about ordering: most
+// records read "Yuntian Gu", some read "Gu, Yuntian". The comma form is unambiguous
+// and must be checked first - taking the trailing word of "Gu, Yuntian" cites the
+// paper as "Yuntian et al.", which is someone's given name in a public attribution
+// table. Remaining wrong case is unmarked particles ("van der Waals"); the full author
+// list is in sources/openalex.json when the exact form matters.
+const surname = name => {
+  const n = (name || "").trim();
+  const comma = n.match(/^([^,]+),/);
+  return comma ? comma[1].trim() : n.split(/\s+/).pop();
+};
 
 export function citeText(s) {
   const a = s.authors || [];

@@ -15,3 +15,4 @@ node scripts/validate.mjs
 # generated from it. Neither is ever hand-edited.
 node scripts/summary.mjs > /dev/null
 node scripts/readme_table.mjs
+node scripts/stats.mjs
