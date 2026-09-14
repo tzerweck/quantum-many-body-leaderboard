@@ -1,0 +1,976 @@
+        SkipVAR: Accelerating Visual Autoregressive
+   Modeling via Adaptive Frequency-Aware Skipping
+
+
+
+
+                     Jiajun Li1,5∗   Yue Ma2∗     Xinyu Zhang1     Qingyan Wei3
+                                   Songhua Liu4,5†     Linfeng Zhang5†
+                    1University of Electronic Science and Technology of China
+                        2The Hong Kong University of Science and Technology
+ 3Central South University     4National University of Singapore     5Shanghai Jiaotong University
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 1:  Qualitative results of SkipVAR. We show our SkipVAR based-on Infinity-8B [11],
+demonstrating optimal acceleration (average 1.57× speedup) on samples rich in high-frequency
+content while preserving visual quality.
+
+                                                  Abstract
+
+          Recent  studies  on  Visual  Autoregressive  (VAR)  models  have  highlighted  that
+          high-frequency components, or later steps, in the generation process contribute
+          disproportionately to inference latency. However, the underlying computational
+          redundancy  involved  in  these  steps  has  yet  to  be  thoroughly  investigated.   In
+          this paper, we conduct an in-depth analysis of the VAR inference process and
+          identify two primary sources of inefficiency: step redundancy and unconditional
+          branch redundancy. To address step redundancy, we propose an automatic step-
+          skipping strategy that selectively omits unnecessary generation steps to improve
+          efficiency. For unconditional branch redundancy, we observe that the information
+
+   ∗Equal contribution.†Corresponding authors.
+
+
+Preprint. Under review.
+           gap between the conditional and unconditional branches is minimal. Leveraging
+           this insight,  we introduce unconditional branch replacement,  a technique that
+           bypasses the unconditional branch to reduce computational cost.  Notably, we
+           observe that the effectiveness of acceleration strategies varies significantly across
+           different samples.  Motivated by this, we propose SkipVAR, a sample-adaptive
+           framework that leverages frequency information to dynamically select the most
+           suitable  acceleration  strategy  for  each  instance.   To  evaluate  the  role  of  high-
+           frequency information, we introduce high-variation benchmark datasets that test
+           model sensitivity to fine details. Extensive experiments show SkipVAR achieves
+           over 0.88 average SSIM with up to 1.81x overall acceleration and 2.62x speedup
+           on the GenEval benchmark, maintaining model quality. These results confirm the
+           effectiveness of frequency-aware, training-free adaptive acceleration for scalable
+           autoregressive image generation. Our code is available at https://github.com/
+           fakerone-li/SkipVAR and has been publicly released.
+
+1    Introduction
+
+Visual Autoregressive (VAR) modeling introduces a novel paradigm in image generation by redefining
+autoregressive learning as a coarse-to-fine “next-scale prediction” process [33], diverging from the
+traditional raster-scan “next-token prediction” approach [16, 18, 32, 39, 42].  This methodology
+enables autoregressive transformers to efficiently learn visual distributions and generalize effectively.
+                                                             Based on the VAR framework, Infinity [11] ex-
+                                                             tends VAR by introducing an infinite-vocabulary
+                                                             tokenizer  and  bitwise  self-correction,  enabling
+                                                             high-resolution, photorealistic image generation
+                                                             from text prompts.
+                                                             Recent advances in accelerating visual autoregres-
+                                                             sive (VAR) models [10, 6, 43] have revealed that
+                                                             a significant portion of computational overhead
+                                                             arises from the later stages of generation. These
+                                                             findings  are  consistent  with  recent  analyses  in-
+                                                             dicating that high-frequency components in the
+                                                             generation process contribute disproportionately
+                                                             to inference latency. Although these components
+Figure 2: SSIM v.s. runtime for different accelera-          often have limited perceptual significance, they
+tion methods. SkipVAR achieves the best trade-off,           require dense computations, thereby becoming a
+maintaining high consistency with faster inference.          primary bottleneck in inference efficiency. Conse-
+                                                             quently, identifying and mitigating the computa-
+tional redundancy in late-stage generation has emerged as a critical direction for enabling scalable
+and efficient VAR inference.
+Based on these observations, a comprehensive understanding of computational inefficiencies in
+the VAR inference pipeline is still lacking.   We conduct an in-depth analysis of the generation
+dynamics and identify two key forms of redundancy that degrade inference efficiency.  The first,
+step redundancy, occurs when later autoregressive steps contribute minimal improvements to the
+output despite high computational cost, as shown in Figure 3. The second, unconditional branch
+redundancy, is found in models with both conditional and unconditional decoding branches, where
+the information disparity between branches is often negligible, making the unconditional branch
+largely redundant in later stages. Our acceleration strategy replaces the unconditional branch with
+conditional-only generation in these stages, significantly reducing computational overhead while
+maintaining output coherence. Compared to token-level methods [2, 3, 48, 53], our approach offers
+greater stability and consistency.
+Notably, we observe that the effectiveness of acceleration strategies varies significantly across different
+samples.  This variability stems from the fact that the importance of high-frequency information
+differs  substantially  from  one  instance  to  another.   Certain  images  are  highly  sensitive  to  fine-
+grained structural details and thus demand preservation of high-frequency components for faithful
+reconstruction. Conversely, other samples can tolerate a reduction in high-frequency computation
+without noticeable quality degradation. Despite this intrinsic heterogeneity, existing VAR acceleration
+
+
+                                                            2
+methods predominantly rely on uniform, one-size-fits-all strategies that apply the same acceleration
+scheme across all samples and throughout the entire inference process. Such approaches overlook
+the unique frequency characteristics of individual samples, often resulting in suboptimal trade-offs
+between inference speed and output fidelity. Therefore, there is a clear need for adaptive acceleration
+frameworks that dynamically tailor the strategy to each sample’s specific frequency requirements.
+                                                              Motivated by these observations, we propose Skip-
+                                                              VAR, a sample-adaptive, decision-driven accelera-
+                                                              tion framework that dynamically selects the most
+                                                              suitable strategy for each instance based on its fre-
+                                                              quency characteristics.  Unlike prior approaches
+                                                              that apply fixed acceleration schemes, SkipVAR
+                                                              leverages frequency information to tailor inference
+                                                              behavior  at  the  sample  level.   Specifically,  our
+                                                              method employs a lightweight decision model to
+                                                              assess each image’s sensitivity to high-frequency
+                                                              details, and accordingly selects the optimal accel-
+                                                              eration policy from a palette of VAR-compatible
+                                                              methods.  By fully exploiting the inherent multi-
+                                                              scale structure of VAR models [33] and adapting
+                                                              to individual content requirements, SkipVAR en-
+                                                              sures that samples requiring high-frequency pre-
+                                                              cision remain unaffected by speedup, while more
+                                                              tolerant samples benefit from substantial compu-
+                                                              tational savings.  This dynamic adaptation leads
+                                                              to a significantly improved balance between effi-
+                                                              ciency and generation quality across diverse visual
+                                                              inputs.
+                                                              To quantify the role of high-frequency informa-
+Figure  3:   Top:  L1  loss  between  conditional  and        tion in autoregressive image generation, we design
+unconditional  branches  drops  over  inference  steps.       high-variation benchmark datasets that highlight
+Bottom:  LPIPS to the final image also drops, with            models’ sensitivity to fine-grained details. Given
+frequency-robust  samples  consistently  lower  than          the unreliability of existing subjective metrics in
+frequency-sensitive ones.                                     capturing high-frequency discrepancies, we em-
+                                                              ploy objective similarity metrics to assess the per-
+ceptual fidelity between original and accelerated outputs. We compute similarity both over the entire
+image and specifically on high-frequency components, emphasizing the impact of fine details in eval-
+uation. Additionally, we construct two datasets: a frequency-sensitive set, where samples are highly
+affected by high-frequency degradation, and a frequency-robust set, where quality remains stable with
+reduced high-frequency computation. These benchmarks facilitate a more interpretable evaluation of
+acceleration strategies and underscore the need for sample-adaptive methods like SkipVAR.
+Through our SkipVAR method,  we achieve superior performance in Figure 2,  where the curve
+produced by our approach consistently outperforms a series of token-based methods. Even at a 1.81×
+acceleration ratio, we maintain SSIM> 0.88. Moreover, our approach generalizes seamlessly to the
+Infinity-8B model, delivering even higher acceleration factors. In Figure 1, we present high-quality
+visual results generated by SkipVAR based on the infinity-8B model, showing the powerful and faster
+generative ability, including various styles and human faces in various image resolutions. Overall,
+our contributions can be summarized as follows:
+
+
+        •  We introduce two efficient acceleration strategies, step-skipping and unconditional branch
+           replacement, and a high-frequency-focused score to emphasize fine-detail preservation.
+
+        •  We propose SkipVAR, a frequency-sensitive and sample-adaptive framework that adaptively
+           selects a frequency-aware acceleration strategy for each instance.
+
+        •  To validate the effectiveness of SkipVAR, we perform extensive experiments and user studies
+           to evaluate our approach, which shows our method achieves state-of-the-art performance.
+
+
+                                                             3
+        Figure 4: Visualization of Post-Scaling Steps for Samples with Varying Sensitivity.
+
+2    Related Work
+
+Visual Autoregressive Models.    Visual Autoregressive (VAR) models [33] depart from traditional
+token-by-token prediction by adopting a coarse-to-fine, multi-scale next-patch strategy and diffusion
+transformer [52, 4, 27, 36, 47, 5, 28, 8, 50, 23, 46, 34, 37]: at the earliest scales they capture global lay-
+out and structure, and at finer scales they synthesize high-frequency textures and detail. A prominent
+example, Infinity [11], extends this paradigm through three key innovations: an infinite-vocabulary
+tokenizer and classifier enabling bitwise token prediction, a bitwise self-correction mechanism to
+refine detail accuracy,  and a theoretically unbounded scaling of both tokenizer and transformer
+modules. These advances yield state-of-the-art performance—achieving GenEval and ImageReward
+(0.96 vs. 0.87) scores that surpass SD3-Medium and SDXL—while generating 1024×1024 images
+in 1.4 s.  Nonetheless, the exponential growth of token counts at fine scales leads to substantial
+computational and memory overhead, and the hierarchical discretization process can accumulate
+approximation errors that degrade perceptual fidelity.
+
+Acceleration  Techniques  in  Visual  Generation.    Acceleration  in  visual  generation  has  been
+explored extensively in diffusion models through distillation [29, 26, 25, 30], quantization [17, 31],
+pruning [2, 3, 20, 24, 44, 51, 7, 35, 48, 53], and feature caching [22, 21, 19, 15].  However, these
+techniques do not directly translate to the hierarchical,  patch-based generation of VAR models.
+FastVAR [10] addresses this gap by applying post-training token pruning with cached token reuse
+to accelerate inference without sacrificing quality; yet it employs a fixed pruning ratio across all
+images and scales, ignoring per-sample variations in high-frequency importance and conditional
+information and thus risking either wasted computation or perceptual degradation. Our SkipVAR
+framework departs from these uniform accelerators by dynamically selecting, for each image and
+at each scale, between aggressive step-skipping and conservative unconditional branch replacement
+based  on  handcrafted  frequency-sensitivity  features.   This  sample-specific  decision  mechanism
+preserves structural coherence, avoids pruning artifacts, and maintains SSIM above a user-specified
+threshold while delivering efficient inference across diverse inputs.
+
+3    Methodology
+
+3.1    Preliminary
+
+Autoregressive (AR) models factorize the joint probability of a token sequence x = (x1,...,xT ) as
+p(x) = QTt=1p(xt|x<t), and are trained to predict each token from its predecessors.  Extending
+AR to images requires discretizing continuous pixels via a VQ-VAE, which encodes an image
+im∈ RH×W×3 tof  = E(im), then quantizes it toq = Q(f) with a codebookZ∈ RV×C, and
+reconstructs the image as  ˆim =D(lookup(Z,q)), typically under a combination of reconstruction,
+perceptual, feature, and adversarial losses. However, the raster-scan autoregressive process breaks
+spatial locality, incursO(n2) decoding steps, and results inO(n6) operations for ann×n image.
+To address this, Visual Autoregressive Modeling (VAR) instead generates coarse-to-fine token maps
+R  =  (r1,...,rK), where each rk  is a token grid in [V ]hk×wk  and the final resolution satisfies
+(hK,wK) = (h,w). The probability is modeled asp(R) = QKk=1p(rk|r<k), enabling block-wise
+causal attention during training and parallel decoding with KV-caching at inference time.  This
+reduces the number of iterations toO(logn) and computation toO(n4). Despite these improvements,
+the rapid increase of fine-scale tokens at high resolutions remains a major computational bottleneck.
+
+
+                                                           4
+3.2    Motivation
+
+Visual Autoregressive (VAR) models [33] adopt a coarse-to-fine, multi-scale generation paradigm
+that improves image quality but increases computational cost at higher scales. This section outlines
+key motivations for our adaptive approach by examining limitations in current methods.
+
+1.  Redundancy in High-Frequency Generation.    Early scales capture global structure, while
+later scales refine high-frequency details [33, 10].  However, such refinement is costly and yields
+diminishing perceptual returns [10]. Figure 3 shows that although later inference steps dominate run-
+time, LPIPS improvements plateau and image changes become visually minor. Both conditional and
+unconditional losses decrease steadily, but separately computing these branches imposes significant
+overhead without commensurate quality gains.
+
+2. Variability in High-Frequency Sensitivity.    Images differ in their dependence on high-frequency
+detail. For instance, an anime-style headshot exhibits minimal changes across steps, while a realistic
+portrait requires ongoing refinement (Figure 4). Existing VAR acceleration methods [10, 6, 43] apply
+uniform strategies, risking wasted computation or quality loss. Figure 3 shows that frequency-robust
+samples have consistently lower LPIPS than frequency-sensitive ones, highlighting the need for
+sample-specific acceleration.
+
+3.  Limitations of Existing Benchmarks.    Common metrics like ImageReward [45] and CLIP
+Score [12] emphasize overall plausibility but neglect fine-detail fidelity crucial in later VAR stages.
+Consequently, blurred or less detailed outputs may still score highly, masking acceleration effects.
+We advocate comparing accelerated outputs to full-step references using objective metrics SSIM
+and LPIPS [49], supplemented by high-frequency variants (SSIM-HF, LPIPS-HF) to better evaluate
+fine-detail preservation.
+In sum, redundancy in high-frequency generation, variability in sample sensitivity, and benchmark
+limitations  motivate  an  adaptive,  image-specific  acceleration  strategy.   Our  proposed  SkipVAR
+addresses these challenges by dynamically tailoring generation per image, enhancing computational
+efficiency without compromising perceptual quality.
+
+3.3    Method
+
+We propose SkipVAR, a post-training adaptive acceleration framework designed for Visual Au-
+toregressive (VAR) models.  SkipVAR exploits the inherent redundancy in multi-scale generation
+by dynamically selecting acceleration strategies on a per-sample basis, guided by the significance
+of high-frequency components.  Our method aims to substantially reduce inference cost without
+compromising perceptual quality.
+
+Overview of SkipVAR.    Given a multi-scale VAR model that generates an image overK refinement
+steps, we designate a specific stepN (typically early, e.g.,N = 9) as the decision step. After stepN,
+acceleration strategies may be selectively applied to the remaining steps{N + 1,N + 2,...,K}.
+To inform decision-making, we utilize decoded images from stepN  and the cached intermediate
+result from stepN−1. These decoded outputs are downsampled and analyzed in the image space to
+estimate the importance of high-frequency information. The extracted features are then fed into a
+lightweight decision modelD, which outputs the optimal acceleration policy for the remaining steps
+on a per-sample basis.
+
+High-Frequency Importance Estimation.    To characterize a sample’s sensitivity to high-frequency
+information, we compute two complementary indicators:
+
+High Frequency Difference (HF_Diff).    To quantify local variations in high-frequency structures
+during the generation process, we apply a 3× 3 Sobel operatorS to the grayscale images decoded at
+two consecutive steps,N andN−1. The high-frequency difference is then defined as theℓ1 distance
+between their corresponding Sobel responses:
+
+                                      HF_Diff =∥S(IN)−S(IN−1)∥1,                                              (1)
+
+
+                                                           5
+Figure 5: Top Left: Overall framework. At the Decision Step, an acceleration strategy is selected
+and applied to subsequent steps. For clarity in showcasing the acceleration strategies, we omit the
+propagation of other methods during the acceleration steps. Top Right: Visualization of SkipVAR’s
+pipeline. We divide the generation process into Low-Frequency Generation Steps, Decision Steps,
+and  Acceleration  Steps  to  emphasize  the  roles  of  each  stage.   At  Decision  Step,  we  cache  the
+results from the previous step, then select an appropriate acceleration strategy to apply during the
+subsequent Acceleration Steps.  Bottom:  Detailed framework for acceleration strategy selection.
+After downsampling and decoding the results into image space, we compute HF_Diff by applying
+the Sobel filter and measuring the L1 loss, capturing the difference in high-frequency energy across
+steps. Simultaneously, we compute HF_Ratio by applying a circular mask in the frequency domain
+via FFT to measure the proportion of high-frequency content. These indicators are then fed into a
+decision model to determine the optimal acceleration strategy.
+
+whereIN  andIN−1 denote the decoded grayscale images at stepsN  andN−1, respectively.  A
+smaller value of HF_Diff indicates that the high-frequency content has stabilized between the two
+steps, implying diminishing returns from further refinement. Therefore, when HF_Diff falls below a
+threshold, the sample is considered less sensitive to high-frequency variations, making it a strong
+candidate for early termination or aggressive acceleration.
+
+High Frequency Ratio (HF_Ratio).    To complement the local difference measurement, we fur-
+ther assess the global frequency composition of the decoded image using the Fourier transform.
+Specifically, we define the high-frequency ratio as:
+                                                        P
+                                     HF_Ratio =        P   (u,v)∈H|F(IN)|uv
+
+                                                          (u,v)|F(IN)|uv +ϵ,                                             (2)
+
+whereF(IN) denotes the magnitude of the shifted Fourier transform of the grayscale imageIN , and
+H represents the set of high-frequency components located beyond a radiusρ (typicallyρ = 0.25)
+from the center of the frequency spectrum.  The small constant ϵ is added to avoid division by
+zero. A lower HF_Ratio implies that the image contains inherently less high-frequency information,
+making it more robust to early truncation or simplified refinement. Therefore, such images are strong
+candidates for aggressive acceleration.
+
+Lightweight Decision Models.    To achieve low-latency inference decisions, we employ simple,
+efficient classifiers for the decision modelD.  Specifically, we consider:  1.  Decision Tree (DT):
+A  tree-based  model  that  partitions  the  feature  space  with  learned  thresholds,  offering  fast  and
+interpretable decisions.  2.  Random Forest (RF): An ensemble of decision trees that aggregates
+predictions across multiple randomized subsets to improve robustness and generalization. 3. Logistic
+
+
+                                                            6
+                              Table 1: Quantitative comparison on the DrawBench dataset. Note that ToMe and SiTo use the
+                              default ratio of {0.5, 0.5, 0.5}, while FastVAR is reproduced by us using official settings.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                              Regression (LR): A linear model that estimates the probability of applying acceleration strategies
+                              via a sigmoid activation over the feature vector.
+
+                              Dataset  Construction.    We  construct  the  training  dataset  from  the  People  class,  which  in-
+                              herently  includes  both  high-frequency–insensitive  samples  (e.g.,  stylized  headshots)  and  high-
+                              frequency–sensitive ones (e.g., photo-realistic full-body images). This heterogeneity ensures coverage
+                              of acceleration behaviors ranging from aggressive skipping to conservative generation with no acceler-
+                              ation. For each image, we extract two handcrafted features, HF_Diff and HF_Ratio, capturing local
+                              Sobel edge stability and global high-frequency content in the Fourier domain, respectively. Together,
+                              these features provide a compact yet informative representation of sample frequency sensitivity.
+
+                              Labeling and Classifier Training.    Labels are assigned based on the most aggressive acceleration
+                              strategy that maintains SSIM above a target threshold, either by skipping steps or replacing uncondi-
+                              tional branch with conditional copying. Feature vectors are standardized, and classifiers are trained
+                              using an 80/20 train/validation split. While multiple decision models are evaluated, all subsequent
+                              experiments use Logistic Regression, highlighting that the framework’s effectiveness stems from its
+                              strategic design rather than model complexity.
+
+                              Generalization Evaluation.    To validate generalization, we apply the trained decision model to
+                              a distinct image category with different content distribution.  As shown in Figure 7b, SkipVAR
+                              remains effective without retraining, achieving an SSIM near 0.88 using a 0.84 threshold—close to
+                              the non-accelerated baseline. This suggests that our frequency-aware decision mechanism captures
+                              generalizable patterns beyond the training domain.
+
+                              Acceleration Strategies.    SkipVAR incorporates two practical strategies to exploit redundancy at
+                              late generation stages:
+
+                                       •  Skip Strategy: For the Skip Strategy, we target frequency-robust samples by selecting a
+                                         specific acceleration step beyond which decoding stops early. As illustrated in Figure 5, we
+                                         directly decode the output at that step without proceeding to further resolution refinements.
+                                       •  Uncond-Branch-Replace Strategy: For the unconditional branch replacement Strategy, we
+                                         focus on frequency-sensitive samples. As shown in Figure 3, we leverage the convergence
+                                         between the conditional and unconditional branches in the later stages.  By reusing the
+                                         conditional output in place of the unconditional one, we effectively cut computation in half.
+                                         Compared to the Skip Strategy, the additional cost of computing the conditional branch
+                                         ensures that frequency-sensitive samples still receive sufficient high-frequency information.
+
+                              Each strategy is governed by an independent decision model:Dskip predicts steps where skipping is
+Methods                                        Speedup     SSIM     SSIM-HF     LPIPS     LPIPS-HFsafe, andDuncond selects steps where unconditional branch replacement is appropriate.
+
+Infinity                                  1.00×          -            -             -     7      -
++SkipVAR@0.88                             1.58×       0.9092       0.3429       0.0488        0.1823
++SkipVAR@0.86                             1.70×       0.8924       0.3100       0.0577        0.1925
++SkipVAR@0.84                             1.81×       0.8793       0.2881       0.0646        0.1997
++SkipVAR@0.84_HFDiffOnly                  1.72×       0.8747       0.2815       0.0671        0.2019
++ToMe@0.05_LastStepOnly                   0.95×       0.8067       0.1913       0.1043        0.2376
++ToMe                                     1.18×       0.6264       0.1111       0.3520        0.4133
++SiTo@0.05_LastStepOnly                   0.93×       0.7927       0.1816       0.1092        0.2412
++SiTo                                     1.15×       0.6487       0.1168       0.2874        0.3670
++FastVAR@0.05_LastStepOnly                1.02×       0.8142       0.1964       0.0977        0.2330
++FastVAR                                  2.53×       0.6919       0.1270       0.2042        0.3092
++SkipVAR-hybrid (w/o DM)                  2.62×       0.7915       0.1829       0.1075        0.2385
+4    Experiments
+
+4.1    Experiments Setup
+
+Setup and Acceleration Mechanism.    We evaluate our proposed acceleration strategy on the
+open-source  Infinity-2B  model,  a  state-of-the-art  Bitwise  Visual  AutoRegressive  (VAR)  model
+capable of generating high-resolution images up to 1024×1024 pixels.  The acceleration decision
+in SkipVAR is made at the 9th inference step, based on two handcrafted frequency-aware features:
+the high-frequency difference (computed using a third-order Sobel operator) and the high-frequency
+ratio  (thresholded  with ρ  =  0.4).   A  decision  model  is  trained  on  the  people  category  of  the
+MJHQ30K dataset [14],  which consists of 3,000 diverse high-resolution images including both
+stylized and photo-realistic human figures.  This model selects the most aggressive yet fidelity-
+preserving acceleration strategy—either skipping or unconditional replacement—subject to SSIM
+thresholds{0.88, 0.86, 0.84}.
+
+Evaluation Protocol and Metrics.    During eval-                 Table 2:  Evaluation on different datasets.  Gray:
+uation,  acceleration  is  applied  only  to  autore-            DrawBench,Orange: Paintings,Cyan: Photo.
+gressive decoding steps (10–12), excluding VAE
+decoding  time  for  fair  comparisons.     We  re-                      Method                   Spd.   MACs   IRwd     Clip
+port generation quality using ImageReward [45],                          Infinity         1.00× 31097  0.8618  0.2702
+                                                                         +SkipVAR@0.88    1.58× 18134  0.8688  0.2701
+GenEval  [9],   HPSv2  [41],   GPT  Scores  [1],                         +SkipVAR@0.86    1.70× 16467  0.8570  0.2705
+SSIM [40], LPIPS [49], and FID [13]. Efficiency                          +SkipVAR@0.84    1.81× 15237  0.8575  0.2704
+is  measured  by  Acceleration  Ratio,  Inference                        Infinity         1.00×    –   1.2767  0.2746
+                                                                         +SkipVAR@0.84    1.53×    –   1.2742  0.2745
+Time,  and  FLOPS.  Experiments  are  conducted                          Infinity         1.00×    –   0.9991  0.2618
+                                                                         +SkipVAR@0.88    1.55×    –   0.9876  0.2621
+on a single NVIDIA RTX 4090D GPU with 24GB                               +SkipVAR@0.84    1.75×    –   0.9854  0.2625
+VRAM, using default settings for consistent com-
+parison.
+
+4.2    Main Results
+
+Comparison  on  subjective  scores.    1.     Im-                Table  3:   Comparison  on  multiple  benchmarks.
+ageReward and CLIP Score Evaluation:  We                         (a)   Evaluation   on   the   HPSv2   benchmark.      (b)
+evaluate SkipVAR on DrawBench (200 prompts)                      GPT-based  evaluation  on  frequency-sensitive  and
+and   on   the   Paintings   and   Photo   subsets   of          frequency-robust datasets;blue rowscorrespond to
+HPSV2 [41] (800 images each) using ImageRe-                      Frequency-sensitive dataset,green rowscorrespond
+ward [45] and CLIP Score [12]. As shown in Ta-                   to Frequency-robust dataset.
+ble 2, SkipVAR@0.84, SkipVAR@0.86, and Skip-                                       (a) HPSv2 evaluation.
+VAR@0.88 all achieve near-identical scores to the
+original Infinity model across all three datasets,                   Methods                Speedup       Ani.     Art     Paint   Photo
+demonstrating that our method maintains high sub-                    Infinity                  1.00×          31.70  30.45  30.40  29.43
+jective quality even on stylistically diverse image                  +SkipVAR@0.84  1.73×          31.59  30.2730.4929.30
+sets.   2.   Quality–Speed Tradeoff on HPSV2:                             (b) GPT-based frequency evaluation.
+On the full HPSV2 benchmark (Table 3a), Skip-                        Methods                Lat.         Spd.             Aes    Align  SSIM
+VAR@0.84 attains a 1.73× speedup for only a
+0.08-point drop in average score (from 30.49 to                      Infinity        1.39     –         88.36 86.69    –
+                                                                     +SkipVAR@0.84   1.09     1.28×     88.11 87.59  0.849
+30.41), preserving Anime, Concept-art, Paintings,                    Infinity        1.39     –         87.18 89.75    –
+and Photo quality within 0.2 points. Figure 6 vi-                    +SkipVAR@0.84   0.70     1.99×     87.02 90.98  0.905
+sualizes representative outputs ordered by acceleration level, showing that simpler inputs trigger
+aggressive skipping while complex scenes retain unconditional branch replacement in line with
+human perceptual expectations.  3.  GenEval Benchmark Performance: On the GenEval bench-
+mark [9] (Table 4), SkipVAR@0.86 delivers a 1.77× speedup with only a∼1% drop in overall score
+(from 0.71 to 0.70). Furthermore, our SkipVAR-hybrid (w/o DM) configuration—applying skip to
+steps 11–12 and unconditional branch replacement to steps 9–10—achieves a 2.62× speedup while
+matching or exceeding baseline two-objective, position, and color attribute scores, underscoring the
+robustness of our frequency-aware acceleration design. 4. Adaptation to Frequency Sensitivity:
+We categorize HPSV2 images into frequency-sensitive and frequency-robust sets based on SSIM sen-
+sitivity at late inference steps. Table 3b shows that SkipVAR@0.84 applies the slower unconditional
+branch replacement strategy for sensitive samples—preserving SSIM at 0.8493—and the faster skip
+strategy for robust samples—achieving SSIM of 0.9051—yielding up to a 1.99× speedup without
+
+
+                                                              8
+                                Figure 6: Image generations under different acceleration strategies. Strategies are selected by our
+                                decision model. Simpler images use faster strategies with less high-frequency detail; complex ones
+                                use slower strategies to preserve more detail. Images are grouped and sorted by strategy speed.
+                                Table 4: Comparison of different generation models on the GenEval [9] benchmark. ● Diffusion
+                                models, ■ Autoregressive models, ★ Infinity model. Prompt rewriting was applied to the Infinity
+                                model in our experiments.
+
+
+
+
+
+
+
+
+
+
+
+
+                                perceptible subjective degradation. Additionally, we observe that the GPT score does not decrease
+                                due to acceleration and even shows a slight increase in the Align metric, indicating that our approach
+                                maintains high semantic consistency while achieving significant speedup.
+
+                                Comparison  on  objective  metrics.    Because                        Table 5: Generation quality on MJHQ30K
+                                subjective   scores   often   fail   to   capture   high-
+                                frequency  detail  differences,  we  evaluate  our                   Dataset      Speedup     FID      SSIM       LPIPS
+                                method using rigorous objective metrics as follows                   Food          1.88×         3.56     0.8675     0.0780
+                                (further discussion is provided in the Appendix): 1.                 Fashion     1.76×         3.64     0.8713     0.0765
+                                SSIM and LPIPS: We assess acceleration effects                       Plants        1.60×         2.69     0.8690     0.0649
+                                with SSIM and LPIPS under a fixed random seed                        Art             1.58×         3.02     0.8663     0.0704
+                                for direct comparability to the Infinity baseline.
+                                On DrawBench (Table 1), SkipVAR maintains SSIM above each model’s training threshold and
+                                outperforms token-based approaches such as ToMe [3], SiTo [48], and FastVAR [10]. For instance,
+                                ToMe@0.05_LastStepOnly—applying 5% token merging at the final step—yields SSIM < 0.81,
+                                whereas SkipVAR’s holistic acceleration better preserves global fidelity. 2. SSIM-HF Analysis: To
+                                capture fine-detail fidelity, we introduce SSIM-HF, computed on high-frequency regions only. Also
+                                on DrawBench (Table 1), ToMe@0.05_LastStepOnly shows overall SSIM just 8% lower than Skip-
+                                VAR@0.84, but SSIM-HF degrades by 34%, demonstrating the severe impact of suboptimal token
+                                selection on fine textures. 3. MJHQ30K FID Performance: On the MJHQ30K benchmark (Table 5),
+                                SkipVAR@0.84 achieves a 1.88× speedup with FID = 3.5627. Even on the “Art” subset—where
+                                high-frequency detail is paramount—it delivers a 1.58× acceleration without significant quality loss.
+
+                                4.3    Empirical Studies
+
+                                Feature Design and Objective Analysis.    Robust decision-making requires features that correlate
+                                with fine-detail sensitivity yet resist luminance and contrast variations. Sole reliance on Sobel-based
+                                HF_Diff, which captures dynamic stability of high-frequency content between refinement steps, can
+                                misclassify dark but smooth images as high-frequency.  To address this, we introduce HF_Ratio,
+                                which measures the intrinsic frequency distribution of the current sample, reflecting its global reliance
+                                on fine-scale details. Combining HF_Diff and HF_Ratio yields a two-dimensional feature vector
+
+Methods                                      Params     Speedup     Two Obj.     Position     Color Attri.     Overall
+●SDXL                                        2.6B            -              0.74           0.15             0.23            0.559
+●PixArt-Sigma                             0.6B            -              0.62           0.14             0.27            0.55
+●SD3-medium                              2.0B            -              0.74           0.34             0.36            0.62
+■LlamaGen                                  0.8B            -              0.34           0.07             0.04            0.32
+■Show-o                                       1.3B            -              0.80           0.31             0.50            0.68
+★Infinity                                 2.0B            -           0.85          0.39            0.55           0.71
+★+SkipVAR@0.88                            2.0B        1.50×           0.83          0.39            0.59           0.71
+★+SkipVAR@0.86                            2.0B        1.77×           0.84          0.36            0.58           0.70
+★+SkipVAR-hybrid (w/o DM)                 2.0B        2.62×           0.84          0.39            0.60           0.72
+       (a) HF_Ratio at step 9 vs. final output                         (b) Decision regions on Animals class
+Figure 7:  (a) Scatter of HF_Ratio on the 9th-step downsampled image versus the final high-res
+output—points lie alongy =x, showing reliable low-res Fourier estimates. (b) Logistic regression
+boundary in HF_Diff–HF_Ratio space for the Animals class. Legend: skip_3 = skip final 3 steps;
+uncond_2 = uncond branch replace for last 2 steps.
+
+
+that captures both local edge stability across steps and global texture richness.  As Table 1 shows,
+SkipVAR@0.84 outperforms the HF_Diff-only variant (SkipVAR@0.84_HFDiffOnly) by avoiding
+excessive conservatism in acceleration decisions. Figure 7a further confirms that the intermediate
+HF_Ratio reliably estimates final high-frequency content, justifying its use at the decision step.
+
+High-Frequency Sensitivity Prediction.    We train a logistic regression (LR) on these features to
+classify samples into “skip” or “uncond branch replace” regimes. As Figure 7b illustrates, LR cleanly
+divides the feature space, yielding SSIM 0.8628 on the Animals class.  Decision tree and random
+forest classifiers achieve comparable accuracy with sub-0.03 ms inference latency, indicating that our
+handcrafted features carry the predictive burden. Trained on 80% of the 3K-sample People dataset,
+all models generalize across MJHQ30K classes and transfer without loss to an 8B-parameter variant,
+where SkipVAR@0.84 attains a 2.06× speedup and SSIM 0.86 on DrawBench (additional 8B results
+in Appendix).We note, however, that training on only 3K samples may lead to mild overfitting in
+ensemble methods such as RF.
+
+Acceleration Program.    Profiling reveals that the last few decoding steps (10–12) dominate runtime,
+despite most token distributions having stabilized. We thus fix the decision point at step 9 (N = 9),
+and only accelerate the final three steps—striking a balance between computational efficiency and
+structural completeness. This design avoids redundant high-resolution decoding while preserving
+image layout. Steps 10–12 account for 69% of total inference time, and LPIPS improvements taper
+off beyond step 9, even for frequency-sensitive cases (see Figure 3). This suggests a natural turning
+point where acceleration yields diminishing perceptual returns.  As shown in Table 5, SkipVAR
+achieves up to 1.88× speedup on datasets like Food (3K samples), while maintaining SSIM above
+0.86. A detailed breakdown of our acceleration strategies is provided in the Appendix.
+
+5    Conclusion
+
+In this paper,  we presented SkipVAR, a novel,  training-free acceleration framework for Visual
+Autoregressive models that adapts to the frequency sensitivity of each sample.  we observe that
+there are existing step redundancy and unconditional branch redundancy in VAR. Motivated by
+this, we propose SkipVAR, a sample-adaptive framework that adaptively selects a frequency-aware
+acceleration strategy for each instance. Specifically, we first analyze the step redundancy during the
+generation and propose an automatic step-skip strategy to improve the efficiency. For unconditional
+branch redundancy, we discover that the information gap between the conditional and unconditional
+branch is small. Based on this observation, we introduce the unconditional branch replace, skipping
+the unconditional branch to decrease the computational cost.  Extensive results demonstrate the
+effectiveness of frequency-aware training-free adaptive acceleration for efficient generation.
+
+
+                                                           10
+References
+ [1]  Josh Achiam, Steven Adler, Sandhini Agarwal, Lama Ahmad, Ilge Akkaya, Florencia Leoni
+      Aleman, Diogo Almeida, Janko Altenschmidt, Sam Altman, Shyamal Anadkat, et al. GPT-4
+      technical report. arXiv preprint arXiv:2303.08774, 2023.
+
+ [2]  Daniel Bolya, Cheng-Yang Fu, Xiaoliang Dai, Peizhao Zhang, Christoph Feichtenhofer, and
+      Judy Hoffman. Token Merging: Your ViT but faster. arXiv preprint arXiv:2210.09461, 2022.
+
+ [3]  Daniel Bolya and Judy Hoffman.  Token merging for fast stable diffusion.  In CVPR, pages
+      4599–4603, 2023.
+
+ [4]  Siran Chen, Yue Ma, Yu Qiao, and Yali Wang. M-bev: Masked bev perception for robust au-
+      tonomous driving. In Proceedings of the AAAI Conference on Artificial Intelligence, volume 38,
+      pages 1183–1191, 2024.
+
+ [5]  Siran Chen, Qinglin Xu, Yue Ma, Yu Qiao, and Yali Wang.  Attentive snippet prompting for
+      video retrieval. IEEE Transactions on Multimedia, 26:4348–4359, 2023.
+
+ [6]  Zigeng Chen, Xinyin Ma, Gongfan Fang, and Xinchao Wang. Collaborative decoding makes
+      visual auto-regressive modeling efficient. arXiv preprint arXiv:2411.17787, 2024.
+
+ [7]  Gongfan Fang, Xinyin Ma, and Xinchao Wang.  Structural pruning for diffusion models.  In
+      NeurIPS, 2023.
+
+ [8]  Kunyu Feng, Yue Ma, Bingyuan Wang, Chenyang Qi, Haozhe Chen, Qifeng Chen, and Zeyu
+      Wang. Dit4edit: Diffusion transformer for image editing. In Proceedings of the AAAI Conference
+      on Artificial Intelligence, volume 39, pages 2969–2977, 2025.
+
+ [9]  Dhruba Ghosh, Hanna Hajishirzi, and Ludwig Schmidt. Geneval: An object-focused framework
+      for evaluating text-to-image alignment. arXiv preprint arXiv:2310.11513, 2023.
+
+[10]  Hang Guo, Yawei Li, Taolin Zhang, Jiangshan Wang, Tao Dai, Shu-Tao Xia, and Luca Benini.
+      Fastvar: Linear visual autoregressive modeling via cached token pruning, 2025. arXiv preprint
+      arXiv:2503.23367v2.
+
+[11]  Jian Han, Jinlai Liu, Yi Jiang, Bin Yan, Yuqi Zhang, Zehuan Yuan, Bingyue Peng, and Xiaobing
+      Liu.  Infinity:  Scaling bitwise autoregressive modeling for high-resolution image synthesis.
+      arXiv preprint arXiv:2412.04431, 2024.
+
+[12]  Jack Hessel, Ari Holtzman, Maxwell Forbes, Ronan Le Bras, and Yejin Choi.  Clipscore: A
+      reference-free evaluation metric for image captioning. In Proceedings of the 2021 Conference
+      on Empirical Methods in Natural Language Processing, pages 7514–7528, 2021.
+
+[13]  Martin Heusel, Hubert Ramsauer, Thomas Unterthiner, Bernhard Nessler, and Sepp Hochreiter.
+      Gans trained by a two time-scale update rule converge to a local nash equilibrium. In Advances
+      in Neural Information Processing Systems (NeurIPS), pages 6626–6637, 2017.
+
+[14]  Daiqing Li, Aleks Kamko, Ehsan Akhgari, Ali Sabet, Linmiao Xu, and Suhail Doshi. Playground
+      v2.5: Three insights towards enhancing aesthetic quality in text-to-image generation.  arXiv
+      preprint arXiv:2402.17245, 2024.
+
+[15]  Senmao Li, Taihang Hu, Fahad Shahbaz Khan, Linxuan Li, Shiqi Yang, Yaxing Wang, Ming-
+      Ming Cheng, and Jian Yang. Faster Diffusion: Rethinking the role of unet encoder in diffusion
+      models. NeurIPS, 2023.
+
+[16]  Tianhong Li, Yonglong Tian, He Li, Mingyang Deng, and Kaiming He. Autoregressive image
+      generation without vector quantization. arXiv preprint arXiv:2406.11838, 2024.
+
+[17]  Xiuyu Li, Yijiang Liu, Long Lian, Huanrui Yang, Zhen Dong, Daniel Kang, Shanghang Zhang,
+      and Kurt Keutzer. Q-Diffusion: Quantizing diffusion models. In ICCV, pages 17535–17545,
+      2023.
+
+
+                                                         11
+[18]  Dongyang Liu, Shitian Zhao, Le Zhuo, Weifeng Lin, Yu Qiao, Hongsheng Li, and Peng Gao.
+      Lumina-mgpt:  Illuminate flexible photorealistic text-to-image generation with multimodal
+      generative pretraining. arXiv preprint arXiv:2408.02657, 2024.
+[19]  Haozhe  Liu,  Wentian  Zhang,  Jinheng  Xie,  Francesco  Faccio,  Mengmeng  Xu,  Tao  Xiang,
+      Mike Zheng Shou, Juan-Manuel Perez-Rua, and Jürgen Schmidhuber.  Faster diffusion via
+      temporal attention decomposition. arXiv preprint arXiv:2404.02747, 2024.
+[20]  Hongyu Liu, Xuan Wang, Ziyu Wan, Yue Ma, Jingye Chen, Yanbo Fan, Yujun Shen, Yibing
+      Song, and Qifeng Chen. Avatarartist: Open-domain 4d avatarization. In CVPR, 2025.
+[21]  Xinyin Ma, Gongfan Fang, Michael Bi Mi, and Xinchao Wang. Learning-to-Cache: Accelerating
+      diffusion transformer via layer caching. arXiv preprint arXiv:2406.01733, 2024.
+[22]  Xinyin Ma, Gongfan Fang, and Xinchao Wang. DeepCache: Accelerating diffusion models for
+      free. In CVPR, pages 15762–15772, 2024.
+[23]  Yue Ma, Kunyu Feng, Xinhua Zhang, Hongyu Liu, David Junhao Zhang, Jinbo Xing, Yinhan
+      Zhang, Ayden Yang, Zeyu Wang, and Qifeng Chen.  Follow-your-creation: Empowering 4d
+      creation through video inpainting. arXiv preprint arXiv:2506.04590, 2025.
+[24]  Yue Ma, Yingqing He, Xiaodong Cun, Xintao Wang, Siran Chen, Ying Shan, Xiu Li, and Qifeng
+      Chen. Follow your pose: Pose-guided text-to-video generation using pose-free videos, 2024.
+[25]  Yue Ma, Yingqing He, Hongfa Wang, Andong Wang, Chenyang Qi, Chengfei Cai, Xiu Li,
+      Zhifeng Li, Heung-Yeung Shum, Wei Liu, et al.  Follow-your-click:  Open-domain regional
+      image animation via short prompts. arXiv preprint arXiv:2403.08268, 2024.
+[26]  Yue Ma, Hongyu Liu, Hongfa Wang, Heng Pan, Yingqing He, Junkun Yuan, Ailing Zeng,
+      Chengfei Cai, Heung-Yeung Shum, Wei Liu, et al. Follow-your-emoji: Fine-controllable and
+      expressive freestyle portrait animation.  In SIGGRAPH Asia 2024 Conference Papers, pages
+      1–12, 2024.
+[27]  Yue Ma, Yulong Liu, Qiyuan Zhu, Ayden Yang, Kunyu Feng, Xinhua Zhang, Zhifeng Li, Sirui
+      Han, Chenyang Qi, and Qifeng Chen. Follow-your-motion: Video motion transfer via efficient
+      spatial-temporal decoupled finetuning. arXiv preprint arXiv:2506.05207, 2025.
+[28]  Yue Ma, Yali Wang, Yue Wu, Ziyu Lyu, Siran Chen, Xiu Li, and Yu Qiao. Visual knowledge
+      graph for human action reasoning in videos.  In Proceedings of the 30th ACM International
+      Conference on Multimedia, pages 4132–4141, 2022.
+[29]  Chenlin Meng, Robin Rombach, Ruiqi Gao, Diederik Kingma, Stefano Ermon, Jonathan Ho,
+      and Tim Salimans. On distillation of guided diffusion models. In CVPR, pages 14297–14306,
+      2023.
+[30]  Tim Salimans and Jonathan Ho. Progressive distillation for fast sampling of diffusion models.
+      arXiv preprint arXiv:2202.00512, 2022.
+[31]  Yuzhang Shang, Zhihang Yuan, Bin Xie, Bingzhe Wu, and Yan Yan. Post-training quantization
+      on diffusion models. In CVPR, pages 1972–1981, 2023.
+[32]  Peize Sun, Yi Jiang, Shoufa Chen, Shilong Zhang, Bingyue Peng, Ping Luo, and Zehuan Yuan.
+      Autoregressive model beats diffusion:  Llama for scalable image generation.  arXiv preprint
+      arXiv:2406.06525, 2024.
+[33]  Keyu Tian, Yi Jiang, Zehuan Yuan, Bingyue Peng, and Liwei Wang.  Visual autoregressive
+      modeling: Scalable image generation via next-scale prediction. NeurIPS, 2024.
+[34]  Zhen Wan, Yue Ma, Chenyang Qi, Zhiheng Liu, and Tao Gui.  Unipaint: Unified space-time
+      video inpainting via mixture-of-experts. arXiv preprint arXiv:2412.06340, 2024.
+[35]  Hongjie Wang, Difan Liu, Yan Kang, Yijun Li, Zhe Lin, Niraj K Jha, and Yuchen Liu. Attention-
+      driven training-free efficiency enhancement of diffusion models. In CVPR, pages 16080–16089,
+      2024.
+
+
+                                                        12
+[36]  Jiangshan Wang, Yue Ma, Jiayi Guo, Yicheng Xiao, Gao Huang, and Xiu Li.   Cove:  Un-
+      leashing the diffusion feature correspondence for consistent video editing.   arXiv preprint
+      arXiv:2406.08850, 2024.
+
+[37]  Jiangshan Wang,  Junfu Pu,  Zhongang Qi,  Jiayi Guo,  Yue Ma,  Nisha Huang,  Yuxin Chen,
+      Xiu  Li,  and  Ying  Shan.   Taming  rectified  flow  for  inversion  and  editing.   arXiv  preprint
+      arXiv:2411.04746, 2024.
+
+[38]  Lingyun Wang, Bingjie Wang, Jay Chhablani, Jose Alain Sahel, and Shaohua Pi. Freqformer:
+      Frequency-domain transformer for 3-d visualization and quantification of human retinal circula-
+      tion. arXiv preprint arXiv:2411.11189, 2024.
+
+[39]  Xinlong Wang, Xiaosong Zhang, Zhengxiong Luo, Quan Sun, Yufeng Cui, Jinsheng Wang, Fan
+      Zhang, Yueze Wang, Zhen Li, Qiying Yu, et al. EMU3: Next-token prediction is all you need.
+      arXiv preprint arXiv:2409.18869, 2024.
+[40]  Zhou Wang, Alan C Bovik, Hamid R Sheikh, and Eero P Simoncelli. Image quality assessment:
+      from error visibility to structural similarity. IEEE Transactions on Image Processing, 13(4):600–
+      612, 2004.
+[41]  Xiaoshi Wu, Yiming Hao, Keqiang Sun, Yixiong Chen, Feng Zhu, Rui Zhao, and Hongsheng
+      Li.   Human preference score v2:  A solid benchmark for evaluating human preferences of
+      text-to-image synthesis. arXiv preprint arXiv:2306.09341, 2023.
+[42]  Jinheng Xie, Weijia Mao, Zechen Bai, David Junhao Zhang, Weihao Wang, Kevin Qinghong
+      Lin, Yuchao Gu, Zhijie Chen, Zhenheng Yang, and Mike Zheng Shou. Show-o: One single trans-
+      former to unify multimodal understanding and generation. arXiv preprint arXiv:2408.12528,
+      2024.
+[43]  Rui Xie, Tianchen Zhao, Zhihang Yuan, Rui Wan, Wenxi Gao, Zhenhua Zhu, Xuefei Ning, and
+      Yu Wang.  Litevar: Compressing visual autoregressive modelling with efficient attention and
+      quantization. arXiv preprint arXiv:2411.17178, 2024.
+[44]  Zhen Xiong, Yuqi Li, Chuanguang Yang, Tiao Tan, Zhihong Zhu, Siyuan Li, and Yue Ma.
+      Enhancing image generation fidelity via progressive prompts. arXiv preprint arXiv:2501.07070,
+      2025.
+[45]  Jiazheng Xu, Xiao Liu, Yuchen Wu, Yuxuan Tong, Qinkai Li, Ming Ding, Jie Tang, and Yuxiao
+      Dong. Imagereward: Learning and evaluating human preferences for text-to-image generation.
+      In Advances in Neural Information Processing Systems, 2023.
+[46]  Zexuan Yan, Yue Ma, Chang Zou, Wenteng Chen, Qifeng Chen, and Linfeng Zhang.  Eedit:
+      Rethinking the spatial and temporal redundancy for efficient image editing.  arXiv preprint
+      arXiv:2503.10270, 2025.
+[47]  Beiyuan Zhang, Yue Ma, Chunlei Fu, Xinyang Song, Zhenan Sun, and Ziqiang Li.  Follow-
+      your-multipose: Tuning-free multi-character text-to-video generation via pose guidance. arXiv
+      preprint arXiv:2412.16495, 2024.
+[48]  Evelyn Zhang, Bang Xiao, Jiayi Tang, Qianli Ma, Chang Zou, Xuefei Ning, Xuming Hu, and
+      Linfeng Zhang. Token pruning for caching better: 9 times acceleration on stable diffusion for
+      free. arXiv preprint arXiv:2501.00375, 2024.
+[49]  Richard Zhang, Phillip Isola, Alexei A. Efros, Eli Shechtman, and Oliver Wang.  The unrea-
+      sonable effectiveness of deep features as a perceptual metric.   In Proceedings of the IEEE
+      Conference on Computer Vision and Pattern Recognition, pages 586–595, 2018.
+
+[50]  Yinhan Zhang, Yue Ma, Bingyuan Wang, Qifeng Chen, and Zeyu Wang. Magiccolor: Multi-
+      instance sketch colorization. arXiv preprint arXiv:2503.16948, 2025.
+
+[51]  Chenyang Zhu, Kai Li, Yue Ma, Chunming He, and Xiu Li. Multibooth: Towards generating
+      all your concepts in an image from text. In Proceedings of the AAAI Conference on Artificial
+      Intelligence, volume 39, pages 10923–10931, 2025.
+
+
+                                                         13
+[52]Chenyang Zhu, Kai Li, Yue Ma, Longxiang Tang, Chengyu Fang, Chubin Chen, Qifeng Chen,
+      and Xiu Li.  Instantswap: Fast customized concept swapping across sharp shape differences.
+      arXiv preprint arXiv:2412.01197, 2024.
+[53]  Chang Zou, Xuyang Liu, Ting Liu, Siteng Huang, and Linfeng Zhang. Accelerating diffusion
+      transformers with token-wise feature caching. arXiv preprint arXiv:2410.05317, 2024.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                         14
+A    Scalability of Acceleration Strategies.
+
+Although our current acceleration strategy uses skip or unconditional branch replacement, more
+acceleration schemes can be integrated in principle. By leveraging the decision model to distinguish
+between high-sensitivity and low-sensitivity images, we can assign different acceleration levels
+accordingly—applying more aggressive acceleration to low-sensitivity images, while adopting more
+conservative strategies for high-sensitivity ones. This flexibility enables a finer-grained, image-aware
+control over inference efficiency, potentially unlocking greater acceleration gains while preserving
+output quality.
+
+B    Limitations of SSIM-Based Evaluation.
+
+In our experiments, we train decision models using SSIM-based thresholds to guide acceleration
+strategies. This objective metric helps align accelerated outputs with those generated by the original
+model.   However,  we  acknowledge  a  key  limitation:  a  lower SSIM  score  does  not  necessarily
+indicate perceptible quality degradation to the human eye.  For instance, in face close-ups where
+high-frequency features dominate,  even minor acceleration can significantly lower SSIM while
+leaving visual perception largely unaffected.
+This observation suggests that relying solely on SSIM may lead to overly conservative decisions
+for images deemed high-frequency sensitive. To address this, we propose incorporating perceptual
+metrics that better reflect human visual perception to further differentiate within these “sensitive”
+images.  Specifically, by identifying samples where visual quality remains acceptable despite low
+SSIM, we can apply more aggressive acceleration strategies without noticeable degradation. This
+approach enables us to unlock higher speedups while preserving the perceptual integrity of the
+outputs.
+
+C    Additional Generation Results on the Infinity-8B Model
+
+In this section, we provide further quantitative and qualitative results of applying our SkipVAR
+method on the Infinity-8B text-to-image model. Table 6 summarizes the DrawBench benchmarking
+results when using decision models trained on the 2B model but applied to the 8B model.
+
+Table 6: Quantitative Results on DrawBench using SkipVAR decision models trained on 2B, applied
+to Infinity-8B.
+                  Method                   Latency   Speedup   SSIM    LPIPS   SSIM-HF     LPIPS-HF
+
+                  Infinity_8B               3.38 s     —         —       —         —          —
+                  +SkipVAR@0.88_via_2B      1.86 s   1.81×     0.901   0.0406    0.3885     0.1765
+                  +SkipVAR@0.86_via_2B      1.74 s   1.94×     0.8795  0.0476    0.3472     0.1857
+                  +SkipVAR@0.84_via_2B      1.64 s   2.06×     0.8592  0.0549    0.3121     0.1955
+
+
+
+On the Paintings dataset, which contains images with abundant high-frequency details, SkipVAR
+yields an average acceleration of 1.51×. Example generations showcasing diverse artistic styles are
+included in the Images/ directory.
+
+
+  Table 7: Comparison of Super-Resolution (SR) and direct skipping for late steps in VAR model
+                 Method         SSIM ↑     LPIPS ↓     SSIM−high ↑     LPIPS−high ↓
+                 SR-12             0.8412       0.1405            0.2128                0.3055
+                 Skip-12           0.8621       0.0632            0.2596                0.2011
+                 SR-11-12          0.8078       0.1576            0.1841                0.3189
+                 Skip-11-12        0.8218       0.0875            0.2099                0.2233
+                 SR-10-12          0.7712       0.1797            0.1599                0.3347
+                 Skip-10-12        0.7802       0.1172            0.1726                0.2467
+
+
+
+                                                          15
+Figure 8: Misjudgments by ImageReward and CLIP Score on HF-Robust (top) and HF-Sensitive
+(bottom) images.
+
+
+D    Evaluating Step Replacement via Super-Resolution in VAR Models
+
+To investigate whether super-resolution (SR) models can compensate for the removal of later steps
+in the VAR model (specifically steps 10, 11, and 12), we conducted experiments comparing direct
+skipping and SR-based recovery methods.  We adopt FreqFormer [38] as the SR backbone in our
+evaluation. As shown in Table 7, the use of super-resolution models (denoted with the "_2x" suffix)
+results in consistently lower performance across multiple metrics such as SSIM, Cosine similarity,
+and LPIPS, when compared to their non-SR counterparts.  Despite reducing inference time, the
+super-resolution models fail to effectively replicate the generation quality of the omitted steps. This
+suggests that directly replacing the later autoregressive steps with SR recovery cannot maintain the
+original model’s fidelity and thus does not bring meaningful improvements.
+
+E    Misjudgments of Common Subjective Metrics on Images
+
+We observe that widely used subjective evaluation metrics—namely ImageReward, CLIP Score, and
+GPT Score—often misjudge the importance of high-frequency details.  When evaluating images
+whose overall structure has been largely completed, these metrics fail to capture subtle but perceptually
+significant fine textures.
+Specifically:
+
+        •  For HF-Robust examples, human observers perceive negligible differences, yet ImageRe-
+          ward exhibit large fluctuations (see Figure 8).
+        •  For HF-Sensitive examples, the removal of high-frequency details visibly degrades the
+          image, but paradoxically the restoration of these details sometimes leads to a decrease in
+          the subjective scores.
+        •  GPT Score exhibits significant instability:  even when asked to distinguish between two
+          images with clearly differing high-frequency details—among a pool of 300 comparison
+          images—GPT consistently fails to identify which image contains superior high-frequency
+          information.
+
+
+                                                         16
+These observations highlight the limitations of current subjective metrics in reflecting the contribution
+of fine visual details. Figure 8 provides representative examples.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                               17

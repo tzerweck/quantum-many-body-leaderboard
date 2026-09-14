@@ -1,0 +1,1654 @@
+    Projected Inverse Iteration: An Eigenvalue
+ Approach to Ground-State Computation with
+                       Neural Quantum States
+
+     Hang Zhang1,  Victor Armegioiu1,  Juan Carrasquilla1,
+    Siddhartha Mishra1,  Johannes M¨uller2,  Jannes Nys1*†   ,
+                               Marius Zeinhofer1*†
+
+                           1ETH Zurich, Switzerland.
+                                      2TU Berlin.
+
+
+         *Corresponding author(s). E-mail(s):jannys@ethz.ch;
+                        marius.zeinhofer@math.ethz.ch;
+            †These authors contributed equally to this work.
+
+
+
+                                        Abstract
+Deep learning offers a powerful approach to quantum many-body problems via
+neural  network  wavefunctions,  but  their  optimization  remains  a  severe  bottle-
+neck.  Existing  optimization  methods,  including  natural  gradient  descent  and
+stochastic reconfiguration, suffer from spectral gap-dependent convergence that
+limits their effectiveness on systems fraught with competing orders and nearly
+degenerate  ground  states,  such  as  frustrated  magnets  and  strongly  correlated
+electron materials. Here, we introduce Projected Inverse Iteration (PII) by re-
+framing  the  ground-state  search  as  an  eigenvalue  problem.  PII  achieves  rapid,
+gap-insensitive  convergence  while  preserving  the  favorable  polynomial  com-
+putational  scaling  of  stochastic  reconfiguration.  Demonstrated  on  challenging
+two-dimensional spin systems, including the highly frustratedJ                  1-J 2 model, PII
+outperforms  standard  optimization  techniques  and  presents  a  promising  algo-
+rithmic strategy for discovering complex quantum states in the presence of small
+spectral gaps. More broadly, PII can be interpreted as a novel natural gradient
+method tailored for eigenvalue problems, opening up its application to related
+challenges within deep learning.
+
+
+
+
+
+
+
+                                             1
+1  Introduction
+
+Optimization algorithms are a foundational facet of recent advances in artificial intel-
+ligence (AI), alongside novel neural architectures and the scaling of data and compute.
+They  are  essential  for  making  large-scale  learning  practically  achievable.  Powerful
+optimization methods range from widely used first-order methods like momentum [1]
+and  Adam  [2]  to  computationally  heavier  approximate  second-order  methods  like
+K-FAC [3], Shampoo [4], and SOAP [5] that offer improved convergence.
+    This  paradigm  naturally  extends  to  AI  for  physics  and  chemistry.  A  prominent
+example is the use of neural network wavefunctions to solve complex many-body prob-
+lems  in  condensed  matter  physics,  nuclear  physics,  and  quantum  chemistry  [6–25].
+For most architectures, standard first-order stochastic methods such as Adam are well
+known  to  perform  poorly,  making  natural  gradient  schemes  (independently  discov-
+ered and coined stochastic reconfiguration [26], or SR) the preferred choice. However,
+improving this scheme has become a critical focal point; in the last two years, it has
+become apparent that to achieve breakthroughs, progress in neural architectures must
+be matched with parallel advancements in optimization methods [13,27–34]. Just as
+Adam  revolutionized  the  field  of  deep  learning,  it  stands  to  reason  that  the  devel-
+opment  of  novel  physics-informed  optimization  schemes  may  be  the  key  to  solving
+previously intractable quantum problems.
+    In  this  manuscript,  we  focus  on  the  challenge  of  makingeigensolverstractable
+for  large-scale  problems  in  quantum  mechanics  far  beyond  the  problems  reachable
+with exact methods. In this regime, even state-of-the-art matrix-free methods exhaust
+the capacity of the world’s largest supercomputers. We focus on the core eigenvalue
+problem of quantum mechanics, the stationary Schr¨odinger equation
+
+                                               ˆH|ψ⟩=E|ψ⟩.                                                   (1)
+
+for a Hamiltonian operator  ˆHand quantum state|ψ⟩with energyE. While the ground
+state  approximation  of  Eq.   (1)  is  typically  formulated  as  an  energy  minimization
+problem,  here  we  show  that  directly  viewing  it  as  an  eigenvalue  problem  offers  a
+powerful new perspective. More precisely, our contributions are the following:
+•  We  introduce  Projected  Inverse  Iteration  (PII), adapting classical inverse
+  iteration to large-scale quantum systems via a Galerkin projection onto the tangent
+  space  of  the  variational  manifold.  We  empirically  demonstrate  PII’s  efficacy  on
+  challenging  two-dimensional  spin  systems,  where  it  converges  significantly  faster
+  than Stochastic Reconfiguration—the current gold standard—while preserving the
+  same favorable computational scaling.
+•  We  establish  a  principled  theoretical frameworkfor analyzing the conver-
+  gence  of  algorithms  in  ground-state  computations.  Our  analysis  identifies  SR  as
+  a Galerkin-projected variant of Riemannian gradient descent, explaining its linear
+  convergence rate and severe degradation for closing spectral gaps. In contrast, PII
+  explicitly leverages the eigenvalue structure to bypass this bottleneck, providing a
+  highly robust and efficient training method for neural network wavefunctions in the
+  presence of closing spectral gaps (as illustrated in Figure1).
+
+
+                                                      2
+Fig. 1Visualization of SR (red) and PII (cyan) for the Hamiltonian    ˆH= diag(1,10,0) and a linear
+normalized state vector on the sphereS. Figure A visualizes the optimization dynamics on the sphere,
+and Figure B shows the corresponding energy error. PII converges in essentially a single step for the
+shift valueτ= 10       −8   . SR with learning rateη= 0.1 converges slowly with oscillating iterates, due to
+the large eigenvalue spread (Γ = 10) and the small spectral gap (∆ = 1).
+
+    The development of PII in this work can be seen as a specialization of theinfinite-
+dimensionalviewpoint on optimization in scientific machine learning proposed in [35].
+In this context, infinite-dimensional refers to the choice of inverse iteration as a well-
+suited  method  for  solving  Eq.  (1)  over  a  general  function  space,  independent  of  a
+parametrization. When we refer to function space or the non-parametric setting, we
+always mean the intractably large space, irrespective of it beingC        2N in spin systems, or
+the subspace ofL    2(R  3N  ) consisting of anti-symmetric functions in electronic structure.
+Consequently, PII applies to general non-linearly parametrized eigenvalue problems.
+In fact, in machine learning parlance, PII can be viewed as a novel natural gradient
+method that is tailored for the application to eigenvalue problems. We thus anticipate
+applications of PII beyond its demonstrated utility in quantum physics.
+
+2  Results
+
+We introduce the core PII algorithm in the next section, and demonstrate its proper-
+ties on a benchmark example, as well as on large-scale two-dimensional systems with
+important Hamiltonians central to condensed matter physics [7].
+
+2.1  Projected inverse iteration
+Consider a variational approximationψ       θ  (typically a neural network [6]) of a quan-
+tum state with parametersθ. To solve the time-independent Schr¨odinger equation in
+Eq.  (1),  variational  methods  cast  the  problem  into  an  optimization  problem  of  the
+
+
+
+
+                                                       3
+energy loss function given by the Rayleigh quotient
+
+
+                                        minψθ E(ψ  θ) =⟨ψ θ| ˆH|ψ  θ⟩⟨ψ θ|ψ θ⟩ .                                          (2)
+
+
+The  denominator  translates  the  fact  that  valid  quantum  states  are  normalized
+(|  ˆψ⟩=|ψ⟩/∥ψ∥in  theL                               2  norm∥ψ∥=      p⟨ψ|ψ⟩),  i.e.  they  live  on  the  unit  sphere
+S={      ˆψ∈H:∥       ˆψ∥= 1}. Hence, the Rayleigh quotient in Eq. (2) is insensitive to the
+normalization. The above objective is typically optimized using gradient-based opti-
+mization algorithms such as Adam [2,9], K-FAC [3,16], or stochastic reconfiguration
+(SR). While successful in many contexts, these minimization methods do not funda-
+mentally  exploit  the  underlying  eigenvalue  problem  represented  by  the  Schr¨odinger
+equation in Eq. (1).
+    To  respect  the  eigenvalue  structure,  we  design  a  projected  version  of  inverse
+iteration—the canonical  algorithm in numerical linear algebra  for computing  eigen-
+states  given  an  eigenvalue  guess  [36].  The  projection  step  turns  the  intractable
+non-parametric inverse iteration scheme into a scalable iterative algorithm similar to a
+preconditioned gradient scheme. To translate this approach to the context of ground-
+state computations in quantum mechanics, we consider a trial|ψ    k⟩at iterationkand
+a shift parameterτthat serves as an approximation of the ground-state energy. In a
+non-parametric setting, inverse iteration updates the quantum state via
+
+
+                                     | ˆψk+1⟩=     ( ˆH−τ       ˆI) −1 | ˆψk⟩∥(   ˆH−τ       ˆI) −1 | ˆψk⟩∥.                                       (3)
+
+
+We rewrite the above into a Riemannian scheme, iteratively updating the current state
+with tangential directions and retracting back to the sphere via normalization. This
+yields
+
+
+               | ˆψk+1⟩= | ˆψk⟩−|d k⟩∥| ˆψk⟩−|d k⟩∥, |d k⟩=|     ˆψk⟩−     ( ˆH−τ       ˆI) −1 | ˆψk⟩⟨ ˆψk|(  ˆH−τ       ˆI) −1 | ˆψk⟩.             (4)
+
+
+whered     k∈T ψkSis tangent to the current iterate    ˆψk, i.e.⟨d   k| ˆψk⟩= 0. In the exam-
+ple in Fig.1, we explicitly depict the update vectord                    0 on the sphere for the first step
+(k= 0). At first glance, this reformulation appears impractical. Direct computation of
+dk  is infeasible for many-body systems due to the exponential growth of the Hilbert
+space, and introducing Riemannian geometry may seem like an unnecessary compli-
+cation. However, this geometric perspective is the crucial stepping stone for deriving
+a scalable, projected variant. Specifically, our method builds on the realization that
+a  Galerkin  projection  of  this  infinite-dimensional  Riemannian  update  onto  the  tan-
+gent space of a variational model leads to a highly tractable algorithm. Moreover, this
+approach maintains the same polynomial computational scaling as SR per iteration
+(for details, see Methods). Galerkin projection turns the inverse iteration update (4)
+
+
+
+
+                                                        4
+into a tractable preconditioned gradient scheme in parameter space
+
+                                θk+1   =θ k−Q −1  (θ k) 12∇θE(ψ  θk),                                 (5)
+
+where∇     θE(ψ  θk) is the energy gradient, andQis a preconditioner that can be esti-
+mated efficiently with Monte Carlo integration. While we use normalized states in our
+notation, our method works equally well for unnormalized states. For details, we refer
+to the Methods. The matrixQdepends on the energy shiftτ, and is constructed from
+theτ-shifted  Hamiltonian  operator  projected  into  the  tangent  space  of  the  current
+iterate  ˆψk. Moreover, for the choiceτ=E(ψ         k), the iteration (3) is known asRayleigh
+quotient  iteration, and its equivalent Riemannian formulation in Eq. (4) agrees with
+the Riemannian Newton method. We expand on this connection in AppendixH.
+
+2.2  Convergence guarantees
+To analyze PII in comparison to SR, we consider their non-parametric formulations.
+This setting isolates the underlying dynamics and has the advantage of being agnostic
+to  the  specific  parametric  ansatz.  Extending  this  analysis  to  include  neural  quan-
+tum states and the effect of Monte Carlo sampling remains an open question beyond
+the  scope  of  this  work.  Strictly  speaking,  our  computationally  tractable  algorithms
+in  parameter  space  are  Galerkin-projected  and  Monte  Carlo-estimated  variants  of
+their functional counterparts. While we refer to them as SR and PII for simplicity,
+their underlying non-parametric methods are Riemannian gradient descent and inverse
+iteration, see also Methods.
+    LetE       0  andE       max  denote the smallest and largest eigenvalues of  ˆH, respectively.
+We define the first excited state energy,E 1, as the minimal eigenvalue of  ˆHstrictly
+greater  thanE         0.  Our  analysis  explicitly  covers  degenerate  ground  states.  For  any
+iterative sequence  ˆψk converging to a target ground state  ˆψ∗, we analyze the functional
+convergence rateρ<1 for which∥            ˆψk− ˆψ∗∥2≤cρ k for a constantcindependent ofk.
+The convergence of SR as a functional algorithm is governed by the rate
+                                                1−   1E1−E    0    .                                         (6)
+                                       ρSR =          2 Emax−E    0
+
+For concreteness this rate is stated forη= 1/(2(E                  max−E    0)). Crucially, the convergence
+rate of SR in Eq. (6) deteriorates when the spectral spread Γ =E        max−E    0  is large
+or the spectral gap ∆ =E    1−E    0  is small. In these cases, SR converges with a slow
+linear rate, as illustrated in Figure1or in more detail in the AppendixK. Moreover,
+SR possesses a critical step-size threshold ofη= 1/(E             max−E    0) beyond which the
+algorithm diverges, see Figure [B]. The sensitivity of the SR step-size to the spectrum
+(η<Γ −1  ) requires a manual step-size tuning for every quantum system.
+    Inverse iteration, on the other hand, always uses a step-size ofη= 1 and converges
+for all shift parametersτ <          E1+E    02      at the rate
+                                          1− E1−E    0   =E0−τ      .                                    (7)
+                                  ρII =          E1−τ             E1−τ
+
+
+                                                       5
+Fig. 2  Spectral-gap dependence distinguishes PII from SR. A,Optimization trajectories for
+the 4×4 TFIM in a regime with a small spectral gap (h/J= 2, ∆ = 0.015), plotted as relative error
+εversus iteration for PII, SR and Adam, whereε=|(E                    ViT−E   ED)/E  ED|. All runs use the same
+number of Monte Carlo samples (M= 32,768) and a positive real-valued ViT ansatz (4 layers, hidden
+dimensiond= 20, andh= 2 heads). PII uses a learning rateη= 1.0 and Tikhonov regularization
+λ= 0.01, whereas SR usesη= 0.01 andλ= 10                    −4   . Adam is included as a standard first-order baseline,
+with  its  best  learning  rateη=  0.01.B,The  same  comparison  in  a  larger-gap  regime  (h/J=  4,
+∆ = 3.25). PII shows little gap dependence, whereas SR slows down for the smaller gap and Adam
+remains at higher relative error over the plotted iterations.
+
+Forτ=E          0+α(E        1−E    0) we obtain the convergence rateρ        II =  α1−α     thereby removing all
+dependency on the spectrum of  ˆH. Further, the convergence factorρ                II in Eq. (7) can be
+made arbitrarily fast asτ→E           0, see FigureK5. In the limitτ→E                                   0, inverse iteration
+converges  typically  in  a  single  step  as  illustrated  in  Figure1.  Nevertheless,  using  a
+valueτ̸=E              0 induces a slowdown of convergence, which we demonstrate in FigureK6.
+However, we will demonstrate in the next sections thatτ <E         0 can serve as a reliable
+regularization  when  used  with  stochastic  Monte  Carlo  estimation  of  the  quantities
+involved. Whenτ     k =E(ψ    k) is chosen adaptively as the current energy estimate, the
+method is known as the eigensolver Rayleigh quotient iteration and converges cubically
+in the vicinity of the ground state [36]. While the convergence analysis in this section
+is for the non-parametric setting, we experimentally show that these properties to a
+large extent carry over to expressive variational models. In practice, this means PII is
+much more robust to small gaps compared to SR. In all our experiments in the next
+section, including linear models, full Hilbert sum computations, and highly nonlinear
+deep neural networks on large 10×10 models with Monte Carlo, we clearly observe
+significantly less gap sensitivity in agreement with the theory.
+    In certain applications, extremely small spectral gaps can occur. For any method
+to resolve these, one needs access to highly accurate energies, gradients, and precon-
+ditioners beyond those achievable with Monte Carlo estimation. Resolving such gaps
+remains out of reach for both SR and PII. However, PII can resolve moderately small
+gaps much better than SR.
+
+
+
+
+                                                          6
+2.3  Effect of spectral gap on convergence
+In  this  section,  we  experimentally  confirm  the  favorable  convergence  properties  of
+PII  on  systems  with  small  spectral  gaps,  both  for  a  linearized  state-vector  setting
+and a nonlinearly parametrized neural-network ansatz. For the linear state vector, we
+visualize the behavior of SR for a moderately small spectral gap in Fig.1. The effect
+of further shrinking the gap is visualized in AppendixKin FiguresK5andK7. We
+observe that closing spectral gaps lead to a slow oscillatory behavior of the iterates in
+Hilbert space. This is the familiar behavior of a gradient descent method in a narrow
+loss valley, bouncing rapidly between the valley walls. This interpretation is further
+strengthened through the analysis of SR as a projected Riemannian gradient descent
+method in section3.1. PII, on the other hand convergence in a single step for all these
+examples, independent of the gap sizes considered.
+    We further benchmark PII against SR and Adam in a parametric setting using a
+variational ansatz for a small 4×4 transverse-field Ising model (TFIM), for which the
+spectral gap can be evaluated by exact diagonalization. The Hamiltonian is
+
+                                  ˆHTFIM =−J  X         ˆσzi ˆσzj−h X     ˆσxi,                                   (8)
+
+                                                   ⟨i,j⟩              i
+
+where⟨i,j⟩denotes nearest neighbours, and               ˆσx,y,z are the Pauli matrices.
+    Figure2compares the convergence speed in a coupling regime with different gap
+sizes ∆ =E    1−E    0. We consider the gaps (small) ∆ = 0.015 ath/J= 2, and (large)
+∆ = 3.25 ath/J= 4, respectively. The experiments are carried out with a deep neu-
+ral network ansatz, in particular a non-linear ViT ansatz [12]. We include Adam as
+a widely used adaptive first-order baseline, which relies only on local gradient infor-
+mation  and  does  not  use  the  preconditioning  employed  by  SR  or  PII.  For  SR  and
+PII,  the  respective  preconditioners  are  regularized  with  a  Tikhonov  regularization1
+Q(θ)→Q(θ) +λIwhen taking the inverse in Eq. (5) (see Eq. (29) in Methods). For
+fair comparison, we run SR with the largest possible learning rateηand the small-
+est possible regularizationλthat allows for a stable optimization (see Supplemental
+Material).
+    Ath/J=  2,  the  4×4  TFIM  corresponds  to  the  ordered  ferromagnetic  regime
+of the two-dimensional model. In the thermodynamic limit, this phase spontaneously
+breaks the globalZ            2 spin-flip symmetry, giving two symmetry-related ground states.
+On a finite periodic lattice, this degeneracy is lifted by a finite-size spectral gap ∆,
+which decreases exponentially with system size. PII reduces the relative error of the
+variational  energy  to∼10  −4    within  10  iterations  in  both  regimes  (Fig.2a,b).  By
+contrast, SR slows markedly as the gap decreases, requiring substantially more iter-
+ations  to  reach  the  same  accuracy.  The  resulting  trajectories  distinguish  an  almost
+gap-insensitive optimization regime for PII from a gap-limited regime for SR. These
+results indicate that the qualitative conclusions based on theoretical non-parametric
+convergence  rates  in  Eqs.  (6)-(7)  persist  for  neural  quantum  states  optimized  with
+Monte Carlo sampling.
+
+
+
+  1We  will  set  the  units  of  energyJ=  1  everywhere,  and  drop  the  scale  in  SR  learning  rates  and  PII
+regularizations for simplicity of notation.
+
+                                                       7
+Fig. 3  Shift undershooting stabilizes PII in a quasi-degenerate TFIM.Relative ground-
+state energy error versus iteration for the 4×4 TFIM ath/J= 2.A,Without undershooting (τ=E                              0),
+Monte Carlo noise prevents PII from converging for small batch sizes (M= 512 andM= 4096).
+B,With undershooting (τ= 1.2E             0), trajectories stay stable across batch sizes.C,In the noise-free
+full-sum limit, sweepingτ=αE                 0  follows the predicted contractionr  PII, showing a direct trade-off
+between robustness and speed. All trajectories useλ= 0.1 andη= 1.0. All results are produced with
+a real-valued RBM ansatz (hidden-variable densityα= 4 [6]).
+
+2.4  Effect of the energy shiftτ
+Theoretically, the optimal convergence in PII is expected when the shiftτmatches
+the  true  ground  state,  i.e.,τ=E             0  in  Eq.  (3).  However,  takingτ < E                 0,  which  we
+refer to asundershootingthe energy, can help stabilize the preconditioning at a fixed
+Monte  Carlo  budget  per  iteration,  at  the  cost  of  a  reduced  theoretical  convergence
+rate in Eq. (7). This approach is different from the standard Tikhonov regularization
+approach (λ) also used in SR.
+    In Fig.3a,b, we consider the 2D TFIM ath/J= 2 on a 4×4 lattice. Without under-
+shooting, i.e.τ=E            0 is the exact ground state energy obtained with ED (Fig.3A), PII
+shows rapid convergence, but requires a higher number of Monte Carlo samples for
+convergence. ForM= 512 and 4096, the optimization fails, likely to an inaccurately
+
+
+                                                            8
+Fig.  4  PII  acceleration  at  large10×10lattices.Energy  per  site  during  the  optimization,
+comparing  SR  and  PII  for  three  canonical  2D  spin- 12  models  on  a  torus:A,TFIM  ath/J=  2;
+B,unfrustrated Heisenberg antiferromagnet (J      2  = 0);C,frustratedJ                           1–J  2  model atJ    2/J1  = 0.5.
+Stoquastic casesA,Bare optimized with a positive real ViT ansatz (4 layers;d= 20,h= 2), whereas
+the frustrated pointC,uses a complex-valued ViT to capture the emergent sign structure (4 layers;
+d= 60,h= 10; see Methods). PII usesη= 1.0 with diagonal shift 10                −3    (TFIM),η= 1.0 with shift
+10−2    (Heisenberg), andη= 1.0 with shift 10         −1    atJ    2/J1 = 0.5, together with mild overshoot control.
+
+empirical preconditioner in Eq. (5). In contrast, atM= 16384 the method converges
+smoothly, indicating effective preconditioning.
+    Introducing  mild  undershooting  substantially  improves  the  robustness  of  PII
+(Fig.3B): across the same range ofM, PII becomes far less sample-size dependent
+and converges reliably even in the low-sample regime. We attribute this stabilization
+to improved spectral conditioning of the preconditioner. Increasingτshifts the spec-
+trum ofQtowards larger values, which heuristically makes it easier for finite-sample
+estimates to retain (approximate) positive semi-definiteness in Eq. (17).
+    To  disentangle  this  effect  from  Monte  Carlo  noise,  we  further  evaluate  PII  in  a
+noiseless setting by replacing stochastic estimators with a full Hilbert space contraction
+(full  sum  for  short).  In  this  deterministic  limit  (see  Fig.3c),  undershooting  is  no
+longer  expected  to  provide  a  stability  advantage,  but  still  induces  the  slowdown  of
+convergence observed in Eq. (7). Asτmoves away fromE                     0, the ratio approaches unity,
+increasingρ                    II  and  weakening  the  per-iteration  contraction.  These  results  expose  a
+stability-speed trade-off that can be exploited in PII: undershooting mildly reduces the
+convergence speed, but significantly improves numerical robustness under stochastic
+estimation of the preconditionerQ.
+
+2.5  Large scale results
+We  now  apply  PII  to  a  number  of  large-scale  experiments  far  beyond  the  reach  of
+exact  methods  (due  to  a  Hilbert-space  size  of  1030),  and  of  significant  importance
+for condensed matter physics [7]. We consider three canonical two-dimensional spin-    12
+models on 10×10 square lattices with periodic boundary conditions: the TFIM, the
+(unfrustrated)  Heisenberg  antiferromagnet,  and  the  highly  frustratedJ                    1–J  2  model.
+
+
+
+                                                           9
+The latter reads
+                             ˆHJ1–J  2 =J    1X   ˆSi· ˆSj +J    2 X     ˆSi· ˆSj,                             (9)
+
+
+                                            ⟨i,j⟩                 ⟨⟨i,j⟩⟩
+
+where⟨⟨i,j⟩⟩denotes next-nearest neighbours, andS            i = [ˆσxi, ˆσyi, ˆσzi ]. The Heisenberg
+model corresponds toJ    2/J1  = 0 in Eq. (9). Near the frustrated pointJ      2/J1  = 0.5,
+the phase diagram in the thermodynamic limit remains highly debated [37–40].
+    The TFIM and the Heisenberg Hamiltonian are stoquastic, i.e. can be cast into
+a form with real and negative off-diagonal elements. This implies that their ground
+states can be chosen real and nonnegative. In contrast, nearJ         2/J1≃0.5 theJ              1–J  2
+model develops a nontrivial sign structure and is challenging even for state-of-the-art
+ground-state solvers. Capturing the sign structure requires an expressive and highly
+non-linear complex-valued ansatzψ     θ. For TFIM ath/J= 2 and the Heisenberg limit
+J2/J1 = 0, we use the same positive ViT as in previous experiments. For the highly
+frustrated pointJ  2/J1 = 0.5, we use a wider and complex-valued neural network.
+    Figure4shows the convergence of PII versus standard SR for the three Hamilto-
+nians. PII reaches the target energy in substantially fewer iterations than SR for the
+TFIM and Heisenberg benchmarks (Fig.4a,b), which is consistent with SR becoming
+spectrum-limited in systems with small energy gaps. On 10×10, SR typically requires
+O(10    2) iterations to reach the target energy, whereas PII converges within only a few
+dozen iterations (∼20–30) across the same settings.
+    We  clarify  that,  in  the  ordered  TFIM,  the  finite-size  splitting  between  the  two
+lowest states becomes exponentially small with system size. Because these states form a
+quasi-degenerate ground state, resolving them with single-state methods is practically
+impossible. Consequently, convergence to the target energy is dominated by the gap
+to the next true excited state. When this gap is small, SR enters a gap-limited regime.
+Similar effects appear in the Heisenberg antiferromagnet, while in theJ       1-J  2  model,
+frustration lifts the quasi-degeneracy and can remain significant for large system sizes:
+O(1).
+
+3  Methods
+3.1  Riemannian functional optimization perspective
+Before describing the projection step that converts II into PII, we first analyze energy
+optimization from a Riemannian perspective. We hereby focus on infinite-dimensional
+functional updates, or said differently, updates of non-parametric quantum states in
+the Hilbert space. The Riemannian gradient of the energyE(              ˆψ) =⟨      ˆψ|H|       ˆψ⟩on the
+sphereSreads
+
+                                   gradSE(   ˆψ) = 2(   ˆH−E(         ˆψ)   ˆI)|    ˆψ⟩                                   (10)
+
+
+
+
+
+
+
+                                                      10
+Hence, Riemannian gradient descent on the sphere with step-sizeη>0 and retraction
+by normalization [41] is given by the recursion
+
+
+                                  | ˆψk+1⟩= | ˆψk⟩−ηgrad     SE(   ˆψk)∥| ˆψk⟩−ηgrad     SE(   ˆψk)∥ .                                 (11)
+
+
+In other words, the Riemannian gradient descent update in Hilbert space retracts the
+following update direction
+
+                                      |d k⟩=ηgrad       SE(   ˆψk)
+                                             = 2η(     ˆH−E(         ˆψk)ˆI)|    ˆψk⟩                                       (12)
+
+back  onto  the  sphereS.  We  will  demonstrate  in  the  next  section  that  SR  can
+be  understood  as  a  Galerkin-projected  version  of  this  Riemannian  gradient  descent
+scheme.
+    We note in passing that the Riemannian energy gradient is the same as the gradient
+of the Rayleigh quotient in Eq. (2): grad    SE=∇   ψE. This implies that Riemannian
+gradient  descent  agrees  with  gradient  descent  on  the  Rayleigh  quotient  up  to  the
+retraction step.
+
+3.2  Galerkin projections and inverse iteration
+While the previous section considered functional updates, we now study these updates
+in  a  basis  determined  by  a  parametrized  quantum  state.  For  a  normalized  neural
+network wavefunction  ˆψθ  =ψ θ/∥ψ  θ∥with parametersθ∈R            P , we consider its local
+linearization given by
+
+                                     Vθ = span{∂     θi ˆψθ}Pi=1 ⊂T ψθS,                                    (13)
+
+which  changes  throughout  the  optimization.  As  detailed  below,  we  obtain  PII  and
+SR by orthogonally projecting their functional schemes onto these finite-dimensional
+spaces. Any solutionξ∈R         P  to the linear system
+                                 X    b(∂  θi ˆψθ,∂θj ˆψθ)ξ j =b(∂   θi ˆψθ,dk)                                 (14)
+
+
+                                   j
+
+represents the orthogonal projection of|d  k⟩with respect to the inner productbinto
+the spaceV    θ  in the generating system∂      θ1 ˆψθ,...,∂θ1 ˆψθ. Such a projection is called a
+Galerkin projection.
+    To derive PII from II, we consider the inner productb(v,w) =⟨v|                  ˆH−τ       ˆI|w⟩and
+project the inverse iteration directiond       k in Eq. (4) ontoV   θ with respect to the inner
+productb. This choice comes from the fact that if we choosew=d          k, the intractable
+( ˆH−τ       ˆI) −1    in the functional II update in Eq. (4) is annihilated. This will allow us to
+make II tractable through projection. Computingbandd             k  in the generating system
+
+
+
+                                                        11
+ofV  θ yields
+
+                         b(∂  θi ˆψθ,∂θj ˆψθ) =⟨∂  θi ˆψθ| ˆH−τI|∂    θj ˆψθj⟩=Q(θ)     ij                      (15)
+                             b(∂  θi ˆψθ,dk) =⟨∂  θi ˆψθ| ˆH−τI|d    k⟩=    12∂θiE(ψ  θ)                     (16)
+
+where we introduced the matrices
+
+                                            Q(θ) =H(θ)−τS(θ)                                             (17)
+                                          S(θ)   ij =⟨∂  θi ˆψθ|∂ θj ˆψθ⟩                                           (18)
+                                          H(θ)   ij =⟨∂  θi ˆψθ| ˆH|∂  θj ˆψθ⟩                                       (19)
+
+which  can  be  estimated  efficiently  with  Monte  Carlo  sampling,  as  we  demonstrate
+in the next section. TheS-matrix in Eq. (18) is commonly referred to as theGram
+matrix, overlap  matrixorquantum  geometric  tensor[42]. TheH-matrix represents
+the discretization of the Hamiltonian  ˆHand appears also in e.g. the linear method [43].
+For PII, we obtain the linear systemQ(θ)ξ=                           12∇θE(   ˆψθ), clarifying the preconditioner
+and parameter-update rule of PII in Eq. (5).
+    We can also derive SR from a similar Galerkin-projection viewpoint. For SR the
+direction is the Riemannian gradient|d k⟩= grad  SE(   ˆψk) = 2( ˆH−E(         ˆψk))|    ˆψk⟩, and we
+use theL      2 inner product instead ofb:b(v,w) =⟨v|w⟩. This yields the familiar formulas
+
+                                         ⟨∂ θi ˆψθ|∂ θj ˆψθ⟩=S(θ)     ij
+                                              ⟨∂ θi ˆψθ|d k⟩=∂  θiE(ψ  θ),
+
+Any  solutionξ∈R         P  to  the  linear  systemS(θ)ξ =∇           θE(ψ  θ)  now  represents  the
+orthogonal  projection  of  the  Riemannian  gradient  intoV  θ  with  respect  to  theL      2
+inner  product.  This  shows  that  SR  is  in  fact  anL     2  projected  Riemannian  gradient
+descent scheme. Note that the standardL                  2 inner product lacks information about the
+Hamiltonian spectrum. This lies at the core of the struggling behavior of SR in certain
+spectral regimes.
+    Finally,  our  Galerkin  viewpoint  also  gives  insight  into  the  properties  of  the
+Rayleigh-Gauss-Newton method [29] as a Riemannian method. The latter can now be
+understood as follows: 2bis the Riemannian Hessian of the energy, whereb(v,w) =
+⟨v|    ˆH−E(ψ)             ˆI)|w⟩. When discretized, it becomes the matrixH(θ)−E(θ)S(θ).
+    In  our  formalism,  we  can  categorize  the  existing  optimization  schemes  in  terms
+of the corresponding function space optimizer and eigensolver, as shown in Table1.
+Hence, to summarize the procedure to produce a parameter update rule from a given
+eigensolver (and therefore reproduce Table1) goes as follows: (i) a chosen eigenvalue
+solver yields a functional update direction|d        k⟩, which (ii) induces a choice for the inner
+productb, in order to makeb(v,d       k) tractable. Through (iii) Galerkin projections, we
+obtain a linear equation to define a parameter update rule for variational models.
+
+
+
+
+
+                                                           12
+        Parameter                   Function space                 Inner product                    Eigensolver
+        algorithm                      optimizer                         b(v,w)
+
+    Projected inverse                   Globalized                   ⟨v|    ˆH−τ       ˆI|w⟩       Shifted inverse
+  iteration (this work)          Riemannian Newton                                                     iteration
+                                      method onS
+          Rayleigh               Riemannian Newton                 ⟨v|    ˆH−E(ψ)|w⟩             Rayleigh quotient
+   Gauss-Newton [29]                  method onS                                                       iteration
+
+         Stochastic                  RiemannianL                       2  ⟨v|w⟩                    Power iteration
+      reconfiguration            gradient descent onS
+
+  Wasserstein quantum            Wasserstein gradient                        –                              –
+     Monte Carlo [28]                     descent
+Table 1Correspondence of optimization algorithms across parameter space, function space, and
+—where applicable—eigensolvers. We expand on the interpretation of SR as power iteration in
+AppendixF.
+
+
+3.3  Monte Carlo estimators
+Our PII approach is efficient due to the availability of efficient Monte Carlo estimators
+of  theSandHmatrix  in  Eqs.  (18)  and  (19).  We  focus  on  unnormalized  complex-
+valued wave functionsψ       θ∈Cwith real parametersθ∈R              P , but the method generalizes
+to other cases. We generate a set ofMsamples{x                          (m) }Mm=1   , distributed according to
+the  Born  probabilityp θ(x)  =|       ˆψ2θ|.  The  energy  is  obtained  in  the  standard  way  as
+E=E   p [EL] with the local energyE     L(x) = [Hψ  θ](x)/ψ   θ(x). The estimators for the
+energy gradient and the matricesSandHread
+
+
+                      ∂θiE= 2 ReE    p [(J i−E p [Ji])∗(E L−E)     ]                                        (20)
+                              ≈(O ⊤·e)  i                                                                             (21)
+                    S(θ)   ij = ReE  p [(J i−E p [Ji])∗(J j−E p [Jj])]                                    (22)
+                              ≈(O ⊤·O)  ij                                                                           (23)
+                   H(θ)   ij = ReE  p(Ji−E p [Ji])∗ (EL,j +E L (Jj−E p [Jj]))               (24)
+                              ≈(O ⊤·A)  ij                                                                           (25)
+
+We  introduced  the  log  derivativeJ i(x)  =∂   θi logψ  θ(x),  andE     L,i(x)  =∂   θiEL(x)
+denotes the derivative of the local energy. The matrices in the final expressions read
+
+      en =    2√M ReImn           EL(x  (m)    )−E                                                          e∈R      2M
+                                                                                                                      (26)
+
+   Onj =    1√M ReImn             Jj(x  (m)    )−E  p [Jj]                                            O∈R       2M×P
+                                                                                                                      (27)
+
+
+                                                            13
+   Anj =    1√M ReImn         EL,θ(x  (m)    ) +E L(x  (m)    )(J j(x  (m)    )−E  p [Jj])  A∈R       2M×P
+                                                                                                          (28)
+
+wherem= [(n−1) modM] + 1, i.e., we countm= 1,...,M,1,...,M, and ReIm                    n
+indicates that the real part must be considered forn= 1,...,Mand the imaginary
+part forn=M+ 1,...,2M. While computing the JacobianJand the local energies
+EL  are standard practices in SR as well, the local energy derivativeE L,i  is new in
+PII. However, for spin systems and neural network wave functions, the gradients in
+EL,i of the wave function can be computed with a computational cost scaling similarly
+toE  L. Indeed, backpropagation for many neural network architectures has the same
+scaling as a forward pass, typically roughly adding a constant factor 3 in FLOPs [44],
+independent of the system size.
+    Despite the symmetry ofH(θ) in Eq. (19), the Monte Carlo estimator in Eq. (25)
+is only asymptotically Hermitian. In practice, we use a Tikhonov regularization for
+the preconditioner
+
+                                     Q(θ) =H(θ)−τS(θ) +λI               P.                                     (29)
+
+Notice thatλhas the unit of energy here, while our learning rateηis dimensionless.
+Hence, the magnitudes ofλandηfor PII and SR have no clear relation. We remark
+that the choice of regularization strength is in general a delicate matter [45,46].
+    We  can  further  use  the  push-through  identity  for  the  inversion  of  the  empirical
+preconditioner
+            O⊤A−τO   ⊤O+λI    P−1   O⊤e=O  ⊤ OA⊤−τOO  ⊤ +λI      2M −1   e      (30)
+
+
+In the case 2M≤Pwe now need to invert the smaller matrix
+
+                                 OA⊤−τOO  ⊤ +λI      2M ∈R   2M×2M                                          (31)
+
+We will refer to this approach as MinPII, in accordance with MinSR that uses the same
+push-through  identity  [13].  In  the  numerical  experiments,  we  use  minPII  whenever
+2M <Pand PII otherwise. This yields a computational cost ofO(min(M                         2P,P 2M))
+due to the matrix-matrix multiplications involved in forming the preconditioner. We
+use scipy’s general linear solve to obtain the solution to the linear problem in all cases.
+
+3.4  Kaczmarz-inspired acceleration
+Here, we discuss how to adapt the ideas of the SPRING algorithm [30] (or similarly
+MARCH [34]) to the setting of PII. SPRING improves the sample efficiency of SR and
+thereby frequently improves its empirical performance. We observe a similar behavior
+for PII as illustrated in Supplemental MaterialG, motivating the theoretical derivation
+in this section.
+    The derivation of SPRING requires a least-squares formulation of the update direc-
+tion. Because of the non-symmetric Monte Carlo estimator of theH-matrix in Eq. (25),
+
+
+                                                      14
+a  least-squares  formulation  of  PII  is  not  clear  a  priori.  For  flexibility,  we  specialize
+the  viewpoint  of  Ref.  [35]  to  the  VMC  setting.  The  linear  system  in  the  Galerkin
+projection in Eq. (14) can equivalently be solved as a minimization problem
+
+
+                                                                      PX
+                  ξ∗ = argmin                                    2∥       |∂ j ˆψk⟩ξ j−|d k⟩∥2b.              (32)
+                           ξ∈R  P L(ξ),   whereL(ξ) =                        1j=1
+
+An important consequence of our framework is that we defined the norm to be with
+respect  to  a  general  inner  productb.  By  expanding  the  objective  above  and  using
+the definitions of the preconditionerQ(θ       k) and the parameter gradient∇ θE(ψ  k), the
+minimization objective reduces to the quadratic form:
+
+                            L(ξ) =       12ξ⊤Q(θ  k)ξ−    12ξ⊤∇θE(ψ  k) + const.                         (33)
+
+From this perspective, adding anL     2 penaltyλ∥ξ∥          22 toLto keep the norm ofξsmall
+recovers the standard Tikhonov-regularized linear system in Eq.29. This equivalence
+is straightforward to verify for SR, wherebsimply reduces to the standardL                                2 norm
+andQreduces to the overlap matrixS[42].
+    To  achieve  the  sample  efficiency  of  SPRING  through  Kaczmarz  within  PII,  we
+replace the origin-centered penalty above with a term anchored to the update direction
+from the previous VMC step,ξ    k−1
+
+  ξ∗ = argmin         L(ξ) +   λ2∥ξ−µξ   k−1 ∥22                                                               (34)
+           ξ∈R  P
+                     1
+      = argmin        2ξTQ(θ  k)ξ−    12ξT∇θE(ψ  k) +µξ  TQ(θ  k)ξ k−1     + λ2ξTξ               +µξ k−1       (35)
+           ξ∈R  P
+
+Converting the above back into a linear problem yields PII-SPRING
+
+                    (Q(θ  k) +λI   P ) (ξ−µξ   k−1    ) = 12∇θE(ψ  k)−µQ(θ      k)ξ k−1                      (36)
+
+In terms of Monte Carlo estimators, we obtain the solution
+
+       ξ∗ =µξ k−1     + OT A−τO    T O+λI          2M −1   OT 12e−µ     (A−τO        )ξk−1          (37)
+
+which  also  has  a  straightforward  MinPII-SPRING  form  using  the  push-through
+identity as in Eq. (30).
+
+3.5  Convergence results
+We  present  the  precise  convergence  results  for  PII  and  SR  in  the  non-parametric
+setting, where these algorithms correspond to inverse iteration and Riemannian gradi-
+ent descent with retraction by normalization, respectively. Further details on inverse
+
+
+                                                        15
+iteration and eigenvalue methods can be found in Ref. [47], and on Riemannian opti-
+mization  in  Refs.  [41, 48].  In  the  following,  we  consider  a  Hermitian  Hamiltonian
+ˆH∈C       2n×2 n  acting on the Hilbert spaceH=C                  2n. We denote its distinct eigenval-
+ues,  which  may  correspond  to  degenerate  eigenspaces,  byE   0 < E1 <···< E     max.
+LettingV               0  represent the ground state eigenspace associated withE         0, we define the
+system’s  spectral  gap  as  ∆  =E    1−E    0 >0,  and  the  system’s  spectral  spread  as
+Γ =E    max−E    0. ByP      0 andP  ⊥0   we denote the orthogonal projection ontoV    0 and its
+orthogonal complement, respectively.
+
+
+Theorem 1(Convergence  of  Inverse  Iteration)Let  the  sequence(ψ          k)k∈N      be  generated  by
+inverse iteration with shiftτ <          12(E  0 +E   1), i.e.,
+
+                                          ψk+1   =   ( ˆH−τI)  −1 ψk∥(   ˆH−τI)  −1 ψk∥.
+
+Assume that the initial iterateψ      0∈Shas nonzero overlap withV             0, meaningP          0ψ0 is non-zero
+and setψ ∗ :=P   0ψ0/∥P    0ψ0∥∈V   0. Then, it holds √         !1− E1−E   0
+                                                                                      k
+                             ∥ψ k±ψ ∗∥≤            2∥P ⊥0 ψ0∥∥P  0ψ0∥      E1−τ         .                             (38)
+
+The sign in front ofψ ∗  in the equation above is given bysign(E             0−τ).
+
+
+Theorem 2(Convergence of Riemannian Gradient Descent)Let  the  sequence(ψ    k)k∈N      be
+generated by Riemannian gradient descent with retraction by normalization, i.e.,
+
+               ψk+1   = ψk−ηgrad     SE(ψ  k)∥ψ k−ηgrad     SE(ψ  k)∥ ,   grad SE(ψ  k) = 2[ ˆHψk−E(ψ   k)ψ k].
+
+Assume that the initial iterateψ      0∈Shas nonzero overlap withV             0, meaningP          0ψ0 is non-zero
+and setψ ∗ :=P   0ψ0/∥P    0ψ0∥∈V   0. Then, choosing the stepsizeη= 1/(2(E                          max−E   0))it holds √!1−   1
+                                                                           E1−E   0      k
+                           ∥ψ k−ψ ∗∥≤            2∥P ⊥0 ψ0∥∥P  0ψ0∥    2  Emax−E   0
+
+Moreover, the algorithm converges for every step-sizeη<1/(E                         max−E   0).
+
+
+    The  proofs  for  both  results  are  provided  in  Appendix3.5.  As  discussed  in  the
+Section3, these theorems establish the global linear convergence of both algorithms.
+They illustrate how the convergence rate of Riemannian gradient descent deteriorates
+as the spectral gap closes and the spread widens, while inverse iteration can achieve a
+gap-independent and arbitrarily fast rate asτ→E           0. Notably, the explicit constants
+in these bounds are identical for Riemannian gradient descent and inverse iteration.
+While the general convergence properties of these underlying methods are well-known
+in principle, we are not aware of existing literature that provides a complete, global
+non-asymptotic analysis with fully explicit constants that also accommodates degen-
+erate  ground  states.  For  this  reason,  we  state  the  rigorous  results  in  full  here  and
+provide the complete proofs in Appendix3.5. We emphasize that our core theoreti-
+cal contribution is the realization that the analysis above directly describes SR and
+PII, as these are the Galerkin-projected variants of Riemannian gradient descent and
+inverse iteration.
+
+                                                         16
+4  Conclusions and Outlook
+
+We  introduced  Projected  Inverse  Iteration  (PII)  to  optimize  neural  network  wave-
+functions  by  framing  the  ground-state  search  as  an  eigenvalue  problem  rather  than
+an energy minimization task. Our theoretical framework identifies Stochastic Recon-
+figuration (SR) as a Galerkin-projected Riemannian gradient descent, which explains
+its sensitivity to closing spectral gaps. In contrast, PII projects classical inverse iter-
+ation onto the tangent space of the variational manifold. Numerical experiments on
+highly frustrated two-dimensional spin systems confirm that PII is robust to closing
+spectral gaps, yielding significantly faster convergence than SR while maintaining the
+same favorable computational scaling.
+    Future research will focus on extending PII to target excited states. Additionally,
+integrating PII with variance reduction techniques and advanced sampling methods
+will be necessary to adapt the algorithm for complex fermionic systems in quantum
+chemistry and condensed matter physics.
+    Beyond quantum mechanics, PII demonstrates the utility of an infinite-dimensional
+perspective on optimization in scientific machine learning, as suggested in [35]. Because
+PII can be interpreted as a natural gradient method tailored specifically for eigenvalue
+problems, it maps directly to general non-linearly parameterized eigenvalue problems.
+We anticipate this makes PII a robust, scalable tool for a wider class of challenges in
+computational science.
+Acknowledgements.The simulations in this work were based on Netket [49,50]
+and Jax [44].
+
+Declarations
+
+MZ acknowledges support from an ETH Postdoctoral Fellowship for the project “Reli-
+able, Efficient, and Scalable Methods for Scientific Machine Learning”. This work was
+supported by a grant from the Swiss National Supercomputing Centre (CSCS) under
+project ID lp20 on Alps.
+
+Code availability
+
+An implementation of the algorithms presented in this work are available on the github:
+https://github.com/jwnys/projected            inverse   iteration.
+
+Appendix A    Variational model: ViT recap
+
+The variational state used in this work is based on the previously introduced ViT archi-
+tecture for lattice spin systems [27]. A spin configuration on anL×Lsquare lattice
+is divided intob×bblocks, yieldingN=L                                   2/b2  patches. Each patch is mapped lin-
+early to ad-dimensional embedding, defining the input sequenceX                       (0) = [x 1,...,x N],
+withx    i∈R d.  The  sequence  is  then  processed  byn ℓ  stacked  encoder  blocks.  Each
+block contains a multi-head factored attention (MHFA) layer and a point-wise feed-
+forward network of hidden size 2dwith ReLU activation, with residual connections and
+
+
+                                                   17
+pre-layer normalization throughout. Given an input sequenceX                  (ℓ)   , the MHFA layer
+produces an intermediate sequenceA                  (ℓ)    = [A 1,...,A N], whereA     i∈R d, according to
+
+
+                                             dX          NX           dX
+                                 Ai,p =         Wp,q        αµ(q)ij      Vq,rx(ℓ)j,r.                              (A1)
+                                           q=1         j=1          r=1
+
+    Here,x           (ℓ)j,r denotes ther-th component of thed-dimensional representation of patch
+jat layerℓ;µ(q) =⌈qh/d⌉maps the feature indexqto its corresponding attention
+head;V∈R       d×d     andW∈R      d×d     are learnable weight matrices; andα   µ∈R N×N      is the
+attention  matrix.  Unlike  standard  dot-product  attention,  where  the  coefficients  are
+generated from query–key overlaps through a softmax, MHFA[27] treats the attention
+weights  themselves  as  variational  parameters.  On  the  periodic  patch  lattice,  these
+weights are taken in relative formα    µij  =α µi−j  ,with the index difference understood
+modulo the patch lattice. This parameterization is compatible with lattice translations
+and reduces the number of attention parameters fromO(N               2) toO(N). The encoder
+block then updates the sequenceX                  (ℓ)    according to
+                                ˜X(ℓ)    =X    (ℓ)   + MHFA
+                                                               LayerNorm(X                 (ℓ)   ),                       (A2)
+
+                            X(ℓ+1)    =  ˜X(ℓ)   + MLP      LayerNorm( ˜X(ℓ)   )       .                          (A3)
+
+Aftern    ℓ  blocks, the final sequenceX                  (n ℓ) = (y  1,...,y N) is summed over patchesN
+to  give  a  singled-dimensional  representation,z=         PNi=1 yi ∈R d.  The  variational
+wavefunction is then parameterized as log Ψθ(σ) =f   θ(σ) +ig   θ(σ),, with
+
+
+                                                   dX
+                                     fθ(σ) =           ϕ  b(f)α   +w    (f)α ·z,                                   (A4)
+                                                 α=1
+                                                   dX
+                                      gθ(σ) =          ϕ  b(g)α   +w    (g)α ·z,                                   (A5)
+                                                 α=1
+
+whereϕ(x) = log coshx. All parametersbandware real valued. For stoquastic Hamil-
+tonians, a positive real-valued ansatz is used, obtained by omitting the imaginary part
+gθ(σ). For frustrated systems the complex-valued form is used.
+
+Appendix B    Practical implementation details
+
+In this section, we present the pseudocode for the parameter-space implementation of
+PII used in the Results section (Algorithm1), based on the Monte Carlo estimators
+introduced  in  Eqs.  (21)–(25).  At  iterationk,  samples  are  drawn  from  the  current
+variational state to estimate the projected quantities, after which the regularized linear
+system in Eq. (29) is solved to obtain the update direction in parameter space.
+
+
+
+
+                                                         18
+                                      Algorithm 1Practical implementation of PII
+                                      Require:regularizationλ, learning-rate schedule{η                         k}K−1k=0   , number of iterationsK, sample
+                                            countM, initial parametersθ                           0, energy shiftτ
+                                        1:fork= 0,...,K−1do
+                                        2:     DrawMMCMC samples
+                                        3:     Estimatee        k,Ok, andA   k         (see Eqs. (26)–(28))
+                                        4:     Form∇    θE(ψ  k)←O  ⊤k ek
+                                        5:     FormQ    k←O ⊤k Ak−τO ⊤k Ok +λI       (see Eqs. (23)–(25) & Eq. (29) for PII, or
+                                            Eq. (31) for MinPII)
+                                        6:     Solve the linear systemξ      k =Q −1k   [ 12∇θE(ψ  k)]
+                                        7:     Update parameters:θ          k+1 ←θ  k−η kξk         (see Eq. (5))
+                                        8:end for
+                                        9:returnθ       K
+
+                                      Appendix C    Numerical details: hyperparameters for
+                                                                            the experiments
+
+                                      TableC1shows the architecture and optimization hyperparameters used in the numer-
+                                      ical experiments reported in the Results section. For the ViT ansatz, the architectural
+                                      parameters are the number of transformer layersn  ℓ, the number of attention headsh,
+                                      the embedding dimensiond, and the patch sizeb. For the RBM ansatz, we report the
+                                      hidden-unit densityα. The optimization parameters are the number of Monte Carlo
+                                      samplesM, the learning rateη, the regularization parameterλ, and, where applicable,
+                                      the energy shiftτ.
+
+
+                                      Table C1Architecture and optimization hyperparameters used in the numerical experiments.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                                                           19
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure     System      Size      Method        Ansatz             Architecture                        Optimization
+                                                                    nℓ h d  b α    M       η     λ   τ
+Fig.2    TFIM        4×4     PII             real ViT        4   2   20   2   —        32768              1.0        10   −2   E0
+Fig.2    TFIM        4×4     SR             real ViT        4   2   20   2   —        32768             0.01       10   −4      —
+Fig.2    TFIM        4×4     Adam          real ViT        4   2   20   2   —        32768             0.01       10   −4      —
+Fig.3a    TFIM        4×4     PII             RBM           —  —  —  —   4   512, 4096, 16384        1.0        10   −1   E0
+Fig.3b    TFIM        4×4     PII             RBM           —  —  —  —   4   512, 4096, 16384        1.0        10   −1    1.2E    0
+Fig.3c    TFIM        4×4     PII             RBM           —  —  —  —   4        full sum            1.0        10   −1  αE0
+Fig.4a    TFIM        10×10  PII             real ViT        4   2   20   2   —        32768              1.0        10   −3    1.1E    0
+Fig.4a    TFIM        10×10  SR             real ViT        4   2   20   2   —        32768            0.002      10   −4      —
+Fig.4b    Heisenberg  10×10  PII             real ViT        4   2   20   2   —        32768              1.0        10   −2    1.4E    0
+Fig.4b    Heisenberg  10×10  SR             real ViT        4   2   20   2   —        32768            0.002      10   −4      —
+Fig.4c J        1–J  2        10×10  MinPII        complex ViT   4   10  60   2   —        16384              1.0        10 −1   E0
+Fig.4c J        1–J  2        10×10  MinSR         complex ViT   4   10  60   2   —        16384            0.004      10 −4      —
+Fig.D1a  TFIM        10×10  SR             real ViT        4   2   20   2   —        32768        0.001→0.01  10       −3      —
+Fig.D1b  TFIM        10×10  SR             real ViT        4   2   20   2   —        32768        0.001→0.01  10       −4      —
+Fig.E2a   TFIM        4×4     PII             RBM           —  —  —  —   4        full sum            1.0        10   −1    1.4E    0
+Fig.E2b  TFIM        4×4     PII             RBM           —  —  —  —   4         4096              1.0        10   −1    1.4E    0
+Fig.G3TFIM        10×10  PII             real ViT        4   2   20   2   —     4096, 32768          1.0        10    −3    1.1E    0
+Fig.G3TFIM        10×10  PII-SPRING  real ViT        4   2   20   2   —     4096, 32768          1.0        10    −3    1.1E    0
+Fig. D1  SR is sensitive to learning-rate tuning on the10×10TFIM.Energy per site versus
+iteration for TFIM ath/J= 2, comparing SR across several learning rates with PII.A,Results for
+λ= 10  −3   .B,Results forλ= 10         −4   . As the SR learning rate is increased, the optimization becomes
+progressively less stable, with transient spikes appearing in the estimated ground state energy. By
+contrast, PII converges to the ground state more rapidly than all SR settings shown here. The yellow
+star  marks  the  SR  hyperparameter  setting  used  in  the  main  text,  corresponding  to  the  best  SR
+performance considered here.
+Appendix D    Details about finetuning learning rate
+                               of SR: demonstration of failure at
+                               higher LR
+
+In  this  section,  we  show  that  SR  was  tuned  as  carefully  as  possible  to  obtain  its
+strongest  performance.  Even  under  such  tuning,  SR  remains  sensitive  to  the  joint
+choice of learning rate and diagonal shift. FigureD1a,b shows the optimization tra-
+jectories  obtained  with  two  diagonal  shifts,λ=  10    −3    andλ=  10   −4  ,  respectively.
+The diagonal shift is introduced to improve numerical stability; however, if it is set
+too large, the SR convergence slows down. We therefore useλ= 10   −4    as the best-
+performing SR setting. Keeping the diagonal shift fixed atλ= 10  −4  , we then increase
+the learning rate fromη= 0.001 toη= 0.01. As shown in Fig.D1, larger learning rates
+progressively destabilize SR, leading to pronounced transient spikes and oscillations
+in the energy trajectory.
+
+Appendix E    Properties of theHmatrix
+
+To clarify the meaning of the matricesH(θ) andS(θ) defined in Eqs. (19) and (18),
+we interpret them as the effective Hamiltonian and the induced Hilbert-space metric
+on the variational tangent spaceV    θ = span{∂     θi ˆψθ}Pi=1 ⊂T    ˆψθS.Consider an arbitrary
+tangent vector|φ⟩=     PPi=1 vi∂θi| ˆψθ⟩∈Vθ,with coefficient vectorv∈R       P . By con-
+struction,H(θ) andS(θ) reproduce the energy and norm of|φ⟩within this local linear
+space:
+                                          v⊤H(θ)v
+                                           v⊤S(θ)v         =⟨φ|     ˆH|φ⟩⟨φ|φ⟩    .                                          (E6)
+
+
+                                                       20
+The generalized eigenvalue problem
+
+                                               H(θ)v=λS(θ)v                                              (E7)
+
+therefore coincides with the Schr¨odinger problem projected ontoV  θ. Equivalently, the
+generalized eigenvalues of (H(θ),S(θ)) are the Ritz values of                ˆHin the tangent space.
+Ordering them asλ    min(θ) =λ        1(θ)≤λ         2(θ)≤···, the smallest one satisfies
+
+                                       λmin(θ) =   min          ⟨φ|     ˆH|φ⟩
+                                                      0̸=φ∈V   θ  ⟨φ|φ⟩    ,                                      (E8)
+
+and thus gives the lowest Ritz value in the tangent space around  ˆψθ. At convergence,ˆψθ∗  =ψ    0,  the  tangent  space  is  orthogonal  to  the  ground  state  and  therefore  lies
+
+entirely in the excited-state sector. Accordingly, any nonzeroφ∈V        θ∗ can be expanded
+as|φ⟩=   Pn≥1  cn|E n⟩, and Eq. (E8) reduces to
+                                                          P
+                              λmin(θ∗) =    min             Pn≥1 |c n|2En
+                                              0̸=φ∈V   θ∗      n≥1 |c n|2 ≥E    1,                           (E9)
+
+withE         1  the  first  excited-state  energy.  The  bound  is  saturated  if  the  tangent  space
+contains a nonzero vector in the first-excited eigenspace.
+    FigureE2shows this behavior directly. In the full-sum calculation, the variational
+energy decreases towardE       0, whereasλ                min  rapidly approachesE      1  and then remains
+near it. Once the ground-state direction is excluded from the tangent space, the low-
+est mode of the projected problem is controlled by the lowest excited-state direction
+contained in that space.
+
+Appendix F    Stochastic Reconfiguration as Power
+                              Iteration
+
+Here,  we  recall  the  connection  between  power  iteration  and  Riemannian  gradient
+descent  with  retraction  by  normalization.  The  functional  update  for  Riemannian
+gradient descent can be re-written as
+
+
+                                 ψk+1   = ψk−2η(       ˆHψk−E(ψ    k)ψ k)∥ψ k−2η(       ˆHψk−E(ψ    k)ψ k)∥
+
+
+                                        =   (τ kI−   ˆH)ψ  k∥(τ  kI−   ˆH)ψ  k∥,
+
+
+whereτ     k  =E(ψ    k) +   12η  .  The  latter  is  one  step  of  power  iteration  for  the  operator
+τk−  ˆH,  which  for  a  suitable  choice  ofηshifts  the  Hamiltonian  such  that  we  can
+compute the ground state with a power iteration.
+
+
+
+
+                                                        21
+Fig. E2  Projected tangent-space spectrum during optimization on the4×4Heisenberg
+model.Variational energyEand smallest generalized eigenvalueλ                              min of the matrix pair (H(θ),S(θ))
+during optimization with a real-valued RBM ansatz of hidden-unit densityα= 4. All runs use the
+same  optimization  hyperparameters,τ=  1.4E                                0,λ=  0.1,  andη=  1.0.a,  Full-sum  estimator.b,
+Monte Carlo estimator with 4k samples.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Fig. G3  SPRING accelerates convergence on the10×10TFIM for small sample size.
+Relative  error  as  a  function  of  iteration  for  PII  and  PII-SPRING  (MinPII  and  MinPII-SPRING)
+on the 10×10 TFIM ath/J= 2 in a real-valued ViT ansatz. All runs use the same optimization
+hyperparameters,τ= 1.1E                                0,λ= 10   −3   , andη= 1.0. For SPRING, we usedµ= 0.8.
+Appendix G    PII-SPRING and MinPII-SPRING
+
+In  this  section,  we  study  whether  the  PII-SPRING  algorithm  improves  the  perfor-
+mance of PII. Fig.G3shows that the advantage of PII-SPRING is obvious in the small
+sample size regime. ForM= 32k, PII-SPRING exhibits a slightly faster convergence
+rate than PII, while the two methods become comparable at later iterations. The dif-
+ference is much more pronounced forM= 4k, where MinPII-SPRING reaches relative
+
+
+                                                         22
+errors  of  order  10−4    substantially  earlier  than  MinPII.  This  behaviour  is  expected
+when the number of samples is smaller than the number of variational parameters.
+The sampled linear system is then underdetermined and gives only a rough approxi-
+mation to the full projected update. Updates based on the current samples alone are
+then more sensitive to finite-sampling noise. SPRING partly compensates for this by
+reusing information from last step. When the number of samples is much larger than
+the number of variational parameters, the sampled least-squares problem is overde-
+termined and typically close to uniquely determined, leaving less room for SPRING
+to improve the update direction.
+
+Appendix H    Inverse Iteration as a Riemannian
+                               Newton Method
+
+The  Riemannian  Newton  method  with  retraction  by  normalization  is  given  by  the
+recursion
+                           ψk+1   = ψk−Hess   SE(ψ  k)−1  [gradSE(ψ  k)]∥ψ k−Hess   SE(ψ  k)−1  [gradSE(ψ  k)]∥ .                      (H10)
+
+Here, for tangent vectorsv,w∈T       ψSthe Riemannian Hessian and gradient are given
+by
+
+                             HessSE(ψ)(v,w) = 2    ⟨(  ˆH−E(ψ)I)v,w⟩       
+                                    gradSE(ψ) = 2   ˆHψ−E(ψ)ψ     
+
+IfE(ψ)/∈σ(                  ˆH), the solutiond∈T          ψSto HessE(ψ)(d,·) =⟨gradE(ψ),·⟩is given by
+
+
+                                    d=ψ−            ( ˆH−E(ψ)I)     −1 ψ⟨ψ,(   ˆH−E(ψ)I)     −1 ψ⟩ .
+
+
+This can be seen by checking thatdis a tangent vector, i.e., it satisfies⟨d,ψ⟩= 1−1 = 0
+and thatdin fact solves the correct equation⟨(                        ˆH−E(ψ)I)d,w⟩=⟨(                          ˆH−E(ψ)I)ψ,w⟩.
+By using the explicit formula fordin the Riemannian Newton method above, we find
+
+
+                           ψk+1   = ψk−d k∥ψ k−d k∥ =   ( ˆH−E(ψ     k)I) −1 ψk∥(   ˆH−E(ψ     k)I) −1 ψk∥
+
+
+This is iterative scheme is known as Rayleigh Quotient Iteration [36]. If we modify the
+Riemannian Hessian to be  ˆH−τI(acting only on tangent vectors) the same derivation
+as above shows that we obtain shifted Inverse Iteration with shiftτ
+
+                                        ψk+1   =   ( ˆH−τI)   −1 ψk∥(   ˆH−τI)   −1 ψk∥                                       (H11)
+
+
+which is well-suited when a priori information onE     0 is at hand, in which case we set
+τ≈E      0.
+
+
+                                                       23
+Fig. I4  Spectral gap and spread of the4×4TFIM versush/Jobtained with ED.
+Appendix I    Spectral gap analysis
+
+To  understand  the  different  convergence  behavior  of  SR  and  PII,  we  compute  the
+spectrum  of  the  4×4  TFIM  as  a  function  ofh/Jusing  ED.  We  focus  on  the  first
+gapE       1−E    0, the second gapE       2−E    0, and the spectral widthE            max−E    0. FigureI4
+clarifies the spectral regime relevant for SR optimization. At smallh/J, the first gap
+∆ =E    1−E    0 is strongly suppressed and falls below 10−3  , making the ground state and
+first excited state effectively degenerate to VMC. Consequently, the optimizations are
+not governed solely by the lowest excitation gap; the second excitation gapE       2−E    0
+dominates the convergence. This motivates our choice ofh/J= 2 for the comparison.
+Over  the  same  range,E            2−E    0  remains  much  larger  and  reaches  its  minimum  only
+aroundh/J≈2.6, whereas the spectral spreadE                                          max−E    0 stays large.
+Appendix J    Details of Mathematical Derivations
+
+In this section, we provide the proofs of the convergence results for inverse iteration
+and Riemannian gradient descent stated in the main text.
+
+
+Theorem 1(Convergence  of  Inverse  Iteration)Let  the  sequence(ψ          k)k∈N      be  generated  by
+inverse iteration with shiftτ <          12(E  0 +E   1), i.e.,
+
+                                          ψk+1   =   ( ˆH−τI)  −1 ψk∥(   ˆH−τI)  −1 ψk∥.
+
+Assume that the initial iterateψ      0∈Shas nonzero overlap withV             0, meaningP          0ψ0 is non-zero
+and setψ ∗ :=P   0ψ0/∥P    0ψ0∥∈V   0. Then, it holds √         !1− E1−E   0
+                                                                                     k
+                             ∥ψ k±ψ ∗∥≤            2∥P ⊥0 ψ0∥∥P  0ψ0∥     E1−τ         .                             (38)
+
+The sign in front ofψ ∗  in the equation above is given bysign(E             0−τ).
+
+
+
+                                                         24
+ProofDenote  the  shifted  inverse  byT  τ  =  ( ˆH−τI)  −1   .  The  assumptionτ <                        12(E  0 +E   1)
+guarantees  that  the  spectrum  ofT τ  attains  its  maximum  inµ    0  =  (E  0−τ) −1   .  Using  this
+notation, we writeψ    k =c kTτψ0 withc   k =∥T  kτ∥−1   . Moreover, we splitψ        0 =P   0ψ0 +P ⊥0 ψ0 =
+v0 +w   0. Then it holds
+                                                  ψk =c k[µk0 +T  kτw0].
+We use this to compute
+                  ψk−sign(µ            0)k v0 2     ckµk0v0 +c kTkτw0−sign(µ            0)k v0       2
+                                          ∥v  0∥     =                                              ∥v  0∥
+                                                        ck|µ 0|k∥v  0∥−1     2 +c   2k∥T kτw0∥2.
+                                                     =
+We estimate both terms above separately and start with the second. To this end, we note
+that it holds
+                          c2k =        1∥T kτψ0∥2  =                 1∥T kτv0∥2 +∥T  kτw0∥2≤          1|µ 0|2k ∥v  0∥2.
+
+This then yields
+                                             c2k∥T kτw0∥2≤|µ 1|2k ∥w  0∥2|µ 0|2k ∥v  0∥2.
+
+To treat the second term, we need the following equalityq
+
+                                       ∥T kτψ0∥=         |µ 0|2k ∥v  0∥+∥T   kτw0∥2.
+Using this, we compute
+                                               !2                                                  2
+                            |µ 0|k∥v  0∥            =      |µ 0|k∥v  0∥q                           
+                             ∥T kτψ0∥ −1                      |µ 0|2k ∥v  0∥+∥T   kτw0∥2−1
+                                                                                           2
+                                                    =   r            1                   
+                                                                      ∥T τw0∥      2−1
+                                                              1 +     |µ 0|k∥v  0∥
+                                                                        !2
+                                                    ≤       ∥T kτw0∥
+                                                           |µ 0|k∥v  0∥
+
+                                                    =|µ 1|2k ∥w  0∥2|µ 0|2k ∥v  0∥2.
+
+For the inequality above, we used the squared version of the inequality 1−         1√1+x      2≤x. This
+can easily be seen to hold true by the fact that the functionf(x) =x+                                  1√1+x      2−1 satisfies
+f(0) = 0 andf   ′(x)≥0 for allx≥0 and thus it holdsf(x)≥0 for allx≥0. Using the two
+estimates for the terms above, we get
+                            ψk−sign(µ            0)k v0≤√            µ1 k
+                                                   ∥v  0∥          2∥w  0∥∥v  0∥µ0
+                                                                             E0−τ     k
+                                                             =√2∥w  0∥∥v  0∥   E1−τ
+                                                                             1− E1−E   0     k
+                                                             =√2∥w  0∥∥v  0∥         E1−τ           .
+
+                                                                                                                               □
+
+                                                               25
+     We now turn to the convergence proof for Riemannian gradient descent. As a first
+step, we prove a descent lemma.
+
+
+Lemma 3(Descent Lemma)For this lemma letE                       0≤E   1≤···≤E   max denote the eigenval-
+ues of  ˆHcounted with multiplicities and denote byv        0,v1,... an orthonormal basis consisting
+of  eigenvectors.  Note  that  degenerate  ground  states  are  still  fully  covered  by  this  setting.
+Let  again(ψ     k)k∈N      denote  the  iterates  of  Riemannian  gradient  descent  with  retraction  by
+normalization. Then it holds
+                                                   X
+       E(ψ  k+1  )−E(ψ    k) =−        4η∥ ˜ψk+1 ∥2     (E i−E(ψ   k))2 [1−η(E    i−E(ψ   k))]|c  ki|2,        (J12)
+                                                   i=0
+where                          ˜ψk+1   =ψ k−ηgrad     SE(ψ  k),   andc    ki  =⟨ψ  k|vi⟩.
+
+Hence, forη≤(E            max−E   0)−1    = Γ−1    it holds that
+                                                  E(ψ  k+1  )≤E(ψ    k).                                                (J13)
+
+
+
+ProofFirst we expandψ       k and  ˜ψk+1   in the orthonormal basis (v i)
+
+                                      ψk =Xckivi,     ˜ψk+1   =X˜c k+1i  vi.
+                                              i=0                        i=0
+Note that we can writeP
+                                 i=0 |˜c k+1i |2                                           X
+                E(ψ  k) =        ∥ ˜ψk+1 ∥2  E(ψ  k),  E(ψ   k+1  ) =       1∥ ˜ψk+1 ∥2         Ei|˜c k+1i |2
+                                                                                           i=0
+and thus it follows
+                         E(ψ  k+1  )−E(ψ    k) =       1           X(E i−E(ψ   k))|˜c   k+1i |2
+                                                       ∥ ˜ψk+1 ∥2  i=0
+
+Note  that  ˜c k+1i      =  [1−2η(E     i−E(ψ   k))]c  ki ,  and  inserting  in  the  equality  above,  using  the
+abbreviation ∆i =E i−E(ψ   k) it follows
+                                                  X
+        E(ψ  k+1  )−E(ψ    k) =       1∥ ˜ψk+1 ∥2      ∆i(1−2η∆     i)2|cki|2
+                                                  i=0
+                                 =       1        X(∆i−4η∆        2i + 4η  2∆3i )|c ki|2
+                                     ∥ ˜ψk+1 ∥2   i=0
+                                                  "X                                                              #
+                                 =       1∥ ˜ψk+1 ∥2     ∆i|cki|2−4η  X        ∆2i|cki|2 + 4η  2X       ∆3i|cki|2    .
+                                                    i=0                   i=0                      i=0
+This is a (weighted) expansion in terms of the first three moments. The first moment vanishes,
+as can be seen by the following computation
+                      X     ∆i|cki|2 =X(E i−E(ψ   k))|c  ki|2 =E(ψ   k)−E(ψ    k) = 0.
+
+                       i=0                i=0
+Rearranging yields the assertion.                                                        □
+
+     We  can  now  proceed  to  prove  the  convergence  result  for  Riemannian  gradient
+descent.
+
+
+                                                             26
+Theorem 2(Convergence of Riemannian Gradient Descent)Let  the  sequence(ψ    k)k∈N      be
+generated by Riemannian gradient descent with retraction by normalization, i.e.,
+
+               ψk+1   = ψk−ηgrad     SE(ψ  k)∥ψ k−ηgrad     SE(ψ  k)∥ ,   grad SE(ψ  k) = 2[ ˆHψk−E(ψ   k)ψ k].
+
+Assume that the initial iterateψ      0∈Shas nonzero overlap withV             0, meaningP          0ψ0 is non-zero
+and setψ ∗ :=P   0ψ0/∥P    0ψ0∥∈V   0. Then, choosing the stepsizeη= 1/(2(E                          max−E   0))it holds
+                                                √                 !1−   1                  k
+                             ∥ψ k−ψ ∗∥≤             2∥P ⊥0 ψ0∥                  E1−E   0
+                                                       ∥P  0ψ0∥             2 Emax−E   0
+
+Moreover, the algorithm converges for every step-sizeη<1/(E                         max−E   0).
+
+
+
+ProofThe proof proceeds in three steps. We begin by showing the invariance of the initial
+ground state component first, analyze the optimization dynamics along the eigenvectors in a
+second step, and finally derive theL      2 error decay rate.
+
+First Step: Invariance of the Ground State Direction
+An un-normalized gradient descent step is of the form
+                                       ˜ψk+1   =ψ k−2η[       ˆHψk−E(ψ   k)ψ k].
+
+We applyP          0 to both sides of this equation and use thatP        0 commutes with the Hamiltonian
+                                P0 ˜ψk+1   =P   0ψk−2η(       ˆHP0ψk−E(ψ   k)P  0ψk)
+                                           = [1−2η(E             0−E(ψ   k))]P     0ψk.
+Note that [1−2η(E             0−E(ψ   k))] is a positive scalar which we abbreviate withs  k. We then
+compute
+                              P0ψk+1
+                             ∥P  0ψk+1 ∥ = P0 ˜ψk+1∥P  0 ˜ψk+1 ∥ = skP0ψksk∥P  0ψk∥ = P0ψk∥P  0ψk∥.
+Applying this equalityk-times yields the invariance
+                                               P0ψk
+                                             ∥P  0ψk∥ = P0ψ0∥P  0ψ0∥ =:ψ∗.                                           (J14)
+
+Second Step: Optimization Dynamics Along Eigenvectors
+We writeP   ⊥0 ψk =Pmaxi=d     0ckivi, whered           0 = dim(V         0). As a first step we will show
+                                   |ck+1i |         1−2η(E     i−E(ψ   k))       |cki|
+
+                                ∥P  0ψk+1 ∥ =       1−2η(E           0−E(ψ   k))  ∥P  0ψk∥.                            (J15)
+To show this, we set              ˜ψk+1   =ψ k−2η(       ˆHψk−E(ψ   k)ψ k)
+
+and write                                                      maxX
+                                               P⊥0  ˜ψk+1   =       ˜c k+1i  vi.
+                                                               i=1
+Note  that  it  holds  ˜c k+1i  /∥   ˜ψk+1 ∥ =c  k+1i     .  ApplyingP     ⊥0    to   ˜ψk+1    and  using  that  the
+Hamiltonian commutes with the projection yields
+                             P⊥0  ˜ψk+1   =P ⊥0 ψk−2η(       ˆHP⊥0 ψk−E(ψ   k)P ⊥0 ψk).
+
+
+                                                             27
+Now we take the inner product with the eigenvectorv    i, which gives
+                                         ˜c k+1i      =c ki−2η(E    icki−E(ψ   k)c ki )
+                                                 = [1−2η(E     i−E(ψ   k))]c  ki.
+We also applyP          0 to  ˜ψk+1   and obtain
+                                      P0 ˜ψk+1   = [1−2η(E           0−E(ψ   k))]P     0ψk.
+We obtain                                                                      1−2η(E     i−E(ψ   k))
+          |ck+1i |                                                                                               |cki|
+       ∥P  0ψk+1 ∥ = |˜c k+1i |·∥ ˜ψk+1 ∥∥P  0 ˜ψk+1 ∥·∥ ˜ψk+1 ∥ = |˜c k+1i |∥P  0 ˜ψk+1 ∥ =1−2η(E           0−E(ψ   k))∥P  0ψk∥.
+Inserting the step-sizeη= 1/(2(E                            max−E   0)) we get
+                           1−2η(E     i−E(ψ   k))
+                            1−2η(E           0−E(ψ   k)  = 1−       Ei−E   0Emax−E   0 +E(ψ   k)−E     0
+
+                                                        ≤1−        E1−E   0Emax−E   0 +E(ψ        0)−E     0
+
+                                                        ≤1−      1    E1−E   0
+                                                                  2 Emax−E   0  =:ρ
+where we usedE   i≥E   1 andE(ψ            0)≤E(ψ    k). The latter holds wheneverη<1/(E             max−E   0).
+Now we use (J15)k-times
+                                                  |cki|2
+                                               ∥P  0ψk∥2≤ρ   2k  |c 0i|2∥P  0ψ0∥2
+and then sum overi= 1,...,max to obtain
+                                              ∥P ⊥0 ψk∥2
+                                              ∥P  0ψk∥2 ≤ρ   2k ∥P ⊥0 ψ0∥2∥P  0ψ0∥2 .
+
+Convergence in Norm
+It remains to show that the above implies convergence in norm with the rateρ. We begin by
+writing
+                                              ψk =P   0ψk +P ⊥0 ψk
+                                                   =∥P     0ψk∥ψ ∗ +P ⊥0 ψk.
+Then, using the above, we compute
+                           ∥ψ k−ψ ∗∥=∥(∥P           0ψk∥−1)ψ  ∗ +P ⊥0 ψk∥2
+                                           = (1−∥P      0ψk∥)  2 +∥P  ⊥0 ψk∥2
+                                           = 1−2∥P          0ψk∥+∥P        0ψk∥2 + 1−∥P    0ψk∥2
+                                           = 2(1−∥P        0ψk∥)
+                                           ≤2(1−∥P           0ψk∥2)
+                                           = 2∥P ⊥0 ψk∥,
+where we used the inequality 1−x≤1−x                 2 which is valid forx∈[0,1]. Finally, we can put
+it all together by using the final estimate of the second step to obtain
+
+                         ∥ψ k−ψ ∗∥2≤2∥P        0ψk∥2∥P ⊥0 ψ0∥2∥P  0ψ0∥2 ρ2k ≤2 ∥P ⊥0 ψ0∥2∥P  0ψ0∥2 ρ2k .
+
+                                                                                                                               □
+
+                                                               28
+Fig. K5Illustration of varying spectral gaps for SR. A smaller spectral gap leads to slower conver-
+gence and oscillatory behavior for SR.
+Appendix K    Graphical Visualizations
+
+We provide graphical visualizations of the convergence results for inverse iteration and
+stochastic reconfiguration. Similar to Figure1, we use the Hamiltonian
+
+                                      ˆH= diag(a,10,0) :R                 3→R     3,
+
+where herea∈(0,10) is a free parameter and coincides with the spectral gap ∆ of
+the Hamiltonian  ˆH. Figure1reports the results fora= 1. The spectral spread Γ = 10
+is fixed for all the considered experiments. In the following, we illustrate the effect of
+suboptimal spectral shifts for PII, the sensitivity of SR to step-size choices, and the
+effect of closing spectral gaps for SR.
+
+Effect of closing Spectral Gaps
+In FigureK5, we illustrate the sensitivity of SR to closing spectral gaps. To this end,
+we vary the parametera. We consider the valuesa= 5,1,0.5 anda= 0.25. In this
+experiment,  we  choose  the  learning  rateη  ∗  to  be  the  (asymptotically)  optimal  one
+among the constant learning rate schedules. It is given by
+
+                                         η∗ =              1Emax +E    1−2E      0
+
+and solves                                       h                               i
+                                η∗ = argmin        maxi |1−2η(E      i−E    0)|
+                                          η>0
+The quantity|1−2η(E       i−E    0)|is obtained from Eq. (J15), and insertingE                             0 in place
+ofE(ψ    k).  Note  that  in  many  scenarios,  this  step-size  is  not  available  as  it  requires
+
+
+
+                                                        29
+Fig. K6Visualization of PII for different shift valuesτfor the Hamiltonian                 ˆH= diag(1,10,0) and
+a linear normalized state vector on the sphereS. Figure A visualizes the optimization dynamics on
+the sphere, and Figure B shows the corresponding energy error.
+
+exact knowledge ofE    0,E 1  andE       max. Usingη   ∗  here however, illustrates the drasti-
+cally degrading convergence rates of SR a forteriori; even if the optimal step-size was
+known  or  found  through  an  expensive  hyperparameter  tuning,  SR  can  only  resolve
+small-gaped  systems  through  exceedingly  expensive  computations.  This  is  in  direct
+accordance with Theorem2, that states that the error reduction per iteration measured
+inL    2 norm is given by
+                                          1−   1 E1−E    0     = 20−a
+                                 ρSR =           2 Emax−E    0            20  .
+
+
+Although the above result holds for the slightly different step-sizeη= 1/(2(E                              max−
+E0)), it describes the qualitative behavior observed in FigureK5well. We used the
+step-sizeη     ∗  to  show  that  even  with  an  optimal  choice,  SR  can  not  circumvent  a
+slow-down of convergence in the presence of closing spectral gaps.
+
+Suboptimal Spectral Shifts in Inverse Iteration
+We illustrate the effect of gradually varying the shiftτ, away from the optimal value
+τ= 0. In FigureK6, we show the optimization trajectories and the energy errors for
+τ= 0.2,0.1 andτ= 10      −8  . We clearly see linear convergence in all three cases, with
+a deteriorating convergence speed asτis further away from the optimal valueτ= 0.
+This is in agreement with Theorem1, that states that the error reduction per iteration
+measured inL    2 norm is given by (E  0 = 0)
+                                              1− E1−E    0   =  τ
+                                    ρPII =           E1−τ             1−τ  .
+
+
+
+
+
+                                                        30
+Fig.  K7Illustration  of  varying  the  step  sizes  for  SR.  Step-sizes  exceeding  the  critical  step-size
+η= Γ −1    = 0.1 prevent the algorithm from convergence.
+
+Section2.4shows that these findings also translate to nonlinearly parametrized wave-
+functions, whereundershootingthe optimalτalso led to an improved robustness of
+PII in its Monte Carlo variant.
+
+Stability of SR with respect to Step Sizes
+Finally, we illustrate the role of the critical step-size valueη= 1/(E                 max−E    0) = 1/Γ.
+Theorem2states that SR converges only ifη <1/Γ. To visualize this threshold, we
+plot the optimization trajectories and corresponding energy errors for the HamiltonianˆH= diag(1,10,0) in Figure
+                    K7. There, we setη= 0.05,0.1,0.01 andη= 0.11. We
+clearly see that the two choices exceeding the threshold of 0.1 do not converge, and
+even lead to a non-monotone behavior of the iterates{E(ψ         k)}in the later stages of
+the optimization. Such a behavior is expected also in the case of more complicated
+quantum  systems  and  quantum  states  parametrized  as  neural  networks,  and  shows
+that both a large spectral spread Γ, and a small spectral gap ∆ lead to a slowdown of
+SR.
+
+References
+
+ [1]Qian, N.  On the momentum term in gradient descent learning algorithms.Neu-
+      ral Networks12, 145–151 (1999).  URLhttps://www.sciencedirect.com/science/
+      article/pii/S0893608098001166.
+
+ [2]Kingma,  D.  P.  &  Ba,  J.   Bengio,  Y.  &  LeCun,  Y.  (eds)Adam:  A  method  for
+      stochastic optimization.  (eds Bengio, Y. & LeCun, Y.)International Conference
+      on  Learning  Representations  (ICLR)(2015).  URLhttps://arxiv.org/abs/1412.
+      6980.
+
+
+
+                                                      31
+ [3]Martens,  J.  &  Grosse,  R.   Bach,  F.  &  Blei,  D.  (eds)Optimizing  neural  net-
+     works with  kronecker-factored  approximate curvature.  (eds Bach, F. & Blei, D.)
+     Proceedings of the 32nd International Conference on Machine Learning, Vol. 37
+     ofProceedings  of  Machine  Learning  Research, 2408–2417 (PMLR, Lille, France,
+     2015).  URLhttps://proceedings.mlr.press/v37/martens15.html.
+
+ [4]Gupta,  V.,  Koren,  T.  &  Singer,  Y.    Dy,  J.  &  Krause,  A.  (eds)Shampoo:
+     Preconditioned  stochastic  tensor  optimization.   (eds  Dy,  J.  &  Krause,  A.)Pro-
+     ceedings  of  the  35th  International  Conference  on  Machine  Learning, Vol. 80 of
+     Proceedings  of  Machine  Learning  Research,  1842–1850  (PMLR,  2018).    URL
+     https://proceedings.mlr.press/v80/gupta18a.html.
+
+ [5]Vyas, N.et al.Yue, Y., Garg, A., Peng, N., Sha, F. & Yu, R. (eds)Soap: Improving
+     and stabilizing shampoo using adam for language modeling.  (eds Yue, Y., Garg,
+     A., Peng, N., Sha, F. & Yu, R.)International Conference on Learning Represen-
+     tations, Vol. 2025, 93423–93444 (2025).  URLhttps://proceedings.iclr.cc/paper
+     files/paper/2025/file/e988664070e9591f93fdcf605f7dc623-Paper-Conference.pdf.
+
+ [6]Carleo, G. & Troyer, M. Solving the quantum many-body problem with artificial
+     neural networks.Science355, 602–606 (2017).  URLhttps://www.science.org/
+     doi/abs/10.1126/science.aag2302.
+
+ [7]Wu, D.et al.Variational benchmarks for quantum many-body problems.Science
+     386,  296–301  (2024).   URLhttps://www.science.org/doi/abs/10.1126/science.
+     adg9774.
+
+ [8]Astrakhantsev, N.et al.Broken-symmetry ground states of the heisenberg model
+     on the pyrochlore lattice.Phys.  Rev.  X11, 041021 (2021).  URLhttps://link.
+     aps.org/doi/10.1103/PhysRevX.11.041021.
+
+ [9]Hibat-Allah, M., Ganahl, M., Hayward, L. E., Melko, R. G. & Carrasquilla, J.
+     Recurrent neural network wave functions.Phys. Rev. Res.2, 023358 (2020). URL
+     https://link.aps.org/doi/10.1103/PhysRevResearch.2.023358.
+
+[10]Moss,  M.  S.,  Wiersema,  R.,  Hibat-Allah,  M.,  Carrasquilla,  J.  &  Melko,  R.  G.
+     Leveraging recurrence in neural network wavefunctions for large-scale simulations
+     of heisenberg antiferromagnets on the square lattice.Phys. Rev. B112, 134450
+     (2025).  URLhttps://link.aps.org/doi/10.1103/6ccd-wzhz.
+
+[11]Pescia,  G.,  Nys,  J.,  Kim,  J.,  Lovato,  A.  &  Carleo,  G.   Message-passing  neural
+     quantum  states  for  the  homogeneous  electron  gas.Phys.  Rev.  B110,  035108
+     (2024).  URLhttps://link.aps.org/doi/10.1103/PhysRevB.110.035108.
+
+[12]Viteritti, L. L., Rende, R. & Becca, F.  Transformer variational wave functions
+     for frustrated quantum spin systems.Phys. Rev. Lett.130, 236401 (2023).  URL
+     https://link.aps.org/doi/10.1103/PhysRevLett.130.236401.
+
+
+
+                                                    32
+[13]Chen, A. & Heyl, M.  Empowering deep neural quantum states through efficient
+     optimization.Nature  Physics20,  1476–1481  (2024).   URLhttps://doi.org/10.
+     1038/s41567-024-02566-1.
+
+[14]Denis,  Z.  &  Carleo,  G.     Accurate  neural  quantum  states  for  interacting
+     lattice  bosons.Quantum9,  1772  (2025).     URLhttps://doi.org/10.22331/
+     q-2025-06-17-1772.
+
+[15]Linteau,  D.,  Pescia,  G.,  Nys,  J.,  Carleo,  G.  &  Holzmann,  M.   Phase  diagram
+     and crystal melting of helium-4 in two dimensions.Phys. Rev. Lett.134, 246001
+     (2025).  URLhttps://link.aps.org/doi/10.1103/v1g7-m9k4.
+
+[16]Pfau,  D.,  Spencer,  J.  S.,  Matthews,  A.  G.  D.  G.  &  Foulkes,  W.  M.  C.   Ab
+     initio solution of the many-electron schr¨odinger equation with deep neural net-
+     works.Phys. Rev. Res.2, 033429 (2020). URLhttps://link.aps.org/doi/10.1103/
+     PhysRevResearch.2.033429.
+
+[17]Hermann, J., Sch¨atzle, Z. & No´e, F.  Deep-neural-network solution of the elec-
+     tronic  schr¨odinger  equation.Nature  Chemistry12,  891–897  (2020).    URL
+     https://doi.org/10.1038/s41557-020-0544-y.
+
+[18]Foster, A.et al.An ab initio foundation model of wavefunctions that accurately
+     describes chemical bond breaking (2025). URLhttps://arxiv.org/abs/2506.19960.
+     arXiv:2506.19960.
+
+[19]von Glehn, I., Spencer, J. S. & Pfau, D. A self-attention ansatz for ab-initio quan-
+     tum chemistry (2023). URLhttps://arxiv.org/abs/2211.13672.arXiv:2211.13672.
+
+[20]Scherbela, M., Gerard, L. & Grohs, P.  Towards a transferable fermionic neural
+     wavefunction for molecules.Nature Communications15, 120 (2024). URLhttps:
+     //doi.org/10.1038/s41467-023-44216-9.
+
+[21]Li,  R.et  al.A  computational  framework  for  neural  network-based  variational
+     monte  carlo  with  forward  laplacian.Nature  Machine  Intelligence6,  209–219
+     (2024).  URLhttps://doi.org/10.1038/s42256-024-00794-x.
+
+[22]Moreno, J. R., Carleo, G., Georges, A. & Stokes, J. Fermionic wave functions from
+     neural-network constrained hidden states.Proceedings of the National Academy
+     of  Sciences119, e2122059119 (2022).  URLhttps://www.pnas.org/doi/abs/10.
+     1073/pnas.2122059119.
+
+[23]Kim,  J.et  al. Neural-network  quantum  states  for  ultra-cold  fermi  gases.
+     Communications   Physics7,   148   (2024).       URLhttps://doi.org/10.1038/
+     s42005-024-01613-w.
+
+[24]Lou, W. T.et al.Neural wave functions for superfluids.Phys. Rev. X14, 021030
+     (2024).  URLhttps://link.aps.org/doi/10.1103/PhysRevX.14.021030.
+
+
+                                                    33
+[25]Pfau, D., Axelrod, S., Sutterud, H., von Glehn, I. & Spencer, J. S. Accurate com-
+     putation of quantum excited states with neural networks.Science385, eadn0137
+     (2024).  URLhttps://www.science.org/doi/abs/10.1126/science.adn0137.
+
+[26]Sorella, S. Green function monte carlo with stochastic reconfiguration.Phys. Rev.
+     Lett.80, 4558–4561 (1998). URLhttps://link.aps.org/doi/10.1103/PhysRevLett.
+     80.4558.
+
+[27]Rende,  R.,  Viteritti,  L.  L.,  Bardone,  L.,  Becca,  F.  &  Goldt,  S.     A  sim-
+     ple  linear  algebra  identity  to  optimize  large-scale  neural  network  quantum
+     states.Communications  Physics7, 260 (2024).  URLhttps://doi.org/10.1038/
+     s42005-024-01732-4.
+
+[28]Neklyudov, K.et al.Oh, A.et al.(eds)Wasserstein quantum monte carlo: A novel
+     approach  for  solving  the  quantum  many-body  schr¨odinger  equation.  (eds Oh, A.
+     et al.)Advances in Neural Information Processing Systems, Vol. 36, 63461–63482
+     (Curran Associates, Inc., 2023). URLhttps://proceedings.neurips.cc/paper                         files/
+     paper/2023/file/c8450235f227f136242f774b2799581f-Paper-Conference.pdf.
+
+[29]Webber, R. J. & Lindsey, M. Rayleigh-gauss-newton optimization with enhanced
+     sampling for variational monte carlo.Phys.  Rev.  Res.4, 033099 (2022).  URL
+     https://link.aps.org/doi/10.1103/PhysRevResearch.4.033099.
+
+[30]Goldshlager,  G.,  Abrahamsen,  N.  &  Lin,  L.   A  kaczmarz-inspired  approach  to
+     accelerate the optimization of neural network wavefunctions.Journal  of  Com-
+     putational  Physics516,  113351  (2024).   URLhttps://www.sciencedirect.com/
+     science/article/pii/S0021999124005990.
+
+[31]Drissi,  M.,  Keeble,  J.  W.  T.,  Rozal´en  Sarmiento,  J.  &  Rios,  A.   Second-order
+     optimization strategies for neural network quantum states.Philosophical Trans-
+     actions of the Royal Society A: Mathematical, Physical and Engineering Sciences
+     382, 20240057 (2024).  URLhttps://doi.org/10.1098/rsta.2024.0057.
+
+[32]Peng, R. & Chan, G. K.-L. An analysis of first- and quasi-second-order optimiza-
+     tion algorithms in variational monte carlo (2025).  URLhttps://arxiv.org/abs/
+     2502.19576. arXiv:2502.19576.
+
+[33]Jiang,  D.et  al.  Neural  scaling  laws  surpass  chemical  accuracy  for  the  many-
+     electron  schr¨odinger  equation  (2025).   URLhttps://arxiv.org/abs/2508.02570.
+     arXiv:2508.02570.
+
+[34]Gu,  Y.et  al.Solving  the  hubbard  model  with  neural  quantum  states  (2025).
+     URLhttps://arxiv.org/abs/2507.02644. arXiv:2507.02644.
+
+[35]M¨uller, J. & Zeinhofer, M. Salakhutdinov, R.et al.(eds)Position: Optimization in
+     SciML should employ the function space geometry. (eds Salakhutdinov, R.et al.)
+     Proceedings of the 41st International Conference on Machine Learning, Vol. 235
+
+
+                                                    34
+     ofProceedings of Machine Learning Research, 36705–36722 (PMLR, 2024). URL
+     https://proceedings.mlr.press/v235/muller24d.html.
+
+[36]Trefethen, L. N. & Bau, D.Numerical Linear Algebra(SIAM, 2022).
+
+[37]Jiang, H.-C., Yao, H. & Balents, L. Spin liquid ground state of the spin-        12  square
+     J1-J  2 heisenberg model.Phys. Rev. B86, 024424 (2012).  URLhttps://link.aps.
+     org/doi/10.1103/PhysRevB.86.024424.
+
+[38]Gong, S.-S., Zhu, W., Sheng, D. N., Motrunich, O. I. & Fisher, M. P. A. Plaquette
+     ordered phase and quantum phase diagram in the spin- 12 J1−J    2 square heisenberg
+     model.Phys.  Rev.  Lett.113, 027201 (2014).  URLhttps://link.aps.org/doi/10.
+     1103/PhysRevLett.113.027201.
+
+[39]Ferrari, F. & Becca, F.  Gapless spin liquid and valence-bond solid in theJ              1-J  2
+     heisenberg model on the square lattice: Insights from singlet and triplet excita-
+     tions.Phys. Rev. B102, 014417 (2020). URLhttps://link.aps.org/doi/10.1103/
+     PhysRevB.102.014417.
+
+[40]Richter, J., Zinke, R. & Farnell, D. J. J. The spin-1/2 square-lattice j1-j2 model:
+     the spin-gap issue. The European Physical Journal B88, 2 (2015).  URLhttps:
+     //doi.org/10.1140/epjb/e2014-50589-x.
+
+[41]Boumal, N.An  introduction  to  optimization  on  smooth  manifolds(Cambridge
+     University Press, 2023).
+
+[42]Stokes,  J.,  Izaac,  J.,  Killoran,  N.  &  Carleo,  G.   Quantum  Natural  Gradient.
+     Quantum4, 269 (2020).  URLhttps://doi.org/10.22331/q-2020-05-25-269.
+
+[43]Toulouse, J. & Umrigar, C. J.  Optimization of quantum monte carlo wave func-
+     tions  by  energy  minimization.The  Journal  of  Chemical  Physics126,  084102
+     (2007).  URLhttps://doi.org/10.1063/1.2437215.
+
+[44]Bradbury,  J.et  al. JAX:  composable  transformations  of  Python+NumPy
+     programs (2018).  URLhttp://github.com/jax-ml/jax.
+
+[45]Feischl, M., Lasser, C., Lubich, C. & Nick, J.  Regularized dynamical parametric
+     approximation.arXiv preprint arXiv:2403.19234(2024).
+
+[46]Lubich,   C.   &   Nick,   J.      Regularized   dynamical   parametric   approximation
+     of  stiff  evolution  problems  (2025).     URLhttps://arxiv.org/abs/2501.12118.
+     arXiv:2501.12118.
+
+[47]Absil,  P.-A.,  Mahony,  R.  &  Sepulchre,  R.Optimization  Algorithms  on  Matrix
+     Manifolds(Princeton University Press, Princeton, 2009).  URLhttps://doi.org/
+     10.1515/9781400830244.
+
+
+
+
+                                                    35
+[48]Absil,  P.-A.,  Mahony,  R.  &  Sepulchre,  R.Optimization  algorithms  on  matrix
+      manifolds(Princeton University Press, 2008).
+
+[49]Vicentini, F.et al.NetKet 3: Machine Learning Toolbox for Many-Body Quantum
+      Systems.SciPost Phys. Codebases7 (2022).  URLhttps://scipost.org/10.21468/
+      SciPostPhysCodeb.7.
+
+[50]Carleo,  G.et  al.Netket:  A  machine  learning  toolkit  for  many-body  quantum
+      systems.SoftwareX10,  100311  (2019).   URLhttps://www.sciencedirect.com/
+      science/article/pii/S2352711019300974.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                     36

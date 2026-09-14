@@ -1,0 +1,2704 @@
+      Momentum  Stability  and  Adaptive  Control  in  Stochastic
+                                                       Reconfiguration
+
+                                               Yuyang  Wang∗                         Xin  Liu†
+
+                                                             April  21,  2026
+
+
+
+
+                                                                   Abstract
+             Variational  Monte  Carlo  (VMC)  combined  with  expressive  neural  network  wavefunctions  has
+        become   a   powerful   route   to   high-accuracy   ground-state   calculations,   yet   its   practical   success
+        hinges  on  eﬀicient  and  stable  wavefunction  optimization.   While  stochastic  reconfiguration  (SR)
+        provides  a  geometry-aware  preconditioner  motivated  by  imaginary-time  evolution,  its  Kaczmarz-
+        inspired  variant,  subsampled  projected-increment  natural  gradient  descent  (SPRING),  achieves
+        state-of-the-art  empirical  performance.   However,  the  effectiveness  of  SPRING  is  highly  sensitive
+        to  the  choice  of  a  momentum-like  parameterµ.   The  original  sensitivity  ofµ  and  the  instability
+        observed   at µ  =  1,   have   remained   unclear.     In   this   work,   we   clarify   the   distinct   mechanisms
+        governing   the   regimes µ <  1   and µ  =  1.     We   establish   convergence   guarantees   for  0 ≤ µ <
+        1    under    mild    assumptions,    and    construct    counterexamples    showing    that µ  =  1    can    induce
+        divergence   via   uncontrolled   growth   along   kernel-related   directions   when   the   step-size   is   not
+        summable.       Motivated    by    these    theoretical    insights    and    numerical    observations,    we    further
+        propose    Principal    Range    Informed    MomEntum    SR    (PRIME-SR),    a    tuning-free    momentum-
+        adaptive   SR   method   based   on   effective   spectral   dimension   and   subspace   overlap.    PRIME-SR
+        achieves   performance   comparable   to   optimally   tuned   SPRING   while   significantly   improving
+        robustness  in  VMC  optimization.
+
+1       Introduction
+
+Computing   the   ground-state   of   a   quantum   many-body   system   is   a   fundamental   problem   in   com-
+putational   physics,    materials   science,    and   quantum   chemistry.      Such   a   system   is   governed   by   a
+self-adjoint  Hamiltonian  operator H  ,  and  the  goal  is  to  determine  its  lowest  eigenvalue EGS   called
+ground-state  energy,  and  the  associated  eigenfunction ψGS   called  ground-state  wavefunction,
+
+    HψGS =EGSψGS,   ψGS 2 F := fψ : ΩN ! C,ψ 6= 0  satisfies  certain  physical  symmetry.g
+
+whereN   denotes  the  number  of  particles  and Ω  is  the  single-particle  configuration  space.   In  realistic
+settings,  accurately  approximating  ground-state  remains  challenging  due  to  the  curse  of  dimensional-
+ity,  the  strong  correlations  encoded  in H  ,  and  additional  physical  constraints  that  generally  prevent
+ψ   from  factorizing  [36].
+
+   ∗State  Key  Laboratory  of  Mathematical  Sciences  ,  Academy  of  Mathematics  and  Systems  Science,  Chinese  Academy
+of   Sciences,   Beijing   100190,   China   and   School   of   Mathematical   Sciences,   University   of   Chinese   Academy   of   Sciences,
+Beijing   100049,   China   (email:   wangyuyang@lsec.cc.ac.cn).
+   †State  Key  Laboratory  of  Mathematical  Sciences,  Academy  of  Mathematics  and  Systems  Science,  Chinese  Academy
+of   Sciences,   Beijing   100190,   China   and   School   of   Mathematical   Sciences,   University   of   Chinese   Academy   of   Sciences,
+Beijing   100049,   China   (e-mail:   liuxin@lsec.cc.ac.cn).
+
+
+
+
+                                                                         1
+    Variational  methods  based  on  the  Rayleigh-Ritz  principle  provide  a  flexible  route  to  this  problem
+by  recasting  the  eigenvalue  computation  as  minimization  of  the  energy  functional
+                                                       EGS =  infψ∈F     hψjH jψi
+                                                                           hψjψi .
+
+From  this  viewpoint,  Variational  Monte  Carlo  (VMC)  [24,                     9]  considers  a  parametrized  family  of  trial
+wavefunctionsψθ   with θ 2 RNp   and  turns  the  optimization  over  wavefunctions  into  an  optimization
+over  parameters  in RNp .   By  rewriting  the  objective  as  an  expectation  and  estimating  it  using  Monte
+Carlo  sampling,  VMC  evaluates  high-dimensional  expectation  values  without  explicitly  representing
+ψθ    over   the   full   configuration   space   (see   Section         2.1   for   details).      This   feature   enables   VMC   to
+handle   system   sizes   far   beyond   those   accessible   to   deterministic   discretization-based   methods   such
+as  configuration  interaction  [29]  and  multi-configuration  self-consistent  field  [14].
+    In  recent  years,  neural  networks  have  substantially  increased  the  expressiveness  of  trial  wavefunc-
+tions.    Following   the   seminal   work   of   Carleo   and   Troyer   [6],   a   broad   class   of   neural   network-based
+and   physics-inspired   wavefunctions   has   been   developed   [27,                    12,  35,   18,   42],    together   with   theo-
+retical   studies   of   their   representational   capability   [2,           39,   36].      These   advances   have   substantially
+enhanced  the  approximation  power  of  wavefunctions,   thereby  enabling  near-exact  ground-state  en-
+ergy  computations  in  both  electronic-structure  and  lattice  settings  [13],  and  opening  the  era  of  neural
+network-based  VMC  (NN-VMC).
+    Despite  these  successes,  optimizing  neural  network  wavefunctions  remains  challenging  [37].   Stan-
+dard   optimizers   in   deep   learning   such   as   Adam   [16]   and   AdamW   [22]   often   perform   poorly   in   this
+context   because   of   the   complex   landscape   of   neural   network   wavefunctions   [27,                   35].    In   practice,   a
+variety   of   optimization   methods   based   on   the   geometry   and   physics   of   VMC   have   been   developed.
+These  include  stochastic  reconfiguration  (SR)  and  related  natural  gradient  methods  [27,                              30,  31,   32],
+variants   of   the   linear   method   [33,      40,   38],   and   more   recent   manifold-based   approaches   [25,               3,  17].
+While  these  methods  have  demonstrated  strong  empirical  performance,  many  of  them  require  solv-
+ing   large   linear   systems   whose   size   scales   with   the   number   of   model   parameters Np,   resulting   in   a
+per-iteration  computational  cost  of O(N 3p )  and  consequently  limiting  their  scalability.
+    Among   these   approaches,   SR-based   methods   are   the   most   widely   used   in   large   scale   NN-VMC
+applications   (see   Section        2.2  for   a   detailed   introduction   to   SR).   In   contrast   to   linear   method   and
+manifold-based   approaches,   which   often   require   additional   backpropagation   steps   or   lack   effective
+cost-reduction   structures,   SR   admits   a   natural   reformulation   that   enables   scalable   approximations
+[23,  27,  7,  10,  28,   41,  11].    This   has   motivated   a   range   of   scalable   SR   variants   that   approximate   or
+reformulate   the   SR   update   in   a   computationally   tractable   way   for   large   neural   network   wavefunc-
+tions.
+    Existing  scalable  SR  methods  can  be  broadly  categorized  by  the  approximation  viewpoint  they
+adopt.   Structure  exploiting  approaches  approximate  the  SR  matrix  using  block-diagonal  and  Kronecker-
+factorized  forms,  leading  to  K-FAC-type  methods  [23,                   27].   Low-rank  approaches  exploit  the  intrinsic
+rank  deficiency  of  the  SR  matrix,  for  instance  via  truncated  or  warm-started  singular  value  decom-
+position  (SVD)  techniques  [41].   Finally,  least-squares-based  approaches  interpret  the  SR  update  as
+an  underdetermined  linear  system  and  select  specific  solutions,  such  as  Minimum-step  SR  (MinSR)
+[7, 28]  and  the  Subsampled  Projected-Increment  Natural  Gradient  (SPRING)  method  [10].   Notably,
+these  least-squares  formulations  allow  the  use  of  the  Sherman-Morrison-Woodbury  identity,  reducing
+the  per-iteration  cost  to  nearly  linear  in  the  number  of  parameters.
+    Among  these  SR  variants,  SPRING  has  attracted  particular  attention  due  to  its  empirical  state-
+of-the-art  performance  in  NN-VMC  [10,                11].   Motivated  by  randomized  Kaczmarz  projection  methods
+[15,  8],  SPRING  reuses  the  previous  update  direction  by  projecting  it  onto  the  subspace  identified  by
+the  current  batch  of  samples,  and  then  combines  this  projected  direction  with  the  current  gradient
+information  to  form  the  next  update  (see  Section                 2.3  for  details).
+    However,    a   central   practical   issue   is   that   the   stability   and   performance   of   SPRING   depend
+critically   on   how   strongly   the   previous   direction   is   reused.     The   original   work   [10]   reported   that
+
+
+                                                                      2
+Figure    1:      Relative    energy    error    of    SPRING    for    different    choices    of µ    on    the    two-dimensional
+transverse-field   Ising   (2D-TFI)   model   with N  = 10  10   sites   and   transverse-field   strength h = 2
+(left)  and  the  two-dimensional  Heisenberg  (2D-Heisenberg)  model  with N = 10  10  sites  (right).
+
+
+naively   using   the   projected   previous   direction   can   lead   to   unstable   optimization   trajectories.     To
+control   the   contribution   of   historical   information,   SPRING   introduces   a   parameter µ 2 [0, 1)   that
+weights  the  projected  previous  update  direction.   Althoughµ = 1  can  lead  to  severe  instability  or  even
+divergence,  empirically,  values  of µ  close  to  1  often  accelerate  convergence.   Moreover,  SPRING  can
+be  highly  sensitive  toµ:   a  value  that  performs  well  on  one  problem  may  perform  poorly  on  another,
+as  illustrated  in  Fig.    1  (see  Section    5  for  experimental  details).   These  observations  motivate  the  two
+main   goals   of   this   paper:    (i)   to   understand   the   mechanisms   distinguishing   the   regimes µ < 1   and
+µ = 1,  and  (ii)  to  develop  a  principled  momentum-adaptive  SR  method  that  avoids  manual  tuning
+while  retaining  the  practical  benefits  of  momentum  reuse.
+    Contributions.   Our  main  contributions  are  as  follows:
+  (1)   Convergence    guarantees    for    SPRING    with  0   µ <  1.     We   establish   convergence   of
+        noiseless  SPRING  to  a  first-order  stationary  point.   In  the  stochastic  setting  with  independent
+        and   identically   distributed   (i.i.d.)    Monte   Carlo   samples,   we   show   that   the   expected   norm   of
+        the  gradient  converges  to  zero  up  to  a  sampling  error.
+  (2)   Divergence  counterexamples  for  SPRING  withµ = 1.   Exploiting  the  fact  that  the  VMC
+        gradient  lies  in  the  range  of  the  SR  matrix,  we  construct  explicit  counterexamples  showing  that
+        SPRING  withµ = 1  can  exhibit  uncontrolled  growth  along  kernel-related  directions  when  the
+        step-size  is  not  summable,  while  the  same  constructions  remain  convergent  for 0  µ< 1.
+  (3)   PRIME-SR:   a   tuning-free   momentum-adaptive   SR   method.    Motivated  by   the   theo-
+        retical  insights  and  numerical  observations,  we  propose  Principal  Range  Informed  MomEntum
+        SR  (PRIME-SR),  a  new  SR  variant  that  adaptively  controls  momentum  reuse  through  effective
+        spectral   dimension   and   subspace   overlap   indicators   derived   from   the   SR   matrix.    PRIME-SR
+        achieves   performance   comparable   to   optimally   tuned   SPRING.   In   particular,   in   electronic-
+        structure  problems  where  SPRING  is  sensitive  to  initialization  and  can  be  unstable,  PRIME-
+        SR  remains  consistently  stable  across  different  initializations.
+
+    Organization.   The  rest  of  this  paper  is  organized  as  follows.   In  Section                    2,  we  review  the  VMC
+framework,   SR,   and   the   SPRING   algorithm.     In   Section               3,   we   present   the   theoretical   analysis   of
+SPRING,   including   convergence   results   for  0   µ <  1   and   divergence   mechanisms   at µ  =  1.     In
+Section    4,   we   introduce   PRIME-SR,   a   momentum-adaptive   SR   method   motivated   by   kernel-range
+decompositions  and  numerical  observations.   In  Section                   5,  we  report  numerical  results  on  lattice  spin
+systems  as  well  as  atomic  and  molecular  systems.   Finally,   in  Section                   6,   we  summarize  our  findings
+and  discuss  future  directions.
+
+
+                                                                     3
+    Notations.    Throughout   this   paper, R   and C   denote   the   real   and   complex   number   fields,   and
+i   denotes   the   imaginary   unit.     Bold   letters   (e.g., x)   represent   vectors.     The   configuration   space   of
+particles  is  denoted  by Ω,  and ΩN   denotes  theN -fold  Cartesian  product  of Ω.   We  write x 2 ΩN   for
+particle  configuration  and x 2 Ω  for  a  single-particle  configuration.   The  Hamiltonian  is  denoted  by
+H  ,  the  wavefunction  byψ,  and  the  parameters  of  a  parameterized  wavefunction  by θ.   The  symbol 1
+denotes  the  all-ones  vector  of  appropriate  dimension,  andσx,σy ,  andσz   denote  the  Pauli  matrices.
+We  use  the  standard  asymptotic  notation fk = Ω(gk)  to  mean  that  there  exist  constants c> 0  and
+k0   0  such  that fk  cgk   for  all k  k0.
+    The   inner   product   is   written   in   Dirac   notation hji:    it   corresponds   to   the L2   inner   product   in
+continuous  settings  and  theℓ2  inner  product  for  discrete  vectors.   The  norm kk  denotes  the 2-norm
+unless  stated  otherwise  (matrix  spectral  norm,  vector  Euclidean  norm,  and  function L2   norm).   We
+use E   for   expectation,   “i.i.d.”     for   independent   and   identically   distributed,   and   “a.s.”     for   almost
+surely.   We  use Fk  to  denote  aσ-algebra  filtration  for  discrete  iterations,  andσ(X)  for  theσ-algebra
+generated  by  the  random  variable X .
+
+2       Background   and   Preliminaries
+
+In  this  section,  we  briefly  review  the  VMC  framework,  the  SR  method,  and  the  SPRING  algorithm.
+The    exposition    is    intentionally    concise    and    focuses    on    aspects    that    are    directly    relevant    to    the
+subsequent  sections.
+
+2.1       Variational   Monte   Carlo
+Consider  a  quantum  system  ofN   particles  with  configuration x = (x1,..., xN) 2 ΩN   and  wavefunc-
+tion ψ  : ΩN ! C.    Here Ω   denotes   the   single-particle   configuration   space,   which   is   either   discrete
+(e.g.,   lattice   spin   systems)   or   continuous   (e.g.,   electronic   systems).     The   system   is   governed   by   a
+self-adjoint  Hamiltonian  operator H  ,  and  the  goal  is  to  compute  its  ground-state  energy  and  wave-
+function.    Moreover,   for   the   class   of   Hamiltonians   considered   in   this   work,   including   the   electronic
+Hamiltonian   and   the   TFI   and   Heisenberg   models   (see   Appendix                   D   for   details),   the   real   part   of   a
+ground-state   wavefunction  is   also   a   ground-state   wavefunction.    Therefore,   unless   stated   otherwise,
+we  restrict  attention  to  real-valued  wavefunctions  of  the  form ψ : ΩN 7! R.
+    By  the  Rayleigh-Ritz  variational  principle,  the  ground-state  energy  can  be  written  as
+                                                   R
+    EGS =  infψ∈FL[ψ] := hψjH jψi                   ΩNψ(x)hxjH jψi dxR
+                                   hψjψi    =            ΩN jψ(x)j2 dx   ,        s.   t. ψ   satisfies  certain  constraints.
+                                                                                                                                       (2.1)
+When  the  configuration  space  is  discrete,  the  integral  denotes  summation  over ΩN :
+                                                   Z
+                                                                            X        .
+                                                     ΩN  dx := Xx1∈Ω           xN∈Ω
+
+In   VMC,   one   introduces   a   parametrized   ansätz ψθ  : ΩN 7! R   with   parameters θ 2 RNp   satisfying
+ψθ 2 F .   The  ground-state  energy EGS   is  then  approximated  by  solving
+
+                                                   ˜EGS :=   min
+                                                             θ∈RNpL(θ) :=L[ψθ].
+
+Since   the   physical   constraints   (e.g.,   antisymmetry)   are   typically   enforced   by   the   parameterization,˜EGS   provides  an  upper  bound  on  the  true  ground-state  energy,  i.e.,  ˜EGS  EGS.
+
+
+
+
+
+
+                                                                      4
+     Direct   evaluation   of L(θ)   involves   high-dimensional   integrals   or   exponentially   large   sums.     In
+VMC,  the  objective  can  be  rewritten  as  an  expectation:
+                                        Z    jψθ(x)j2
+                            L(θ) =          R jψθj2 dx′       hxjH jψθiψθ(x)|  dx = EX∼πθ [Eloc(θ;X)].
+                                            |      {z      }         {z      }
+                                               =:πθ(x)          =:Eloc(θ;x)
+
+Hereπθ / jψθj2  is  the  probability  distribution  induced  by  the  wavefunction:   for  continuous  systems
+it   is   a   probability   density,   while   for   discrete   systems   it   is   a   probability   mass   function   on ΩN .    The
+quantity Eloc(θ; x)  is  called  the  local  energy  [4].
+Remark   2.1.          For   continuous   systems, H     acts   on   functions   and hxjH jψi  = Hψ(x).     For   dis-
+crete   systems, ψ   can   be   viewed   as   a   vector jψi   indexed   by ΩN ,   and H     is   represented   by   a   matrix,
+hxjH jψi  = Px′∈ΩNψ(x′)hxjH jx′i,   where hxjH jx′i   is   the  (x, x′)-th   element   of   matrix H  .     Al-
+though   this   sum   formal ly   runs   over   an   exponential ly   large   configuration   space,   many   Hamiltonians
+of   interest   in   this   work,   such   as   the   TFI   and   Heisenberg   models,   are   sparse.    Consequently,   only   a
+smal l   number   of   terms   are   nonzero,   and   the   cost   of   evaluating   the   local   energy   is   typical ly O(N).
+     Therefore,   within   the   VMC   framework,   computing   the   ground-state   reduces   to   the   stochastic
+optimization  problem
+                                                 min
+                                                θ∈RNpL(θ) = EX∼πθ [Eloc(θ;X)].                                                                                        (2.2)
+Moreover,  the  gradient  of L(θ)  admits  the  expression  [ ¯E(θ;X)O(θ;X),                                                                    (2.3)21],
+                                       g(θ) := rθL(θ) = 2EX∼πθ
+where
+                              ¯E(θ; x) :=Eloc(θ; x)  L(θ) 2 R,
+                              O(θ; x) := rθ log jψθ(x)j   EX∼πθ [rθ log jψθ(X)j] 2 RNp.                                                 (2.4)
+In   practice,   both L(θ)   and g(θ)   are   estimated   using   Markov   chain   Monte   Carlo   (MCMC)   samples
+[9].   LetNs  denote  the  sample  size,  and  let B := fX1,...,XNsg  be  a  batch  of  samples.   The  standard
+Monte  Carlo  estimators  of L(θ)  and g(θ)  are
+
+                                                                    NsX
+                                  L(θ)  L(θ;B) :=   1Ns                 Eloc(θ;Xi)
+                                                                   i=1                                                                     (2.5)
+                                                                         NsX
+                                  g(θ)  g(θ;B) :=      2                       ¯E(θ;Xi,B)O(θ;Xi,B),
+                                                             Ns   1      i=1
+where
+                                ¯E(θ;Xi,B) :=Eloc(θ;Xi)  L(θ;B),
+
+                                                                                      NsX
+                               O(θ;Xi,B) := rθ log jψθ(Xi)j     1Ns                        rθ log jψθ(Xj)j.                                                    (2.6)
+                                                                                     j=1
+For  a  more  compact  representation,  define
+                           ¯E(θ;B) :=        1p            ¯E(θ;X1,B),...,  ¯E(θ;XNs,B)⊤ 2 RNs
+                                              Ns   1                                                                                       (2.7)
+                          O(θ;B) :=        1pNs   1 (O(θ;X1,B),...,O(θ;XNs,B)) 2 RNp×Ns.
+
+Under  these  definitions,  the  gradient  estimator  can  be  written  compactly  asg(θ;B) = 2O(θ;B) ¯E(θ;B).
+Moreover,  it  is  unbiased  under  i.i.d.   sampling:
+Lemma   2.1   ([1]).         Let B := fX1,...,XNsg   and X1,...,XNs                        i.i.d  πθ .   Then EB[g(θ;B)] =g(θ).
+
+
+                                                                        5
+2.2       Stochastic   Reconfiguration
+SR   and   its   variants   remain   among   the   most   widely   used   optimization   methods   in   VMC,   originally
+motivated  by  imaginary-time  evolution  [30,               31].   In  essence,  SR  chooses  the  parameter  update  so  that
+the  variation  of  the  parameterized  wavefunction  matches  an  infinitesimal  imaginary-time  evolution
+step  (see  [4]  for  details).   The  resulting  SR  update  can  be  written  as
+                                       θk+1 := θk +ηk∆θk,
+                                        ∆θk 2 arg min
+                                                  ∆θ∈RNp  ∆θ⊤S(θk)∆θ +g(θk)⊤∆θ,
+whereηk   denotes  the  step-size,  andS(θ) := EX∼πθ                     O(θ;X)O(θ;X)⊤ 2RNp×Np   is  the  SR  matrix,
+
+which  is  also  known  as  the  Fisher  information  matrix  [27].   Using  the  expression  ofg(θ)  in  Eq.  (2.3),
+the  SR  direction  can  equivalently  be  characterized  as
+                                                                 hO(θk;X)⊤∆θ +  ¯E(θk;X)2i
+                               ∆θk = arg min                                                                 .                                                       (2.8)
+                                          ∆θ∈RNp EX∼πθk
+    In  practice,  let Bk := fXk,1,...,Xk,Nsg  be  the  sample  batch  drawn  fromπθk .   Using  the  notation
+in  Eq.  (2.7),  the  SR  update  becomes
+                                     θk+1 = θk +ηk∆θk,
+                                      ∆θk 2 arg minO(θk;Bk)⊤∆θ +  ¯E(θk;Bk)2.                                                                   (2.9)
+
+                                                ∆θ∈RNp
+Equivalently,  ∆θk    solves    the    linear    least-squares    system O(θk;Bk)⊤∆θ  =    ¯E(θk;Bk)    with Np
+unknowns  and Ns   equations.
+    In   the   NN-VMC   era,   the   number   of   parameters   can   be   extremely   large,   and   one   typically   has
+Np   Ns.     On   the   one   hand,   directly   solving   an Np-dimensional   linear   system   is   impractical;   on
+the   other   hand,   Eq.   (2.9)   becomes   an   underdetermined   least-squares   problem   with   infinitely   many
+solutions.    In   [7],   the   authors   exploited   this   underdetermined   structure   and   proposed   selecting   the
+minimum-norm   solution,    leading   to   the   MinSR   method   whose   update   can   be   computed   at   cost
+O(N 3s  +NpN 2s ).     It   highlights   the   role   of   the   underdetermined   structure   in   large   scale   SR.   This
+perspective  also  motivates  the  SPRING  method.
+
+2.3       SPRING
+SPRING,  introduced  in  [10],  is  a  recent  SR  variant  motivated  by  the  randomized  Kaczmarz  method
+for  overdetermined  least-squares  problems  [15,                 8].   Since  the  parameter θ  usually  changes  gradually,
+the   SR   equations   often   vary   only   mildly   from   one   iteration   to   the   next.      Based   on   randomized
+Kaczmarz   method,   the   SPRING   uses   the   previous   update   direction   as   a   reference   and   corrects   it
+with  the  current  SR  system.   This  leads  to  the  following  projection-inspired  update:
+                      ∆θk := arg min                                      O(θk;Bk)⊤∆θ +  ¯E(θk;Bk)2,                              (2.10)
+
+                                 ∆θ∈RNp k∆θ   ∆θk−1k2 + 1λ
+
+where λ> 0  is  a  regularization  parameter.
+    However,    as   demonstrated   in   [10],    the   update   in   Eq.   (2.10)   can   yield   unstable   optimization
+trajectories,  and  the  origin  of  this  instability  was  left  unexplained.   To  improve  stability,  the  authors
+introduced   a   decay   factor,   which   is   also   called   a   momentum   parameter, µ 2  [0, 1)   applied   to   the
+previous  update  direction,  resulting  in  the  practical  SPRING  update
+                  ∆θk := arg min                                         O(θk;Bk)⊤∆θ +  ¯E(θk;Bk)2
+
+                              ∆θ∈RNp k∆θ  µ∆θk−1k2 + 1λ                                                                              (2.11)
+                         = λI +O(θk;Bk)O(θk;Bk)⊤−1 λµ∆θk−1  O(θk;Bk) ¯E(θk;Bk).
+
+                                                                      6
+Using  the  Sherman-Morrison-Woodbury  identity,  the  computational  cost  of  SPRING  can  be  reduced
+to O(N 3s  +N 2sNp),  and  the  update  can  be  written  as
+
+                          ∆θk =µ∆θk−1  O(θk;Bk) λI +O(θk;Bk)⊤O(θk;Bk)−1ζk,                                        (2.12)
+
+where
+                                      ζk :=µO(θk;Bk)⊤∆θk−1 +  ¯E(θk;Bk) 2 RNs.                                                                  (2.13)
+    To   further   stabilize   the   optimization,   [10]   introduced   two   additional   techniques.     The   first   ad-
+dresses  the  potential  singularity  ofO(θk;Bk)⊤O(θk;Bk)  due  to  finite  sampling.   Let 1 2 RNs   denote
+the  all-ones  vector.   By  the  definition  of O(θk;Bk)  in  Eqs.  (2.6)  and  (2.7),  we  have O(θk;Bk)1 = 0.
+The  authors  proposed  replacing  Eq.  (2.12)  by
+
+                  ∆θk =µ∆θk−1  O(θk;Bk)                     λI +O(θk;Bk)⊤O(θk;Bk) +   1Ns 11⊤ −1                       ζk,                      (2.14)
+
+since  this  modification  does  not  change  the  update  in  exact  arithmetic  (see  the  derivation  in  [10]):
+
+ O(θk;Bk)         λI +O(θk;Bk)⊤O(θk;Bk) +   1Ns 11⊤ −1                      =O(θk;Bk) λI +O(θk;Bk)⊤O(θk;Bk)−1.
+
+The    second    technique    is    a    norm    constraint    inspired    by    K-FAC    [23],    which    controls    the    update
+magnitude  at  each  iteration,
+                                                                            (         p       )
+                                          θk+1 := θk + ∆θk  min               ηk,       C       ,                                                                            (2.15)
+                                                                                    k∆θkk
+
+where C >  0   is   a   prescribed   constant.     The   resulting   SPRING   procedure   is   summarized   in   Algo-
+rithm    1.
+
+  Algorithm   1:  SPRING
+    Input:      Initial  parameter θ0 2 RNp ,  sample  size Ns 2 N,  step-size ηk,  regularization
+                parameter λ> 0,  momentum  parameter µ 2 [0, 1),  and  norm-constraint  parameter
+                C > 0.
+ 1  ∆θ−1 := 0;
+ 2    while   the   stopping     criterion    is not   met  do
+ 3              Sample Bk := fXk,1,...,Xk,Nsg  from πθk ;
+ 4              Use Bk   to  construct O(θk;Bk) 2 RNp×Ns   and  ¯E(θk;Bk) 2 RNs ;
+ 5              Compute ζk   by  Eq.  (2.13),  and  compute ∆θk   by  Eq.  (2.14);
+ 6              Update θk+1   by  Eq.  (2.15);
+ 7              Set k :=k + 1  and  update ηk.
+    Output:        Optimized  parameters  and  energy.
+
+
+3       Theoretical   Analysis   of   SPRING
+
+In  this  section,  we  develop  a  theoretical  analysis  of  the  SPRING  iteration,  with  particular  emphasis
+on  the  role  of  the  momentum  parameter µ.   We  show  that  the  regimes 0  µ< 1  and µ = 1  exhibit
+fundamentally  different  behaviors,  both  theoretically  and  numerically.
+    We   distinguish   between   two   settings.     First,   we   analyze   a   full-batch   (deterministic)   variant   of
+SPRING,  where  the  SR  matrix  and  gradient  are  evaluated  in  expectation  form.   This  setting  allows
+
+
+                                                                     7
+us  to  isolate  the  intrinsic  dynamics  of  the  algorithm  without  stochastic  effects.   Second,  we  consider
+the   practical   stochastic   setting   induced   by   Monte   Carlo   sampling,   where   both   the   SR   matrix   and
+the  gradient  are  estimated  from  finite  samples.
+    Our  main  conclusions  are  as  follows.   When 0  µ< 1,  SPRING  admits  convergence  guarantees
+under  mild  conditions.   In  contrast,  whenµ = 1,  SPRING  can  diverge  even  in  the  full-batch  setting,
+driven  by  an  uncontrolled  accumulation  along  kernel-related  directions  of  the  SR  matrix.
+    Recall  that  the  practical  SPRING  update  can  be  written  in  compact  form  as
+                     8< θk+1 = θk +ηk∆θk,
+                                                                                                                                 SPRING)
+                     :  ∆θk = (λI +S(θk;Bk))−1 λµ∆θk−1   12g(θk;Bk)                                  ,                                                      (
+
+and  its  full-batch  counterpart  is
+                        8<  θk+1 = θk +ηk∆θk,
+                                                                                                                             F-SPRING)
+                        :   ∆θk = (λI +S(θk))−1 λµ∆θk−1   12g(θk)                             .                                                              (
+
+Remark  3.1.         The  ful l-batch  setting  serves  only  as  a  noise-free  baseline  for  analyzing  the  optimization
+behavior   of   SPRING.   In   this   regime,   al l   quantities   are   evaluated   exactly   over   the   ful l   configuration
+space,   so   the   residual   error   is   not   affected   by   Monte   Carlo   sampling   noise.      However,   for   lattice
+models,    the    deterministic    cost    grows    exponential ly    with    the    system    size,    and    exact    evaluation    is
+therefore    feasible    only    for    smal l    systems.      Hence,    the    ful l-batch    setting    is    adopted    here    only    for
+analysis  and  diagnostic  comparison  on  smal l  lattice  models,  and  should  not  be  regarded  as  a  practical
+optimization   setting.
+
+3.1       Convergence   Analysis   of   SPRING   with 0   µ < 1
+We  begin  with  the  full-batch  iteration  (F-SPRING).   This  deterministic  setting  serves  as  a  baseline
+for  understanding  SPRING  and  forms  the  foundation  for  the  subsequent  stochastic  analysis.
+    We  impose  the  following  assumptions,  which  provide  suﬀicient  smoothness  and  moment  control
+to  carry  out  the  convergence  analysis.
+
+Assumption   3.1.           The   fol lowing   hold:
+
+  (1)   There   exists Cm > 0,   such   that   for   any θ 2 RNp ,
+                                       h                                                    Eloc(θ;X)4  Cm.
+                             EX∼πθ       krθ log jψθ(X)jk4i           Cm,   EX∼πθ
+
+  (2)   The   gradient g(θ)   is Cg -Lipschitz   continuous,   i.e.,   there   exists Cg > 0,   such   that
+
+                                          kg(θ)  g(θ′)k  Cg kθ   θ′k,   8 θ, θ′ 2 RNp.
+
+  (3)   For   any k   0,   the   step-size ηk   satisfies
+
+                                                   0<ηk  ηk−1,  η0    2λ(1  µ)Cg   .
+
+
+    The   fourth-order   moment   bounds   in   Assumption                     3.1   control   higher-order   fluctuations   of   the
+stochastic  quantities  and  are  standard  in  analyses  of  Monte  Carlo  estimators.
+
+
+
+
+                                                                      8
+Remark    3.2.        We    note    that    related    moment    bounds    and    smoothness    have    also    appeared    in    the
+existing   works   that   study   the   convergence   of   optimization   methods   for   VMC,   for   example   in   the
+analysis   of   stochastic   gradient   descent   (SGD)   [1].   In   that   work,   Lipschitz   continuity   of   the   gradient
+is   obtained   by   imposing   additional   regularity   assumptions   on   second-order   derivatives   of ψθ .    Here,
+for   simplicity   and   clarity,   we   directly   assume   Lipschitz   continuity   of g(θ),   which   is   a   common   and
+convenient   condition   in   optimization.
+
+    Lipschitz  continuity  of  the  gradient  implies  a  quadratic  upper  bound  for  the  objective L(θ).
+Lemma   3.1   ([26]).        If g(θ) = rθL(θ)   is Cg -Lipschitz   continuous,   then
+
+                         L(θ′)  L(θ)  g(θ)⊤(θ′   θ) + Cg2  kθ′   θk2,   8 θ, θ′ 2 RNp.
+
+
+
+    Using  this  bound,  we  obtain  the  following  convergence  result  for  the  full-batch  SPRING  iteration.
+Theorem   3.1.         Under   Assumption          3.1,   let fθkg   be   generated   by   (F-SPRING).    Then   for   any  0
+µ< 1,   there   exist C > 0,   such   that,   for   any K   1,
+
+                                                         KX
+                                                             ηk kg(θk)k2  C.
+                                                        k=1
+
+
+Proof.    See  Appendix        A.
+
+    Theorem       3.1  implies  that,  when 0  µ< 1,  the  accumulated  squared  gradient  norm  is  finite.   As
+a  direct  consequence,  we  obtain  the  following  corollary.
+
+Corollary   3.1.        Under   the   assumptions   of   Theorem           3.1:
+  (1)   IfPkηk = 1,   then
+                                                                            !
+                                min                            PK1                and    lim infk→∞  kg(θk)k = 0.
+                               1≤k≤K kg(θk)k2 = O                  k=1ηk
+
+  (2)   If ηk  η> 0,   then   limk→∞g(θk) = 0.
+
+
+    These   results   establish   convergence   to   first-order   stationary   points   in   the   deterministic   setting.
+Notably,  the  restriction µ< 1  is  essential:   as µ ! 1,  the  admissible  step-size  bound  will  vanish.
+    While  Theorem         3.1   establishes  convergence  guarantees  in  the  idealized  full-batch  setting,  we  now
+turn   to   the   practical   SPRING   update   with   Monte   Carlo   sampling,   given   by   (SPRING).     In   this
+setting,   both   the   gradient   and   the   SR   matrix   are   estimated   from   finite   samples,   which   introduces
+additional   stochastic   noise.    To   avoid   complications   arising   from   non-stationary   Markov   chains,   we
+impose  the  following  simplifying  assumption  on  the  sampled  batches.
+
+Assumption   3.2.           For k   0,   the   sampled   configurations Bk := fXk,igNsi=1   satisfy:
+                                                     Xk,1,...,Xk,Ns         i.i.d.  πθk.
+
+
+
+    Under  Assumption           3.2,  Lemma       2.1  shows  that  the  gradient  estimatorg(θk;Bk)  is  unbiased.   The
+same  assumption  also  implies  that  the  SR  matrix  is  an  unbiased  estimator  of S(θk).
+
+
+                                                                      9
+Lemma   3.2.        Under   Assumption          3.2,   for   any k   0, EBk[S(θk;Bk)] =S(θk).
+Proof.    See  Appendix        B.1.
+    Despite   the   unbiasedness   of   both g(θk;Bk)   and S(θk;Bk),    the   SPRING   update   direction   in
+(SPRING)   is   conditionally   biased   due   to   the   matrix   inversion.      Specifically,   conditioning   on   the
+σ-algebra  generated  by  previous  samples Fk−1 :=σ (Xi,j, 0  i  k   1, 1  j  Ns),  we  generally
+have
+
+E   (λI +S(θk;Bk))−1 λµ∆θk−1   12g(θk;Bk)                             jFk−1       6= (λI +S(θk))−1 λµ∆θk−1   12g(θk)                         ,
+
+This   conditional   bias   introduces   an   additional   error   term   in   the   convergence   analysis   and   prevents
+convergence  to  an  exact  first-order  stationary  point.
+Theorem   3.2.         Under  Assumptions           3.1  and    3.2,  let fθkg  be  generated  by   (SPRING).   Then  for  any
+0  µ< 1,   there   exist C1, C2, C3 > 0,   such   that,   for   any K   1,
+
+                                 KX                                            KX                     KX
+                                     ηkE[kg(θk)k2]  C1 +C2  1Ns                    ηk +C3  1N 2s          ηk.                                                       (3.1)
+                                k=1                                           k=1                   k=1
+Here, E[]   denotes   the   total   expectation.
+Proof.    See  Appendix        B.
+    The   bound   in   Eq.   (3.1)   shows   that   Monte   Carlo   noise   yields   a   residual   term   of   order O(1/Ns).
+Consequently,  the  parameter  sequence fθkg  converges  to  an O(1/Ns)-neighborhood  of  a  first-order
+stationary  point.
+Corollary   3.2.        Under   the   assumptions   of   Theorem            3.2,   we   have
+                                               h                                      !            1
+                                    min          kg(θk)k2i      = O      PK1             + O              .
+                                   1≤k≤K E                                   k=1ηk                 Ns
+
+Remark   3.3.         In   contrast   to   SPRING,   the   SGD   update   in   VMC   admits   a   conditional ly   unbiased
+update    direction    under    Assumption           3.2,    enabling    first-order    convergence    results    [1].       From    this
+viewpoint,  our  analysis  is  closer  in  spirit  to  studies  that  explicitly  account  for  Monte  Carlo/MCMC-
+induced   bias   in   the   update   direction,   such   as   [19].     The   resulting O(1/Ns)   residual   term   is   of   the
+same   type.     We   emphasize   that   (3.1)   is   an   upper   bound;   in   practice,   SR   preconditioning   can   yield
+substantial ly   faster   convergence.
+    A  natural  question  is  whether  the O(1/Ns)  term  is  merely  an  artifact  of  the  proof  or  an  intrinsic
+consequence    of    stochastic    sampling.       To    investigate    this,    we    conduct    numerical    experiments    on
+the   one-dimensional   transverse-field   Ising   (1D-TFI)   model   with N  =  10   sites   and   transverse-field
+strengthh = 1,  using  a  restricted  Boltzmann  machine  (RBM)  ansätz  [6]  withD = 5N   hidden  units
+(see  Appendix       D   for  details).   All  experiments  are  implemented  using  NetKet  [34]  and  JAX  [5].
+    For  SPRING,  we  fix  the  regularization  parameterλ = 10−3  and  do  not  apply  the  norm-constraint
+stabilization.    Unless   otherwise   specified,   all   other   algorithmic   components   follow   Algorithm                      1.    We
+run  SPRING  with µ = 0  and µ = 0.99  under  both  full-batch  evaluation  and  Monte  Carlo  sampling
+with   varying   sample   sizes Ns.      To   eliminate   MCMC   non-stationarity   in   this   experiment,   we   use
+direct  sampling  throughout.   For  each  run,  we  record  the  full-batch  gradient  norm  overK = 100000
+iterations.   The  results  are  reported  in  Fig.           2.
+    In   this   experiment,   the   full-batch   size   is  2N  =  1024.      The   results   show   that,   even   when Ns
+exceeds   the   full-batch   size,   stochastic   sampling   prevents   convergence   to   an   exact   stationary   point.
+Moreover,    the   empirical   results   are   well   fitted   by pb/Ns +c/N 2s ,    consistent   with   the   bound   in
+Eq.  (3.1).   These  observations  indicate  that  the O(1/Ns)  residual  term  reflects  an  intrinsic  limitation
+of  stochastic  sampling  rather  than  a  proof  artifact.
+
+
+                                                                     10
+                    (a) µ = 0, ηk = 0.01.                                           (b) µ = 0, ηk = 0.01/(1 + 10−4k).
+
+
+
+
+
+
+
+
+
+                  (c) µ = 0.99, ηk = 0.01.                                        (d) µ = 0.99, ηk = 0.01/(1 + 10−4k).
+
+Figure   2:    Convergence   test   on   the   1D-TFI   model   with N  =  10   sites.     Each   block   corresponds   to
+a   fixed   momentum   parameter µ   and   a   step-size   schedule.     Left   panels:    evolution   of   the   minimum
+gradient   norm min0≤k≤K kg(θk)k   over   iterations,   for   full-batch   evaluation   and   for   different   sample
+sizes Ns.      Right   panels:     the   minimum   gradient   norm   attained   over K  =  100000   iterations   as   a
+function  of Ns.   The  red  dashed  line  indicates  the  full-batch  result,  and  the  orange  curve  shows  the
+fitpb/Ns +c/N 2s .
+
+3.2       Divergence   Counterexample   of   SPRING   with µ = 1
+We  now  analyze  the  regimeµ = 1,  which  exhibits  dynamics  that  are  qualitatively  different  from  the
+case 0  µ< 1.   Throughout  this  subsection,  we  focus  on  the  full-batch  update  (F-SPRING).   A  key
+structural   property   of   VMC   plays   a   central   role:    the   gradient g(θ)   always   lies   in   the   range   of   the
+SR  matrix S(θ).
+Lemma   3.3.        Let R(S(θ))   denote   the   range   space   of S(θ).   Then g(θ) 2 R(S(θ)).
+Proof.    Denote K(S(θ))  the  kernel  space  of S(θ).   For  any w 2 K(S(θ)),  we  have
+                                                                     hO(θ;X)⊤w2i
+                                         w⊤S(θ)w = EX∼πθ                                     = 0,
+
+which  implies O(θ;X)⊤w = 0 πθ -a.s.   Consequently,
+
+                           g(θ)⊤w = EX∼πθ[ ¯E(θ;X)O(θ;X)⊤w] = 0,   8 w 2 K(S(θ)).
+
+Therefore, g(θ) ? K(S(θ))  and  hence g(θ) 2 R(S(θ)).
+
+Remark    3.4.        The   same   property   holds   for   the   Monte   Carlo   estimators.      Indeed,   with   the   usual
+constructions g(θ;B)  =  2O(θ;B) ¯E(θ;B)   and S(θ;B)  = O(θ;B)O(θ;B)⊤,   we   also   have g(θ;B) 2
+R(S(θ;B)).
+    LetPK(θ) 2 RNp×Np   denote  the  orthogonal  projector  onto  the  kernel  space K(S(θ)).   Projecting
+the  full-batch  update  (F-SPRING)  onto K(S(θk))  yields
+
+                                                PK(θk)∆θk =µPK(θk)∆θk−1.                                                                                            (3.2)
+
+This   identity   shows   that   the   kernel   component   of   the   update   is   driven   purely   by   the   momentum
+term.   Since  both  the  kernel  space  and  the  projector PK(θk)  depend  on θk,  directly  analyzing  (3.2)
+is  challenging.   To  gain  intuition,  we  consider  a  simplified  setting  where  the  SR  matrix  is  fixed.
+
+
+                                                                    11
+Heuristic   analysis   with   fixed   SR   matrix.       Assume S(θ)   S 2 RNp×Np   with 0 < rank(S) <
+Np,  and  let PK   denote  the  associated  kernel  projector.   Then  (3.2)  reduces  to
+
+                                        PK∆θk =µPK∆θk−1 =  =µkPK∆θ0.                                                                           (3.3)
+
+Consequently,  the  kernel  component  of  the  parameter  iterate  satisfies
+                                                  kX                                    kX             !
+                     PKθk+1 =PKθ0 +                   ηmPK∆θm =PKθ0 +                         ηmµm        PK∆θ0.                                 (3.4)
+                                                m=0                                     m=0
+    When 0  µ< 1,  the  exponentially  decay  in  (3.3)  typically  keeps  the  kernel  contribution  bounded
+for  standard  step-size  schedules.   In  contrast,  when µ = 1,  (3.4)  becomes
+                                                                       kX         !
+                                          PKθk+1 =PKθ0 +                      ηm     PK∆θ0.
+                                                                        m=0
+If PK∆θ0 6=  0   and   the   step-size   sequence   is   not   summable,   the   kernel   component   grows   without
+bound.    Since   commonly   used   step-size   schedules   in   VMC   satisfy ηk = O(1/k),   this   heuristic   argu-
+ment  explains  why µ = 1  can  lead  to  divergence.
+Remark   3.5.        In  standard  implementations,  one  often  initializes ∆θ−1 = 0,  so  that  the  first  update
+reduces   to   an   SR   step   and   satisfies
+
+                             ∆θ0 = θ1   θ0η0      =  12 (λI +S)−1g(θ0) =) PK∆θ0 = 0.
+
+This   does   not   contradict   the   above   mechanism:   in   practice S(θk)   varies   with k,   and   finite-precision
+effects  can  introduce  nonzero  kernel  components  after  the  first  iterations.   For  the  heuristic  argument,
+we   therefore   view θ1   as   given   and   analyze   the   subsequent   dynamics   of fθkgk≥2.
+    More  generally,  if  there  exists  a  subspace
+
+                                                     K0  \        K(S(θk;Bk)),
+                                                               k
+then  for  (SPRING),  we  can  similarly  have
+                                                                                        kX             !
+                    PK0∆θk =µkPK0∆θ0,  PK0θk+1 =PK0θ0 +                                       ηmµm        PK0∆θ0,
+                                                                                        m=0
+where PK0   is  the  orthogonal  projector  onto K0.
+
+Explicit  counterexamples.       The  heuristic  mechanism  above  can  be  realized  by  explicit  wavefunc-
+tion  constructions  for  which  the  SR  matrix  is  independent  of θ.   Highlight  that,  under  the  stochastic
+setting,  the  divergence  will  still  happen  in  some  situations.
+Continuous   example.   Consider  the  Gaussian-type  wavefunction  on R3N ,
+
+                                      ψθ(x) =e− 14 (x−Aθ)⊤Σ−1(x−Aθ),   x 2 R3N,                                                                      (3.5)
+
+where  Σ 2 R3N×3N    is   symmetric   positive   definite   and A 2 R3N×Np    satisfies  0 <  rank(A) < Np.
+Then πθ   is  the  Gaussian  distribution N (Aθ, Σ).   A  direct  computation  gives
+
+                         rθ logψθ(x) =  12A⊤Σ−1(x  Aθ),   EX∼πθ[rθ logψθ(x)] = 0.
+
+
+                                                                   12
+Hence  the  SR  matrix  is
+
+                      S(θ) =  14EX∼πθ[A⊤Σ−1(X  Aθ)(X  Aθ)⊤Σ−1A] =  14A⊤Σ−1A,
+
+which  is  independent  of θ,  and  satisfies 0< rank(S)   rank(A)<Np.   In  the  stochastic  setting,
+                                                           0                                               1
+                                                                                     NsX
+                    O(θk;Xk,i,Bk) =  12A⊤Σ−1               @Xk,i  Aθk     1Ns             (Xk,j  Aθk)A,
+
+                                                                                     j=1
+
+so,  since
+                                                        NsX
+                            S(θk;Bk) =      1Ns   1         O(θk;Xk,i,Bk)O(θk;Xk,i,Bk)⊤,
+                                                       i=1
+we  have K(A)   K(S(θk;Bk))  for  any k   0.
+Discrete   example.   Consider  the  complex-valued  wavefunction
+
+                                      ψθ(x) = 2−N/2ei x⊤Aθ,        x 2 f 1, 1gN,                                                                            (3.6)
+
+where i  denotes  the  imaginary  unit  andA 2 RN×Np  satisfies 0< rank(A)<Np.   In  this  case,πθ  is  the
+uniform   distribution   on f 1, 1gN .    Consequently,   we   have EX∼πθ[X] = 0   and EX∼πθ[XX⊤] = IN .
+For  complex-valued  wavefunctions,  the  logarithmic  derivative  is  defined  by
+
+                                          rθ logψθ(x) := rθψθ(x)ψθ(x)    = iA⊤x,
+
+which   satisfies EX∼πθ[rθ logψθ(x)]  =  0.      The   SR   matrix   is   typically   defined   via   the   Hermitian
+covariance  of  logarithmic  derivatives,   or  equivalently  by  taking  its  real  part  (see  [4]  for  details).    In
+particular,
+
+                                        S(θ) := ReEX∼πθ [O(θ;X)O(θ;X)∗](iA⊤X) ( iX⊤A)
+                                               = ReEX∼πθA⊤(XX⊤)A
+                                               = EX∼πθ
+                                               =A⊤A,
+
+where  ()∗    denotes   the   conjugate   transpose.      Thus, S(θ)   is   independent   of θ    and   satisfies  0 <
+rank(S)   rank(A)<Np.   In  the  stochastic  setting,
+                                                                0                           1
+                                                                                  NsX
+                                   O(θk;Xk,i,Bk) = iA⊤          @Xk,i     1Ns         Xk,jA,
+
+                                                                                  j=1
+
+and  therefore K(A)   K(S(θk;Bk)).
+    Combining  these  observations  yields  the  following  result.
+
+Theorem   3.3.        Let fθkgk≥2   be   generated   by   (F-SPRING)   or   (SPRING)   with µ = 1.     Then   there
+exist   a   wavefunction   and   an   initialization   such   that
+                                                                  kX        !
+                                                   kθkk = Ω             ηm     .
+                                                                  m=1
+
+
+
+                                                                13
+     Theorem       3.3  describes  a  worst-case  scenario,  revealing  that  the  kernel-related  directions  are  the
+source  of  instability.    In   contrast,   for  the  two  explicit  counterexamples  above,   we  can  also   establish
+convergence  for 0  µ< 1:   in  the  continuous  case  with  the  electronic  Hamiltonian  in  Eq.  (D.1),  and
+in  the  discrete  case  with  a  spin-lattice  Hamiltonian.
+Theorem    3.4.          Let ψθ(x)    be    given    by    Eq.    (3.5)    or    Eq.    (3.6),    and    let    the    Hamiltonian H      be
+the   electronic   Hamiltonian   in   Eq.   (D.1)   or   a   spin-lattice   Hamiltonian.     Let fθkg   be   generated   by
+(F-SPRING).    Under   Assumption                 3.1   (3),   for   any 0  µ< 1,   there   exist C > 0,   such   that,   for   any
+K   1,
+                                                           KX
+                                                               ηk kg(θk)k2  C.
+                                                         k=1
+
+Proof.    See  Appendix        C.
+
+4       PRIME-SR:   A   Momentum-Adaptive   SR   Method
+
+In   this   section,   we   introduce   Principal   Range   Informed   MomEntum   SR   (PRIME-SR),   a   tuning-
+free   momentum-adaptive   variant   of   SPRING.   The   design   of   PRIME-SR   is   guided   by   the   theoret-
+ical   insight   from   Section      3.2:    under   aggressive   momentum   reuse   at µ  =  1,   instability   arises   from
+kernel-related  directions.   This  suggests  that  momentum  control  should  link  to  the  sampled  spectral
+information  revealed  by  the  SR  matrix  at  the  current  iteration.
+     Our   basic   viewpoint   is   that   momentum   control   should   depend   on   two   complementary   aspects
+of   the   SR   information:     first,   how   the   sampled   spectrum   is   distributed;    second,   how   reliable   the
+associated   sampled   directions   are.     The   first   aspect   is   encoded   by   an   effective   spectral   dimension
+indicator,   while   the   second   is   characterized   by   a   subspace-overlap   indicator.    PRIME-SR   combines
+these   two   signals   to   determine   the   momentum   parameter   adaptively:    stronger   momentum   reuse   is
+encouraged   only   when   both   the   spectral   and   range   space   information   are   favorable.     Throughout
+this  section,  unless  stated  otherwise,  we  use  the  shorthand  notations
+              ¯Ek :=  ¯E(θk;Bk),   Ok :=O(θk;Bk),   Sk :=S(θk;Bk),   gk :=g(θk;Bk).
+
+4.1       Design   Principle   and   Effective   Spectral   Dimension
+We  begin  with  the  spectral  aspect,  and  let  the  SVD  of Ok 2 RNp×Ns   be
+                                                Σk    0  (V Rk  )⊤
+                       Ok =URk  UKk                0     0     (V Kk  )⊤   ,        Σk = diag(ςk,1,...,ςk,rk),                                    (4.1)
+
+whereςk,1,...,ςk,rk > 0  are  the  nonzero  singular  values  ofOk.   Therefore,  the  SR  matrixSk =OkO⊤k
+has  nonzero  eigenvalues ς2k,1,...,ς2k,rk ,  and rk =  rank(Sk).
+     To  quantify  how  the  sampled  spectrum  is  distributed,  we  introduce  the  following  effective  spectral
+dimension:                                                      Prki=1ς2k,i 2
+
+                                                      αk :=       Prki=1ς4k,i     rk,                                                                                                    (4.2)
+
+where   the   upper   bound rk    is   from   the   Cauchy-Schwarz   inequality.     This   quantity   approximately
+measures   the   number   of   principal   spectral   directions.      Indeed,    if ς2k,1    ς2k,i    for   all i 6=  1,    then
+αk    1;   if   all   nonzero   singular   values   are   equal,   then αk  = rk.     Hence αk    may   be   viewed   as   an
+effective  dimension  of  the  sampled  spectrum.
+     The   relevance   of αk   to   momentum   control   is   the   following.    A   smaller αk   means   that   the   sam-
+pled   spectral   information   is   concentrated   on   fewer   dominant   directions,   which   in   turn   suggests   a
+
+
+                                                                       14
+potentially   larger   kernel-related   subspace.    In   this   regime,   strong   momentum   reuse   carries   a   higher
+risk  of  amplifying  unstable  components,  and  the  momentum  parameter  should  therefore  be  reduced.
+Conversely,  a  largerαk   indicates  that  the  sampled  spectral  information  is  spread  over  more  effective
+directions,  which  is  more  favorable  for  aggressive  momentum  reuse.
+    Figure     3 illustrates  the  behavior  ofαk  on  the  1D-TFI  model  withN = 10,  including  the  full-batch
+reference  and  sampled  runs  with  different  sample  sizes.   All  other  experimental  settings  are  the  same
+as  those  in  Section     3.1.   An  important  empirical  observation  is  thatαk   is  relatively  insensitive  to  the
+sample  size  and  remains  close  to  its  full-batch  counterpart.   This  indicates  thatαk  stably  captures  the
+spectral  structure  at  the  current  iteration  and  is  therefore  suitable  as  an  online  stability  indicator.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure   3:   Effective   spectral   dimension αk   on   the   1D-TFI   model   with N  = 10   under   SPRING   with
+µ = 0.99.   The  sampled  values  remain  close  to  the  full-batch  reference  across  different  sample  sizes.
+
+
+4.2       Subspace   Overlap   as   a   Reliability   Indicator
+The  indicatorαk   describes  only  the  sampled  spectrum.   It  does  not  characterize  whether  the  associ-
+ated  sampled  directions  are  trustworthy.   To  address  this  second  aspect,  we  now  examine  the  range
+space  information  carried  by  the  singular  subspaces  ofOk.   From  the  decomposition  in  Eq.  (4.1),  the
+nonzero  spectrum  is  shared  by
+
+                             Sk =OkO⊤k  2 RNp×Np               and   Tk =O⊤kOk 2 RNs×Ns.
+
+Meanwhile,  the  associated  range  space  information  is  carried  by  the  nonzero  left  and  right  singular
+subspaces:
+                                       span(URk  ) = R(Sk),        span(V Rk  ) = R(Tk).
+Since αk    already   provides   an   effective   dimension,   we   define   the   principal   range   spaces   using   the
+leading dαke   directions.      Specifically,    let URk,α    and V Rk,α    denote   the   submatrices   of URk      and V Rk
+formed  by  the  leading dαke  columns.
+    The  role  of  subspace  overlap  is  to  quantify  the  reliability  of  the  sampled  range  space  information.
+Ideally,   such   reliability   should   be   measured   by   comparing   the   effective   sampled   subspace   with   the
+corresponding   effective   subspace   of   the   true   SR   matrix S(θk).     In   other   words,   the   ideal   quantity
+is   the   overlap   between   the   principal   range   spaces   of Sk   and S(θk).     Since S(θk)   is   unavailable   in
+practice,  we  introduce  two  practical  surrogates:
+
+    •   the  left-subspace  surrogate,  given  by  the  overlap  between  the  principal  range  spaces  ofSk   and
+        Sk−1;
+
+    •   the   right-subspace   surrogate,   given   by   the   overlap   between   the   principal   range   spaces   of Tk
+        and Tk−1.
+
+
+                                                                      15
+These  are  defined  as
+                                         URk,α⊤URk−1,αF,   β(V )                   V Rk,α⊤V Rk−1,αF.                                             (4.3)
+                            β(U)k     :=                                       k     :=
+
+These   quantities   measure   the   overall   alignment   between   the   principal   sampled   directions   at   two
+successive  iterations.   A  small  overlap  indicates  that  the  principal  directions  extracted  from  the  two
+sampled  matrices  differ  significantly,  suggesting  that  sampling  does  not  yet  stably  resolve  the  under-
+lying  effective  subspace.   By  contrast,  a  large  overlap  indicates  that  the  dominant  sampled  directions
+are   consistently   identified   across   iterations,   suggesting   that   sampling   is   suﬀiciently   informative   to
+capture   the   underlying   effective   subspace   more   reliably.     Therefore,   larger   values   of β(U)k          or β(V )k
+indicate  more  reliable  sampled  directions  for  momentum  reuse.
+     Figure     4  reports   both   indicators   on   the   1D-TFI   model   with N  =  10.     We   observe   that   both
+the  left-  and  right-subspace  overlaps  clearly  separate  different  sample  sizes:   larger  sample  sizes  lead
+to   larger   overlap   values.    This   confirms   that   both   indicators   reflect   the   reliability   of   sampled   range
+space  information.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+              Left-subspace  overlap: β(U)k                                                   Right-subspace  overlap: β(V )k
+
+Figure  4:   Left  and  right  principal  range  space  overlap  indicators  on  the  1D-TFI  model  withN = 10.
+Both  indicators  separate  different  sample  sizes  and  thus  reflect  the  reliability  of  sampled  range  space
+information.
+
+
+4.3       Practical   Rule   and   the   PRIME-SR   Algorithm
+Both   indicators   in   Eq.   (4.3)   are   informative,   but   they   differ   in   computational   convenience.     The
+left-subspace  overlap  is  more  directly  connected  to R(Sk).   However,  computing  it  requires  access  to
+the   left   singular   vectors   of Ok,   which   is   expensive   when Np   is   large.    We   therefore   adopt   the   right-
+subspace   viewpoint   and   work   with   the   smaller   matrix Tk  := O⊤kOk 2 RNs×Ns .    Since Ns   Np   in
+the  applications  considered  here,  this  choice  is  substantially  more  eﬀicient.   Accordingly,  PRIME-SR
+uses  the  right  principal-range-space  overlap  as  its  practical  reliability  indicator:
+                                  ˜βk :=   V Rk,α⊤V Rk−1,αF 2      h                                   i
+                                                                            0,pminfdαke,dαk−1eg                 .                                                        (4.4)
+
+     We  now  combine  the  two  signals  into  the  momentum-control  rule.   The  design  principle  is  simple:
+
+    •   a  smallerαk  indicates  a  potentially  larger  kernel-related  subspace  and  therefore  calls  for  smaller
+        momentum;
+
+    •   a  larger ˜βk  indicates  more  reliable  sampled  directions  and  therefore  supports  larger  momentum.
+
+
+                                                                       16
+Hence,   the   adaptive   momentum   parameter µk   in   PRIME-SR   should   be   increasing   in   both αk   and
+˜βk.   We  use  the  following  practical  rule:
+                                                     s                 ˜βk              !            αk     1/4!
+                             µk := 1           1         pminfdαke,dαk−1eg                    1         rk            .                                               (4.5)
+
+
+The  resulting  PRIME-SR  update  is
+
+                            ∆θk =  Ok λI +O⊤kOk−1 µkO⊤k ∆θk−1 +  ¯Ek +µk∆θk−1.                                            (4.6)
+
+     For  practical  computation,   we  directly  use   the  spectral  decomposition Tk =Vk ˜Σ2kV ⊤k   .    Then αk
+admits  the  equivalent  form                                Prki=1ς2k,i 2
+
+                                                   αk =        Prki=1ς4k,i     =  tr(˜Σ2k)2tr(˜Σ4k) ,                                                                                            (4.7)
+
+so   it   can   be   computed   directly   from   the   spectrum   of Tk.     The   matrix V Rk,α   is   formed   by   the dαke
+leading   eigenvectors   in Vk,   and rk   is   the   numerical   rank   obtained   by   truncating   the   spectrum   of˜Σ2k   using   a   tolerance εr .     As   in   our   implementation,   we   use   the   MATLAB-default   choice   in rank
+
+command: εr =Nsεm,  where εm   denotes  machine  precision.
+     The  additional  computational  and  storage  overhead  of  PRIME-SR  relative  to  SPRING  is  modest.
+The  extra  cost  is  dominated  by  the  computation  of  ˜βk,  which  requires O (Nsdαkedαk−1e)  operations
+per   iteration,   while   the   additional   storage   cost   is O (Nsdαke)   for   storing V Rk,α.    In   our   experiments,
+Ns = 1000  and  typicallyαk   20   30,  so  the  overhead  is  relatively  small.   Algorithm                                   2  summarizes
+PRIME-SR.
+
+  Algorithm   2:  PRIME-SR
+     Input:      Initial  parameter θ0 2 RNp ,  sample  sizeNs 2 N,  step-size  scheduleηk,  regularization
+                 parameter λ> 0,  norm-constraint  parameter C > 0  and  rank  tolerance εr .
+ 1  ∆θ−1 := 0,  ˜β0 = 1;
+ 2    while    the   stopping      criterion    is  not   met  do
+  3              Sample Bk := fXk,1,...,Xk,Nsg  from πθk ;
+  4              Construct Ok 2 RNp×Ns   and  ¯Ek 2 RNs   from Bk;
+
+  5              Compute  the  eigendecomposition Tk =O⊤kOk =Vk ˜Σ2kV ⊤k   ;
+
+  6              Compute αk   via  Eq.  (4.7),  and  compute rk   using  tolerance εr   on  ˜Σ2k;
+  7              Form V Rk,α   using  the dαke  leading  eigenvectors  of Tk;
+  8              ifk   1  then
+  9                         Compute  ˜βk   by  Eq.  (4.4);
+
+10              Compute µk   by  Eq.  (4.5);
+11              Update θk+1   by  Algorithm         1 with µk;
+12              Record αk   and V Rk,α,  set k :=k + 1,  and  update ηk.
+     Output:        Optimized  parameters  and  energy.
+
+
+Remark   4.1.         At   present,   the   convergence   analysis   developed   in   Section                 3  does   not   directly   extend
+to   PRIME-SR,   since   the   momentum   parameter   in   PRIME-SR   is   updated   adaptively,   whereas   our
+current    theory    is    established    for    SPRING    with    a    fixed    momentum    parameter.      Nevertheless,    the
+numerical  results  in  the  fol lowing  section  show  that  PRIME-SR  provides  a  clear  practical  advantage:
+it   substantial ly   improves   stability   and   robustness   over   fixed-µ   SPRING,   avoids   manual   tuning,   and
+achieves   performance   comparable   to,   and   in   some   cases   better   than,   the   optimal ly   tuned   SPRING.
+
+
+                                                                        17
+5       Numerical   Experiments
+
+In   this   section,   we   evaluate   the   proposed   PRIME-SR   method   and   compare   it   with   SPRING   using
+fixed,  hand-tuned  momentum  parameters µ.   The  goal  of  these  experiments  is  not  to  claim  uniform
+superiority  over  the  best  fixed  choice  of µ,  but  rather  to  assess  whether  PRIME-SR  can  (i)  achieve
+performance  comparable  to  near-optimal  fixed-µ  SPRING  runs,  and  (ii)  provide  improved  robustness
+against  unstable  momentum  choices  in  practical  VMC  settings.
+    All  experiments  are  conducted  on  an  Ubuntu  20.04.1  system  equipped  with  an  NVIDIA  GeForce
+RTX   4090   GPU   and   CUDA   12.0.      Spin-lattice   experiments   are   implemented   using   NetKet   [34],
+a   VMC   framework   based   on   JAX   [5],   while   electronic-structure   experiments   are   performed   using
+VMCNet  [20].
+    For  spin-lattice  models,  we  consider  the  TFI  model  and  the  Heisenberg  model,  both  with  periodic
+boundary  conditions  (see  Appendix               D.3   for  details):
+
+   •    TFI  model
+                                                    H  =   X           σziσzj  hX         σxj.
+                                                                <i,j>                 j
+
+   •    Heisenberg  model
+                                                  H  = X          σxiσxj  +σyiσyj  +σziσzj.
+                                                           <i,j>
+
+We   test   the   1D-Heisenberg   model   with N  = 100   sites,   and   the   2D-Heisenberg   and   2D-TFI   models
+with N  = 10  10   sites;   for   the   2D-TFI   model   we   use   transverse   field   strengths h = 2, 3, 4.    These
+settings   follow   [3].     For   all   lattice   experiments,   we   use   RBM   wavefunction   with D  =  5N    hidden
+units,   initialized   with   random   seed jax.random.PRNGKey(0)   and   using   64-bit   precision.    Each   run
+uses K = 10,000  optimization  iterations  with Ns = 1000  MCMC  samples  per  iteration.   We  employ
+a  burn-in  of 3000  steps,  single-spin-flip  proposals,  and 10  MCMC  transitions  between  optimization
+iterations.   We  apply  mean-centered  local-energy  clipping  at 5  standard  deviations,  following  common
+VMC   practice   [27,      10].    Reported   energy   trajectories   are   smoothed   using   a   sliding   window   average
+over  100  iterations,  as  in  [10].
+    For  electronic  systems,  we  consider C, N,  and O  atoms,  as  well  as LiH, N2  and CO  molecules.   For
+N2,   we   use   the   equilibrium   bond   length 2.016   Bohr,   and   for CO   we   use 2.173   Bohr,   following   [10].
+Benchmark  ground-state  energies  for C, N, O, N2,  and CO  are  taken  from  [10],  while  the  benchmark
+for  LiH   is   taken   from   [27].      A   standard   FermiNet   architecture   with   16   dense   determinants   and
+32-bit   precision   is   used,   consistent   with   [10].      Each   electronic   experiment   runs   for K  =  100,000
+iterations   with Ns  =  1000   samples   per   iteration.     Gaussian   all-electron   proposals   are   used,   with
+adaptive  standard  deviation  to  maintain  an   acceptance  ratio  of  approximately  50%  (See   Appendix
+D.4   for   details).     Reported   energy   trajectories   are   smoothed   using   a   sliding   window   average   over
+3000  iterations.
+    Across  all  experiments,  we  use  the  inverse-time  step-size  scheduleηk =  η01 +ck   withc = 10−4.   We
+set η0 = 0.02  for  all  spin-lattice  systems  and  for C, N, O,  and LiH,  and η0 = 0.002  for N2  and CO,
+matching   [10].    We   use   regularization λ = 10−3   and   a   norm   constraint C  = 10−3   throughout.    For
+fixed-µ  SPRING,  we  tune µ = 0, 0.2, 0.4, 0.8, 0.9, 0.95, 0.995  for  spin-lattice  models,  and  we  exclude
+µ = 0.995   for   electronic   systems   due   to   stability   issues.    For   PRIME-SR,   we   set   the   rank   tolerance
+as εr =Nsεm,  where εm   denotes  machine  precision.
+
+5.1       Experiments   on   Spin-Lattice   Models
+Figures    5  and   6 report  results  for  the  2D-TFI  model  withh = 2, 3, 4  and  for  the  1D/2D-Heisenberg
+models.   The  correspondingµk   trajectories  are  plotted  every  100  iterations.   Across  all  tested  lattice
+systems,  PRIME-SR  consistently  reaches  energy  levels  comparable  to  those  obtained  by  the  optimal
+
+
+                                                                    18
+or   near-optimal   fixed-µ   runs.      At   the   same   time,    the   fixed-µ   baselines   exhibit   a   clear   spread   in
+performance  across  different  choices,  indicating  that  careful  tuning  is  important  for  obtaining  strong
+results.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+               (a)  1D-Heisenberg  model  with N = 100  sites.   Left:   relative  energy  error.   Right: µk .
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+            (b)  2D-Heisenberg  model  with N = 10 × 10  sites.   Left:   relative  energy  error.   Right: µk .
+
+Figure  5:   PRIME-SR  on  the  Heisenberg  model.    Left  column:   relative  energy  error.    Right  column:
+adaptive  momentum  parameter µk.
+
+     Values   of µ   that   perform   well   on   the   2D-TFI   problems   are   not   always   equally   effective   on   the
+Heisenberg   models,   and   vice   versa.     This   model   dependence   makes   it   diﬀicult   to   choose   a   single
+fixed   momentum   that   works   reliably   across   different   systems.      In   contrast,    PRIME-SR   remains
+competitive  throughout  these  tests  without  requiring  problem-specific  tuning,  which  is  precisely  the
+practical  advantage  of  the  proposed  adaptive  strategy.
+
+5.2       Sensitivity   of   Initialization   on   Electronic   Systems
+For   electronic   systems,   we   observe   that   fixed-µ   SPRING   is   also   sensitive   to   initialization,   i.e.,   to
+the  initial  parameter θ0,  especially  forµ   0.9.   We  test  five  initializations  corresponding  to  random
+seeds jax.random.PRNGKey(i)   for i = 0, 1, 2, 3, 4.    Fig.                      7  reports   results   for N2   and CO   molecules
+withµ = 0.9, 0.95.   The  dependence  on  initialization  is  pronounced:   for  some  seeds,  the  optimization
+remains   stable   and   reaches   low   energy   error,   whereas   for   others,   the   same   hyperparameter   setting
+leads  to  visibly  worse  behavior  and  can  even  lead  to  divergence.   This  indicates  that,  in  the  electronic
+setting,  the  performance  of  fixed-µ  SPRING  depends  not  only  on  the  choice  of µ,  but  also  strongly
+on  the  initialization.
+
+
+
+
+
+
+
+                                                                       19
+                                        (a) h = 2.   Left:   relative  energy  error.   Right: µk .
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                       (b) h = 3.   Left:   relative  energy  error.   Right: µk .
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                        (c) h = 4.   Left:   relative  energy  error.   Right: µk .
+
+Figure   6:    PRIME-SR   on   the   2D-TFI   model   with N  = 10  10   sites.    Left   column:    relative   energy
+error.   Right  column:   adaptive  momentum  parameter µk.
+
+     As  a  direct  comparison,  Fig.          8  shows  the  corresponding  results  of  PRIME-SR  on  the N2   and CO
+molecules  across  the  same  set  of  random  seeds.   In  contrast  to  fixed-µ  SPRING,  all  runs  remain  stable
+and   attain   similar   final   accuracies.     The   reduction   in   seed   sensitivity   is   one   of   the   main   practical
+advantages   of   PRIME-SR   and   highlights   its   substantially   improved   robustness   in   the   electronic
+setting.
+
+5.3       Experiments   on   Atomic   Systems
+We  next  report  experiments  on  the  atoms C, N,  and O,  comparing  fixed-µ  SPRING  and  PRIME-SR.
+Due   to   instability   at   large µ,   we   exclude   some µ   values   from   the   comparison.     Specifically,   for  C
+atom,   we   compare   against µ  =  0, 0.2, 0.4, 0.6, 0.8, 0.9, 0.95, 0.99,   while   for  N   and  O   atoms   we   use
+µ  =  0, 0.2, 0.4, 0.6, 0.8, 0.9, 0.95.     Unstable   runs   for  N   and  O   atoms   with µ  =  0.99   are   reported   in
+Appendix       E.1.     Figure     9  shows   results   for   random   seed   0,   and   the   results   of   additional   seeds   are
+
+
+                                                                       20
+provided  in  Appendix          E.2.   The  trajectories  of µk   are  plotted  every  1000  iterations.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        (a) N2, µ = 0.9.   Relative  energy  error.                               (b) N2, µ = 0.95.   Relative  energy  error.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        (c) CO, µ = 0.9.   Relative  energy  error.                              (d) CO, µ = 0.95.   Relative  energy  error.
+
+Figure  7:   Sensitivity  of  fixed-µ  SPRING  to  initialization  on N2   (top  row)  and CO  (bottom  row)  for
+µ = 0.9, 0.95.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+              (a) N2.   Relative  energy  error.                                        (b) CO.   Relative  energy  error.
+
+             Figure  8:   Sensitivity  of  PRIME-SR  to  initialization  on N2   (left)  and CO  (right).
+
+    Across   all   three   atomic   systems,   PRIME-SR   remains   stable   throughout   training   and   reaches
+final  accuracies  that  are  comparable  to  the  optimal  or  near-optimal  fixed-µ  baselines.   In  particular,
+it   consistently   avoids   the   unstable   large µ   behavior   while   retaining   the   optimization   benefits   of
+momentum  reuse.   Together  with  the  multi-seed  results  reported  in  Appendix                              E,  these  experiments
+
+
+                                                                     21
+indicate  that  PRIME-SR  improves  robustness  to  initialization  without  introducing  a  noticeable  loss
+in  accuracy.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                     (a) C  atom.   Left:   relative  energy  error.   Right: µk .
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                     (b) N  atom.   Left:   relative  energy  error.   Right: µk .
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                     (c) O  atom.   Left:   relative  energy  error.   Right: µk .
+
+ Figure  9:   Comparison  of  fixed-µ  SPRING  and  PRIME-SR  on C, N, O  atoms  for  random  seed  0.
+
+5.4       Experiments   on   Molecular   Systems
+We   finally   consider   the  LiH,  N2,   and  CO   molecules.     We   compare   against   fixed-µ   SPRING   with
+µ = 0,  0.2,  0.4,  0.6,  0.8,  0.9,  0.95,  0.99   for  LiH   molecular,   and µ = 0,  0.2,  0.4,  0.6,  0.8,  0.9,  0.95
+for  N2   and  CO   molecules.     Unstable   runs   for  N2   and  CO   molecules   with µ  =  0.99   are   reported
+in   Appendix      E.1.     Figure    10  shows   results   for   random   seed   0,   and   results   of   additional   seeds   are
+reported  in  Appendix          E.3.
+    The  molecular  systems  show  the  same  overall  trend.   PRIME-SR  remains  stable  over  the  full  op-
+
+
+                                                                     22
+timization  horizon  and  reaches  accuracies  comparable  to  optimal  fixed-µ  SPRING.  For CO,  PRIME-
+SR  can  even  outperform  the  best  stable  fixed-µ   run  in  our  experiments.    The  additional  multi-seed
+results  in  Appendix       E  further  support  the  conclusion  that  PRIME-SR  provides  a  more  robust  alter-
+native  to  fixed-µ  SPRING  on  molecular  problems.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                (a) LiH  molecule.   Left:   relative  energy  error.   Right: µk .
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                (b) N2   molecular.   Left:   relative  energy  error.   Right: µk .
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                (c) CO  molecular.   Left:   relative  energy  error.   Right: µk .
+
+Figure   10:     Comparison   of   fixed-µ   SPRING   and   PRIME-SR   on  LiH,  N2,    and  CO   molecules   for
+random  seed  0.
+
+6       Conclusion   and   Discussion
+
+VMC  has  become  a  central  tool  for  studying  strongly  correlated  quantum  systems,  where  the  expres-
+siveness  of  modern  neural  network  wavefunctions  must  be  matched  by  stable  and  eﬀicient  optimiza-
+tion   algorithms.    Among   existing   approaches,   SPRING,   the   momentum-accelerated   variant   of   SR,
+
+
+                                                                   23
+has   demonstrated   state-of-the-art   performance   in   VMC   optimization.    However,   this   strong   practi-
+cal  performance  relies  on  carefully  tuned  momentum  parameters,  and  the  stability  and  convergence
+behavior  of  SPRING  have  remained  insuﬀiciently  understood.
+    In  this  work,  we  investigated  the  stability  and  convergence  properties  of  SPRING  for  wavefunc-
+tion  optimization  in  VMC.  We  provided  a  theoretical  characterization  of  the  role  of  the  momentum
+parameterµ,  showing  that  the  regimes 0  µ< 1  andµ = 1  are  governed  by  fundamentally  different
+mechanisms.     In   particular,   we   established   convergence   guarantees   for µ <  1   under   mild   assump-
+tions,   and   constructed   explicit   counterexamples   demonstrating   that µ  =  1   can   induce   divergence
+through  uncontrolled  growth  along  kernel-related  directions  of  the  SR  matrix.   Building  on  these  in-
+sights  and  numerical  observations,   we  proposed  PRIME-SR,  a  tuning-free  momentum-adaptive  SR
+method   that   controls   momentum   reuse   through   spectral   flatness   and   subspace-overlap   indicators
+derived   from   the   SR   matrix.    Extensive   experiments   on   spin-lattice   systems   as   well   as   atomic   and
+molecular   electronic   systems   show   that   PRIME-SR   achieves   performance   comparable   to   optimally
+or  near-optimally  tuned  fixed-µ  SPRING  while  substantially  improving  robustness.
+    Several  directions  for  future  work  remain.   From  a  theoretical  perspective,  it  would  be  desirable
+to   extend   the   current   analysis   beyond   idealized   sampling   assumptions   and   fixed-µ   settings,    and
+to   better   understand   the   mechanisms   behind   the   instability   occasionally   observed   in   electronic-
+structure   runs   even   when µ< 1.    Such   behavior   likely   reflects   a   subtle   interplay   between   sampling
+noise   and   SR   ill-conditioning,   and   may   also   depend   on   the   specific   Hamiltonian   and   wavefunction
+parameterization.   On  the  algorithmic  side,  exploring  even  simpler  or  theoretically  justified  indicators
+of  sampling  quality  or  curvature  structure  could  further  improve  the  adaptive  mechanism.    Finally,
+the   kernel-range   viewpoint   underlying   our   design   is   not   specific   to   SPRING,   and   similar   adaptive
+principles  may  be  applicable  to  other  SR-based  or  geometry-aware  optimization  methods.
+
+Acknowledgements.       The  work  of  Xin  Liu  was  supported  in  part  by  the  National  Natural  Science
+Foundation   of   China   (12125108,   12288201),   and   RGC   grant   JLFS/P-501/24   for   the   CAS   AMSS–
+PolyU  Joint  Laboratory  in  Applied  Mathematics.
+
+References
+
+ [1]  Nilin   Abrahamsen,   Zhiyan   Ding,   Gil   Goldshlager,   and   Lin   Lin.      Convergence   of   variational
+      monte   carlo   simulation   and   scale-invariant   pre-training.      Journal   of   Computational   Physics,
+      513:113140,  2024.
+
+ [2]  Nilin  Abrahamsen  and  Lin  Lin.   Anti-symmetric  barron  functions  and  their  approximation  with
+      sums  of  determinants.   Journal   of   Computational   Physics,  page  114118,  2025.
+ [3]  Victor  Armegioiu,  Juan  Carrasquilla,  Siddhartha  Mishra,  Johannes  Müller,  Jannes  Nys,  Marius
+      Zeinhofer,    and   Hang   Zhang.      Functional   neural   wavefunction   optimization.      arXiv    preprint
+      arXiv:2507.10835,  2025.
+ [4]  Federico   Becca   and   Sandro   Sorella.    Quantum   Monte   Carlo   approaches   for   correlated   systems.
+      Cambridge  University  Press,  2017.
+ [5]  J.    Bradbury,    R.    Frostig,    P.    Hawkins,    M.    J.    Johnson,    C.    Leary,    D.    Maclaurin,    G.    Necula,
+      A.  Paszke,  J.  VanderPlas,  S.  Wanderman-Milne,  and  Q.  Zhang.   JAX:  Composable  transforma-
+      tions  of  Python+NumPy  programs.                  http://github.com/jax-ml/jax,  2018.
+ [6]  G.   Carleo   and   M.   Troyer.      Solving   the   quantum   many-body   problem   with   artificial   neural
+      networks.   Science,  355(6325):602–606,  2017.
+
+ [7]  Ao   Chen   and   Markus   Heyl.     Empowering   deep   neural   quantum   states   through   eﬀicient   opti-
+      mization.   Nature   Physics,  20(9):1476–1481,  2024.
+
+
+                                                                    24
+ [8]  N.  Deanna  and  T.  Joel  A.  Paved  with  good  intentions:   analysis  of  a  randomized  block  Kaczmarz
+      method.   Linear   Algebra   and   its   Applications,  441:199–221,  2014.
+
+ [9]  William   MC   Foulkes,   Lubos   Mitas,   RJ   Needs,   and   Guna   Rajagopal.     Quantum   monte   carlo
+      simulations  of  solids.   Reviews   of   Modern   Physics,  73(1):33,  2001.
+[10]  G.  Goldshlager,   N.  Abrahamsen,   and  L.  Lin.   A  Kaczmarz-inspired  approach  to  accelerate  the
+      optimization  of  neural  network  wavefunctions.   Journal   of   Computational   Physics,  516:113351,
+      2024.
+[11]  Yuntian  Gu,  Wenrui  Li,  Heng  Lin,  Bo  Zhan,  Ruichen  Li,  Yifei  Huang,  Di  He,  Yantao  Wu,  Tao
+      Xiang,   Mingpu   Qin,   Liwei   Wang,   and   Dingshun   Lv.    Solving   the   hubbard   model   with   neural
+      quantum  states,  2025.
+[12]  J.  Hermann,  Z.  Schätzle,  and  F.  Noé.  Deep-neural-network  solution  of  the  electronic  Schrödinger
+      equation.   Nature   Chemistry,  12(10):891–897,  2020.
+[13]  Jan  Hermann,  James  Spencer,  Kenny  Choo,  Antonio  Mezzacapo,  W  Matthew  C  Foulkes,  David
+      Pfau,    Giuseppe   Carleo,    and   Frank   Noé.      Ab   initio   quantum   chemistry   with   neural-network
+      wavefunctions.   Nature   Reviews   Chemistry,  7(10):692–709,  2023.
+[14]  Juergen   Hinze.    Mc-scf.   i.   the   multi-configuration   self-consistent-field   method.    The   Journal   of
+      Chemical   Physics,  59(12):6424–6432,  1973.
+
+[15]  S.  Karczmarz.   Angenaherte  auflosung  von  systemen  linearer  glei-chungen.   Bul l.  Int.  Acad.  Pol.
+      Sic.   Let.,   Cl.   Sci.   Math.   Nat.,  pages  355–357,  1937.
+[16]  Diederik     P     Kingma.           Adam:        A     method     for     stochastic     optimization.           arXiv     preprint
+      arXiv:1412.6980,  2014.
+[17]  Chenyi  Li,  Shuchen  Zhu,  Zhonglin  Xie,  and  Zaiwen  Wen.   Accelerated  natural  gradient  method
+      for  parametric  manifold  optimization,  2025.
+[18]  Ruichen   Li,    Haotian   Ye,    Du   Jiang,    Xuelan   Wen,    Chuwei   Wang,    Zhe   Li,    Xiang   Li,    Di   He,
+      Ji   Chen,   Weiluo   Ren,   et   al.    A   computational   framework   for   neural   network-based   variational
+      monte  carlo  with  forward  laplacian.   Nature   Machine   Intel ligence,  6(2):209–219,  2024.
+[19]  Tianyou   Li,    Fan   Chen,    Huajie   Chen,    and   Zaiwen   Wen.      Convergence   analysis   of   stochastic
+      gradient  descent  with  mcmc  estimators.   arXiv   preprint   arXiv:2303.10599,  2023.
+
+[20]  J.   Lin,   G.   Goldshlager,   N.   Abrahamsen,   and   L.   Lin.    VMCNet:    Framework   for   training   first-
+      quantized  neural  network  wavefunctions  using  VMC,  built  on  JAX,  2024.
+[21]  Jeffmin   Lin,   Gil   Goldshlager,   and   Lin   Lin.    Explicitly   antisymmetrized   neural   network   layers
+      for  variational  monte  carlo  simulation.   Journal   of   Computational   Physics,  474:111765,  2023.
+[22]  Ilya   Loshchilov   and   Frank   Hutter.      Decoupled   weight   decay   regularization.      arXiv    preprint
+      arXiv:1711.05101,  2017.
+[23]  J.   Martens   and   R.   Grosse.    Optimizing   neural   networks   with   Kronecker-factored   approximate
+      curvature.   In  International   Conference   on   Machine   Learning,  pages  2408–2417.  PMLR,  2015.
+[24]  William  Lauchlin  McMillan.   Ground  state  of  liquid  he  4.   Physical  Review,  138(2A):A442,  1965.
+
+[25]  Kirill   Neklyudov,   Jannes   Nys,   Luca   Thiede,   Juan   Carrasquilla,   Qiang   Liu,   Max   Welling,   and
+      Alireza   Makhzani.    Wasserstein   quantum   monte   carlo:    a   novel   approach   for   solving   the   quan-
+      tum   many-body   schrödinger   equation.     Advances   in   Neural   Information   Processing   Systems,
+      36:63461–63482,  2023.
+
+
+                                                                     25
+[26]  Jorge  Nocedal.   Numerical  optimization.   Springer  Ser.  Oper.  Res.  Financ.  Eng./Springer,  2006.
+
+[27]  D.   Pfau,   J.   S.   Spencer,   A.   G.   D.   G.   Matthews,   and   W.   M.   C.   Foulkes.     Ab   initio   solution   of
+      the  many-electron  Schrödinger  equation  with  deep  neural  networks.   Physical  Review  Research,
+      2(3),  2020.
+
+[28]  Riccardo    Rende,    Luciano    Loris    Viteritti,    Lorenzo    Bardone,    Federico    Becca,    and    Sebastian
+      Goldt.   A  simple  linear  algebra  identity  to  optimize  large-scale  neural  network  quantum  states.
+      Communications   Physics,  7(1):260,  2024.
+
+[29]  Isaiah   Shavitt.     The   method   of   configuration   interaction.     In   Methods   of   electronic   structure
+      theory,  pages  189–275.  Springer,  1977.
+
+[30]  S.  Sorella.  Green  function  Monte  Carlo  with  stochastic  reconfiguration.  Physical  Review  Letters,
+      80(20):4558,  1998.
+
+[31]  S.  Sorella.  Generalized  Lanczos  algorithm  for  variational  quantum  Monte  Carlo.  Physical  Review
+      B,  64(2):024512,  2001.
+
+[32]  James   Stokes,   Josh   Izaac,   Nathan   Killoran,   and   Giuseppe   Carleo.    Quantum   natural   gradient.
+      Quantum,  4:269,  2020.
+
+[33]  CJ   Umrigar   and   Claudia   Filippi.    Energy   and   variance   optimization   of   many-body   wave   func-
+      tions.   Physical   review   letters,  94(15):150201,  2005.
+[34]  F.  Vicentini,  D.  Hofmann,  A.  Szabó,  D.  Wu,  C.  Roth,  C.  Giuliani,  G.  Pescia,  J.  Nys,  V.  Vargas-
+      Calderón,   N.   Astrakhantsev,   and   G.   Carleo.    NetKet   3:    Machine   Learning   Toolbox   for   Many-
+      Body  Quantum  Systems.   SciPost   Phys.   Codebases,  page  7,  2022.
+
+[35]  Ingrid   von   Glehn,    James   S   Spencer,    and   David   Pfau.      A   self-attention   ansatz   for   ab-initio
+      quantum  chemistry.   In  The   Eleventh   International   Conference   on   Learning   Representations.
+
+[36]  Yuyang   Wang,   Yukuan   Hu,   and   Xin   Liu.     Lower   bound   on   the   representation   complexity   of
+      antisymmetric  tensor  product  functions.   SCIENCE   CHINA   Mathematics,  2026.
+
+[37]  Yuyang  Wang  and  Xin  Liu.  Optimization  of  neural  network  wave  functions  in  variational  monte
+      carlo.   The   Innovation   Informatics,  pages  100025–1,  2025.
+
+[38]  Robert   J   Webber   and   Michael   Lindsey.      Rayleigh-gauss-newton   optimization   with   enhanced
+      sampling  for  variational  monte  carlo.   Physical   Review   Research,  4(3):033099,  2022.
+
+[39]  Haotian  Ye,  Ruichen  Li,  Yuntian  Gu,  Yiping  Lu,  Di  He,  and  Liwei  Wang. o(n2)  representation
+      of  general  continuous  anti-symmetric  function.   arXiv   preprint   arXiv:2402.15167,  2024.
+
+[40]  Luning   Zhao   and   Eric   Neuscamman.    A   blocked   linear   method   for   optimizing   large   parameter
+      sets  in  variational  monte  carlo.   Journal   of   chemical   theory   and   computation,  13(6):2604–2611,
+      2017.
+
+[41]  Dexuan  Zhou,  Huajie  Chen,  Cheuk  Hin  Ho,  Xin  Liu,  and  Christoph  Ortner.   Stochastic  recon-
+      figuration  with  warm-started  svd,  2025.
+
+[42]  Dexuan   Zhou,   Huajie   Chen,   Cheuk   Hin   Ho,   and   Christoph   Ortner.     A   multilevel   method   for
+      many-electron  schrödinger  equations  based  on  the  atomic  cluster  expansion.   SIAM  Journal  on
+      Scientific   Computing,  46(1):A105–A129,  2024.
+
+
+
+
+
+                                                                     26
+A       Proof   of   Theorem                 3.1
+
+To  prove  Theorem      3.1,  we  first  establish  the  following  lemmas.
+
+Lemma   A.1.       Under   Assumption      3.1,   for   any θ 2 RNp ,
+
+                                       kg(θ)k   2pCm,   kS(θ)k2  pCm.
+
+
+
+Proof.   By  the  formulation  of g(θ)  in  Eq.  (2.3),
+ kg(θ)k   2EX∼πθ        ¯E(θ;X)  kO(θ;X)k
+              r           h ¯E(θ;X)2i             h
+            2    EX∼πθ                      EX∼πθ     kO(θ;X)k2i
+              r           h                                       h
+          = 2    EX∼πθ      jEloc(θ;X)  L(θ)j2i         EX∼πθ     krθ log jψθ(X)j   EX∼πθ [rθ log jψθ(X)j]k2i
+              r           h                             h
+            2    EX∼πθ      jEloc(θ;X)j2i      EX∼πθ    krθ log jψθ(X)jk2i
+                          h                            h
+            2    EX∼πθ     jEloc(θ;X)j4i      EX∼πθ     krθ log jψθ(X)jk4i 1/4   2pCm,
+
+where  the  first  inequality  follows  from  Jensen  inequality  since  the  norm kk  is  convex,  the  second  and
+fourth  inequalities  follow  from  the  Cauchy-Schwarz  inequality,  the  third  follows  from  the  property  of
+random  variables  that E[jY   E[Y ]j2]   E[Y 2],  and  the  last  inequality  follows  from  Assumption                3.1.
+    Similarly,  for S(θ)  we  have,
+                                kS(θ)kF  =EX∼πθ        O(θ;X)O(θ;X)⊤F
+                                             EX∼πθ     O(θ;X)O(θ;X)⊤F          
+                                                       h
+                                           = EX∼πθ       kO(θ;X)k2i
+                                                       h
+                                           = EX∼πθ       krθ log jψθ(X)jk2i
+                                              r           h
+                                                 EX∼πθ     krθ log jψθ(X)jk4i         pC.
+
+Since  the  matrix  norm  satisfies kk2   kkF ,  we  obtain kS(θ)k2   kS(θ)kF   pC .
+
+Lemma  A.2.       Under  Assumption       3.1,  let fθkg  be  generated  by  (F-SPRING),  then  for  any 0  µ< 1,
+
+                                                  ∞X
+                                                      ηk k∆θkk2 < 1.
+                                                  k=0
+Proof.   Under  Assumption       3.1, g(θ)  is Cg -Lipschitz  continuous,  by  Lemma          3.1,  we  have
+
+                         L(θk+1)  L(θk)  g(θk)⊤ (θk+1   θk) + Cg2  kθk+1   θkk2.                                              (A.1)
+
+From  the  update  in  (F-SPRING):
+
+                      g(θk) = 2λµ∆θk−1   2(λI +S(θk))∆θk,    θk+1   θk =ηk∆θk.
+
+
+
+                                                             27
+And  further  by 2∆θ⊤k ∆θk−1 = k∆θkk2 + k∆θk−1k2   k∆θk   ∆θk−1k2,  we  have
+
+  L(θk+1)  L(θk)           λµ + Cg2 ηk    ηk k∆θkk2 +λµηk       k∆θk−1k2   k∆θk   ∆θk−1k2
+
+                           2ηk∆θ⊤k  (λI +S(θk)) ∆θk
+
+                           λµ + Cg2 ηk   2λ     ηk k∆θkk2 +λµηk k∆θk−1k2  λµηk k∆θk   ∆θk−1k2.
+                                                                                                           (A.2)
+
+Consider   the   discrete   energy Fk  := L(θk) +λµηk k∆θk−1k2   EGS,   which   is   bounded   from   below.
+Thus,  by  Eq.  (A.2),  we  have
+
+      Fk+1  Fk =L(θk+1)  L(θk) +λµηk+1 k∆θkk2  λµηk k∆θk−1k2
+
+                        λµ + Cg2 ηk   2λ     ηk k∆θkk2 +λµηk+1 k∆θkk2  λµηk k∆θk   ∆θk−1k2
+
+                  (by ηk+1  ηk   and ηk  η0)
+
+                         2λ(1  µ) + Cg2 η0       ηk k∆θkk2  λµηk k∆θk   ∆θk−1k2 < 0,
+
+where  the  last< 0  is  from  the  Assumption  3.1 onη0.   Therefore,Fk  decreases  monotonically.   Assume
+that limk→∞Fk =F∗,  then
+
+             ∞X                                            ∞X                     ∞X
+F∗  F0 =        Fk+1  Fk          2λ(1  µ) + Cg2 η0           ηk k∆θkk2  λµ          ηk k∆θk   ∆θk−1k2 < 0.
+            k=0                                           k=0                    k=0
+
+Hence,  we  obtainP∞k=0ηk k∆θkk2 < 1.
+
+   Now,  we  are  ready  to  prove  Theorem    3.1.
+
+Proof   of   Theorem 3.1. We  first  estimate g(θk)⊤∆θk,  from  the  update  in  (F-SPRING),  we  have
+
+     g(θk)⊤∆θk =  12g(θk)⊤ (λI +S(θk))−1g(θk) +λµg(θk)⊤ (λI +S(θk))−1 ∆θk−1
+
+                  (by S(θk)   0  and  from  Lemma       A.1  kS(θk)k2  pCm)
+
+                                12(λ + pCm) kg(θk)k2 +µkg(θk)kk∆θk−1k
+
+                  (by  Young  inequality)
+
+                                12(λ + pCm) kg(θk)k2 +    µ4(λ + pCm) kg(θk)k2 +µ(λ +pCm)k∆θk−1k2
+
+                   =   µ   24(λ + pCm) kg(θk)k2 +µ(λ +pCm)k∆θk−1k2.
+
+Substituting  this  inequality  into  Eq.  (A.1),  we  obtain
+
+  L(θk+1)  L(θk)     µ   24(λ + pCm)ηk kg(θk)k2 +µ(λ +pCm)ηk k∆θk−1k2 + Cg2 η2k k∆θkk2
+
+                     (by ηk  ηk−1   and ηk  η0)
+
+                          µ   24(λ + pCm)ηk kg(θk)k2 +µ(λ +pCm)ηk−1 k∆θk−1k2 + Cgη02 ηk k∆θkk2.
+
+
+                                                       28
+Rearranging  the  terms,  we  obtain
+        2  µ                                   Cm)ηk−1 k∆θk−1k2 + Cgη0
+   4(λ + pCm)ηk kg(θk)k2  µ(λ +p                                             2 ηk k∆θkk2 +L(θk)  L(θk−1).
+Summing  from k = 1  to k =K ,  we  obtain
+    2  µ         KX                                    KX                                KX
+4(λ + pCm)          ηk kg(θk)k2  µ(λ +pCm)                 ηk−1 k∆θk−1k2 + Cgη02            ηk k∆θkk2 +L(θ1)  L(θK+1)
+                k=1                                   k=1                               k=1
+                                                                     ∞X
+                                        λµ +pCmµ + Cgη02                 ηk k∆θkk2 +L(θ1)  EGS < 1.
+                                                                    k=0
+                          Cm)                                 P∞
+DenoteC :=  4(λ + p2  µ             λµ + pCmµ + Cgη02              k=0ηk k∆θkk2 +L(θ1)  EGS              ,  then  we  have:
+
+
+                                                 KX
+                                                    ηk kg(θk)k2  C.
+                                                k=1
+
+
+B       Proof   of   Theorem                3.2
+
+B.1       Proof   of   Monte   Carlo   Estimators
+We   begin   with   the   proof   of   Lemma  3.2,   which   states   that   the   Monte   Carlo   estimator   of   the   SR
+matrix  is  unbiased.
+Proof   of   Lemma  3.2.  Since S(θk;Bk)  = O(θk;Bk)O(θk;Bk)⊤,    by    the    definition    of O(θk;Bk)    in
+Eqs.      (2.6)  and  (2.7),  we  have:
+
+                       NsX                               NsX                     !                                NsX                     !⊤
+S(θk; Bk) =      1Ns − 1     ∇θ log |ψθk(Xk,i)| −   1Ns      ∇θ log |ψθk(Xk,j)|       ∇θ log |ψθk(Xk,i)| −   1Ns     ∇θ log |ψθk(Xk,j)|
+                       i=1                              j=1                                                      j=1
+                        NsX                                                    NsX                      NsX                       !
+           =      1Ns − 1    ∇θ log |ψθk(Xk,i)| ∇θ log |ψθk(Xk,i)|⊤ −   1Ns        ∇θ log |ψθk(Xk,i)|       ∇θ log |ψθk(Xk,j)|⊤
+                         i=1                                                   i=1                      j=1
+
+                  NsX                                                                X
+           =   1Ns    ∇θ log |ψθk(Xk,i)| ∇θ log |ψθk(Xk,i)|⊤ −          1Ns(Ns − 1)          ∇θ log |ψθk(Xk,i)| ∇θ log |ψθk(Xk,j)|⊤.
+                  i=1                                                             1≤i̸=j≤Ns
+                                                                                                                   (B.1)
+By  Assumption      3.2,  for  any 1  i  Ns   and i 6=j,
+     h                                                             h
+EBk   rθ log jψθk(Xk,i)jrθ log jψθk(Xk,i)j⊤i          = EX∼πθk      rθ log jψθk(X)jrθ log jψθk(X)j⊤i
+     h
+EBk   rθ log jψθk(Xk,i)jrθ log jψθk(Xk,j)j⊤i          = EX∼πθk [rθ log jψθk(X)j]EX∼πθk [rθ log jψθk(X)j]⊤.
+
+Therefore,
+                               h
+EBk [S(θk;Bk)] = EX∼πθk          rθ log jψθk(X)jrθ log jψθk(X)j⊤i            EX∼πθk [rθ log jψθk(X)j]EX∼πθk [rθ log jψθk(X)j]⊤
+                   =S(θk).
+
+
+
+                                                           29
+    Next,   we   estimate   the   error   induced   by   Monte   Carlo   sampling.     Before   doing   so,   we   prove   an
+auxiliary  counting  lemma  that  will  be  used  in  the  subsequent  bounds.
+
+Lemma   B.1.        Let I := f(i1,i2,j1,j2) : 1  i1 6=j1  N,  1  i2 6=j2  Ng.   Then
+
+                     ♯f(i1,i2,j1,j2) 2 I :i1 =i2   or j1 =j2g = 2N(N   1)2  N(N   1),
+
+where ♯   denotes   the   cardinality   of   a   set.
+Proof.   We  count  the  tuples  in I   satisfying i1 =i2   or j1 =j2   as  following.
+
+  (1)  Count  the  case i1 =i2.
+       Choose i :=i1 =i2   in N   ways.   For  each  fixed i,  we  must  choose j1 6=i  and j2 6=i,  which  can
+       be  done  in (N   1)2   ways.   Hence  there  are N(N   1)2   tuples  with i1 =i2.
+  (2)  Count  the  case j1 =j2.
+       By  the  same  argument,  there  are N(N   1)2   tuples  with j1 =j2.
+
+  (3)  Subtract  the  overlap.
+       The   overlap   consists   of   tuples   with   both i1 =i2   and j1 =j2.    Choose i :=i1 =i2   in N   ways
+       and  then  choosej :=j1 =j2  withj 6=i,  in (N   1)  ways.   Thus  the  overlap  has  sizeN(N   1).
+
+Combining  the  three  steps  gives
+
+                      N(N   1)2 +N(N   1)2  N(N   1) = 2N(N   1)2  N(N   1),
+
+which  completes  the  proof.
+
+Lemma   B.2.        Under   Assumptions        3.1  and   3.2,   for   any k   0,
+                    h                                                    h                             i
+               EBk    kg(θk)  g(θk;Bk)k2i             24CmNs ,   EBk      kS(θk)  S(θk;Bk)k2F               6CmNs .
+
+
+
+Proof.   We  first  bound  the  error  of g(θk;Bk).   By  the  definition  of g(θk;Bk)  in  Eqs.  (2.5)  and  (2.4),
+and  similarly  to  Eq.  (B.1),  we  have
+
+                     NsX                                                                 X
+g(θk;Bk) =   2Ns         Eloc(θk;Xk,i)rθ log jψθk(Xk,i)j          2Ns(Ns   1)                     Eloc(θk;Xk,i)rθ log jψθk(Xk,j)j.
+                     i=1                                                              1≤i̸=j≤Ns
+
+Hence
+
+                              NsX
+g(θk; Bk) −g(θk) =   2Ns           Eloc(θk;Xk,i)∇θ log |ψθk(Xk,i)| − EX∼πθk [Eloc(θk;X)∇θ log |ψθk(X)|]
+                             i=1
+                                 X
+           −          2Ns(Ns − 1)         Eloc(θk;Xk,i)∇θ log |ψθk(Xk,j)| − EX∼πθk [Eloc(θk;X)]EX∼πθk [∇θ log |ψθk(X)|]                         .
+                             1≤i̸=j≤Ns
+
+ Using ka +bk2   2kak2 + 2kbk2,  we  obtain
+
+                                    NsX                                                                                           2
+∥g(θk; Bk) −g(θk)∥2 ≤   8N2s              Eloc(θk;Xk,i)∇θ log |ψθk(Xk,i)| − EX∼πθk [Eloc(θk;X)∇θ log |ψθk(X)|]
+                                    i=1
+                                                                                                                                         2
+                         X
++           8N2s (Ns − 1)2         Eloc(θk;Xk,i)∇θ log |ψθk(Xk,j)| − EX∼πθk [Eloc(θk;X)]EX∼πθk [∇θ log |ψθk(X)|]                           .
+                     1≤i̸=j≤Ns
+
+                                                                30
+Taking  expectation  over Bk   and  using  Assumption            3.2,  the  cross  terms  involving  different  samples
+vanish.   Therefore,
+    ∥g(θk) −g(θk; Bk)∥2 ≤   8                  Eloc(θk;X)∇θ log |ψθk(X)| − EX∼πθk [Eloc(θk;X)∇θ log |ψθk(X)|]               2
+EBk                                Ns EX∼πθk
+                         X                          Eloc(θk;X)∇θ logψθk(X′) − EX∼πθk [Eloc(θk;X)]EX∼πθk [∇θ log |ψθk(X)|]                 2
++           8N2s (Ns − 1)2          E(X,X′)∼π⊗2                                                                                                     .
+                   i1̸=j1    and i2̸=j2,       θk
+                    i1=i2    or j1=j2
+
+Then,  by  Lemma       B.1,  the  inequality E[jY   E[Y ]j2]   E[jY j2],  and  the  Cauchy-Schwarz  inequality,
+we  have
+    ∥g(θk) −g(θk; Bk)∥2 ≤   8                 ∥Eloc(θk;X)∇θ log |ψθk(X)|∥2 +  16                       hEloc(θk;X)∇θ logψθk(X′)2i
+EBk                                Ns EX∼πθk                                             Ns E(X,X′)∼π⊗2
+                                                                                                        θk
+                                      q           ∥Eloc(θk;X)∥4EX∼πθk         ∥∇θ log |ψθk(X)|∥4 ≤  24Cm
+                               ≤  24Ns   EX∼πθk                                                               Ns .
+
+    The  bound  for S(θk;Bk)  is  similar:
+EBk ∥S(θk) −S(θk; Bk)∥2       
+                  ∇θ log |ψθk(X)| ∇θ log |ψθk(X)|⊤ − EX∼πθkF        h
+                                                                                                                  2
+≤   2Ns EX∼πθk                                                          ∇θ log |ψθk(X)| ∇θ log |ψθk(X)|⊤i
+                                                                                                                  F
+                       ∇θ log |ψθk(X)| ∇θ logψθk(X′)⊤ − EX∼πθk [∇θ log |ψθk(X)|]EX∼πθk              h                       2
++   4Ns E(X,X′)∼π⊗2                                                                                         ∇θ log |ψθk(X)|⊤iF
+                  θk
+                  ∇θ log |ψθk(X)| ∇θ log |ψθk(X)|⊤2                             ∇θ log |ψθk(X)| ∇θ logψθk(X′)⊤2
+≤   2Ns EX∼πθk                                              F  +   4Ns E(X,X′)∼π⊗2                                               F
+                                                                                  θk
+                 ∥∇θ log |ψθk(X)|∥4     +   4                 h
+=   2Ns EX∼πθk                         F     Ns E(X,X′)∼π⊗2      ∥∇θ log |ψθk(X)|∥2∇θ logψθk(X′)2i
+                                                            θk
+                r             ∥∇θ log |ψθk(X)|∥4      2 ≤  6Cm
+≤  2CmNs   +   4Ns   EX∼πθk                         F          Ns .
+
+
+
+Lemma   B.3.       Under   Assumptions      3.1  and   3.2,   let fθk, ∆θkg   be   generated   by   (SPRING),   then   for
+any 0  µ< 1, k   0,
+                                                                  h                  i
+                                                         6CmE      k∆θkk2 jFk−1
+                       kE [∆θk   ∆θ⋆kjFk−1]k2                       λ2Ns      ,
+                        h                           i                                         12Cm
+                     E   k∆θk   ∆θ⋆kk2 jFk−1               1 + 2µ2 k∆θk−1k2 + 2Cmλ2            λ2Ns,
+
+
+where ∆θ⋆k := (λI +S(θk))−1 λµ∆θk−1   12g(θk)                     ,  and Fk−1 :=σ (fXi,jg0≤i≤k−1,1≤j≤Ns)  is  the
+σ-algebra   generated   by   previous   samples.
+Proof.   We  first  prove  the  first  inequality.
+
+∆θk   ∆θ⋆k = (λI +S(θk;Bk))−1 λµ∆θk−1   12g(θk;Bk)                            (λI +S(θk))−1 λµ∆θk−1   12g(θk)
+         h
+      =   (λI +S(θk;Bk))−1   (λI +S(θk))−1i λµ∆θk−1   12g(θk;Bk)                            + 12 (λI +S(θk))−1 (g(θk)  g(θk;Bk))
+
+      = (λI +S(θk))−1 (S(θk)  S(θk;Bk)) (λI +S(θk;Bk))−1 λµ∆θk−1   12g(θk;Bk)
+
+
+                                                             31
+           + 12 (λI +S(θk))−1 (g(θk)  g(θk;Bk))
+
+     = (λI +S(θk))−1 (S(θk)  S(θk;Bk)) ∆θk + 12 (λI +S(θk))−1 (g(θk)  g(θk;Bk)).
+
+By  Assumption     3.2,  taking  the  conditional  expectation  given Fk−1   yields
+
+              E [∆θk   ∆θ⋆kjFk−1] = (λI +S(θk))−1 E [(S(θk)  S(θk;Bk)) ∆θkjFk−1].
+
+Then  by  the  Cauchy-Schwarz  inequality  and  Lemma         B.2,  we  have
+
+          kE [∆θk   ∆θ⋆kjFk−1]k    1λE [kS(θk)  S(θk;Bk)k2  k∆θkkjFk−1]
+                                           r    h                                i   h                 i
+                                         1λ  E   kS(θk)  S(θk;Bk)k22 jFk−1         E   k∆θkk2 jFk−1
+                                           r    h                                 i   h                 i
+                                         1λ  E   kS(θk)  S(θk;Bk)k2F jFk−1          E  k∆θkk2 jFk−1
+                                           r6Cm    r    h                 i
+                                         1λ    Ns     E   k∆θkk2 jFk−1     .
+
+Next,  we  prove  the  second  inequality.   On  the  other  hand,  we  can  rewrite ∆θk   ∆θ⋆k   as
+
+    ∆θk   ∆θ⋆k = (λI +S(θk))−1 (S(θk)  S(θk;Bk)) (λI +S(θk;Bk))−1 λµ∆θk−1   12g(θk)
+
+                       + 12 (λI +S(θk;Bk))−1 (g(θk)  g(θk;Bk)).
+
+Since S(θk;Bk)   0  a.s.,  we  have(λI +S(θk;Bk))−12    1λ   a.s.   Therefore,  almost  surely,
+                                                         λµ∆θk−1   1          +  1
+      k∆θk   ∆θ⋆kk     1λ2 kS(θk)  S(θk;Bk)kF                           2g(θk)       2λ kg(θk)  g(θk;Bk)k
+                                                         λµ∆θk−1   1          2
+=) k∆θk   ∆θ⋆kk2     2λ4 kS(θk)  S(θk;Bk)k2F                            2g(θk)     +   12λ2 kg(θk)  g(θk;Bk)k2.
+
+Taking  the  conditional  expectation  given Fk−1   and  using  Lemmas        A.1  and   B.2  yields
+                                           λµ∆θk−1   1          2
+          h                         i    2                 2g(θk)       h                                 i
+       E   k∆θk   ∆θ⋆kk2 jFk−1                        λ4              E  kS(θk)  S(θk;Bk)k2F jFk−1
+                                                     h                                i
+                                           +   12λ2E  kg(θk)  g(θk;Bk)k2 jFk−1
+
+                                         12Cmλ4Ns 2λ2µ2 k∆θk−1k2 + 12 kg(θk)k2          + 12Cmλ2Ns
+
+                                         12Cmλ4Ns 2λ2µ2 k∆θk−1k2 + 2Cm          + 12Cmλ2Ns
+                                                                           12Cm
+                                      =    1 + 2µ2 k∆θk−1k2 + 2Cmλ2         λ2Ns.
+
+
+
+
+
+
+
+                                                        32
+B.2       Estimation   of ∆θk
+Lemma  B.4.      Under  Assumptions       3.1 and  3.2,  let fθk, ∆θkg  be  generated  from  (SPRING),  for  any
+0  µ< 1, k   0,   we   have:
+
+                     E[k∆θkk2]   E[k∆θ0k2] + 4(1 +µ2)Cmλ2(1  µ2)2  + 24(1 +µ2)Cmλ2(1  µ2)2      1Ns,
+
+where E[]   is   the   total   expectation.
+
+Proof.  By ∆θk = (λI +S(θk;Bk))−1(λµ∆θk−1   12g(θk;Bk))  and  Young  inequality,  almost  surely,
+
+                                                       2
+      k∆θkk2         µk∆θk−1k +  12λ kg(θk;Bk)k
+
+                  µ2 + 12    k∆θk−1k2 +      1 +µ24λ2(1  µ2) kg(θk;Bk)k2
+
+                  µ2 + 12    k∆θk−1k2 +      1 +µ22λ2(1  µ2) kg(θk;Bk)  g(θk)k2 +      1 +µ22λ2(1  µ2) kg(θk)k2.
+
+Taking  the  conditional  expectation  given Fk−1   and  using  Lemmas          A.1  and   B.2  yields
+
+             E[k∆θkk2 jFk−1]   µ2 + 12    k∆θk−1k2 + 12(1 +µ2)Cmλ2(1  µ2)      1Ns + 2(1 +µ2)Cmλ2(1  µ2) .
+
+Taking  total  expectation,  we  obtain
+
+E[k∆θkk2]   µ2 + 12    E[k∆θk−1k2] + 12(1 +µ2)Cmλ2(1  µ2)      1Ns + 2(1 +µ2)Cmλ2(1  µ2)
+                                12(1 +µ2)Cm                                                             1 +µ2     k−1!
+             = E[k∆θ0k2] +          λ2(1  µ2)      1Ns + 2(1 +µ2)Cmλ2(1  µ2)   1 + 1 +µ22      +  +      2
+                                12(1 +µ2)Cm                                    ∞X   1 +µ2     i
+               E[k∆θ0k2] +          λ2(1  µ2)      1Ns + 2(1 +µ2)Cmλ2(1  µ2)           2
+                                                                              i=0
+
+             = E[k∆θ0k2] + 4(1 +µ2)Cmλ2(1  µ2)2  + 24(1 +µ2)Cmλ2(1  µ2)2      1Ns.
+
+
+
+Lemma  B.5.      Under  Assumptions       3.1 and  3.2,  let fθk, ∆θkg  be  generated  from  (SPRING),  for  any
+0  µ< 1,   there   exists C1,C2 > 0,   such   that,   for   any K   1,   we   have:
+
+   KX                                                                           PK                      PK
+      ηkE[k∆θkk2]   E[L(θ1)]  EGS                                                 k=1ηk                    k=1ηk
+  k=1                         λ(1  µ)       + µη0E[k∆θ0k2]1  µ        +  C1λ(1  µ) Ns      +  C2λ(1  µ)     N 2s  .
+
+
+Proof.  By    Lemma    3.1,    and g(θk)  =  2λµ∆θk−1   2(λI  + S(θk))∆θ⋆k,    where  ∆θ⋆k    is    defined    in
+
+
+
+
+
+
+
+
+                                                         33
+Lemma    B.3,  we  have
+
+L(θk+1)  L(θk)
+
+  2λµηk∆θ⊤k ∆θk−1   2ηk∆θk(λI +S(θk))∆θ⋆k + Cg2 η2k k∆θkk2
+
+=λµηk(k∆θkk2 + k∆θk−1k2   k∆θk   ∆θk−1k2)   2ηk∆θ⊤k (λI +S(θk))∆θk
+
+     + 2ηk∆θ⊤k (λI +S(θk))(∆θk   ∆θ⋆k) + Cg2 η2k k∆θkk2
+(by ηk  η0)
+
+ λµηk k∆θk−1k2 + (λ(µ   2) + Cg2 η0)ηk k∆θkk2 + 2ηk kλI +S(θk)k2 k∆θkkk∆θk   ∆θ⋆kk
+(by  triangle  inequality  and  Young  inequality)
+
+ λµηk k∆θk−1k2 + (λ(µ   2) + Cg2 η0)ηk k∆θkk2 + 2ηk(λ + kS(θk)kF )                  εk∆θkk2 +  14ε k∆θk   ∆θ⋆kk2
+
+(by  Lemma    A.1  and  let ε =  2λ(1  µ)  Cgη04(λ + pCm)     )
+
+ λµηk k∆θk−1k2 + (λ(µ   2) + Cg2 η0)ηk k∆θkk2 + (λ(1  µ)   Cg2 η0)ηk k∆θkk2
+     +     2(λ + pCm)2
+        2λ(1  µ)  Cgη0ηk k∆θk   ∆θ⋆kk2
+=λµηk k∆θk−1k2  ληk k∆θkk2 +     2(λ + pCm)2
+                                         2λ(1  µ)  Cgη0ηk k∆θk   ∆θ⋆kk2.
+
+Taking  conditional  expectation  conditional  on Fk−1,  and  by  Lemma         B.3,  we  have
+
+
+  E[L(θk+1)jFk−1]  L(θk)  λµηk k∆θk−1k2  ληkE[k∆θkk2 jFk−1] +  ˜C1ηkNs +  ˜C2ηk k∆θk−1k2Ns    ,
+
+                               Cm)2                                                    Cm)2
+where  ˜C1 :=    24Cm(λ + pλ2(2λ(1  µ)  Cgη0)1 + 2Cmλ2,  and  ˜C2 :=  48Cmµ2(λ + pλ2(2λ(1  µ)  Cgη0) .
+   Taking  total  expectation,
+
+     E[L(θk+1)]   E[L(θk)]  λµηkE[k∆θk−1k2]  ληkE[k∆θkk2] +  ˜C2ηkE[k∆θk−1k2]Ns            +  ˜C1ηkNs
+
+                               (for  the  third  term,  by  Lemma  B.4)
+                                λµηkE[k∆θk−1k2]  ληkE[k∆θkk2] +C1ηkNs +C2 ηkN 2s,
+
+
+where C1 :=  ˜C1 +     E[k∆θ0k2] + 4(1 +µ2)Cmλ2(1  µ2)2 ˜C2,  and C2 :=  24(1 +µ2)Cm ˜C2λ2(1  µ2)2         .
+
+   Define  the  discrete  energyFk := E[L(θk)] +λµηkE[k∆θk−1k2],  and  then  again  byηk+1  ηk,  we
+have
+
+             Fk+1  Fk = E[L(θk+1)]   E[L(θk)] +λµηk+1E[k∆θkk2]  λµηkE[k∆θk−1k2]
+                          λ(µ   1)ηkE[k∆θkk2] +C1ηkNs +C2 ηkN 2s.
+
+
+
+
+
+                                                       34
+Rearranging  terms  and  summing  from k = 1  to k =K ,  we  get
+
+              KX                                         KX             KX
+  λ(1  µ)        ηkE[k∆θkk2]  F1  FK+1 + C1Ns                ηk + C2N 2s    ηk
+             k=1                                        k=1            k=1
+                                                                                            KX              KX
+                                   E[L(θ1)]   E[L(θK+1)] +λµη0E[k∆θ0k2] + C1Ns                  ηk + C2N 2s    ηk
+                                                                                           k=1             k=1
+                                                                                    KX             KX
+                                   E[L(θ1)]  EGS +λµη0E[k∆θ0k2] + C1Ns                 ηk + C2N 2s    ηk.
+                                                                                   k=1            k=1
+Dividing  both  sides  by λ(1  µ)  yields  the  claim.
+
+B.3       Proof   of   Theorem        3.2
+Now,  we  are  ready  to  prove  Theorem    3.2.
+
+Proof   of   Theorem 3.2.  By  Lemma     3.1,  we  have:
+
+             L(θk+1)  L(θk)  ηkg(θk)⊤∆θk + Cg2 η2k k∆θkk2
+
+                                  =ηkg(θk)⊤∆θ⋆k +ηkg(θk)⊤(∆θk   ∆θ⋆k) + Cg2 η2k k∆θkk2.
+
+We  start  by  estimating g(θk)⊤∆θ⋆k.   By  Lemma        A.1  and  Young  inequality,  we  have
+
+     g(θk)⊤∆θ⋆k =  12g(θk)⊤(λI +S(θk))−1g(θk) +λµg(θk)⊤(λI +S(θk))−1∆θk−1
+
+                                12(λ + pCm) kg(θk)k2 +µkg(θk)kk∆θk−1k
+
+                                12(λ + pCm) kg(θk)k2 +    µ8(λ + pCm) kg(θk)k2 + 2µ(λ +pCm)k∆θk−1k2
+
+                   =   µ   48(λ + pCm) kg(θk)k2 + 2µ(λ +pCm)k∆θk−1k2.
+
+And  thus,  we  have
+
+L(θk+1) L(θk)     µ   48(λ + pCm)ηk kg(θk)k2+2µ(λ+pCm)ηk k∆θk−1k2+ηkg(θk)⊤(∆θk ∆θ⋆k)+Cg2 η2k k∆θkk2.
+
+Take  the  conditional  expectation  conditional  on Fk−1   and  use  Cauchy-Schwarz  and  Young  inequal-
+ities,  and  by  Lemma   B.3,
+
+E[L(θk+1)|Fk−1] −L(θk)
+
+≤   µ − 48(λ + √Cm)ηk ∥g(θk)∥2 + 2µ(λ + √Cm)ηk ∥∆θk−1∥2 +ηk ∥g(θk)∥ · ∥E[∆θk − ∆θ⋆k|Fk−1]∥ + Cg2 η2kE[∥∆θk∥2 |Fk−1]
+
+≤   µ − 48(λ + √Cm)ηk ∥g(θk)∥2 + 2µ(λ + √Cm)ηk ∥∆θk−1∥2 +    ηk8(λ + √Cm) ∥g(θk)∥2 + 2(λ + √Cm)ηk ∥E[∆θk − ∆θ⋆k|Fk−1]∥2
+
+     + Cg2 η2kE[∥∆θk∥2 |Fk−1]
+
+< −          14(λ + √Cm)ηk ∥g(θk)∥2 + 2µ(λ + √Cm)ηk ∥∆θk−1∥2 + 2(λ + √Cm)ηk ∥E[∆θk − ∆θ⋆k|Fk−1]∥2 + Cg2 η2kE[∥∆θk∥2 |Fk−1]
+
+≤ −          1                               Cm)ηk ∥∆θk−1∥2 + 12Cm(λ + √Cm)
+     4(λ + √Cm)ηk ∥g(θk)∥2 + 2µ(λ + √                                    λ2Ns    ηkE[∥∆θk∥2 |Fk−1] + Cg2 η2kE[∥∆θk∥2 |Fk−1].
+
+                                                         35
+Taking  total  expectation,  and  by ηk  ηk−1  η0   and  Lemma                B.4,
+
+E[L(θk+1)] − E[L(θk)]
+≤ −          1                                    Cm)ηkE[∥∆θk−1∥2] + 12Cm(λ + √Cm)
+     4(λ + √Cm)ηkE[∥g(θk)∥2] + 2µ(λ + √                                           λ2Ns    ηkE[∥∆θk∥2] + Cg2 η2kE[∥∆θk∥2]
+
+≤ −          14(λ + √Cm)ηkE[∥g(θk)∥2] + 2µ(λ + √Cm)ηk−1E[∥∆θk−1∥2] +  ˜C1ηkNs  +  ˜C2 ηkN2s  + Cgη02 ηkE[∥∆θk∥2],
+                               Cm)                                                                                  Cm)
+where  ˜C1 =  12Cm(λ + pλ2             E[k∆θ0k2] + 4(1 +µ2)Cmλ2(1  µ2)2   ,  and  ˜C2 :=  288C2m(1 +µ2)(λ + pλ4(1  µ2)2                        .
+    Rearranging  terms,  we  get:
+
+        ηkE[∥g(θk)∥2] ≤4(λ + √Cm)(E[L(θk)] − E[L(θk+1)]) + 8µ(λ + √Cm)2ηk−1E[∥∆θk−1∥2]
+                           + 4(λ + √Cm) ˜C1ηkNs  + 4(λ + √Cm) ˜C2 ηkN2s  + 2Cg(λ + √Cm)η0ηkE[∥∆θk∥2].
+
+Summing  from k = 1  to k =K ,  and  by  Lemma              B.5,
+
+KX                                                                                    PK                             PK
+    ηkE[∥g(θk)∥2] ≤ 4(λ + √Cm)(E[L(θ1)] − E[L(θK+1)]) + 4(λ + √Cm) ˜C1                   k=1ηk               Cm) ˜C2    k=1ηk
+k=1                                                                                      Ns      + 4(λ + √              N2s
+
+                                                                      KX
+                         + 2(λ + √Cm)(4µ(λ + √Cm) +Cgη0)                 ηkE[∥∆θk∥2]
+                                                                     k=0
+                                                                              PK                             PK
+                    ≤ 4(λ + √Cm)(E[L(θ1)] −EGS) + 4(λ + √Cm) ˜C1                 k=1ηk              Cm) ˜C2     k=1ηk
+                                                                                 Ns      + 4(λ + √              N2s
+                                                                      KX
+                         + 2(λ + √Cm)(4µ(λ + √Cm) +Cgη0)                 ηkE[∥∆θk∥2]
+                                                                     k=0
+                                  PK               PK
+                    ≤M1 +M2          k=1ηk            k=1ηk
+                                     Ns      +M3       N2s  ,
+where M1,M2,M3 > 0  are  constants  defined  as:
+                                        Cm) +Cgη0                                          Cm)   h                         i
+M1 := 2(λ + √Cm)        2 + 4µ(λ + √λ(1 −µ)             (E[L(θ1)] −EGS) + 2η0(λ + √1 −µ           4µ(λ + √Cm) +Cgη0          E[∥∆θ0∥2]
+                                           CmC1 +CgC1η0)
+M2 := 2(λ + √Cm)        2 ˜C1 + 4µ(λ + √λ(1 −µ)
+                                           CmC2 +CgC2η0)
+M3 := 2(λ + √Cm)        2 ˜C2 + 4µ(λ + √λ(1 −µ)                  ,
+
+where C1,C2 > 0  are  constants  in  Lemma            B.5.
+
+C       Proof   of   Theorem                3.4
+
+Proof.  According  to   the   proof  of   Theorem    3.1  in  Appendix    A,  it   suﬀices   to  show  that   the   gradient
+g(θ)  is  uniformly  bounded  and  Lipschitz  continuous.   It  is  therefore  enough  to  prove  that  bothg(θ)
+and r2L(θ)  are  uniformly  bounded.
+Continuous  Gaussian  example.   Since  a  constant  does  not  change  the  function  value,  we  consider
+the  normalized  wavefunction
+                   ψθ(x) =CΣe− 14 (x−Aθ)⊤Σ−1(x−Aθ),        x = (x1,..., xN),    xi 2 R3,
+
+whereA 2 R3N×Np ,Σ 2 R3N×3N    is   symmetric   positive   definite   and CΣ  =  (2π)−3N/4 det(Σ)−1/4.
+Then πθ(x) = jψθ(x)j2   is  the  density  of  the  Gaussian  distribution X  N(Aθ, Σ).
+
+
+                                                            36
+    The  electronic  Hamiltonian  is
+
+             NX          NX   MX       ZI                           1                                              ZIZI′
+H  =  12         ∆xi              kxi   RIk+ X                kxi   xjk+Cnuc,  Cnuc :=  X                      kRI   RI′k.
+            i=1          i=1 I=1                  1≤i<j≤N                                         1≤I<I′≤M
+Hence L(θ)  = hψθjH jψθi   can   be   decomposed   into   a   kinetic   part   and   a   potential   part.     For   the
+kinetic  term,  using  integration  by  parts
+
+      NX                         Z                                         (X  Aθ)⊤Σ−2(X  Aθ) =  1
+ 12       hψθj∆xijψθi =  12                                     8EX∼πθ                                            8 tr(Σ−1),
+      i=1                         R3N krxψθ(x)k2 dx =  1
+
+where   the   last   equality   is   from   the   the   standard   identity   for   centered   Gaussian   quadratic   forms:   if
+Y  N(0, Σ),  then  for  any  matrix M , E[Y ⊤MY ] =  tr(MΣ).
+    For  the  potential  terms,  we  first  rewrite A  and Σ  in  block  forms:
+                        0  A1...1            0  Σ11        Σ1N    1
+                  A =   B@     CA,    Σ =    B@   ...              . . .               ...CA,  Ai 2 R3×Np,  Σij 2 R3×3.
+
+                           AN                  ΣN1       ΣNN
+
+Then  the  random  variable  of  each  electronic  coordination Xi  N(Aiθ, Σii),  and  therefore
+                        1                                     Z      1
+      EX∼πθ      kXi   RIk        =                1(2π)3/2(det Σii)1/2kyke− 12 (y−(Aiθ−RI))⊤Σ−1ii  (y−(Aiθ−RI)) dy.
+                                                                R3
+For  the  electron-electron  term,  defineYij :=Xi  Xj ,  andYij   is  again  Gaussian  with  the  mean  and
+covariance
+                      E[Yij] = (Ai  Aj)θ,    Cov(Yij) = Σii + Σjj   Σij   Σji =: Γij.
+Therefore,  we  have
+                 1                   1                                 Z      1
+EX∼πθ     kXi  Xjk         = E    kYijk    =                1(2π)3/2(det Γij)1/2kyke− 12 (y−(Ai−Aj)θ)⊤Γ−1ij  (y−(Ai−Aj)θ) dy.
+                                                                         R3
+    For  any  symmetric  positive  definite 3  3  matrix Γ,  define
+                                                              Z      1
+                          UΓ(z) :=               1(2π)3/2(det Γ)1/2kyke− 12 (y−z)⊤Γ−1(y−z) dy.
+                                                               R3
+Then  the  above  two  identities  become         1                                 1
+
+        EX∼πθ      kXi   RIk       =UΣii(Aiθ   RI),      EX∼πθ               kXi  Xjk        =UΓij((Ai  Aj)θ).
+
+Hence
+
+                                     NX   MX
+          L(θ) =  18  tr(Σ−1)                 ZIUΣii(Aiθ   RI) +  X                  UΓij((Ai  Aj)θ) +Cnuc.
+                                    i=1  I=1                              1≤i<j≤N
+
+    Let
+                                      γΓ(w) =               1(2π)3/2(det Γ)1/2e− 12w⊤Γ−1w,
+                             Z      1
+then  we  have UΓ(z) =            kykγΓ(y   z) dy.   Differentiating  with  respect  to z   gives
+                               R3
+               Z      1                                                    Z      1
+rzUΓ(z) =           kyk Γ−1(y z)γΓ(y z) dy,   r2zUΓ(z) =                        kyk    Γ−1(y z)(y z)⊤Γ−1 Γ−1 γΓ(y z) dy.
+                 R3                                                          R3
+
+                                                              37
+Since Γ−1   is  fixed  and  positive  definite,  there  exist  constants C1,C2,C3,c1 > 0  such  that
+
+                              kΓ−1(y   z)γΓ(y   z)k  C1ky   zke−c1∥y−z∥2,
+
+and                                                             (C2 +C3ky   zk2)e−c1∥y−z∥2.
+               Γ−1(y   z)(y   z)⊤Γ−1   Γ−1 γΓ(y   z)
+
+Therefore
+                                   Z    ky   zk                          Z      kuk
+              krzUΓ(z)k  C1               kyk  e−c1∥y−z∥2 dy =C1              ku + zke−c1∥u∥2 du,
+                                    R3                                     R3
+and                        Z                                            Z
+          kr2zUΓ(z)k           C2 +C3ky   zk2                                C2 +C3kuk2
+                            R3         kyk     e−c1∥y−z∥2 dy =           R3     ku + zk  e−c1∥u∥2 du,
+where u = y   z.    We   split   the   domain   into fku + zk   1gSfku + zk > 1g.    On fku + zk   1g,
+using  the  local  integrability  of kvk−1   in R3,
+                 Z      kukk                                                         1
+                      ku + zke−c1∥u∥2 du            sup                             kvk dv< 1,
+                   R3                              u∈R3 kukke−c1∥u∥2 Z∥v∥≤1
+
+for k = 0, 1, 2.   On fku + zk> 1g,
+                        Z           (kukk)e−c1∥u∥2           Z
+
+                         ∥u+z∥>1        ku + zk       du       R3 kukke−c1∥u∥2 du< 1.
+
+Hence
+                              sup
+                              z∈R3 jrzUΓ(z)j< 1,         supz∈R3 kr2zUΓ(z)k< 1.
+
+    For g(θ)  and r2L(θ),  by  the  chain  rule,
+
+                     NX   MX
+         g(θ) =              ZIA⊤i rUΣii(Aiθ   RI) +  X                (Ai  Aj)⊤rUΓij((Ai  Aj)θ),
+                     i=1 I=1                                 1≤i<j≤N
+
+and
+
+               NX   MX
+r2L(θ) =               ZIA⊤i r2UΣii(Aiθ  RI)Ai +  X                  (Ai  Aj)⊤r2UΓij((Ai  Aj)θ)(Ai  Aj).
+               i=1 I=1                                     1≤i<j≤N
+
+Using  the  uniform  boundedness  of rzUΓ(z)  and r2zUΓ(z),  we  obtain
+
+                                 sup
+                               θ∈RNp kg(θ)k< 1,          supθ∈RNp kr2L(θ)k< 1.
+
+Therefore g(θ)  is  uniformly  bounded  and  globally  Lipschitz  continuous.
+Discrete   example.   Consider
+
+                                  ψθ(x) = 2−N/2eix⊤Aθ,        x 2 f 1, 1gN.
+
+Then
+                       L(θ) = hψθjH jψθi = 2−N   X                   hxjH jyiei(y−x)⊤Aθ.
+                                                       x,y∈{−1,1}N
+
+                                                         38
+Therefore,  we  have
+
+                           g(θ) = 2−N   X                ihxjH jyiA⊤(y   x)ei(y−x)⊤Aθ
+                                           x,y∈{−1,1}N
+and
+                  r2L(θ) =  2−N   X                   hxjH jyiA⊤(y   x)(y   x)⊤Aei(y−x)⊤Aθ.
+                                       x,y∈{−1,1}N
+Since x,y 2 f 1, 1gN ,  we  have ky   xk   2pN .   Hence
+
+                                   sup
+                                 θ∈RNp kg(θ)k< 1,          supθ∈RNp kr2L(θ)k< 1.
+Thereforeg(θ)  is  uniformly  bounded  and  globally  Lipschitz  continuous  also  in  the  discrete  case.
+
+D       Experimental   Settings
+D.1       Restricted   Boltzmann   Machine
+The   restricted   Boltzmann   machine   (RBM)   proposed   in   [6],   is   used   as   the   wavefunction   ansätz   for
+spin-lattice  models  and  takes  the  form
+
+                                               ∑N           DY               NX
+                                  ψθ(x) =e       j=1ajxj       cosh(bk +         wkjxj),
+
+                                                           k=1              j=1
+where θ  =  (aj,bk,wkj)j=1,...,N;k=1,...,D .      For   spin-lattice   systems,   the   configuration   satisfies  x 2
+f 1, 1gN .
+
+D.2       Electronic   Hamiltonian
+In  electron  structure  theory,  the  electronic  Hamiltonian  takes  the  form:
+
+                  NX           NX   MX       ZI                           1                           ZIZI′
+    H  :=  12         ∆xi               kxi   RIk +  X               kxi   xjk +  X               kRI   RI′k,           (D.1)
+                 i=1           i=1 I=1                   1≤i<j≤N                     1≤I<I′≤M
+
+where fRIgMI=1   R3   are  nuclear  positions  and fZIgMI=1   N  are  nuclear  charges.
+
+D.3       Transverse-Field   Ising   Model   and   Heisenberg   Model
+Both  TFI  and  Heisenberg  models  consist  of  chains  of  Pauli  matrices.   The  Pauli  matrices  are  defined
+as                                   0    1                0    i                  1     0
+                             σx =      1    0  ,  σy =       i     0   ,  σz =      0    1    .
+
+The  Pauli  operator  acting  on  site i  is  defined  as
+
+                     σℓi  :=I⊗(i−1) 
+σℓ 
+I⊗(N−i) 2 C2N×2N,ℓ 2 fx,y,zg,  1  i  N,
+
+where 
+  denotes  the  Kronecker  product.   The  TFI  and  Heisenberg  Hamiltonians  are  defined  as
+   •   TFI  model: H  =  P<i,j>σziσzj  hPjσxj ,  where h> 0  is  the  transverse-field  strength.
+
+   •   Heisenberg  model: H  =P<i,j>σxiσxj  +σyiσyj  +σziσzj .
+Here <i,j >  denotes  a  nearest-neighbor  pair.
+
+
+                                                             39
+D.4       FermiNet   Architecture   and   Hyperparameters
+
+
+Table   1:    FermiNet   architecture   and   MCMC   hyperparameters   used   in   all   electronic-system   experi-
+ments.
+
+                                       Hyperparameter                                                                                                       Value
+                                       One-electron  stream  width                                                                          256
+                                       Two-electron  stream  width                                                                           16
+                                       Number  of  equivariant  layers                                                                      4
+                                       Backflow  activation  function                                                                  tanh
+                                       Number  of  determinants                                                                                  16
+                                       Exponential  envelope  structure                                                    Isotropic
+                                       Standard  deviations  for  local  energy  clipping                    5
+                                       Number  of  walkers                                                                                                 1000
+                                       MCMC  burn-in  steps                                                                                        5000
+                                       MCMC  steps  between  updates                                                               10
+
+E       PRIME-SR   vs.    SPRING   Across   Random   Seeds
+E.1       Instability   of   SPRING   with µ = 0.99   on N, O, N2   and CO
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                            (a) N  (energy)                                                                                       (b) O  (energy)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                               (c) N2   (energy)                                                                            (d) CO  (energy)
+
+                   Figure  11:   Energy  trajectories  of  SPRING  with µ = 0.99  on N, O N2   and CO.
+
+
+
+                                                                                         40
+E.2       Atomic   Systems:    Results   Across   Random   Seeds
+Random   seed   1.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                    (a) C  atom.   Left:   relative  energy  error.   Right: µk .
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                    (b) N  atom.   Left:   relative  energy  error.   Right: µk .
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                    (c) O  atom.   Left:   relative  energy  error.   Right: µk .
+
+ Figure  12:   Comparison  of  fixed-µ  SPRING  and  PRIME-SR  on C, N, O  atoms  for  random  seed  1.
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                   41
+   Random   seed   2.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                     (a) C  atom.   Left:   relative  energy  error.   Right: µk .
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                     (b) N  atom.   Left:   relative  energy  error.   Right: µk .
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                     (c) O  atom.   Left:   relative  energy  error.   Right: µk .
+
+Figure  13:   Comparison  of  fixed-µ  SPRING  and  PRIME-SR  on C, N, O  atoms  for  random  seed  1.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                      42
+   Random   seed   3.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                     (a) C  atom.   Left:   relative  energy  error.   Right: µk .
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                     (b) N  atom.   Left:   relative  energy  error.   Right: µk .
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                     (c) O  atom.   Left:   relative  energy  error.   Right: µk .
+
+Figure  14:   Comparison  of  fixed-µ  SPRING  and  PRIME-SR  on C, N, O  atoms  for  random  seed  3.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                      43
+   Random   seed   4.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                     (a) C  atom.   Left:   relative  energy  error.   Right: µk .
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                     (b) N  atom.   Left:   relative  energy  error.   Right: µk .
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                     (c) O  atom.   Left:   relative  energy  error.   Right: µk .
+
+Figure  15:   Comparison  of  fixed-µ  SPRING  and  PRIME-SR  on C, N, O  atoms  for  random  seed  4.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                      44
+E.3       Molecular   Systems:    Results   Across   Random   Seeds
+Random   Seed   1.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                (a) LiH  molecular.   Left:   relative  energy  error.   Right: µk .
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                 (b) N2   molecular.   Left:   relative  energy  error.   Right: µk .
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                (c) CO  molecular.   Left:   relative  energy  error.   Right: µk .
+
+Figure   16:     Comparison   of   fixed-µ   SPRING   and   PRIME-SR   on  LiH,  N2,    and  CO   molecules   for
+random  seed  1.
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                    45
+     Random   Seed   2.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                  (a) LiH  molecular.   Left:   relative  energy  error.   Right: µk .
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                   (b) N2   molecular.   Left:   relative  energy  error.   Right: µk .
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                  (c) CO  molecular.   Left:   relative  energy  error.   Right: µk .
+
+Figure   17:     Comparison   of   fixed-µ   SPRING   and   PRIME-SR   on  LiH,  N2,    and  CO   molecules   for
+random  seed  2.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                        46
+     Random   Seed   3.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                  (a) LiH  molecular.   Left:   relative  energy  error.   Right: µk .
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                   (b) N2   molecular.   Left:   relative  energy  error.   Right: µk .
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                  (c) CO  molecular.   Left:   relative  energy  error.   Right: µk .
+
+Figure   18:     Comparison   of   fixed-µ   SPRING   and   PRIME-SR   on  LiH,  N2,    and  CO   molecules   for
+random  seed  3.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                        47
+     Random   Seed   4.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                  (a) LiH  molecular.   Left:   relative  energy  error.   Right: µk .
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                   (b) N2   molecular.   Left:   relative  energy  error.   Right: µk .
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                  (c) CO  molecular.   Left:   relative  energy  error.   Right: µk .
+
+Figure   19:     Comparison   of   fixed-µ   SPRING   and   PRIME-SR   on  LiH,  N2,    and  CO   molecules   for
+random  seed  4.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                        48

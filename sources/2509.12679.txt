@@ -1,0 +1,887 @@
+      Large Language Model Scaling Laws for Neural
+               Quantum States in Quantum Chemistry
+
+
+
+
+        Oliver Knitter1,2,∗         Dan Zhao2,3       Stefan Leichenauer2    Shravan Veerapaneni1
+
+                  1University of Michigan     2SandboxAQ     3New York University
+                                  *knitter@umich.edu, currently at IonQ
+
+
+                                                     Abstract
+
+          Scaling laws have been used to describe how large language model (LLM) per-
+          formance scales with model size, training data size, or amount of computational
+          resources. Motivated by the fact that neural quantum states (NQS) has increasingly
+          adopted LLM-based components, we seek to understand NQS scaling laws, thereby
+          shedding light on the scalability and optimal performance–resource trade-offs of
+          NQS ansatze. In particular, we identify scaling laws that predict the performance,
+          as measured by absolute error and V-score, for transformer-based NQS as a func-
+          tion of problem size in second-quantized quantum chemistry applications.  By
+          performing analogous compute-constrained optimization of the obtained paramet-
+          ric curves, we find that the relationship between model size and training time is
+          highly dependent on loss metric and ansatz, and does not follow the approximately
+          linear relationship found for language models.
+
+1    Introduction
+
+Electronic ground state calculations are a fundamental problem inab initioquantum chemistry. As
+explicit calculation of the ground truth scales exponentially with molecule size, heuristic algorithms
+based on the variational principle have been devised including Hartree-Fock, coupled cluster methods
+[2], and tensor network methods such as DMRG [23].
+The incorporation of LLM components into NQS opens these ansatze up to systematic scalability
+analysis using scaling laws [15], mathematical relationships that describe how the computational
+requirements of a neural network model scale with the size of the underlying problem.  For NLP,
+scaling laws have helped reveal how the performance of specific models grows with access to greater
+training data and compute resources. These laws help predict the limits of model capabilities, optimize
+the allocation of resources, and guide development of new architectures.
+Applying this broad analysis of NQS performance across different problem types is largely made
+possible by the introduction of V-Score, [28], a problem-agnostic and model-agnostic metric analyzing
+performance of any algorithm designed to find the minimal eigenstate of a Hamiltonian. With it, the
+application of these scaling laws to NQS ansatze may prove fruitful, allowing us to systematically
+assess the efficiency and effectiveness of different neural architectures for representing quantum states
+within an application of such practical interest. Understanding the scaling behavior of autoregressive
+NQS ansatze is particularly important as it would:
+
+        •  Identify optimal neural architectures balancing accuracy, computational cost, and scalability.
+          This is essential in quantum chemistry, where solving even fundamental problems requires
+          ansatze that are sufficiently expressive at favorable model sizes.
+        •  Illuminate the strengths and weaknesses of NQS as an overall paradigm, highlighting specific
+          areas where improvements in model design could lead to substantial gains in performance.
+        •  Gauge the broader applicability of these models for addressing larger molecular systems,
+           more complex chemical environments, or general tasks beyond ground state energies.
+
+Contributions.We estimate and analyze Chinchilla-like scaling laws [           12] for autoregressive NQS
+models in solving/estimating electronic ground states. Drawing parallels with LLM scaling laws, we
+examine whether similar principles govern the efficiency and accuracy of deep learning architectures
+in the NQS domain.  We focus on analyzing three specific autoregressive ansatze, based on three
+well-known architectures: MADE [30], transformers [29], and retentive networks (RetNets) [17].
+Our analysis focuses on comparing the performance and costs of these architectures to better un-
+derstand how they scale with model size and training time, relative to problem size.  Inspired by
+similar estimation frameworks for LLMs [15], we introduce general floating point operation (FLOP)
+estimates for NQS problems as a proxy for compute costs.  Our goal is to provide guidance for
+optimizing NQS performance in quantum chemistry by appropriately prioritizing the use of available
+compute resources for a given problem and molecule size.
+Our paper is organized as follows. Section3gives an overview of the general problem formulation.
+Section3.2describes the NQS paradigm and the autoregressive ansatze under consideration.  We
+detail the use of scaling laws in LLMs and how we apply them in our ansatz experiments for NQS in
+section4. We summarize our findings in section5and conclude with a discussion of our findings and
+future directions in section6.
+
+2    Related Work
+
+Recent advances have used neural networks trained via variational Monte Carlo [6] as an alternative
+variational ansatz. Known as neural quantum states (NQS), this method offers a potentially scalable
+solver for electronic ground state calculations [7] with many variants based on autoregressive ansatze
+[1, 3, 30] such as the transformer architecture [29] among others [17] as autoregressive ansatze,
+given the inherent expressiveness and utility of transformers within large language models (LLMs).
+However, further exploration is still necessary to understand how well these architectures perform
+and scale as NQS ansatze.
+Scaling law analyses [10, 15] empirically study how LLM performance can scale with model or
+data size, computational resources, etc. The eponymous Chinchilla scaling laws [12] estimated that
+doubling the size of a LLM requires a doubling in the number of training tokens for optimality. Since
+then, similar efforts have studied scaling behavior in transfer learning settings for downstream tasks
+[14], the influence on scaling behavior of inductive biases in model architectures [26], effects of
+scaling on smaller language model trade-offs [13], the potential impact of synthetic data on scaling
+and model collapse [8], how data-constrained language models scale with repeated data [21], and
+scaling-informed optimization of model/data sizes when accounting for inference demand [22].
+Scaling properties of NQS have been studied in time-evolved quantum states [18] focusing on training
+unnormalized RBM ansatze [6] and variations of the autoregressive NAQS ansatz [24] under different
+Ising Hamiltonians. Our analysis is fundamentally similar with a few distinct caveats. We consider
+more sophisticated ansatz architectures, designed for greater expressiveness with respect to size.
+Furthermore, we are interested in exploring the scaling properties of autoregressive ansatze applied
+to a specific practical use case. While [18] indicates NQS ansatze likely require exponentially many
+parameters to model all possible states of an exponentially large quantum system,  the required
+expressiveness for practical applications may be much lower.
+
+3    Problem
+
+3.1    Preliminaries
+
+Calculating the energy of a molecule requires knowledge of its wavefunction, represented by a unit
+vector|ψ⟩     in a complex Hilbert space, and its electronic Hamiltonian: a Hermitian operatorHe on
+this space encoding the total kinetic and potential energy of the molecule. Its ground state energy
+corresponds to the minimal spectral value ofHe.  Under the Born–Oppenheimer approximation,
+the relatively heavy atomic nuclei are treated as classical point charges, leaving the electrons to be
+modeled as quantum particles [5].
+
+
+                                                            2
+Figure 1: A general autoregressive NQS ansatz|ψ θ⟩. The model takes a qubit configurationx and
+returns either the ansatz entry⟨x|ψ  θ⟩ or conditional probabilities Prob(x     j|x k<j).  The modulus
+network is an autoregressive model that directly contributes to both outputs, while the phase network
+is typically an MLP only contributing to the ansatz entry.
+
+
+Given a set of orthonormal spin-orbitals{ϕ j}nj=1  , second quantization and the Jordan–Wigner trans-
+formation together mapHe to a HamiltonianH in ann-qubit state space [20], whose computational
+basis corresponds with occupancy configurations, known asSlater determinants, of the         n spin-orbitals.
+The smallest eigenvalue ofH, also called the ground state energy, approximates the energy of the
+true molecular ground state. We considerHas a real linear combination of Pauli strings:
+                              H= Xωj            σj1⊗···⊗σ  jn        ,  σjk∈{I,X,Y,Z}                               (1)
+                                       j
+where the set{I,X,Y,Z}      denotes the four Pauli matrices. These strings form an orthonormal basis
+for the 4n-dimensional space ofn-qubit Hamiltonians; the construction ofH ensures that the number
+of terms in (1) is  O(n     4) [20]. To find the ground state, we consider the expectation value ofH with
+respect to|ψ  θ⟩, ann-qubit variational ansatz:
+                                                  L(θ) =⟨ψ     θ|H|ψ   θ⟩                                                         (2)
+By the Rayleigh–Ritz principle, the only minimum for (2) is the ground state energy of  H, in which
+case|ψ θ⟩ represents an associated eigenvector. The goal is then to variationally optimizeθ to find
+this ground state.
+
+3.2    Autoregressive Neural Quantum States
+
+Neural quantum states [6] is a classical deep learning architecture for solving variational many-body
+problems using a neural network ansatz.  Over the past few years, serious interest has manifested
+toward addressing electronic ground state problems with NQS [7], particularly using autoregressive
+ansatze [1, 17, 29, 30]; we exclusively consider the autoregressive formulation in this paper.  An
+n-qubit NQS ansatz is a neural network that maps bit strings of lengthn to complex numbers. For
+the purposes of training, we consider these outputs as the complex logarithm of the ansatz:
+                                      log⟨x|ψ     θ⟩= logψ   θ(x) :{0,1}      n→C                                         (3)
+Autoregressive ansatze encode these values in two networks: a phase netϕθ returning a single number,
+and a modulus net returning an autoregressive sequence of nested conditional probabilities:
+                                 logp  jθ(x  1,...,xj) = log (Pr (x j = 1|x k<j;θ))
+The individual network outputs are collected into the ansatz output
+                                                            nX
+                                      log⟨x|ψ     θ⟩=   12      pjθ(x k≤j    ) +iϕ θ(x)                                          (4)
+                                                           j=1
+
+                                                               3
+This specific construction ensures the ansatz always encodes a normalized quantum state, which is
+significant because every state induces a probability distribution on the set of qubit spin configurations,
+                                                      Pr (x;θ) =|⟨x|ψ        θ⟩|2
+
+and we may rewrite the expectation (2) as a stochastic loss function with respect to this distribution:
+
+                                    L(θ) =E    x∼|ψ   θ|2 [l θ(x)],  l   θ(x) = ⟨x|H|ψ    θ⟩⟨x|ψ  θ⟩                                        (5)
+
+The valuelθ(x)     in (5) is called thelocal energyof     H atx. The autoregressive ansatz construction
+makes efficient sampling from|ψ θ|2 possible, through use of the conditional probabilities generated
+by the modulus network to sample spins qubit-by-qubit.  For each samplex, the local energy is
+constructed by multiplying all nonzero entries in rowx ofH with the corresponding entries of|ψ θ⟩,
+then adding the results.  In practice, the set of unique samples is stored and a list of frequencies
+monitors how often each is sampled with replacement [30].  Explicit constraints are built into the
+network to ensure the state distribution only samples from physically plausible Slater determinants:
+the full Hilbert space considers all orbital occupancy configurations, but most do not correspond
+with the correct number of electrons in the molecule. As in (5), we can rewrite the gradient of the
+expectation as a stochastic estimator over the state distribution:
+                                ∇θL(θ) = 2 ReE     x∼|ψ   θ|2 [(l θ(x)−b)∇      θ log⟨ψ   θ|x⟩]                               (6)
+The baselinebis arbitrary but typically chosen asb=L(θ)for purposes of variance reduction.
+
+3.3    Types of Autoregressive NQS Ansatze
+
+
+       Model                Sequential Forward FLOP Estimate             Full Ansatz Training FLOP Estimate
+       MADE   3N                     BT                (1.5n+ 3M+ 10−3 logB)N                                                   mod + 2(M+ 3)N                 ph
+       RetNet n                seq (2N+ 4n              bnseqdattn)(Parallel)BT               ((M+ 4)n−2 logB)N                                         mod + 2(M+ 3)N                 ph
+                       nseq  2N+ 5n           b(d   attn)2 (Recurrent)+n                               bdm×(2.5d                m ((M+ 1)n−2 logB) + 3n                                2)
+       Transformern                         seq (2N+ 4n              bnseqdattn)        BT     (M+ 4)n−                43 logB      Nmod + 2(M+ 3)N                 ph
+                                                                 +n     bdm  (M+ 3.5)n            2−  89 logB−            23 (logB)            2 
+
+Table 1: Estimates of the total FLOP counts required both to perform one forward pass of MADE,
+RetNet,  and transformer on an input sequence,  based on parameter count N=N         mod +N    phase,
+sequence lengthnseq, number of decoder blocksnb, and the attention/retention dimensiondattn; and
+to train a corresponding NQS ansatz, based on qubit numbern, training stepsT , average numberB
+of unique samples processed, and unique bit flip termsM in the problem Hamiltonian. RetNet and
+Transformer estimates require the numbern                 b of blocks and the internal dimensiond                        m.
+
+Figure1depicts a general autoregressive NQS ansatz, highlighting both modulus and phase networks.
+The three ansatze examined in this work all follow this form, using a simple feedforward network
+to model the phase, which is joined by a sequence of autoregressive decoder blocks modeling the
+conditional probabilities. They differ only in the type of decoder used: in this paper, we consider the
+MADE [30], RetNet [17], and transformer [29] architectures. Reserving a more detailed description
+of them for the appendix, we emphasize here that each model enforces the autoregressive constraint
+on its outputs in a distinct way. Fundamentally, MADE [9] follows a basic feedforward architecture; a
+fixed binary mask is applied to the model weights in each forward pass, severing connections between
+neurons so as to ensure the autoregressive property.  This makes MADE easy to sample from and
+train in a parallelizable way, at the expense of making it a fundamentally less expressive architecture
+relative to model size.
+Transformers [27] calculate all pairwise dot product similarities within each input sequence. Attention
+can be made autoregressive through input masking, and is highly parallelizable, though at the expense
+of introducing a quadratic computational cost with respect to input sequence length. RetNets [25]
+are recurrent architectures, which are innately autoregressive and perform forward passes in linear
+time. RetNets compress into a mathematically equivalent parallel form analogous to the transformer;
+utilizing these two forms during inference and training respectively allows RetNet to utilize both the
+time complexity advantage of recurrent networks and the greater ease of training of transformers. We
+
+
+                                                                    4
+describe in table1leading term estimates for the FLOP count required by each of these models to
+perform a single forward pass on a single input sequence, from which it is possible to extrapolate
+FLOP count estimations for an entire NQS training run.  We provide detailed derivations of these
+estimates in AppendixA.4.
+
+4    Methodology
+
+We introduce a general framework for FLOP count estimation to quantify the computational cost
+of NQS. Drawing on the Chinchilla laws [12], we present a parametric scaling law for NQS and
+describe the specific experimental setup of our analysis.
+
+4.1    FLOP Estimates for NQS
+
+Typically, supervised learning only requires one forward and one backward pass through the model
+for each batch sample at each gradient update step.  NQS, however, does not have training data,
+instead using the model to first generate a batch of sample spins fromx∼|ψ  θ|2, and then calculate
+local energies. For each samplex, this requires not only one forward pass to obtain⟨x|ψ  θ⟩, but many
+more to calculate the numerator⟨x|H|ψ    θ⟩. Each termPi in (1) defines a specific bit flip sequence:
+applying this flip tox yields the indexx′ of the term⟨x′|ψ θ⟩ that corresponds with a nonzero entry
+ofPi. Each bit flip adds an additional forward pass to the compute cost. Before training, all unique
+bit flip sequences are identified between the terms ofH, eliminating redundant forward passes [29].
+Nonetheless, a significant number of forward passes remains, though none of them contribute to the
+gradient calculation, yielding some compute cost savings depending on the ansatz.
+For an NQS problem, we estimate the training FLOP count based on the numbern= 2n      seq of qubits,
+the average unique sample batch sizeB at each iteration, the single-token FLOP countFmod of the
+modulus network, the single-sequence FLOP countFph of the phase network, the numberM  of
+unique bit flip patterns withinH, and the training stepsT . We estimate the sampling FLOP count as
+                                                  
+                                                     ⌊log  4B⌋−1X            n                  
+                      FLOPSample≈F    modT                      4m +B        2−⌊log  4B⌋                                 (7)
+
+                                                        m=0
+
+For  ease  of  approximation,  we  assume  at  each  step  the  sampling  process  starts  from  the  four
+configurations of a single orbital and branches intoB unique samples in approximately log4(B)
+steps. The remaining steps are needed to identify the full spin configuration for each sample. This
+assumption is an overestimate, since the sampling process is less costly if it does not branch this
+quickly. Then, the FLOP count to construct and backpropagate through (5) is approximately
+
+                                                                     n
+                                FLOPLoss≈BT             (M+ 3)        2Fmod +F    ph                                   (8)
+
+For each sample at each time step, (8) covers  M forward passes for the local energy numerator, one
+for the denominator, and then backpropagation—approximately equivalent to two forward passes.
+We ignore the FLOP count for assembling the model outputs into loss values as they contribute no
+leading terms to the overall count. We also note thatFmod is implicitly context-dependent even within
+eqs. (7) and (8); for each ansatz,F                         mod may vary based on the corresponding phase of training.
+From derivations provided in sectionA.4, we arrive at the ansatz-specific FLOP count estimates for
+MADE, RetNet, and transformer shown in table1. For the latter two ansatze, we set    dattn =d    m. In
+all cases, we consider separately the number of parametersN=N         mod +N    ph for the modulus and
+phase networks, respectively, ignoring all non-leading terms. KV caching can reduce some of the
+transformer compute cost, for a considerable increase in memory. Accomplishing this cost savings
+would also require cache sharing between separate forward passes to an atypical extent.  Though
+this paper performs FLOP-constrained scaling law analysis using rougher estimates given in table4,
+which have been simplified for ease of analysis, we introduce these three estimate formulas here as
+general resources for assessing the compute cost of the MADE, transformer, and RetNet ansatze.
+
+
+                                                            5
+4.2    Parametric Scaling Law for NQS
+
+We now derive NQS scaling laws to identify predictive relationships between accuracy/performance
+and several key attributes of NQS: model size, compute budget, problem size, and the number of
+unique samples used for training. In practice, the search space grows too quickly with problem size to
+allow for sampling from all feasible spins under a fixed compute budget, so we truncate the number
+of unique samples generated at each sampling run. Since these samples contribute to the loss function
+analogously to training data, the total number obtained in training serves as a proxy for the number of
+tokens used in traditional scaling law analysis.
+AppendixA.6gives a brief overview of the Chinchilla scaling law [                     12] establishing basic power law
+relationships between the final training lossL, model sizeN, and numberD of tokens used.  To
+adapt this curve to NQS, we must consider that any scaling analysis predicting the general behavior
+of an ansatz across a variety electronic ground state calculations must account for performance
+differences caused by training on different molecules.  Increasing problem size, while keeping all
+other hyperparameters equal, is expected to both increase computational cost and decrease accuracy
+for any ansatz. To help the scaling law account for variation in problem size, we propose incorporating,
+in addition to the numberN of model parameters (per thousand), a new termSF equaling the average
+fraction of the total search space that is sampled throughout training. For a molecular system with
+n spin-orbitals,NE electrons, and a singlet ground state—where the electrons are equally divided   0.5n 2
+
+among the up and down spins—the search space size is                    0.5N  E     .
+
+This calculation is analogous for molecules with nonzero spin, though all molecules used for analysis
+in section4.3have either singlet or triplet ground states. For a given NQS run, we then obtain       SF  by
+dividing the average numberB of unique samples generated at each iteration by the search space size.
+SinceSF  incorporates information about the number of unique samples seen at each optimization
+step, we multiply it by the numberTof optimization steps to give
+                                                    D′ =T×SF
+a size-controlled analog to the variableDfrom [12].
+Since different molecules have different energies, we modify the loss L(N,D ′):  absolute error
+between the NQS result and the ground truth, obtainable for moderate problem sizes via full con-
+figuration interaction (FCI), is a suitable measure since an error tolerance within 0.00159    Hartree
+is a widely accepted standard of chemical accuracy.  Unfortunately, absolute error is not viable at
+scale since FCI calculations quickly become intractable.  As such, we also consider the V-Score
+[28], a recent performance metric for assessing variational Hamiltonian eigensolvers. For ann-qubit
+HamiltonianHand ansatz|ψ                θ⟩, the V-Score is given by
+                                                    
+ψθ|H  2|ψ θ−⟨ψ θ|H|ψ   θ⟩2
+                                   V-Score =n             ⟨ψ θ|H|ψ   θ⟩−ω    02                                                (9)
+
+where ω0  is  the  weight  value  from  (1)  corresponding  with  identity  operator.   Both  (2)  and  its
+variance—the numerator in (9)—may be estimated by the sample mean and variance of (5). V-Score
+was developed as a proxy measure for relative error, and it is both dimensionless and invariant
+with respect to global energy shifts. These properties make V-Score a natural candidate for scaling
+law analysis. Altogether, we consider two modifications of the Chinchilla curve for assessing the
+performance of NQS models for electronic ground state calculations:
+
+          ErrorAbs(N,D ′) =A    0 + A1Nα1  + A2D′α 2, V-Score(N,D     ′) =A    0 + A1Nα1  + A2D′α 2       (10)
+
+4.3    Experimental Setup
+
+We apply each ansatz to each of the molecules in table2, performing a coarse ablation varying model
+size—both modulus and phase networks—optimization steps, and the maximum number of unique
+samples generated per step. We perform all training with Adam, annealing the learning rate along
+a cosine schedule from 2.5×10   −3    to 5×10  −8   , with a linear warmup over the first 4% of steps.
+Following the same practice from [17], we exponentially increase the number of non-unique samples
+at each step from 104 to 1012, and for the first 90% of training, we only recompute the loss every 10
+
+
+                                                             6
+                            Moleculen  N      E       Determinants       Paulis M            FCI
+                               H2O           14        10                441                1,390         190 −75.0155
+                                N2            20        14              14,400             2,591         446 −107.6602
+                                O2            20        16               2,025              2,879         530 −147.7502
+                               H2S           22        18               3,025              9,558        1,524−394.3546
+                               PH3           24        18              48,400            24,369       4,333−338.6984
+                               LiCl           28        20           1,002,001          24,255       4,508−460.8496
+                              Li2O          30        14          41,409,225         20,558       3,810−87.8927
+Table 2: Molecules whose second quantized (in the the STO-3G basis set) Hamiltonians were used
+for analysis. We list the corresponding number of spin-orbitals, electrons, Slater determinants in the
+search space, Pauli basis terms, and unique bit flip patterns among the Pauli terms. FCI ground truth
+values from [29] are also shown.
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 2:  Heat maps showing the final V-score and loss values for each data point collected for
+the transformer ansatz, as a function of both model parametersN  and scaled iterationsD′. Since
+the variance and loss values comprising the V-score are stochastic estimates, we depict 10−8    as the
+lower limit of V-score accuracy, while absolute loss values are truncated at 10−5    to reflect desired
+thresholds of chemical accuracy.
+
+
+steps. We also incorporate variational neural annealing (VNA) [11] to improve accuracy. We vary the
+number of training steps between 12,500 and 50,000, the model dimensions of RetNet and transformer
+between 8 and 64—the internal feedforward dimension always equals 4x this dimension—and the
+hidden state dimensions of the MADE and phase networks between 8 and 128. For both RetNet and
+transformer, we utilized 1 or 2 decoder blocks. The maximum number of unique samples generated
+at each step was varied between 1,000 and 16,000.
+We follow [17] in choosing the final loss value of each training run. We fit Eq. (10) to our data as
+in [12], replacing zero absolute error values with 10−5    to avoid issues with the log-loss and using
+Adam alongside a cosine-annealed learning rate for 50,000 steps, with initial parameters taken from
+ranges given for the original Chinchilla law [4,12].
+
+5    Results
+
+We collected 335 datapoints applying the three ansatze to the problems in table2: 120 for MADE, 109
+for RetNet, and 106 for transformer. We observe in fig.2the distribution of data points collected for
+transformer, to which those of MADE and RetNet are qualitatively similar and given in sectionA.7.
+These heat maps display the V-scores and absolute loss values as functions of the variablesN andD′
+as defined in section4.2: the figures qualitatively indicate a correlation between       N,D′, and both
+dependent variables. Similar trends are observable within the data sets for both the tranformer and
+RetNet ansatze. Reserving some discussion of these other models for the appendix, we emphasize
+how similar the RetNet behavior in fig.5is to that of the transformer shown here. In general, the data
+point distributions of the two networks are directly comparable, since RetNet and transformer ansatze
+of equivalent dimension have nearly identical numbers of parameters; likewise, both models train
+similarly under equivalent setups [17].
+In both cases, we observe a pronounced stratification of the data point distribution with respect to
+N. A similar stratification is visible in fig.4, but that data set succeeds in covering a wider range of
+parameter sizes. This difference is due to the fact that the architecture of RetNets and transformers is
+
+
+                                                                  7
+Figure 3: Heat maps showing the logarithm of the FLOP count estimates for all data points collected
+with each of the three ansatze. In all three cases, FLOP count does not decrease monotonically with
+respect to scaled iterations, indicating the latter is not merely a proxy for problem size.
+
+
+less explicitly dependent on problem size than that of MADE. Furthermore, in testing, we maintained
+a fixed ratio of 8 hidden dimensions per attention/retention head inside each transformer and RetNet.
+
+
+                  V-score    A          0         A1        A2      α1    α2          Log-R        2
+
+                   MADE 9.37×10      −11        2.58×10   −5        5.53×10   −2        1.459      2.828        0.68
+                   RetNet  6.71×10      −7              0.626           4.39×10    −3        9.370      2.451        0.40
+                Transformer1.34×10        −6              0.197           7.25×10    −3        7.952      2.371        0.53
+
+               Absolute Error   A         0         A1        A2      α1    α2          Log-R        2
+
+                   MADE  4.12×10      −9              0.033                0.106           2.224      0.757        0.65
+                   RetNet  1.13×10      −4         5.26×10   −4              0.111           0.452      1.179        0.49
+                Transformer2.83×10        −9              0.720                0.039           5.274      0.637        0.62
+Table 3: Parametric curve parameters for MADE, RetNet, and transformer NQS ansatze, for both
+V-score and Loss data.R2 are given on a log–log scale between model outputs and true loss values.
+
+
+Following the training procedure from section4.3, we have identified parametric curve coefficients,
+shown in table3for (10) for all three ansatze.  These coefficients indicate that model size makes
+a greater impact, as represented byA1 andα1, on V-score for the transformer and RetNet models,
+although this preference is not as strong for the transformer. In contrast, model size appears to make
+a nearly negligible impact for MADE, and here we should rather focus on increasing training time as
+a means of improving performance. The transformer ansatz exhibits scaling behavior that is more
+similar to RetNet, preferring an increase in model size to an increase in training time.
+Looking now to the coefficients for the absolute error values, we immediately observe that the baseline
+coefficientA0 is smaller than the predetermined error tolerance for both MADE and transformer.
+This observation alone is not alarming, as all datasets contain several problem instances where the
+model achieved the exact tolerance. For the RetNet, a higher baseline coefficient may indicate the
+model is fundamentally less accurate than the other two, but such a distinction is not practically
+meaningful since the baseline still lies within chemical accuracy. Furthermore, these curves indicate
+that model size impacts final accuracy less for the RetNet, so one should focus on increasing training
+time; in contrast, it appears more advantageous to increase model size for the transformer.
+
+5.1    FLOP Analysis
+
+In fig.3, we show FLOP estimates, on a logarithmic scale, for each of the entries in our three datasets.
+These estimates come from the equations outlined in section4.1, and provide a coarse, yet still
+meaningful, understanding of the compute time needed to produce these results. Qualitatively, we
+observe for all three ansatze that when controlling for scaled training timeD′, an increase in model
+sizeNcorrelates with an increase in compute time, which makes intuitive sense.
+Conversely,D′ scales inversely with compute requirements; this observation is also intuitive, since
+larger problem sizes and search spaces should obviously correlate with larger compute costs: for a
+fixed training time, a larger problem size will generally incur a greater compute cost and lowerD′.
+As a result, one may consider the argument thatD′ only serves to predict the V-score and absolute
+error values in our data to the extent that smaller problems are easier to learn than larger ones. As a
+potential rebuttal, and an indication thatD′ may reveal something more fundamental, we observe in
+fig.3for all ansatze that when keeping   N fixed, an increase inD′ appears to first correspond with an
+
+
+                                                                 8
+increase in FLOPs before the general decrease: a similar reversal does not appear in either the V-score
+or absolute error data.  This phenomenon indicates that the correlation betweenD′ and FLOPs is
+likely weaker than that betweenD′ and our two loss metrics, lending credence to the hypothesis that
+D′ is truly a size-agnostic measure of training time.
+
+5.2    Compute Constrained Scaling Analysis
+
+                                  Ansatz         Simplified Training FLOP Estimate
+                                  MADE               3MSD    ′N
+                                  RetNet                  11315.5Mn+             3n  2dmSD′N
+
+                              TransformerM                      n+   n212d      mSD′N
+
+Table 4: Simplified FLOP estimates for constrained scaling law optimization. These are derived from
+the estimates given in table1and are intended to prioritize ease of computation at the expense of a
+decrease in accuracy. HereSrefers to the search space size of the NQS problem.
+
+
+The FLOP estimates in table1, while already ignoring many non-leading contributions, are meant to
+reflect the primary contributions of all relevant factors of an NQS training run on compute cost. These
+complicated formulas contrast with the simple 6ND   cost formula assumed by [15] for language
+modeling, which allows for a simple constrained optimization comparing performance relative to
+compute cost. To perform a similar analysis here, we introduce further simplified compute estimates
+in table4, with detailed discussion of their derivation in sectionA.5. Future analyses that consider
+Nmod andN        ph as separate variables may benefit from the more accurate estimates of table1.
+
+                    D′ =                MADE                   RetNet                  Transformer
+                   V-score 0.053×N                          0.516       13.076×N                 3.823          6.707×N               3.354
+              Absolute Error0.889×N                        2.938        0.005×N               0.383        2663.825×N                     8.279
+Table 5: The empirical coefficients in table3and estimates in table4together define curves tracking
+the growth ofD ′, with respect toN, along the efficient frontier determined by compute budgetC.
+
+
+Derivations made in sectionA.8indicate that, for compute budget estimates of the form    C=kD  ′N
+for some problem-definedk, such as those given in table4, the constrained optimization of (10) is
+entirely analogous to the process carried out in [12]. Consequently, we give in table5the optimal
+growth rate ofD′ as a function ofN, for each loss metric and ansatz considered. These growth rates
+are highly metric and ansatz dependent, and more importantly, do not reflect the approximately linear
+curves identified in the Chinchilla scaling laws.
+
+6    Conclusion
+
+Our work applies Chinchilla-style LLM scaling laws, incorporating a new training time variable
+dependent on problem size, to MADE, transformer, and RetNet NQS ansatze in order to assess their
+performance on a selection of quantum chemistry problems of varying size. Using an ablation dataset,
+we fit this curve to predict both absolute error and V-score loss metrics for each ansatz.  Together
+with a novel framework for estimating the compute cost of NQS, these results demonstrate how the
+performance of NQS at scale may be analyzed similarly to LLMs.
+This line of research invites a more comprehensive ablation study, with greater variety of architectures,
+problem sizes and training setups. For instance, the model sizeN in (10) comprises both modulus
+and phase networks, but it may be illuminating to isolate the phase network’s role. Varying the total
+number of non-unique Monte Carlo samples may also impact accuracy. A technique introduced in
+[29] efficiently approximates local energy calculations by neglecting Hamiltonian terms associated
+with unsampled states, and more recent work [19] demonstrates the extent of its potential. Analyzing
+the scaling properties of NQS under this new variation would help provide insight into the extent of
+its benefits, especially when considering NQS as a problem-agnostic method of dequantization [16].
+
+
+                                                               9
+Acknowledgments
+
+The authors would like to thank James Stokes for his feedback throughout the course of this work.
+
+References
+ [1]  Thomas D Barrett, Aleksei Malyshev, and AI Lvovsky. Autoregressive neural-network wave-
+      functions for ab initio quantum chemistry.Nature Machine Intelligence, 4(4):351–358, 2022.
+ [2]  Rodney J Bartlett and Monika Musiał. Coupled-cluster theory in quantum chemistry.Reviews
+      of Modern Physics, 79(1):291–352, 2007.
+ [3]  Elizabeth Bennewitz, Florian Hopfmueller, Bohdan Kulchytskyy, Juan Carrasquilla, and Pooya
+      Ronagh. Neural error mitigation of near-term quantum simulations.Nature Machine Intelligence,
+      4(7):618–624, Jul 2022.
+ [4]  Tamay Besiroglu, Ege Erdil, Matthew Barnett, and Josh You. Chinchilla scaling: A replication
+      attempt.arXiv preprint arXiv: 2404.10102, 2024.
+ [5]  Max Born and Robert Oppenheimer.  Zur quantentheorie der molekeln.Annalen der Physik,
+      389(20):457–484, 1927.
+ [6]  Giuseppe Carleo and Matthias Troyer. Solving the quantum many-body problem with artificial
+      neural networks.Science, 355(6325):602–606, 2017.
+ [7]  Kenny Choo, Antonio Mezzacapo, and Giuseppe Carleo. Fermionic neural-network states for
+      ab-initio electronic structure.Nature Communications, 11(1), May 2020.
+ [8]  Yunzhen Feng, Elvis Dohmatob, Pu Yang, Francois Charton, and Julia Kempe.   A tale of
+      tails: Model collapse as a change of scaling laws. InICLR 2024 Workshop on Navigating and
+      Addressing Data Problems for Foundation Models, 2024.
+ [9]  Mathieu Germain, Karol Gregor, Iain Murray, and Hugo Larochelle. Made: Masked autoencoder
+      for distribution estimation. InInternational conference on machine learning, pages 881–889.
+      PMLR, 2015.
+[10]  Danny Hernandez, Jared Kaplan, Tom Henighan, and Sam McCandlish.   Scaling laws for
+      transfer.arXiv journal arXiv:2102.01293, 2021.
+[11]  Mohamed Hibat-Allah, Estelle M Inack, Roeland Wiersema, Roger G Melko, and Juan Car-
+      rasquilla. Variational neural annealing.Nature Machine Intelligence, 3(11):952–961, 2021.
+[12]  Jordan Hoffmann, Sebastian Borgeaud, Arthur Mensch, Elena Buchatskaya, Trevor Cai, Eliza
+      Rutherford, Diego de Las Casas, Lisa Anne Hendricks, Johannes Welbl, Aidan Clark, Tom
+      Hennigan, Eric Noland, Katie Millican, George van den Driessche, Bogdan Damoc, Aurelia
+      Guy, Simon Osindero, Karen Simonyan, Erich Elsen, Jack W. Rae, Oriol Vinyals, and Laurent
+      Sifre.  Training compute-optimal large language models.arXiv preprint arXiv:2203.15556,
+      2022.
+[13]  Shengding Hu, Yuge Tu, Xu Han, Chaoqun He, Ganqu Cui, Xiang Long, Zhi Zheng, Yewei
+      Fang, Yuxiang Huang, Weilin Zhao, Xinrong Zhang, Zheng Leng Thai, Kaihuo Zhang, Chongyi
+      Wang, Yuan Yao, Chenyang Zhao, Jie Zhou, Jie Cai, Zhongwu Zhai, Ning Ding, Chao Jia,
+      Guoyang Zeng, Dahai Li, Zhiyuan Liu, and Maosong Sun. Minicpm: Unveiling the potential
+      of small language models with scalable training strategies.arXiv preprint arXiv:2404.06395,
+      2024.
+[14]  Berivan Isik, Natalia Ponomareva, Hussein Hazimeh, Dimitris Paparas, Sergei Vassilvitskii, and
+      Sanmi Koyejo. Scaling laws for downstream task performance of large language models.arXiv
+      preprint arXiv:2402.04177, 2024.
+[15]  Jared Kaplan, Sam McCandlish, Tom Henighan, Tom B Brown, Benjamin Chess, Rewon Child,
+      Scott Gray, Alec Radford, Jeffrey Wu, and Dario Amodei.  Scaling laws for neural language
+      models.arXiv preprint arXiv:2001.08361, 2020.
+
+
+                                                         10
+[16]  Oliver Knitter, James Stokes, and Shravan Veerapaneni. Toward neural network simulation of
+      variational quantum algorithms.NeurIPS workshop on AI for Science: Progress and Promises,
+      2022.
+[17]  Oliver Knitter, Dan Zhao, James Stokes, Martin Ganahl, Stefan Leichenauer, and Shravan
+      Veerapaneni. Retentive neural quantum states: Efficient ansätze for ab initio quantum chemistry.
+      Machine Learning: Science and Technology, 2025.
+[18]  Sheng-Hsuan Lin and Frank Pollmann.  Scaling of neural-network quantum states for time
+      evolution.physica status solidi (b), 259(5):2100172, 2022.
+[19]  Aleksei Malyshev, Markus Schmitt, and A. I. Lvovsky.  Neural quantum states and peaked
+      molecular wave functions: Curse or blessing?, 2024.
+[20]  Sam McArdle, Suguru Endo, Alán Aspuru-Guzik, Simon C Benjamin, and Xiao Yuan. Quantum
+      computational chemistry.Reviews of Modern Physics, 92(1):015003, 2020.
+[21]  Niklas Muennighoff, Alexander M. Rush, Boaz Barak, Teven Le Scao, Aleksandra Piktus,
+      Nouamane Tazi, Sampo Pyysalo, Thomas Wolf, and Colin Raffel.  Scaling data-constrained
+      language models.arXiv preprint arXiv:2305.16264, 2023.
+[22]  Nikhil Sardana, Jacob Portes, Sasha Doubov, and Jonathan Frankle. Beyond chinchilla-optimal:
+      Accounting for inference in language model scaling laws. InForty-first International Conference
+      on Machine Learning, 2024.
+[23]  Ulrich Schollwöck.  The density-matrix renormalization group.Reviews of modern physics,
+      77(1):259–315, 2005.
+[24]  Or Sharir, Yoav Levine, Noam Wies, Giuseppe Carleo, and Amnon Shashua. Deep autoregres-
+      sive models for the efficient variational simulation of many-body quantum systems.Physical
+      review letters, 124(2):020503, 2020.
+[25]  Yutao Sun, Li Dong, Shaohan Huang, Shuming Ma, Yuqing Xia, Jilong Xue, Jianyong Wang,
+      and Furu Wei. Retentive network: A successor to transformer for large language models.arXiv
+      preprint arXiv:2307.08621, 2023.
+[26]  Yi Tay, Mostafa Dehghani, Samira Abnar, Hyung Won Chung, William Fedus, Jinfeng Rao,
+      Sharan Narang, Vinh Q. Tran, Dani Yogatama, and Donald Metzler.  Scaling laws vs model
+      architectures: How does inductive bias influence scaling?  InThe 2023 Conference on Empirical
+      Methods in Natural Language Processing, 2023.
+[27]  Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez,
+      Ł ukasz Kaiser, and Illia Polosukhin. Attention is all you need. In I. Guyon, U. Von Luxburg,
+      S. Bengio, H. Wallach, R. Fergus, S. Vishwanathan, and R. Garnett, editors,Advances in Neural
+      Information Processing Systems, volume 30. Curran Associates, Inc., 2017.
+[28]  Dian  Wu,  Riccardo  Rossi,  Filippo  Vicentini,  Nikita  Astrakhantsev,  Federico  Becca,  Xi-
+      aodong Cao, Juan Carrasquilla, Francesco Ferrari, Antoine Georges, Mohamed Hibat-Allah,
+      Masatoshi Imada, Andreas M. Läuchli, Guglielmo Mazzola, Antonio Mezzacapo, Andrew
+      Millis, Javier Robledo Moreno, Titus Neupert, Yusuke Nomura, Jannes Nys, Olivier Parcollet,
+      Rico Pohle, Imelda Romero, Michael Schmid, J. Maxwell Silvester, Sandro Sorella, Luca F.
+      Tocchio, Lei Wang, Steven R. White, Alexander Wietek, Qi Yang, Yiqi Yang, Shiwei Zhang,
+      and Giuseppe Carleo.  Variational benchmarks for quantum many-body problems.Science,
+      386(6719):296–301, 2024.
+[29]  Yangjun Wu, Chu Guo, Yi Fan, Pengyu Zhou, and Honghui Shang.  Nnqs-transformer:  an
+      efficient and scalable neural network quantum states approach for ab initio quantum chemistry.
+      InProceedings of the International Conference for High Performance Computing, Networking,
+      Storage and Analysis, pages 1–13, 2023.
+[30]  Tianchen Zhao,  James Stokes,  and Shravan Veerapaneni.   Scalable neural quantum states
+      architecture for quantum chemistry.Machine Learning: Science and Technology, 4(2):025034,
+      jun 2023.
+
+
+                                                         11
+A    Appendix
+
+A.1    The MADE Ansatz
+
+The first ansatz we analyze [30] utilizes MADE [9], a feedforward network designed as an autoencoder
+for probability distributions, as the decoder. MADE applies binary masks to its weights, severing
+key neural connections between the hidden layers to ensure that its outputs obey the autoregressive
+property. MADE does not require any feature embedding or positional encoding of the input spins,
+and is the simplest of the three architectures being examined. MADE was not the first autoregressive
+ansatz applied to electronic ground state calculations,  but it serves as a precursor for the more
+sophisticated architectures discussed.
+FLOP estimates for a MADE network are simple: a feedforward network withN parameters requires
+approximately 2N   FLOPs to perform a forward pass on a single spin configuration, since most model
+weights correspond with one multiplication and one addition operation inside each forward pass;
+biases only correspond with one addition operation, but are heavily outnumbered among the total
+parameter count. We ignore the contribution of nonlinearities to the compute cost, alongside other
+non-leading FLOP contributions, throughout this work. These count estimates hold true for a MADE
+network, but the binary masking of model weights introduces an additional FLOP for each weight, so
+MADE requires3NFLOPs to perform a forward pass on a single spin configuration.
+
+A.2    NQS–Transformer
+
+The transformer is a ubiquitous architecture that underpins many large language models. They process
+input sequences in parallel and generate autoregressive output, making them well-suited to learn the
+conditional probabilities of an NQS ansatz [3, 29]. Each transformer block comprises an attention
+block and a feedforward layer, interspersed with residual connections and layer normalizations.
+Attention forms the the key input processing apparatus, calculating a weighted context vector for
+each input token based on all pairwise contextual relationships within the input sequence. Tokens are
+embedded based on value and relative position, then projected to obtain batches of query, key, and
+value vectors, which are used to construct the context vectors:
+                                       QKT
+     Attention(X) = softmax               √dk       V, whereQ=XW        Q, K=XW   K, V=XW   V        (11)
+
+Attention can easily learn correlations between tokens separated by significant relative distance,
+and a transformer typically utilizes several attention heads simultaneously—known asmulti-head
+attention—to learn different types of contextual information [              27]. Appropriate input masking during
+training and inference makes attention autoregressive. Being so naturally expressive, transformers
+have been shown to perform well as NQS ansatze [29]. In this context, the transformer operates on
+input sequences of spatial orbital occupancies. Each spatial orbital can contain two electrons, so these
+sequences have lengthn/2for ann-qubit NQS problem.
+FLOP estimates [15] indicate that for a transformer withN total parameters,nb blocks, and attention
+dimensiondattn, a forward pass acrossnseq tokens requires approximately 2N+4n          bnseqdattn operations
+per token.  FLOP estimates made for LLMs typically truncate this value to 2N  , but for NQS, the
+typically smaller ratio of model-to-problem size, coupled with the need for multiple forward passes
+to generate local energy values, necessitates considering the full FLOP estimate [16]. We emphasize
+here that the presence ofn     seq inside this estimate implies that the transformer requiresO(n                    2seq)time
+to perform a forward pass an entire sequence.
+
+A.3    RetNet NQS
+
+The Retentive Network (RetNet) is a recurrent language model that compresses into an equivalent
+parallel form [25], which processes inputs and calculate gradients through backpropagation similarly
+to transformers. In this format, the RetNet block is essentially analogous to the transformer, except
+that multi-head attention is replaced by multi-scale retention, which compresses the repeated action
+of a linear recurrent model onto the embedded inputs:
+  Retention(X) =     QKT⊙D V, whereQ= (XW       Q)⊙Θ, K= (XW      K)⊙                              Θ, V=XW    V.
+                                                                                                                      (12)
+
+
+                                                            12
+Under retention, embedded tokens are still projected to queries, keys, and values, but the retention head
+itself encodes relative positional information Θ, along with applying its own weighted autoregressive
+maskD. These matrices are defined by                                  γj−k  ,  j≥k
+
+                                        Θj =e ijθ,  Djk =              0,    j <k ,                                         (13)
+
+whereθ is a real parameter vector andγ is a positive scalar. Different retention heads have different,
+fixedγ values to capture different types of contextual information. Consequently, retention heads
+are followed by group, not layer, normalization.  RetNets train in parallel form but they perform
+retention recurrently during inference. TakingQ,K, andV  as in (12), retention can be expressed as
+a recurrence on the rows of these three matrices:
+                                            St =γS t−1    + (K n)TVt, S0 = 0
+                                            Retention(X    t) =Q tSt                                                             (14)
+
+Thus RetNets perform inference inO(n       seq) time, unlike the transformer’sO(n     2seq).  For a RetNet
+with 2N   total parameters,nb decoder blocks, retention dimensiondattn, and sequence lengthnseq, the
+parallel RetNet requires 2N+ 4n          bnsecdattn operations per token—same as transformer—to perform
+a forward pass.   Recurrent RetNet,  in contrast,  requires 2N+ 5n          b(d  attn)2  operations per token
+[17].  While RetNet contains a few more parameters than an equivalent transformer, these results
+indicate that a recurrent RetNet scales more favorably for problems wherenseq >1.75d               attn. Though
+fundamentally less expressive than transformers, RetNets have shown comparable performance on
+key language modeling baselines [25]. Since NQS training incorporates output from multiple training
+and inference forward passes, its computational cost is dominated by these forward passes: the dual
+form of the RetNet makes it useful for improving compute efficiency of NQS, and RetNet ansatze are
+amenable to solving electronic ground state problems [17].
+
+A.4    Deriving FLOP Estimates for MADE, RetNet, and Transformer Ansätze
+
+Following the principles of estimation outlined in section4.1, we now derive the different total FLOP
+count estimates shown in table1. The MADE ansatz is simple to estimate, since it requires a full
+forward pass through the entire input sequence at all stages of training. Its FLOP estimate is given by
+
+                              ⌊log  4B⌋−1X                n                    
+  FLOPM≈3N       modT                        4m +B          2−⌊log  4B⌋          +BT((M+ 3)(3N                            mod + 2N   ph))
+
+                                    m=0
+                               B            n
+              ≈3N       modT     3  +B        2−logB             +BT((3M+ 9)(N                            mod + 2(M+ 3)N                ph))
+                          3n+ 2
+              ≈BT                2     + 3M+ 9−3 logB                  Nmod + 2(M+ 3)N                ph.                          (15)
+
+We now proceed with RetNets, as in contrast with transformers, calculating the total FLOP estimate
+remains relatively straightforward: we use the recurrent form of RetNet for (7) and theMpasses in
+(8), and the parallel form for the rest, which gives us
+
+                                1
+          FLOPR≈BT                3−log(B) +        (M+ 1)n2            Frec +BT         (M+ 3)F             ph + 3n2 Fpar
+                                 2N   mod + 5d  2mnb (M+ 1)n
+                     ≈BT                                            2  −log(B)
+
+                         +BT((2 (M+ 3)N                     ph + 3n(N         mod +nd    mnb)))
+                     ≈BT(((M+ 4)n−2 logB)N                                               mod + 2(M+ 3)N                ph)
+                         +BT  nbdm 2.5d       m ((M+ 1)n−2 logB) + 3n                              2.                                  (16)
+
+Estimating the FLOPs of the transformer ansatz requires consideration of a few different factors. The
+contribution of the phase network remains unchanged, but unlike RetNets,Fmod implicitly depends
+
+
+                                                                 13
+onn during sampling, though we may mitigate this effect to an extent by excluding dummy tokens
+from forward passes. In this case, we must make adjustments to the expression of (7) and get
+
+                     ⌊log  4B⌋−1X                                                           n/2X                            
+ FLOPS(T)≈T                       (m+ 1)4  m (2N     mod + 4(m+ 1)n               bdm) +B        (2N     mod + 4mn   bdm)
+                            m=0                                                       m=⌊log          4B⌋+1
+                             ⌊log  4B⌋−1X                     ⌊log  4B⌋X       
+               ≈T    2N   mod         (m+ 1)4  m +n    bdm            m24m
+
+                                 m=0                             m=1
+                                                                                  
+                                                                        n/2X
+                  +T    BNmod (n−2 logB) + 4Bn                         bdm  m     
+
+                                                                 m=⌊log          4B⌋+1
+                                                                         n2
+               ≈BT          n−   43 logB−         29  Nmod +n    bdm        2  + 2027− 89 logB−         23 (logB)           2  .
+                                                                                                                           (17)
+
+Estimating the loss count gives
+
+                FLOPL(T)≈BT  (M+ 3)nN             mod + 2(M+ 3)N                ph +n    bdm(M+ 3)n          2,             (18)
+and through combining these two estimates, we obtain the transformer FLOP count estimate
+
+
+                  FLOPT≈BT                 (M+ 4)n−            43 logB    Nmod + 2 (M+ 3)N             ph
+
+                                 +BT        nbdm      (M+ 3.5)n              2− 89 logB−         23 (logB)           2  .               (19)
+
+
+A.5    Derivation of Simplified FLOP Estimates
+
+We now describe the simplification process yielding the rougher FLOP estimates given in table4.
+Traditional LLM compute-constrained scaling law analysis presumes an approximate FLOP count of
+6ND   [15], whereN is the model parameter count andD is the number of tokens used from training.
+This estimate is quite rough, based on the presumption that while the single-token forward pass FLOP
+count of a transformer is technically greater than2N, this difference is not significant in practice.
+The NQS FLOP estimates in table1are far more elaborate, incorporating several additional terms
+that dependent on problem size—the qubit numbern, numberM of unique bit flip patterns within the
+terms of the Hamiltonian, which is roughlyO(n     4), and the sample batch sizeB. Furthermore, these
+formulas do not yet explicitly depend onN andD′, the variables used in the NQS parametric scaling
+law curve from section4.2. Accordingly, we must modify the NQS FLOP estimates both to depend
+on these two variables explicitly and to be more amenable to the simple constrained optimization
+performed in scaling law analysis.  We give a detailed description for modifying the Transformer
+ansatz FLOP estimate, but those for RetNet and MADE follow similar principles.
+Drawing inspiration from the general principles that lead to the 6ND   estimate in [15], we first remove
+all remaining non-leading terms in (19). We also remove all terms dependent on      logB     , sinceB is
+bounded above by the size of the search space:  the discussion of search space size in section4.2
+and a basic asymptotic analysis of binomial coefficients based on Stirling’s approximation together
+indicate that logB      isO(n)       , hence it is not one of the primary leading terms in the estimate. We then
+have a reduced estimate
+                            FLOPT≈BT  nMNmod + 2MN   ph +n    bdm Mn2.                           (20)
+Looking back to [15], under the model constraints enforced in section4.3,       Nmod≈12n          bd2m, simplify-
+ing (20) further to
+
+                             FLOPT≈BT               M     n+  n212d      mNmod + 2MN   ph         .                             (21)
+
+
+                                                              14
+Figure 4: Heat maps showing V-score and absolute error for the MADE ansatz. We note that data
+points are far less stratified than in fig.2
+
+
+If we letS equal the size of the search space defined by the given NQS problem, and permit ourselves
+some further overestimate of the FLOP contribution from the phase network, then our reduced FLOP
+estimate becomes
+                                       FLOPT≈M             n+  n212d      mSD′N.                                           (22)
+
+A similar simplification process results in the other entries of table4.
+
+A.6    Brief Overview of Chinchilla Parametric Curve Fitting
+
+A crucial aspect of assessing a model’s performance with the Chinchilla scaling law analysis [12]
+involves fitting a parametric curve to a collection of data points representing separate training runs of
+the model: the curve predicts the final training loss valueL attained by each instance as a function
+of model sizeN and number of tokensD processed by the model over the course of training. The
+contribution of each variable to the final loss is given via a power law functional form:
+
+
+                                         L(N,D) =A            0 + A1Nα1  + A2Dα2,                                              (23)
+
+with the final curve being determined through minimizing a Huber loss, taken withδ= 10 −3   , applied
+to the logarithms of the power law and target loss values and averaged across the entire dataset:
+                             X                                                !                        !
+                   minAi,αi1      Huberδ       log    A0 + A1                    −logL(N      j,Dj)                    (24)
+                         R   j∈R                              Nα1j    + A2Dα2j
+
+Though the exact values of these regression parameters have been disputed [4] since the unveiling of
+the Chinchilla laws, the laws themselves remain a crucial foundation for scaling analysis in LLMs.
+
+A.7    MADE and RetNet Result Discussion
+
+We show in fig.4the equivalent heat maps for the MADE ansatz to those of the transformer from
+fig.2. Observing that these data points are less stratified with respect to model size as can be seen
+for tranformer and RetNet, we emphasize here that the exact values ofN come from both problem
+size and hidden layer dimension.  This observation is technically true for all models discussed in
+this paper, but the effect is far less visible for the other models, which do not solely consists of
+feedforward components.  The number of hidden layers was deliberately kept fixed and shallow
+to avoid introducing further sources of error as a result of the specified training hyperparameter
+configuration being insufficient to handle deeper networks. We do this during testing not only for
+both networks inside the MADE ansatz, but also for the phase networks, which are feedforward
+networks, of the RetNet and transformer ansatze.
+In contrast, the data distribution shown in fig.5for the RetNet ansatz is almost identical to what can
+be seen in fig.2, owing to the fact that RetNets and transformers are so architecturally similar. Of
+course, the exact V scores and absolute errors attained differ between the two models, but the general
+trends here corroborate the conclusion from [17] that the two models also train quite similarly as
+NQS ansatze.  We can make a few additional general qualitative observations about the observed
+
+
+                                                            15
+Figure 5: Heat maps showing V-score and absolute error values for the RetNet-based ansatz. We do
+note that the distribution of data points is more directly similar to fig.2than to what is shown in fig.4.
+
+
+data. For instance, it appears that, on average, a given combination of independent variablesN and
+D′ will yield a lower V-score with a RetNet ansatz than with a transformer, but at the same time,
+the transformer appears more likely to produce a lower absolute error than the RetNet.  A similar
+comparison between the scaling performance of these architectures and the MADE ansatz is more
+difficult to make since MADE is a fundamentally different model, but one can observe in the data
+that RetNet and transformer ansatze show better performance, in terms of both V-score and absolute
+error, than the MADE ansatz using lower numbers of parameters.
+
+A.8    Analysis of Compute-Constrained Scaling
+
+Here we give, in moderate detail, the derivation of the efficient frontier obtained in [12], slightly
+modified for our purposes.  Each of the FLOP estimates in table4is of the form    kD′N, for some
+k specific to the choice of ansatz and the exact problem size. This allows for a similar constrained
+optimization  to  [12],  allowing  us  to  determine  from  the  empirically  obtained  parametric  curve
+constants the optimal training configuration relative to a fixed compute cost. Both parametric curves
+in (10) take the form
+                                         L(N,D ′) =A    0 + A1Nα1  + A2D′α 2                                               (25)
+for some loss functionL.  The method of Lagrange multipliers then says that for a fixed compute
+budgetC, we must solve the system of equations
+                                                α1A1Nα1−1   =λkD ′
+                                               α2A2D′α 2−1   =λkN
+                                                        kD′N=C.
+
+SubstitutingD      ′ = CkN  into the other two equations gives
+                                                α1A1Nα1 =λC
+                                             α2A2Cα2−1   =λk  α2Nα2,
+
+
+and substituting the first equation into the second then gives
+                                                                        α2A2       1α1+α   2 C      α2α1+α   2              (26)
+               α2A2Cα2 =α    1A1kα2Nα1+α    2, henceN=                    α1A1                 k
+
+Likewise, substitutingN=            CkD′  into the second equation givesα    2A2D′α 2 =λC, so
+                                  α1A1              1       α1A1            1           α1
+                                                    α2  =               α1+α   2 C      α1+α   2 .                          (27)
+                          D′ =      α2A2Nα1                   α2A2                 k
+
+These equations for the compute-optimalNandD           ′ are clear analogs of those found in [12].
+
+
+
+
+
+                                                            16

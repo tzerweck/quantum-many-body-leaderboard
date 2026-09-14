@@ -1,0 +1,776 @@
+                           Neural network backflow for ab-initio solid calculations
+
+                                                     An-Jun  Liu  and  Bryan  K.  Clark
+         The  Anthony  J.  Leggett  Institute  for  Condensed  Matter  Theory  and  IQUIST  and  NCSA  Center  for  Artificial
+       Intelligence  Innovation  and  Department  of  Physics,  University  of  Illinois  at  Urbana-Champaign,  IL  61801,  USA
+
+                   Accurately  simulating  extended  periodic  systems  is  a  central  challenge  in  condensed  matter
+                physics.  Neural quantum states (NQS) offer expressive wavefunctions for this task but face issues
+                with scalability.  In this work, we successfully extend the neural network backflow (NNBF) approach
+                toab-initiosolid-state materials.  Building on our scalable optimization framework for molecules
+                [Liuet  al.,  PRB112,  155162  (2025)],  we  introduce  a  two-stage  pruning  strategy  to  manage  the
+                massive  configuration  space  expansions:   by  utilizing  a  computationally  cheap,  physics-informed
+                importance proxy, we devote exact NNBF amplitude evaluations solely to the most relevant deter-
+                minants, significantly improving optimization efficiency, energy estimation, and convergence.  Our
+                framework achieves state-of-the-art accuracy across diverse solid-state benchmarks.  For 1D hydro-
+                gen chains, NNBF matches or surpasses DMRG and AFQMC, remains robust in strongly correlated
+                bond-breaking regimes where coupled-cluster methods fail, and smoothly extrapolates to the TDL.
+                We further demonstrate its scalability by computing ground-state potential energy curves for 2D
+                graphene and 3D silicon.  Finally, ablation studies validate the computational savings of our pruning
+                strategy and highlight the dependence of the NNBF energies on basis sets.
+
+
+                     I.    INTRODUCTION                                       sampling highly peaked distributions and the prohibitive
+                                                                              quartic scaling of local energy evaluations through a uni-
+  Theab-initiocomputation  of  electronic  structure  in                      fied  approach:  periodically  constructing  a  compact  yet
+periodic  materials  is  a  central  challenge  in  condensed                 important  subspace,  reusing  pre-computed  information
+matter physics and quantum chemistry, essential for pre-                      for truncated local energy evaluations, and employing an
+dicting  material  properties  from  first  principles.   How-                improved  stochastic  sampling  method  for  unbiased  en-
+ever,  the  exact  solution  of  the  many-body  Schr¨odinger                 ergy estimation.  To extend this foundation to periodic
+equation   scales   exponentially   with   system   size,   ne-               solid materials, we introduce an efficient two-stage prun-
+cessitating  sophisticated  approximations.     Traditional                   ing strategy.  In the first stage, a computationally cheap,
+coupled-cluster (CC) method [1], serve as the gold stan-                      physics-informed importance proxy filters the massively
+dard  for  weakly  correlated  systems  but  suffer  severe                   expanded  connected  space  into  a  highly  representative
+breakdowns in the presence of strong static correlation,                      intermediate  pool.    In  the  second  stage,  exact  NNBF
+such as during bond breaking. Conversely, while the Den-                      amplitude  evaluations  are  performed  solely  on  this  re-
+sity Matrix Renormalization Group (DMRG) method [2–                           duced pool to construct the final, optimal target spaceU.
+4] excels for one-dimensional systems, it struggles to scale                  This  algorithmic  innovation  drastically  reduces  compu-
+efficiently  in  higher  dimensions.    Phaseless  Auxiliary-                 tational overhead while successfully capturing the most
+Field Quantum Monte Carlo (AFQMC) [5–7] is often ac-                          physically  relevant  configurations  while  optimizing  the
+curate,  but  doesn’t  provide  a  variational  upper  bound                  wave-function,  allowing  the  NNBF  ansatz  to  efficiently
+and lacks a compact, closed-form variational wave func-                       and accurately solve complex second-quantizedab-initio
+tion, making the subsequent evaluation of arbitrary ob-                       solids.
+servables computationally demanding.                                             We  demonstrate  the  efficacy  of  this  extended  frame-
+  Recently, Neural Quantum States (NQS) have emerged                          work  across  a  variety  of  periodic  benchmarks.    First,
+as a highly promising alternative, leveraging the univer-                     we compute the potential energy curves of 1D hydrogen
+sal  approximation  capabilities  of  deep  neural  networks                  chains  under  both  open  and  periodic  boundary  condi-
+to  compactly  encode  complex,  highly  entangled  many-                     tions, successfully extrapolating our results to the ther-
+body  wave  functions.    However,  the  vast  majority  of                   modynamic limit.  In these systems, our method matches
+NQS applications have been heavily restricted to lattice                      or  exceeds  the  performance  of  AFQMC,  DMRG,  and
+or molecular systems[8–23].  Applications of NQS toab-                        conventional CC methods, showing particular robustness
+initiosolid-state materials in both first and second quan-                    in  the  strongly  correlated  bond-breaking  regime  where
+tization remain remarkably sparse [24–27].  The Neural                        perturbation-based methods fail.  We then showcase the
+Network Backflow (NNBF) [8,9,20,21,23,28] ansatz                              method’s scalability to higher-dimensional materials by
+has  demonstrated  state-of-the-art  accuracy  in  molecu-                    computing the ground-state potential energy curves for
+lar  systems  and  first-quantized  solids  but  has  not  yet                2D  hexagonal  graphene  and  3D  face-centered  cubic  sil-
+been applied to ab-initio materials.  In this work, we ad-                    icon.    Finally,  through  extensive  ablation  studies,  we
+dress this omission by extending our recent, highly scal-                     quantitatively  validate  the  computational  efficiency  of
+able ab-intio NNBF framework—originally developed for                         our two-stage proxy-based pruning strategy and highlight
+molecular systems (Ref.9)—to periodic solid-state ma-                         the critical role of the single-particle basis set for main-
+terials.   Our  previous  work  overcame  the  difficulties  of               taining NQS accuracy in strongly correlated regimes.
+                                                                                                                                                        2
+
+                         II.    METHODS                                        (HF) state and nearby excited states [29,30]. This causes
+                                                                               standard Markov Chain Monte Carlo (MCMC) methods
+   In  this  section,  we  first  present  an  overview  of  the               to waste computational resources excessively resampling
+NNBF  background,  summarize  the  prior  optimization                         dominant configurations.  Second, the local energy eval-
+framework  we  build  upon,  and  detail  the  algorithmic                     uation scales quartically with system size, making exact
+improvements  introduced  in  this  study  to  extend  the                     computations prohibitive for larger systems.
+method to solid-state systems.                                                    Ref.9resolved these issues by introducing a scalable
+                                                                               optimization framework.  At a given training step, a con-
+                                                                               nected spaceCis expanded from a small core spaceVof
+                     A.    VMC with NNBF                                       unique dominant configurations.  The amplitudes for all
+                                                                               the configurations insideV∪Care computed, and the top
+   Neural  Quantum  States  (NQS),  and  specifically  the                     |V|N conn/lunique configurations with the largest ampli-
+Neural  Network  Backflow  (NNBF)  architecture,  have                         tude moduli are selected to form a compact target space
+proven highly effective for representing fermionic wave-                       U, whereN  conn is the number of connected terms andlis
+functions  in  second  quantization  [8, 9, 20, 21, 23, 28].                   a predefined speedup factor.  This target spaceUis fixed
+For a many-electron system defined byN e electrons and                         for the subsequentl−1 steps, and only the amplitudes
+No single-particle orbitals (SPOs), the generic electronic                     inside it will be computed.
+Hamiltonian takes the form:                                                       To  construct  unbiased  estimators  for  the  energy  and
+     ˆH= X      tijˆc †            X      Vijklˆc †                            its gradient, a Gumbel top-ktrick is employed to sample
+                    iσˆc jσ + 12                 iσˆc †jσ′ˆc lσ′ˆc kσ      (1) a  setSfromU,  assigning  an  importance  weightw        i(κ)
+           ijσ                   ijklσσ′                                       to  each  sample|x      i⟩∈S.   The  local  energy  calculation
+where the indicesi,j,k,literate over theN    o  SPOs and                       is  correspondingly  streamlined  by  truncating  the  sum
+σ,σ′  denote  spin.     The  corresponding  many-electron                      to  include  only  terms  withinU,  denoted  asE    l(x i|U).
+wavefunction is expressed as|ψ⟩=   P                                           Together,w       i(κ)  andE     l(x i|U)  are  used  to  estimate  the
+         x1↑                               E   iψ(x  i)|x i⟩, where         objective functions efficiently before applying parameter
+|x i⟩=      i ,...,xNo↑i  ,x1↓i ,...,xNo↓i       is thei-th compu-             updates via AdamW [31].  Finally, to ensure robust ex-
+tational basis vector, andx   j                                                ploration,  a  concurrent  set  of|C|N  e  MCMC  walkers  is
+                                    i ∈{0,1}denotes the occu-                  injected at the end of thel-step interval to update the
+pation of thej-th spin-orbital.                                                core spaceV.  This framework drastically boosts training
+   To approximate this state, a generic NNBF wavefunc-                         efficiency without sacrificing accuracy, allowing NNBF to
+tion is defined as:                                                            achieve results competitive with state-of-the-art ab-initio
+
+                          DX      h                         i                  methods like HCI [32,33], ASCI [34,35], FCIQMC [36],
+            ψθ(x i) =         det   Φmj={l|x    li=1},k     (x i;θ)   (2)      and DMRG [37].
+                        m=1
+where   Φmjk   are   the   “configuration-dependent”   spin-
+orbitals  (neural  orbitals)  output  by  the  internal  neural
+network,Dis the number of determinants, andθrepre-                                            C.    Algorithmic improvements
+sents the model parameters.
+   To  optimize  the  NNBF  ansatz  to  approximate  the                          In  this  work,  we  extend  the  framework  of  Ref.9to
+ground state, training relies on gradient-based minimiza-
+tion of the variational energy:                                                periodic  solid-state  systems.   Unlike  molecular  systems
+                                                                               where  wavefunctions  are  typically  expanded  in  atomic
+              Eθ =⟨ψ θ|  ˆH|ψ  θ⟩                                              basis sets{χ    i}, crystalline states are instead expanded inP
+                         ⟨ψ θ|ψ θ⟩    =E pθ(x)    [E l(x)]             (3)     Bloch atomic orbitalsϕ      ik (r) =        1√N   neik·R  nχi(r−R   n)
+                                                                               to embed the system’s periodicity, in whichR n is a lat-
+where  the  local  energy  isE l(x)  =  ⟨ψ θ| ˆH|x⟩⟨ψ θ|x⟩     .   The  exact  tice vector,kis a Bloch momentum sampled in the first
+gradient with respect to the network parameters is:                            Brillouin zone, andNis the number of unit cells in the
+                               ∂ln|ψ   θ(x)|                                   crystal.  By performing a periodic Hartree–Fock calcula-
+  ∇θEθ = 2 Re        Epθ(x)                                           (4)      tion using PySCF [38]—where Coulomb singularities are
+                                     ∂θ        [E l(x)−E    θ]                 treated via the Ewald method—we obtain a basis of crys-
+                                                                               talline HF orbitals.  Thei-th state atkis expanded as
+                                                                               φik (r)  =  PjCji(k)ϕ   jk (r),  whereC      ji(k)  are  the  coeffi-
+                         B.    Background                                      cients determined by this procedure.
+                                                                                  Note  that  unlike  orbitals  in  quantum  chemistry,  the
+   Optimizing molecular Hamiltonians with NQS gener-                           overlaps between Bloch states are highly non-local due to
+ally faces two severe bottlenecks.  First, the probability                     the periodicity of the system. This non-locality is directly
+distribution  is  highly  peaked  around  the  Hartree–Fock                    reflected by the structure of the Coulomb tensor in the
+                                                                                                                                                      3
+
+resulting second-quantized crystalline Hamiltonian:                           investigated in detail in Sec.III C). A schematic overview
+   ˆH=  X                                                                     of this two-stage pruning algorithm is presented in Fig.1.
+              hkijˆc †ikσ   ˆc jkσ                                               The second modification refines the MCMC injection
+         ijkσ
+                 X                                                            strategy.  Injecting MCMC walkers directly into the core
+         + 12            V k1k2k3k4ijkl         ˆc †ik  1σˆc †jk  2σ′ˆc lk 4σ′ˆc kk   3σ.   (5)spaceVcan be suboptimal; walkers are often populated
+                 ijkl                                                         by dominant configurations already present inV,  while
+              k1k2k3k4σσ′                                                     semi-important  configurations  proposed  by  the  walkers
+                                                                              are discarded before their exact amplitudes can be eval-
+The  momentum  sum  is  evaluated  over  a  uniform  grid                     uated.  Instead,  we now inject the MCMC walkers into
+in the first Brillouin zone.  Because the two-electron inte-                  the formation of the pool spaceP.  This allows the ex-
+gral is only nonzero when crystal momentum is conserved                       act NNBF amplitude evaluation—the most precise met-
+(k  1 +k   2−k   3−k   4 =G, whereGis a reciprocal lattice                    ric available—to dictate which of these proposed configu-
+vector),  the total number of terms scales asO(N          4oN3k).             rations ultimately survive the trim intoU.  Furthermore,
+In this work, we restrict our focus to Γ-point calculations                   because we maintain persistent MCMC walkers without
+(N k = 1), ensuring all Hamiltonian matrix elements are                       restarting them at each step, long equilibration times are
+real but work in a supercell that consists of many unit                       unnecessary.  We perform just 1 proposal move per train-
+cells.                                                                        ing step using 0.1|U|walkers, effectively hiding the sam-
+  We introduce two primary algorithmic modifications to                       pling cost within the main amplitude evaluation subrou-
+adapt the previous framework for solids efficiently.  The                     tine.
+first addresses a key inefficiency:  the connected spaceC
+expanded  from  a  core  spaceVmay  contain  redundant
+configurations  (for  example,  the  single  excitations  of  a
+core configuration, which itself is a single excitation rela-
+tive to another core configuration, are part of the double                                              III.    RESULTS
+excitations of the latter core configuration), particularly
+when spin-flip symmetry is enforced.  To resolve this, we
+introduce a more efficient two-stage pruning algorithm to                        We first evaluate the performance of the NNBF ansatz,
+construct the target spaceU, as visualized in Fig.1.                          combined  with  the  algorithmic  improvements  proposed
+  First,  the|V| unique  configurations  with  the  largest                   in  Sec.II C,  on  a  1D  linear  hydrogen  chain.   We  begin
+amplitude moduli are selected fromUto form the core                           by presenting the STO-6G dissociation curve for a finite
+spaceV,  and  a  connected  spaceCis  expanded  from                          chain of ten hydrogen atoms under open boundary con-
+Vvia  Hamiltonian  matrix  elements.    Each  connected                       ditions,  which has been used as the benchmark  system
+configuration|x           j⟩∈Clinks to multiple core configura-               for  various  many-body  methods[39].   We  then  demon-
+tions|x     i⟩∈V.  We quantify the strength of these links                    strate the extrapolated dissociation curve in the thermo-
+by|ψ  θ(x i)H ij|, which captures both strong Hamiltonian                     dynamic limit.  Next, we transition to periodic boundary
+coupling and proximity to dominant configurations.  The                       conditions, presenting the STO-6G dissociation curve for
+maximum  connection  strength  defines  the  importance                       a periodic H10 chain alongside thermodynamic limit ex-
+score for|x   j⟩:                                                             trapolations at a selected interatomic distance.  Finally,
+                   I(x  j) =  max|x i⟩∈V|ψ θ(x i)H ij|.                  (6)  to  demonstrate  the  broader  capability  of  our  method,
+                                                                              we  apply  it  to  real  solid-state  systems,  specifically  2D
+This metric parallels the deterministic selection heuristic                   graphene and 3D silicon using the GTH-DZV basis set.
+used in Heat-bath Configuration Interaction (HCI) [32].                          To validate the algorithmic improvements introduced
+  In  the  first  pruning  stage,  we  select  the|V|N   conn/r               in  Sec.II C,  we  perform  an  ablation  study  benchmark-
+unique  elements  with  the  largest  importance  scores  to                  ing  the  effectiveness  of  the  proxy  importance  score  in
+form an (ideally) deduplicated pool spaceP.  Crucially,                       Eq. (6) against both a random importance score and the
+this step does not require any NNBF amplitude evalua-                         unpruned expansion method from Ref.9.  Furthermore,
+tions, andris a predefined reduction factor, meaning the                      we demonstrate the quality of the proxy score for captur-
+size ofPmatches the effective size of a connected space                       ing the true ordering of amplitude moduli.  We visualize
+that would be expanded from a smaller core space of size                      the cumulative probability captured as a function of the
+|V|/rwithout any pruning.                                                     pool space size|P|and compare it against both random
+  In  the  second  stage,  we  evaluate  the  exact  ampli-                   selection  and  the  optimal  selection  based  on  exact  am-
+tudes  for  the  configurations  inPand  select  the  top                     plitude  moduli.   Lastly,  we  present  a  separate  ablation
+(|V|N conn/r)/lelements with the largest amplitude mod-                       study highlighting the critical role of basis set selection
+uli  to  form  the  final,  highly  dominant  target  spaceU.                 in NQS training.  Specific details regarding the (default)
+This  proxy-based  pre-filtering  creates  a  superior  target                neural network architectures, hyperparameters, training
+space, yields more accurate gradient estimations, and ul-                     protocols, and the post-training MCMC inference proce-
+timately leads to better training results (their effects are                  dure are provided in AppendixA.
+                                                                                                                                                    4
+
+                                                                                              A.    Linear Hydrogen Chain
+
+                                                                                The  linear  hydrogen  chain  serves  as  an  ideal  bench-
+                                                                             mark   for   evaluating   many-body   electronic   structure
+                                                                             methods because the strength of its electron correlation
+                                                                             can  be  tuned  via  the  interatomic  separation.    Unlike
+                                                                             the Hubbard model, which captures only on-site interac-
+                                                                             tions,  the hydrogen chain explicitly includes long-range
+                                                                             Coulomb interactions.  As a result, its ground-state prop-
+                                                                             erties reflect key features that are essential for generaliz-
+                                                                             ing to real materials.
+                                                                                Building on the extensive benchmarks established by
+                                                                             Mottaet  al.[39],  we  first  investigate  the  system  un-
+                                                                             der open boundary conditions (OBC). The ground-state
+                                                                             energies  for  a  10-atom  chain  at  various  atomic  sep-
+                                                                             arations  are  calculated  using  our  NNBF  ansatz  and
+                                                                             compare against traditional methods—(R/U)CCSD and
+                                                                             (R/U)CCSD(T)—as well as state-of-the-art ab-initio ap-
+                                                                             proaches  like  AFQMC  and  DMRG[39].    As  shown  by
+                                                                             the  energy  errors  relative  to  the  exact  FCI  results
+                                                                             in  Fig.2,   NNBF  matches  the  accuracy  of  AFQMC
+                                                                             and  DMRG,  outperforming  conventional  gold-standard
+                                                                             coupled-cluster   methods.      Notably,   at   large   atomic
+                                                                             separations  where  static  correlation  dominates,  single-
+                                                                             reference  methods  like  RCCSD  break  down,  whereas
+                                                                             NNBF remains robust and reliable in this strongly cor-
+                                                                             related regime.
+                                                                                To eliminate finite-size effects, we extrapolate the OBC
+                                                                             results to the thermodynamic limit (TDL), with full de-
+                                                                             tails  of  the  procedure  provided  in  AppendixB.  As  il-
+                                                                             lustrated  in  Fig.3,  comparing  our  TDL  extrapolation
+   FIG. 1:  Schematic representation of the two-stage                        against  DMRG  references  reveals  that  the  algorithmi-
+pruning algorithm.Circle 1:The core spaceVconsists                           cally enhanced NNBF yields energies accurate to within
+   of the|V|configurations with the largest amplitude                        0.2 mHa per particle across all bond lengths.  This con-
+moduli from the previous target spaceU. Circle 2:A                           firms that our method’s performance scales competitively
+   connected spaceCis expanded fromVvia non-zero                             alongside DMRG and AFQMC.
+      Hamiltonian matrix elements.  Each connected                              We  then  transition  to  periodic  boundary  conditions
+     configuration|x           j⟩∈Cmay link to multiple core                 (PBC)  using  a  unit  cell  of  two  hydrogen  atoms,  pre-
+configurations|x            i⟩∈V, and these connection strengths             senting the STO-6G dissociation curve for an H10 chain
+       are quantified as|H  ijψθ(x i)|. Circle 3:The                         (modeled  as  a  5×1×1  supercell).   Figure4displays
+importance score of each connected configuration|x           j⟩is            a  similar  trend  to  the  OBC  case:    NNBF  maintains
+   then defined as its maximum connection strength:                          excellent  agreement  with  FCI  energies  across  the  en-
+   I(x  j) = max|x i⟩∈V|ψ θ(x i)H ij|. Circle 4:The first                    tire  potential  energy  surface.    It  consistently  outper-
+      stage of pruning selects the|V|N   conn/runique                        forms  standard  coupled-cluster  techniques,  particularly
+ connected configurations with the largest importance                        in the bond-breaking regime where strong static correla-
+    scores to form an intermediate pool spaceP.  The                         tion causes CCSD to fail.
+predefined reduction factor r ensures that the size ofP                         Finally,  we  perform  a  TDL  extrapolation  for  the  pe-
+  matches the number of configurations that would be                         riodic  system  near  its  equilibrium  geometry.    To  ac-
+  generated by fully expanding a reduced core space of                       count for finite-size scaling, the even and oddN  k curves
+   size|V|/r. Circle 5:The second stage of pruning                           are  fitted  independently  to  the  functional  formE=
+calculates the exact NNBF amplitudes for the combined                        E0 +BN −2  .  At every momentum mesh sizeN   k  (a unit
+  spaceP∪MC, whereMCrepresents configurations                                cell  with  2  hydrogen  atoms  is  used),  NNBF  achieves  a
+     proposed by persistent MCMC walkers running                             lower  variational  energy  than  all  benchmarked  conven-
+concurrently to provide stochastic exploration.  Finally,                    tional methods,  including CCSD(T). Consequently,  our
+  the|V|N   conn/rlelements with the largest amplitude                       approach converges to a lower extrapolated TDL energy,
+  moduli are selected to form the new target spaceU.                         highlighting  the  superior  accuracy  and  stability  of  the
+   This spaceUis fixed and used for the subsequentl                          NNBF framework for periodic solids.
+       steps, wherelis a predefined speedup factor.
+                                                                                                                                              5
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+FIG. 2:  Potential energy curve for H10 under OBC using                    FIG. 3:  Potential energy curve at the thermodynamic
+the STO-6G basis set.  The energy errors of our NNBF                       limit (TDL) for the linear hydrogen chain under OBC
+    ansatz, conventional quantum chemistry methods                           using the STO-6G basis set.  The TDL-extrapolated
+ [CCSD, CCSD(T)], AFQMC, and DMRG are plotted                               energies of our NNBF ansatz, conventional quantum
+relative to the exact FCI reference energy.  The reported                   chemistry methods [CCSD, CCSD(T)], and AFQMC
+NNBF energies are obtained via the following protocol:                      are plotted relative to the TDL-extrapolated DMRG
+  three independent training runs using split localized                    reference.  Details of the NNBF TDL extrapolation are
+Pipek–Mezey (PM) molecular orbitals are performed at                       provided in AppendixB. Data for all other benchmark
+  each atomic separation (see AppendixAfor detailed                                      methods are taken from Ref.39.
+ settings), and a post-training MCMC inference is used
+   to evaluate the variational energy of each run.  The
+ model yielding the lowest of these energies is selected.
+      A final, independent MCMC inference is then
+conducted on this optimal model to obtain the unbiased
+  energy estimate displayed in the figure.  Data for all
+   other benchmark methods are taken from Ref.39.
+
+
+
+      B.    Periodic 2D Graphene and 3D Silicon
+
+  Next, we demonstrate the capability of our approach
+on ab-initio 2D and 3D periodic solids, specifically hexag-
+onal  graphene  and  face-centered  cubic  (FCC)  silicon.
+Calculations  for  both  materials  employ  the  GTH-DZV
+basis set alongside GTH-Pad´e pseudopotentials, model-
+ing a two-atom primitive unit cell.  For graphene, we use
+a 2×2×1 supercell,  freezing the lowest 12 spatial or-
+bitals to leave 16 active spatial orbitals.  For silicon, we
+perform a pure 1×1×1 supercell calculation utilizing                        FIG. 4:  Potential energy curve for a H10 under PBC
+the  full  orbital  space.   Consequently,  both  setups  yield           using the STO-6G basis set.  A unit cell of two hydrogen
+an  identical  active  space  size  consisting  of  8  electrons              atoms is used, and the H10 chain is modeled as a
+distributed across 32 spin-orbitals.                                         5×1×1 supercell.  The energy errors of our NNBF
+  The  potential  energy  curves—plotted  as  deviations                    ansatz and conventional quantum chemistry methods
+from the exact FCI energy—are presented for graphene                      [HF, MP2, CISD, CCSD, CCSD(T)] are plotted relative
+in  Fig.6and  for  silicon  in  Fig.7.   We  benchmark  our               to the exact FCI reference energy.  The reported NNBF
+NNBF  ansatz  against  conventional  quantum  chemistry                    energies are obtained following the exact same training
+techniques.  The results demonstrate that NNBF main-                       and evaluation protocol detailed in Fig.2.  Data for all
+tains excellent agreement with the FCI reference energies                       other benchmark methods are computed using
+across  all  sampled  geometries.   In  stark  contrast,  gold-                                      PySCF[38].
+standard methods such as CCSD(T) perform poorly and
+                                                                                                                                                  6
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  FIG. 5:  Ground-state energy convergence toward the                            FIG. 6:  Ground-state potential energy curve for
+ thermodynamic limit (TDL) for the periodic hydrogen                           periodic 2D hexagonal graphene as a function of the
+    chain at an atomic separation ofr= 1.8 Bohr in                           lattice constant.  Calculations are performed using the
+STO-6G basis set.  Calculations are performed using our                       GTH-DZV basis set and GTH-Pad´e pseudopotentials
+      NNBF ansatz alongside conventional quantum                            with a 2×2×1 supercell whose unit cell is a two-atom
+   chemistry methods [CISD, CCSD, CCSD(T)]. The                             basis.  The lowest 12 spatial orbitals are frozen, yielding
+  system is modeled using a unit cell of two hydrogen                         an active space of 8 electrons across 32 spin-orbitals.
+atoms.  The upper and lower branches for each method                           The energy errors of our NNBF ansatz, constructed
+  correspond to supercells containing an even and odd                            with canonical Hartree–Fock (HF) orbitals, and
+number of unit cells, respectively.  The extrapolation to                     conventional quantum chemistry methods [HF, MP2,
+    the macroscopic limit (N→∞) is carried out by                              CISD, CCSD, CCSD(T)] are plotted relative to the
+independently fitting the even and odd sequences to the                        exact FCI reference energy.  Data points for certain
+  finite-size scaling formulaE(N) =E                  0 +BN −2  .  The       coupled-cluster methods are omitted at specific lattice
+   reported NNBF energies are obtained following the                         constants where the conventional calculations failed to
+exact same training and evaluation protocol detailed in                                                   converge.
+    Fig.2.  Data for all other benchmark methods are
+                 computed usingPySCF[38].
+                                                                            itate a direct comparison, we first cast the original ITS
+even struggle to converge at certain atomic separations.                    algorithm into the language of our two-stage framework
+This stark difference further highlights the superior accu-                 for a desired target space size|U|.  Because the original
+racy and stability of the algorithmically enhanced NNBF                     ITS method does not utilize an importance-score proxy
+framework for computing the electronic structure of pe-                     (omitting the first pruning stage entirely), it must oper-
+riodic solids.                                                              ate with a core space of sizel|U|/N    conn.  This ensures its
+                                                                            connected  spaceC—which  acts  as  the  pool  spacePin
+                                                                            our terminology—containsl|U|configurations.  The ex-
+                      C.    Ablation study                                  act NNBF amplitudes are then evaluated, and this space
+                                                                            is trimmed by a factor oflto yield the final target space
+                                                                            U.
+    1.    Effectiveness of the Importance Proxy in Pruning                     With this formulation established, we perform an ab-
+                                                                            lation  study  on  an  open  boundary  H12  chain  (STO-6G
+  This subsection demonstrates how the two-stage prun-                      basis,r =  2.4  Bohr).    We  fix  the  target  space  size
+ing strategy (introduced in Sec.II C) improves energy ac-                   at|U| =  128N     conn/l≈38,805  and  the  sample  size  at
+curacy at almost no additional computational cost com-                      |S|= 4096, varying only the intermediate pool size|P|.
+pared to the original intermittent target selection (ITS)                   To isolate the physical benefit of our heuristic from the
+method from Ref.9.  The key advantage lies in providing                     simple mathematical benefit of deduplication, we intro-
+a more representative pool spacePfrom which to con-                         duce a “random selection” baseline where the importance
+struct  the  target  spaceU.   To  clearly  compare  the  two               score in Eq. (6) is replaced with a random noise.  Both
+approaches, we will perform an ablation study.  To facil-                   our importance proxy and the random baseline utilize a
+                                                                                                                                                   7
+
+                                                                             amplitude pruning to select a highly representative target
+                                                                             spaceU.
+                                                                               The  random  expansion  baseline  exhibits  poor  per-
+                                                                             formance—even   worse   than   the   vanilla   unpruned
+                                                                             method—until  it  surpasses  a  critical  pool  size,  after
+                                                                             which  it  performs  excellently.   We  find  that  this  criti-
+                                                                             cal pool size (approximately 3.5|U|) corresponds precisely
+                                                                             to the maximum capacity of the fully deduplicated con-
+                                                                             nected space expanded from|V|= 512.  This behavior is
+                                                                             expected:  randomly  deduplicating  the  connected  space
+                                                                             without  accounting  for  graph  connectivity  or  Hamilto-
+                                                                             nian matrix elements is an overly naive strategy.  Impor-
+                                                                             tantly,  this contrast confirms that the physics-informed
+                                                                             metric in Eq. (6) genuinely captures the underlying struc-
+                                                                             ture of the exact NNBF amplitudes, serving as a highly
+                                                                             effective proxy.
+                                                                               This conclusion is further validated by Fig.9.  Taking
+     FIG. 7:  Ground-state potential energy curve for                        a  representative  data  point  from  Fig.8,  we  generate  a
+   periodic 3D face-centered cubic (FCC) silicon as a                        connected spaceCfrom the final core space, deduplicate
+    function of the lattice constant.  Calculations are                      it to formC    unique, and compute the exact NNBF ampli-
+performed using a 1×1×1 supercell whose unit cell is                         tudes for all its elements.  The theoretical “optimal selec-
+ a two-atom basis.  GTH-DZV basis set and GTH-Pad´e                          tion” for the pool space is formed by sorting these con-
+pseudopotentials are used here.  The full spatial orbital                    figurations in descending order of their exact amplitude
+space is utilized without freezing any orbitals, resulting                   moduli.  Figure9clearly demonstrates that cumulatively
+in an active space of 8 electrons across 32 spin-orbitals.                   building  the  pool  space  via  our  descending  importance
+  The energy errors of our NNBF ansatz, constructed                          score achieves a near-optimal selection curve. In contrast,
+     with canonical Hartree–Fock (HF) orbitals, and                          the random selection only captures a non-trivial amount
+ conventional quantum chemistry methods [HF, MP2,                            of probability mass when it approaches the full capacity
+  CISD, CCSD, CCSD(T)] are plotted relative to the                           ofC  unique—reiterating  that  physics-agnostic  deduplica-
+   exact FCI reference energy.  Data points for certain                      tion is inefficient.  Ultimately, these results confirm that
+ coupled-cluster methods are omitted at specific lattice                     the proxy importance score successfully and cheaply pre-
+ constants where the conventional calculations failed to                     dicts the hierarchy of the exact NNBF amplitudes.
+                              converge.
+
+                                                                                                   2.    Effect of Basis Set
+
+fixed  core  size  of|V| =  512.   In  contrast,  the  original                Ref.9demonstrated  that  employing  coupled-cluster
+unpruned ITS method dynamically adjusts its core size                        singles and doubles (CCSD) natural orbitals provides a
+(|V|=|P|/N   conn) to achieve the desired pool size.                         marginal  improvement  in  energy  accuracy  over  canoni-
+  As  demonstrated  in  Fig.8,  our  importance  proxy                       cal HF orbitals, as shown in a limited ablation study for
+yields  profound  improvements.   In  the  leftmost  points                  Li2O in the STO-3G basis set at a single geometry.  Here,
+where the pool size equals the target space size (|P|=                       we present a more comprehensive ablation study exam-
+|U|)—meaning  the  second  stage  of  exact  NNBF  ampli-                    ining  the  dissociation  curve  of  an  open  boundary  H12
+tude pruning is bypassed entirely—our method achieves                        chain in the STO-6G basis set.  We maintain a fixed core
+an order-of-magnitude improvement in energy accuracy                         space size (|V|= 2048), sample size (|S|= 4096), training
+over the vanilla unpruned method for a mere 5% increase                      setup, and NNBF architecture, varying only the choice of
+in runtime (0.0137 s to 0.0144 s).  Furthermore, the en-                     molecular orbitals:  canonical Hartree–Fock (HF), CCSD
+ergy rapidly converges when the pool size is just twice the                  natural  orbitals  (NO),  and  split  localized  Pipek–Mezey
+target size.  This incurs only a marginal additional run-                    (PM) orbitals.
+time cost (from 0.0144 s to 0.0152 s), which accounts for                      Figure10demonstrates  that  at  shorter  interatomic
+both  the  expanded  importance  proxy  calculations  and                    distances,   where  dynamic  correlation  dominates,   our
+the  extra  exact  NNBF  amplitude  evaluations  required                    method performs exceptionally well across all three or-
+prior  to  the  second  pruning  stage.   While  the  precise                bital  bases.    However,  as  the  interatomic  distance  in-
+magnitude  of  these  gains  and  runtime  costs  will  natu-                creases and static correlation becomes dominant, the per-
+rally vary depending on the specific system, this striking                   formance using canonical HF and CCSD natural orbitals
+ratio highlights the proxy’s ability to efficiently capture                  begins to degrade.  This behavior is expected, as the un-
+the most physically relevant configurations from the con-                    derlying mean-field and single-reference methods them-
+nected space, allowing the second stage of exact NNBF                        selves severely struggle in this strongly correlated regime.
+                                                                                                                                                 8
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                             FIG. 9:  Cumulative probability mass of configurations
+                                                                               selected from a fully deduplicated connected space
+   FIG. 8:  Ablation study evaluating the effect of the                       (C unique) as a function of the selection fraction.  This
+  importance proxy on the energy accuracy of an open                         representative data point is taken from the H12 chain
+  boundary H12 using the STO-6G basis set and split                        (r= 2.4 Bohr) analyzed in Fig.8.  The optimal selection
+localized PM molecular orbitals at an atomic separation                     curve acts as the theoretical upper bound, generated by
+   ofr= 2.4 Bohr.  The energy error (and the average                        sorting configurations in descending order of their exact
+  wall-clock time per optimization step) is plotted as a                      NNBF amplitude moduli.  Building the intermediate
+function of the intermediate pool space size (|P|), which                   pool space using our descending importance score proxy
+ is in the unit of target space size|U|(fixed to 38805).                    achieves a near-optimal selection curve.  In contrast, the
+   The performance of our two-stage pruning strategy                        random selection baseline performs poorly, capturing a
+    (using the physics-informed importance proxy) is                         substantial probability mass only when it approaches
+ compared against a random selection baseline and the                        the maximum capacity ofC  unique.  This confirms that
+  vanilla unpruned intermittent target selection (ITS)                         the physics-informed importance score successfully
+    method.  Both the importance proxy and random                            predicts the hierarchy of the exact NNBF amplitudes.
+expansion employ a fixed core size of|V|= 512, whereas
+the unpruned method dynamically adjusts its core size
+                to match the desired pool size.                            formance  of  established  state-of-the-art  ab-initio  meth-
+                                                                           ods such as AFQMC and DMRG. Crucially, in strongly
+                                                                           correlated  bond-breaking  regimes  where  gold-standard
+In contrast, while the model using split PM orbitals also                  coupled-cluster methods like CCSD and CCSD(T) break
+exhibits a slight decrease in accuracy at stretched geome-                 down, the NNBF ansatz remains highly robust, enabling
+tries, it remains highly accurate overall.  This robustness                smooth  and  accurate  extrapolations  to  the  thermody-
+is directly attributed to the localized nature of the PM                   namic limit.  We further demonstrated the method’s ca-
+method, with the split-localization strategy successfully                  pability  to  scale  to  real  extended  materials  by  success-
+preserving the physical advantages of both canonical HF                    fully computing the electronic structure of 2D hexagonal
+and localized orbitals.                                                    graphene and 3D face-centered cubic silicon.
+  The  purpose  of  this  ablation  study  is  not  to  defini-               Through detailed ablation studies, we validated the ef-
+tively declare one molecular orbital basis as universally                  ficacy of our two-stage pruning strategy over naive dedu-
+superior.  Rather, it is to highlight that the choice of the               plication methods.  By utilizing a computationally cheap
+single-particle basis plays a highly significant, yet often                importance proxy to construct a highly representative in-
+overlooked, role in the training performance and ultimate                  termediate subspace, we ensure that the subsequent, ex-
+accuracy of neural quantum states.                                         act NNBF amplitude evaluations are concentrated only
+                                                                           on  the  most  physically  relevant  configurations,  drasti-
+                                                                           cally improving energy accuracy with negligible runtime
+                     IV.    CONCLUSION                                     cost.  Furthermore, we highlighted the profound impact
+                                                                           that  the  choice  of  single-particle  basis  sets  exerts  on
+  In this work,  we have successfully extended the scal-                   NQS  training,  showing  that  preserving  orbital  localiza-
+able NNBF framework from ref.9to real periodic solid-                      tion (such as via split Pipek–Mezey orbitals) is vital for
+state  materials  by  introducing  an  efficient  two-stage                maintaining accuracy as systems transition into regimes
+pruning  algorithm  based  on  a  physics-informed  impor-                 dominated by strong static correlation.
+tance  score.    On  both  open  and  periodic  1D  hydro-                    Looking forward,  this framework lays the foundation
+gen  chains,  our  method  matches  or  exceeds  the  per-                 for  promising  research  directions.    Given  the  sensitiv-
+                                                                                                                                                 9
+
+                                                                            Award 2016136).
+
+
+                                                                                         Appendix A: Experimental Setup
+
+                                                                               The core architecture of our NNBF ansatz relies on a
+                                                                            multi-layer  perceptron  (MLP)  parameterized  byhhid-
+                                                                            den units andLhidden layers, which ultimately outputs
+                                                                            Dconfiguration-dependent  determinants.   To  facilitate
+                                                                            stable gradient flow in deeper networks (L>1), residual
+                                                                            connections are explicitly included.  The variational en-
+                                                                            ergy is minimized to approximate the true ground-state
+                                                                            energy using the AdamW[31] optimizer, with all standard
+                                                                            optimization hyperparameters detailed in TableI. All ref-
+  FIG. 10:  Ablation study evaluating the effect of the                     erence electronic structure computations—including HF,
+ single-particle basis on the potential energy curve of a                   CCSD, CCSD(T), and exact diagonalization (FCI)—are
+    H12 under OBC using the STO-6G basis set.  The                          executed using thePySCFlibrary [38].
+ energy errors of the NNBF ansatz, plotted relative to                         To evaluate the final variational energy and its associ-
+   the exact FCI reference, are compared across three                       ated statistical uncertainty after the optimization phase
+     different choices of molecular orbitals:  canonical                    is complete,  we perform an independent Markov Chain
+ Hartree–Fock (HF), CCSD natural orbitals (NO), and                         Monte Carlo (MCMC) inference run.  We deployN w  =
+ split localized Pipek–Mezey (PM) orbitals.  To isolate                     1024  independent  walkers  to  sample  the  unnormalized
+  the effect of the orbitals, all three models employ an                    probability  density,  defined  as  ¯p θ(x)  =|ψ    θ,NNBF (x)|      2,
+ identical training setup with a fixed core space size of                   via  the  Metropolis–Hastings  algorithm.    The  proposal
+   |V|= 2048 and sample size of|S|= 4096.  While all                        mechanism  generates  configurations  by  executing  spin-
+       orbital choices perform excellently at shorter                       conserving  single-particle  excitations  (i.e.,  swapping  an
+    interatomic distances where dynamic correlation                         occupied spin-orbital with an unoccupied orbital of iden-
+     dominates, the canonical HF and CCSD natural                           tical  spin).   To  effectively  mitigate  autocorrelation  be-
+orbitals degrade significantly in the strongly correlated                   tween consecutive states, the Markov chains are thinned,
+  stretched regime.  In contrast, the split localized PM                    with  samples  recorded  only  after  an  interval  ofK    1  =
+   orbitals maintain robust, high accuracy across the                       10N  e steps.
+                   entire dissociation curve.                                  To prevent the walkers from becoming trapped in lo-
+                                                                            cal minima and to guarantee a thorough exploration of
+                                                                            the  phase  space,  the  MCMC  initialization  adopts  an
+ity  of  the  training  performance  to  the  single-particle               ensemble-based  approach  inspired  by  Ref.45.   Walkers
+                                                                            are initially seeded across a distribution constructed from
+basis,  integrating  orbital  optimization—such  as  itera-                 the  eight  most  heavily  weighted  configurations  identi-
+tive orbital rotation[40] or directly parameterizing orbital                fied during the final optimization step.  The walkers are
+rotation[41]—into  the  NQS  framework  warrants  thor-                     then thermalized through a strict burn-in phase lasting
+ough  investigation.   It  would  also  be  interesting  to  ex-            K2 = 100K       1 steps.
+plore the use of other architectures for periodic solid ab-                    Once equilibrium is achieved across the ensemble, we
+initio NNBF. [42–44].  We anticipate that the techniques                    harvestT= 1000 uncorrelated configurations per walker.
+developed  in  this  study  will  enable  more  efficient  and              The  ultimate  energy  expectation  value  is  calculated  as
+reliable NQS optimization, expanding the range of prac-                     the  global  average  across  allT×N     w  collected  sam-
+tical applications for computing the electronic structure                   ples.   The  statistical  error  is  subsequently  reported  as
+of complex periodic solids.                                                 the  standard  error  of  this  global  mean,  evaluated  as
+                                                                            pVar(E)/(T×N         w).  All final NNBF energies presented
+
+                                                                            throughout this study are derived from this rigorous post-
+                  ACKNOWLEDGMENTS                                           training MCMC evaluation.
+
+  This work made use of the Illinois Campus Cluster, a
+computing resource that is operated by the Illinois Cam-                     Appendix B: Thermodynamic Limit Extrapolation
+pus Cluster Program (ICCP) in conjunction with the Na-                                       for Open Boundary Chains
+tional Center for Supercomputing Applications (NCSA)
+and which is supported by funds from the University of                         Here, we detail the procedure used to extrapolate the
+Illinois  Urbana-Champaign.   We  also  acknowledge  sup-                   NNBF ground-state energies to the thermodynamic limit
+port  from  the  NSF  Quantum  Leap  Challenge  Institute                   (TDL) for the hydrogen chain under open boundary con-
+for Hybrid Quantum Architectures and Networks (NSF                          ditions (OBC) using the STO-6G basis set.
+                                                                                                                                                                          10
+
+                   Parameter / Symbol Description                                        Default Value / Definition
+                   A. Physical System & Configuration Spaces
+                   Ne                                   Number of electrons                                   Problem-dependent
+                   No                                   Number of spin-orbitals                              Problem-dependent
+                   H                                 The physical Hilbert space                         Problem-dependent
+                   V                                   Core space                                                  See SectionII B
+                   C                                   Connected space                                         Generated from core space
+                   P                                  Pool space                                                  See SectionII C
+                   U                                  Target space                                               See SectionII B
+                   S                                     Sample set for energy estimations              See SectionII B
+                   B. Model Architecture (MLP)
+                   D                                 Number of backflow determinants              1
+                   L                                  Number of hidden layers                            2
+                   h                                   Number of hidden units per layer              512
+                   C. Optimizer & Training Schedule
+                   Optimizer                       Algorithm for parameter updates               AdamW
+                   β1,β2                              AdamW exponential decay rates                0.9, 0.999
+                   ϵ                                    AdamW epsilon for numerical stability      1×10     −8
+                   λ                                   AdamW weight decay                                1×10      −4
+                   Learning Rate (t)           Initial rate with decay over iterationt      10                −3 ×(1 + 10   −5 t) −1
+                   D. Algorithmic Enhancements
+                   l                                     Speedup factor               N              o−N    e/2, see SectionII B
+                   r                                    Reduction factor                                         4, see SectionII C
+                   E. Implementation Details
+                   Framework                     Core computational library                        JAX
+                   Precision                         Floating-point precision                             float32
+                   Energy Unit                   Standard unit for energy values                 Hartree
+                   F. Post-Training MCMC Inference
+                   Minit                               Dominant configurations for initialization  8
+                   Nw (inference)                Number of MCMC walkers                        1024
+                   K2                                  Burn-in steps per walker                            100K       1
+                   K1                                  Downsample interval (iterations)               10N     e
+                   M                                Samples collected per walker                      1000
+
+TABLE I: Consolidated hyperparameters and notations used for all experiments, unless explicitly stated otherwise.
+
+
+   For each interatomic distancer, we execute three in-                                  ∞(i.e., 1/N→0), which corresponds to extracting the
+dependent  training  runs  using  the  NNBF  ansatz  con-                                interceptE             0 alongside its propagated fitting uncertainty.
+structed with split localized Pipek–Mezey (PM) molec-                                        These  extrapolatedE            0  values  are  subsequently  used
+ular  orbitals.   Following  the  optimization  phase,  a  pre-                          to  construct  the  TDL  potential  energy  curve  for  the
+liminary post-training MCMC inference is performed to                                    NNBF ansatz used in Figure3.  Data for all other bench-
+evaluate  the  variational  energy  of  each  trial.   To  avoid                         mark  methods,  including  conventional  quantum  chem-
+biased estimation, the model yielding the lowest energy                                  istry methods [CCSD, CCSD(T)], AFQMC, and DMRG,
+is selected, and a completely independent, final MCMC                                    are taken directly from Ref.39.
+inference is conducted on this optimal model to obtain
+the  true,  unbiased  energy  and  its  associated  statistical
+uncertainty.
+
+   For a given distancer, the unbiased energies obtained
+from chains of varying lengths (Natoms) are normalized
+by  the  number  of  atoms.   We  then  perform  a  weighted
+least squares (WLS) fit of these per-atom energies against
+the inverse system size (1/N) using the finite-size scaling
+formulaE(N) =E                  0 +AN −1   +BN −2  .  The macroscopic
+TDL energy is obtained by evaluating the limit asN→
+                                                                                                                                           11
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  FIG. 11:  Finite-size scaling extrapolations to the thermodynamic limit (TDL) for the open boundary hydrogen
+chain at eight distinct atomic separations using the STO-6G basis set.  The NNBF energy per particle is fitted to a
+             second-order polynomial, and data for the other benchmark methods are taken from Ref.39.
+                                                                                                                                                               12
+
+
+
+
+
+ [1]F.  Coester  and  H.  K¨ummel,  Short-range  correlations                             W. M. C. Foulkes, Ab initio solution of the many-electron
+     in nuclear wave functions,Nuclear Physics17, 477–485                                 schr¨odinger equation with deep neural networks, Physical
+     (1960).                                                                              Review  Research2, 10.1103/physrevresearch.2.033429
+ [2]S.  R.  White,  Density  matrix  formulation  for  quantum                            (2020).
+     renormalization groups,Phys. Rev. Lett.69, 2863 (1992).                        [19]J.  Hermann,   Z.  Sch¨atzle,  and  F.  No´e,  Deep-neural-
+ [3]S. R. White and R. L. Martin, Ab initio quantum chem-                                 network solution of the electronic schr¨odinger equation,
+     istry using the density matrix renormalization group,The                             Nature Chemistry12, 891 (2020).
+     Journal of Chemical Physics, 4127–4130 (1999)110.                              [20]D.  Luo  and  B.  K.  Clark,  Backflow  transformations  via
+ [4]G.  K.-L.  Chan,  A.  Keselman,  N.  Nakatani,  Z.  Li,  and                          neural networks for quantum many-body wave functions,
+     S.  R.  White,  Matrix  product  operators,  matrix  prod-                           Phys. Rev. Lett.122, 226401 (2019).
+     uct states, and ab initio density matrix renormalization                       [21]K.  Loehr  and  B.  K.  Clark,Enhancing  neural  network
+     group algorithms, The Journal of Chemical Physics145,                                backflow(2025).
+     10.1063/1.4955108(2016).                                                       [22]J. Robledo Moreno, G. Carleo, A. Georges, and J. Stokes,
+ [5]R.  Blankenbecler,  D.  J.  Scalapino,  and  R.  L.  Sugar,                           Fermionic   wave   functions   from   neural-network   con-
+     Monte  carlo  calculations  of  coupled  boson-fermion  sys-                         strained   hidden   states,   Proceedings   of   the   National
+     tems. i,Physical Review D24, 2278–2286 (1981).                                       Academy   of   Sciences119,  10.1073/pnas.2122059119
+ [6]S. Zhang, J. Carlson, and J. E. Gubernatis, Constrained                               (2022).
+     path  monte  carlo  method  for  fermion  ground  states,                      [23]Z. Liu and B. K. Clark, Unifying view of fermionic neural
+     Physical Review B55, 7464–7477 (1997).                                               network quantum states:  From neural network backflow
+ [7]S.   Zhang   and   H.   Krakauer,   Quantum   monte   carlo                           to hidden fermion determinant states,Phys. Rev. B110,
+     method  using  phase-free  random  walks  with  slater  de-                          115124 (2024).
+     terminants,  Physical  Review  Letters90, 10.1103/phys-                        [24]H.  Ma,  H.  Shang,  and  J.  Yang,  Quantum  embedding
+     revlett.90.136401(2003).                                                             method with transformer neural network quantum states
+ [8]A.-J. Liu and B. K. Clark, Neural network backflow for                                for strongly correlated materials, npj Computational Ma-
+     ab  initio  quantum  chemistry,  Physical  Review  B110,                             terials10,10.1038/s41524-024-01406-3(2024).
+     10.1103/physrevb.110.115137(2024).                                             [25]L.  Fu,  Y.  Wu,  H.  Shang,  and  J.  Yang,  Transformer-
+ [9]A.-J. Liu and B. K. Clark, Efficient optimization of neu-                             based  neural-network  quantum  state  method  for  elec-
+     ral  network  backflow  for  ab  initio  quantum  chemistry,                         tronic band structures of real solids,Journal of Chemical
+     Physical Review B112,10.1103/thz7-lmdn(2025).                                        Theory and Computation20, 6218–6226 (2024).
+[10]T.  Zhao,  J.  Stokes,  and  S.  Veerapaneni,  Scalable  neu-                   [26]N.   Yoshioka,   W.   Mizukami,   and   F.   Nori,   Solving
+     ral quantum states architecture for quantum chemistry,                               quasiparticle  band  spectra  of  real  solids  using  neural-
+     Machine  Learning:   Science  and  Technology4,  025034                              network  quantum  states,  Communications  Physics4,
+     (2023).                                                                              10.1038/s42005-021-00609-0(2021).
+[11]X.  Li,  J.-C.  Huang,  G.-Z.  Zhang,  H.-E.  Li,  C.-S.  Cao,                  [27]X.  Li,  Z.  Li,  and  J.  Chen,  Ab  initio  calculation  of  real
+     D.  Lv,  and  H.-S.  Hu,  A  nonstochastic  optimization  al-                        solids  via  neural  network  ansatz,  Nature  Communica-
+     gorithm  for  neural-network  quantum  states,Journal  of                            tions13,10.1038/s41467-022-35627-1(2022).
+     Chemical Theory and Computation19, 8156 (2023).                                [28]Z.  Chen,  D.  Luo,  K.  Hu,  and  B.  K.  Clark,Simulating
+[12]H. Shang,  C. Guo,  Y. Wu,  Z. Li, and J. Yang,Solving                                2+1d lattice quantum electrodynamics at finite density
+     schr¨odinger equation with a language model(2023).                                   with neural flow wavefunctions(2022).
+[13]Y.     Wu,     C.     Guo,     Y.     Fan,     P.     Zhou,     and             [29]L. Bytautas and K. Ruedenberg, A priori identification
+     H.    Shang,    Nnqs-transformer:       an    efficient    and                       of configurational deadwood,Chemical Physics356, 64
+     scalable     neural     network     quantum     states     ap-                       (2009), moving Frontiers in Quantum Chemistry:.
+     proach     for     ab     initio     quantum     chemistry,     in             [30]J.  S.  Anderson,  F.  Heidar-Zadeh,  and  P.  W.  Ayers,
+     Proc. Int. Conf. High Perform. Comput. Netw. Storage Anal.,                          Breaking   the   curse   of   dimension   for   the   electronic
+     SC ’23 (ACM, 2023) p. 1–13.                                                          schr¨odinger  equation  with  functional  analysis,Compu-
+[14]A. Malyshev, J. M. Arrazola, and A. I. Lvovsky,Autore-                                tational and Theoretical Chemistry1142, 66 (2018).
+     gressive  neural  quantum  states  with  quantum  number                       [31]I.        Loshchilov        and        F.        Hutter,        Decou-
+     symmetries(2023).                                                                    pled         weight         decay         regularization,         in
+[15]X.  Li,  J.-C.  Huang,  G.-Z.  Zhang,  H.-E.  Li,  Z.-P.  Shen,                       International Conference on Learning Representations
+     C.  Zhao,  J.  Li,  and  H.-S.  Hu,  Improved  optimization                          (2019).
+     for the neural-network quantum states and tests on the                         [32]A. A. Holmes, N. M. Tubman, and C. J. Umrigar, Heat-
+     chromium dimer, The Journal of Chemical Physics160,                                  bath configuration interaction:  An efficient selected con-
+     10.1063/5.0214150(2024).                                                             figuration  interaction  algorithm  inspired  by  heat-bath
+[16]A.  Malyshev,  M.  Schmitt,  and  A.  I.  Lvovsky, Neural                             sampling,Journal of Chemical Theory and Computation
+     quantum  states  and  peaked  molecular  wave  functions:                            12, 3674–3680 (2016).
+     Curse or blessing?(2024).                                                      [33]S.  Sharma,  A.  A.  Holmes,  G.  Jeanmairet,  A.  Alavi,
+[17]O.  Knitter,  D.  Zhao,  J.  Stokes,  M.  Ganahl,  S.  Le-                            and  C.  J.  Umrigar,  Semistochastic  heat-bath  configu-
+     ichenauer, and S. Veerapaneni,Retentive neural quantum                               ration interaction method:  Selected configuration inter-
+     states:  Efficient ans¨atze for ab initio quantum chemistry                          action with semistochastic perturbation theory,Journal
+     (2024).                                                                              of  Chemical  Theory  and  Computation13,  1595–1604
+[18]D.  Pfau,  J.  S.  Spencer,  A.  G.  D.  G.  Matthews,  and                           (2017).
+                                                                                                                                                             13
+
+[34]N.  M.  Tubman,  J.  Lee,  T.  Y.  Takeshita,  M.  Head-                             Scuseria,  S.  Sorella,  E.  M.  Stoudenmire,  Q.  Sun,  I.  S.
+     Gordon,  and  K.  B.  Whaley,  A  deterministic  alterna-                           Tupitsyn, S. R. White, D. Zgid, and S. Zhang, Towards
+     tive to the full configuration interaction quantum monte                            the  solution  of  the  many-electron  problem  in  real  ma-
+     carlo  method,  The  Journal  of  Chemical  Physics145,                             terials:   Equation  of  state  of  the  hydrogen  chain  with
+     10.1063/1.4955109(2016).                                                            state-of-the-art many-body methods, Physical Review X
+[35]N. M. Tubman, D. S. Levine, D. Hait, M. Head-Gordon,                                 7,10.1103/physrevx.7.031059(2017).
+     and  K.  B.  Whaley, An  efficient  deterministic  perturba-                  [40]N. M. Tubman,  C. D. Freeman,  D. S. Levine,  D. Hait,
+     tion  theory  for  selected  configuration  interaction  meth-                      M. Head-Gordon, and K. B. Whaley, Modern approaches
+     ods(2018).                                                                          to  exact  diagonalization  and  selected  configuration  in-
+[36]D. Cleland, G. H. Booth, C. Overy, and A. Alavi, Taming                              teraction  with  the  adaptive  sampling  ci  method,Jour-
+     the first-row diatomics:  A full configuration interaction                          nal of Chemical Theory and Computation16, 2139–2159
+     quantum monte carlo study,Journal of Chemical Theory                                (2020).
+     and Computation8, 4138–4152 (2012).                                           [41]J. R. Moreno, J. Cohn, D. Sels, and M. Motta,Enhanc-
+[37]G. K.-L. Chan, M. K´allay, and J. Gauss, State-of-the-art                            ing the expressivity of variational neural, and hardware-
+     density matrix renormalization group and coupled cluster                            efficient quantum states through orbital rotations(2023).
+     theory studies of the nitrogen binding curve,The Journal                      [42]Y. Gu, W. Li, H. Lin, B. Zhan, R. Li, Y. Huang, D. He,
+     of Chemical Physics121, 6110–6116 (2004).                                           Y. Wu, T. Xiang, M. Qin, L. Wang, and D. Lv,Solving
+[38]Q.  Sun,  T.  C.  Berkelbach,  N.  S.  Blunt,  G.  H.  Booth,                        the hubbard model with neural quantum states(2025).
+     S.  Guo,   Z.  Li,   J.  Liu,   J.  D.  McClain,   E.  R.  Say-               [43]H.  Ma,  B.  Kan,  H.  Shang,  and  J.  Yang,Transformer-
+     futyarova,  S.  Sharma,  S.  Wouters,  and  G.  K.  Chan,                           based  neural  networks  backflow  for  strongly  correlated
+     Pyscf:  the python-based simulations of chemistry frame-                            electronic structure(2025).
+     work,   WIREs   Computational   Molecular   Science8,                         [44]L.  Zhang  and  D.  Luo,Neural  transformer  backflow  for
+     10.1002/wcms.1340(2017).                                                            solving  momentum-resolved  ground  states  of  strongly
+[39]M. Motta, D. M. Ceperley, G. K.-L. Chan, J. A. Gomez,                                correlated materials(2025).
+     E. Gull, S. Guo, C. A. Jim´enez-Hoyos, T. N. Lan, J. Li,                      [45]D. Foreman-Mackey, D. W. Hogg, D. Lang, and J. Good-
+     F.  Ma,  A.  J.  Millis,  N.  V.  Prokof’ev,  U.  Ray,  G.  E.                      man, emcee:  The mcmc hammer,Publications of the As-
+                                                                                         tronomical Society of the Pacific125, 306–312 (2013).

@@ -1,0 +1,2829 @@
+jQMC: A JAX-basedab initioquantum Monte Carlo package designed for
+GPU-accelerated computing
+
+        Kousuke Nakano1,a)  and Michele Casula2
+
+        1)Center for Basic Research on Materials, National Institute for Materials Science (NIMS),
+
+        1-2-1 Sengen, Tsukuba, Ibaraki 305-0047, Japan
+
+        2)Institut de Min´eralogie, de Physique des Mat´eriaux et de Cosmochimie (IMPMC),
+
+        Sorbonne Universit´e, CNRS UMR 7590, IRD UMR 206, MNHN, 4 Place Jussieu,
+        75252 Paris, France
+
+        (Dated: 16 July 2026)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                     1
+         We present jQMC, a Python-based computational package forab initioQuantum Monte
+         Carlo  (QMC)  simulations,  designed  for  modern  GPU-accelerated  computing  environ-
+         ments. jQMC implements two well-established QMC algorithms: Variational Monte Carlo
+         (VMC) and the lattice-regularized variant of Diffusion Monte Carlo (LRDMC). The em-
+         ployed  wave  function  is  a  Jastrow  factor  combined  with  the  antisymmetrized  geminal
+         power with spin-singlet and spin-triplet pairings, which contains the single Slater deter-
+         minant as its special lowest-rank case.  The wave function can be initialized from exter-
+         nal  Hartree-Fock/Density  Functional  Theory  calculations  through  the  TREX-IO  library
+         (a common wave-function format across electronic-structure packages) and optimized by
+         stochastic reconfiguration and linear-method energy minimization.  One of the prominent
+         features of jQMC is its use of JAX, which enables automatic differentiation for wave func-
+         tion optimization and atomic force calculations, and allows the main QMC algorithms to
+         be Just-In-Time (JIT) compiled and portable across CPU and GPU. jQMC is vectorized
+         over walkers at the top level of the QMC algorithms, providing efficient intra-GPU (CPU)
+         vectorization.  The multi-GPU (CPU) parallelization is also supported through MPI and
+         JAX  sharding.   To  assess  the  practical  performance  of  this  implementation,  we  bench-
+         marked jQMC performance on NVIDIA GPUs (A100 and H100) and analyzed CUDA
+         kernels.  For the test cases analyzed here, with system sizes up to 160 electrons, the cur-
+         rent version of jQMC is faster than TurboRVB, a Fortran90 code implementing the same
+         algorithms and wave functions, once jQMC is run on GPUs.  In terms of wall-time, the
+         gain can reach an order of magnitude for VMC, while it is more moderate for LRDMC.
+         Furthermore, to demonstrate the applications of jQMC, we focus on an ongoing debate
+         in the community, namely the accuracy of QMC quantities compared with highly accu-
+         rate Quantum Chemistry calculations such as coupled-cluster theory with single, double,
+         and perturbative triple excitations [CCSD(T)]. We studied the accuracy of atomic forces
+         computed by VMC and LRDMC for ethanol and malonaldehyde. We found that LRDMC
+         forces achieve∼1.5 kcal/mol/Å accuracy in the mean absolute error (MAE) with respect
+         to all-electron CCSD(T) forces for ethanol, while LRDMC and CCSD(T) forces are quite
+         different (∼5 kcal/mol/Å in MAE) for malonaldehyde.
+
+
+
+
+
+
+
+a)Electronic mail: kousuke 1123@icloud.com
+
+
+                                                        2
+I.    INTRODUCTION
+
+
+   Solving  the  many-body  Schr¨odinger  equation  remains  a  central  challenge  in  computational
+chemistry and physics.   For nearly a century,  researchers have been developing many theoreti-
+cal and numerical techniques to address this problem.  Among these, Density Functional Theory
+(DFT) is one of the most widely adopted approaches. DFT maps the many-electron problem into
+a system of non-interacting electrons in an effective potential, called eXchange-Correlation (XC)
+functional1.  Although DFT is formally exact, its practical application depends on the XC func-
+tional, and its exact form remains unknown. Progress in systematically improving this functional
+has been elusive2. As a result, widely used approximations often fail in situations involving strong
+correlation effects or weak van der Waals interactions.
+
+   An alternative strategy for addressing the complexity of the many-electron Schr¨odinger equa-
+tion is offered byab initioQuantum Monte Carlo (QMC) methods                         3,4.  Unlike conventional deter-
+ministic approaches, QMC leverages stochastic sampling (i.e., Monte Carlo) to evaluate expecta-
+tion values, thereby bypassing some of the limitations of deterministic methods.  The theoretical
+foundation of QMC dates back to the Markov Chain Monte Carlo (MCMC) in the 1940s5  and
+fixed-node Diffusion Monte Carlo (FN-DMC) in the 1980s          6,7,  which have since become indis-
+pensable across diverse scientific communities. QMC shows a favorable scaling with system size,
+albeit with a larger prefactor than in mean-field approaches. This prefactor, however, is mitigated
+by  the  nature  of  MCMC,  which  makes  QMC  suited  for  modern  high-performance  computing
+(HPC) architectures.  The algorithmic structure allows for near-perfect weak scaling across thou-
+sands of cores, positioning QMC as a promising method for next-generation simulations of both
+molecular and extended systems.
+
+   To dates, several groups have implementedab initioQMC codes such as Amolqc, CASINO                                            8,9,
+CHAMP-EU10, CHAMP-US11, CMQMC, PyQMC12, QMC=Chem                 13, QMCPACK14,15, QMeCha16,
+QWalk17, and TurboRVB18,19 (named alphabetically).  It is also worth highlighting recent efforts
+for standardizing data and functionalities required among QMC packages.  For instance, TREX-
+IO20 is a library designed to standardize the wave function format among different QMC packages.
+QMCkl21 provides common kernels for core QMC algorithms. They represent valuable efforts in
+the QMC community to consolidate their development efforts.
+
+   The recent shift of HPC facilities toward GPU-dominated infrastructures presents significant
+
+                                                          3
+challenges for scientific computing and programming22. Legacy codebases cannot fully exploit the
+computational power of GPU hardware without a comprehensive refactoring of the code because
+the suitable designs are often very different between them. Nearly all of the top-tier systems, such
+as those ranked in the TOP500 list23,24, are equipped with CPU-GPU hybrid architectures, with
+very few exceptions such as Fugaku25.  There are several approaches to make codebases portable
+to GPU machines, such as using native programming languages (e.g., CUDA), directive-based pro-
+gramming models (e.g., OpenACC26), or OpenMP offload, and exploiting GPU-optimized libraries
+such as NVIDIA’s cuBLAS and cuSOLVER. A related and increasingly promising approach in-
+volves harnessing libraries, such as Kokkos27,28, TensorFlow29, PyTorch30, and JAX31, which are
+designed inherently with GPU execution. These frameworks offer a powerful abstraction for high-
+performance computing and are now being explored forab initioQMC applications. Notable ex-
+amples ofab initioQMC codes built on these modern frameworks include FermiNet                  32, PauliNet33,
+QMCTorch34, and JaQMC35 which have demonstrated the potential of combining QMC with ma-
+chine learning and neural network architectures.
+
+   Our developingab initioQMC code, named jQMC, relies on one of the libraries, JAX                               31. JAX
+has  several  features  helping  with  making  code  fast  and  portable  across  different  architectures.
+jQMC implements two ground-state QMC algorithms: variational Monte Carlo (VMC) and DMC3
+in its lattice regularized version.  In VMC, the ground state is obtained by minimizing the total
+energy (or variance) with a parametrized many-body wave function ansatz. DMC is an imaginary-
+time projection technique4 that filters out the ground-state wave function from a given trial wave
+function, typically combined with the so-calledfixed-node(FN) approximation. The nodal surface
+is constructed by a mean-field calculation, such as Hartree-Fock (HF) or DFT, or by an accurate
+variational optimization, and is usually kept frozen during the projection.
+
+   In  particular,  the  jQMC  package  introduces  several  distinguishing  features  that  collectively
+enhance its capability and flexibility forab initioquantum Monte Carlo simulations:  ( i ) wave
+function ansatz:  jQMC supports the Jastrow Antisymmetrized Geminal Power (JAGP)36, a res-
+onating valence bond (RVB)-type wave function.  JAGP contains the single Slater determinant as
+a special case.  ( ii ) wave function optimization:  The code implements the stochastic reconfig-
+uration (SR) method37 and the linear method (LM), robust and efficient optimization algorithms
+that enable simultaneous optimization of both wave function amplitudes and nodal surfaces. ( iii )
+Projection method:  To perform DMC calculations with enhanced numerical control, jQMC in-
+
+                                                         4
+cludes an implementation of the lattice regularized DMC (LRDMC) method38,  which provides
+improved stability over traditional DMC algorithms.  ( iv ) Force evaluation:  By leveraging algo-
+rithmic differentiation with the JAX framework, jQMC enables efficient implementation of energy
+derivatives, such as atomic forces39, directly from the many-body wave function.  ( v ) Software
+architecture:  Developed in Python, the codebase emphasizes ease of use for end-users and mod-
+ular extensibility for developers.  This makes it well-suited for both production simulations and
+the rapid prototyping of new QMC algorithms.   ( vi ) Hardware acceleration:  Through just-in-
+time (JIT) compilation and vectorized execution (e.g., via jit and vmap) provided by JAX, jQMC
+achieves high computational performance across diverse hardware backends, including CPUs and
+GPUs.   ( vii )  Parallel  scalability:  Built-in  MPI  support  (mpi4py40)  and  the  native  JAX  shard-
+ing mechanism allow jQMC to scale efficiently on modern HPC platforms, enabling large-scale
+many-body simulations.  These components together position jQMC as a modern and versatile
+platform for both conducting accurate quantum Monte Carlo simulations and developing novel
+methodologies within the QMC framework.
+
+
+   This paper is organized as follows:  Sec. II briefly explains the QMC algorithms implemented
+in  jQMC,  MCMC,  VMC,  and  LRDMC.  Sec.  III  describes  the  RVB-family  of  wave  functions
+combined with the Jastrow factor; Sec. IV focuses on the implementation of the bare Coulomb
+interactions and effective core potentials.   Sec. V details how energy derivatives are computed
+(e.g., atomic forces) in jQMC; Sec. VI reviews the wave function optimization techniques cur-
+rently implemented in jQMC; Sec. VII summarizes the implementation of jQMC and its typical
+QMC workflow; Sec. VIII describes the mixed-precision support implemented in jQMC. Sec. IX
+explains  the  vectorization  strategy  employed  in  jQMC  and  its  benchmark  results  measured  on
+Miyabi (University of Tokyo) supercomputer;  Sec. X reports an analysis of the CUDA kernels
+in  jQMC  using  NVIDIA Nsight  Systems  and  NVIDIA  Nsight  Compute,  and  study  the  bottle-
+necks of the current implementation.  Sec. XI reports wall-time benchmarks of jQMC on CPU
+and GPU machines, and compares them with the TurboRVB QMC code, implementing the same
+algorithms and wave functions; Sec. XII describes the parallelization strategy employed in jQMC
+and reports weak scaling results of jQMC, measured on Leonardo (CINECA) and Miyabi (Uni-
+versity of Tokyo) supercomputers; Sec. XIII reports a validation of jQMC by comparing the total
+energies of methane, water, and methane-water dimer, and its binding energy with other QMC
+codes;  Sec. XIV demonstrates MCMC and DMC atomic-force calculations for the ethanol and
+
+                                                        5
+malonaldehyde molecules, and compares them with all-electron coupled-cluster theory with sin-
+gle, double, and perturbative triple excitations [CCSD(T)].
+
+
+II.    METHODS
+
+    jQMC implements two established Quantum Monte Carlo methods:  Variational Monte Carlo
+(VMC) and Lattice Regularized Diffusion Monte Carlo (LRDMC). We summarize these methods
+in  this  Section.   For  further  details,  the  reader  is  referred  to  more  comprehensive  reviews  and
+textbooks on QMC3,4.  We notice that throughout this paper the formalism is presented assuming
+a real many-body wave functionΨ(x)∈R, which is also the only case currently supported by the
+jQMC implementation (v.0.2.2).  Extending the formalism to a complex wave functionΨ(x)∈C
+is left for future developments.
+
+
+A.    Variational Monte Carlo
+
+
+    Given theab initioHamiltonian                ˆH, the expectation value of the energy can be computed by
+MCMC as:
+                               DΨ|     ˆH|Ψ E   R  dxΨ      2 (x)·   ˆHΨ    (x)/Ψ  (x)  Z
+                  EMCMC =         ⟨Ψ|Ψ ⟩    =              R  dxΨ      2 (x)             =  dxe      L (x)π (x),                 (1)
+
+
+for a given wave function (WF)Ψ, wherex=                         (r1σ1,r 2σ2,...r  NσN) represents theNelectron
+coordinates and their spins, and
+
+                                  eL (x)≡   ˆHΨ    (x)Ψ (x)      andπ      (x)≡      Ψ2 (x)R  dx ′Ψ2 (x′),
+
+
+are the local energy and the probability distribution, respectively.  MCMC allows one to evaluate
+the multidimensional integration in Eq. 1 stochastically by generating a set of configurations{xi}
+according to the distributionπ         (x) and by averaging the accumulated local energiese          L (xi):
+
+                                                                            MX
+                                        EMCMC =⟨eL (x)⟩π(x)≈  1M                eL (xi),                                           (2)
+                                                                           i=1
+
+The total energy and the mean of other local observablesO            L are always associated with a statistical
+error of pVar[O       L(x  i)]/    ˜M, where Var[O            L(x  i)] is the variance of the sampled observables, and   ˜Mis
+the sampling sizeMdivided by the autocorrelation time. Then, assumingΨis parametrized with
+
+                                                              6
+a set of variational parametersα≡               α1,α2,···,α   p , the corresponding variational energy reads:
+
+                                                             Z
+                                         EMCMC (α) =             dxe      L (x,α  )π (x,α  ) ⩾E    0,                                        (3)
+
+where, according to thevariational theorem,E                MCMC provides an upper bound to the exact ground-
+state energy (E  0). This framework is called VMC.
+
+    One of the key implementations of VMC is the MCMC evaluation of the Hamiltonian expec-
+tation value and the update of the parameters of the trial WF anstazΨ               T,  to get the best varia-
+tional representation of the ground state according to the variational principle.  The possible WF
+parametrizations available in jQMC are discussed later. The MCMC implemented in jQMC relies
+on the generalized Metropolis algorithm (Metropolis–Hastings algorithm41,42). The acceptance of
+a proposed move (A(x→x     ′)) reads:
+                                                                  "                                 #
+                                        A(x→x    ′)=min             1,   Ψ2(x ′)Ψ2(x) · T(x ′→x)T(x→x    ′),                                      (4)
+
+wherex={···,r                        l,···}andx   ′ ={···,r  ′l,···}differ by a single-electron position.  The WF ratios
+during the MCMC electron position update are efficiently computed via the fast-update algorithm,
+described in Subsec. III E. jQMC, first, detects the nearest neighbor nucleusIof the target electron
+lto compute the valueσ            prop(r  l) defined as:
+
+                                      σprop(r  l)=            1                       I(l) |r l−R    I(l) |
+                                                       Z2I(l) |r l−R    I(l) |· 1+Z       21+|r        l−R    I(l) | ,                                    (5)
+
+then a single electron move is proposed:
+
+                                                       x→x  ′ :r′l,γ  =r    l,γ  +η    l                                                        (6)
+
+whereγis a Cartesian label (x,y,z), which is chosen randomly,η                                l is a Gaussian random number
+with a mean of 0 and varianceσ                 prop(r  l)∆t, where∆tis an input hyperparameter.  The transition
+probability is defined as:
+
+                                                                                    "                         #
+                               T(x→x    ′)=                1p                        − |r′l−r    l|2                                       (7)
+                                                       2π(σ        prop(r  l)∆t)        2 exp2(σ     prop(r  l)∆t)        2
+
+to satisfy the detailed-balance condition. Thus, its ratio becomes:
+                                       exp"                                                          !#
+                T(x ′→x)             σprop(r  l)
+                T(x→x    ′) =        σprop(r ′             −|r     l−r ′l|2             12(σ     prop(r ′2(σ     prop(r  l)∆t)        2.            (8)
+                                               l)                                       l)∆t)        2−            1
+
+                                                                    7
+Following this transition probability, we repeatedly perform accept/reject steps to generate Monte
+Carlo  samples  and  evaluate  Eq.  2.   Eqs.  5  and  7  automatically  modulate  the  amplitude  of  the
+MCMC step, by reaching a higher sampling efficiency according to the distribution of the elec-
+tronic clouds centered around each nucleus.
+
+    In the MCMC, probability distributions different fromπ              (x) can also be employed. This is called
+the reweighting technique, or importance sampling.  More specifically, one can use an arbitrary
+probability distribution functionπ     ′ (x) = Ψ2G (x)/R  dxΨ      2G (x), and estimate the expectation value
+of a local observableO       (x) by:
+                                                                           PM′
+                               ¯OMCMC =⟨O (x′)W (x′)⟩π′(x′)                   i=1   O (x′i)W (x′i)PM′
+                                                 ⟨W (x′)⟩π′(x′)  ≈                 i=1 W (x′i)  ,                              (9)
+
+whereW           (x) = (Ψ (x)/Ψ   G (x))2, and the pointsx    ′i are distributed according toπ ′. The reweighting
+technique is essential to compute atomic forces with finite variance,  as discussed in Sec. V B.
+jQMC implements the so-called Attaccalite and Sorella (AS) reweighting scheme43 to avoid the
+divergence  of  derivatives  in  the  vicinity  of  the  nodal  surface.   In  the  AS  scheme,  the  MCMC
+sampling is driven by a modified guiding functionΨ                    G (x) defined by
+
+                                                  ΨG (x) =  RεASAS (x)
+                                                                RAS (x) Ψ (x).                                                   (10)
+RAS(x) is defined as                                         sAS          
+                                                                   X    G−1 2−θ   R
+                                               RAS (x) =                       i,j                                              (11)
+                                                                    i,j
+whereGis the so-called pairing matrix used for the anti-symmetric part of the many-body wave
+function, described later (see Sec. III B), and the scaling factors            AS is defined as:
+                                                     minX               X           ,                                     (12)
+                                      sAS =min           i       |G i j|2,minj       |G i j|2
+                                                              j                   i
+which ensures that both spin-up and spin-down electrons are treated on equal footing when ap-
+proaching  the  nodal  surface,  andθ         R  =3/8  is  an  empirically  chosen  value.   Finally,  with  the
+hyperparameterε                                   AS,R εASAS (x) is defined as:
+
+                                               RεASAS (x) =max   [RAS (x),εAS]                                                (13)
+
+By using the new probability, an observable with singular points in the vicinity of the nodal surface
+can be evaluatedwith finite varianceas:
+
+                                            ⟨W (x) O (x)⟩ΠG(x)/⟨W (x)⟩ΠG(x),                                            (14)
+
+                                                                8
+where theW      (x) is the modified weight:
+                                                                                 RAS (x)           !2
+                                W (x) = (Ψ (x)/Ψ   G (x))2≡              max [RAS (x),εAS]            .                              (15)
+
+The value ofε     AS should be chosen manually in jQMC such that the average reweighting factor
+⟨W (x)⟩≃0.8, which is an empirically optimal setting.
+
+
+B.    Lattice regularized Monte Carlo
+
+1.    Formalism of Lattice regularized diffusion Monte Carlo (LRDMC)
+
+    Lattice regularized diffusion Monte Carlo (LRDMC)        38 is a method built to filter out the ground
+state WF|Υ0⟩ from a given guidance WF|ΨT⟩.  This method is based on Green’s function Monte
+Carlo (GFMC)44–46, and thus, it is sometimes called “power method”. In the GFMC formalism, the
+ground-state WF can be obtained by iteratively applying  λ−     ˆH M to a given trial wave function:
+                             |Υ0⟩∝lim          λ−     ˆH M|ΨT⟩
+
+                                       M→∞                  a0|Υ0⟩ +                             ,
+                                                                          X      λ−E       n!M                                    (16)
+                                   =limM→∞   (λ−E       0)M                      λ−E       0  an|Υn⟩
+                                                                           n,0
+whereλis a large positive number,E                   n isn-th eigenvalue of        ˆH, anda              n is the coefficient for the
+n-th eigenvectors (Υ     n) (i.e. |ΨT⟩ = P
+                                                   n  an|Υn⟩).  The above projection filters out the ground state
+WFΥ         0 from a given guidance WF|ΨT⟩ unless the trial WF is orthogonal to the ground state (i.e.,
+a0≡⟨Ψ  T|Υ 0⟩,0) and|λ−E                       n|/|λ−E            0|≥1.
+
+    For fermions (electrons), LRDMC is always associated with the fixed-node (FN) approxima-
+tion4 because the Green’s function it not always positive for fermions.  This is referred to as the
+sign problem. Therefore, in LRDMC, the Hamiltonian is modified by setting to zero the “wrong”
+sign terms and summing them up into the spin-flip termV           sf (x) =   P
+                                                                                           x′:s x′,x>0 Hx′,x ΨT (x′)/Ψ   T (x). This
+defines an effective FN Hamiltonian       ˆH FN, which reads as:
+                                            
+                                              Hx,x   +V    SF (x)   forx  ′ =x,
+                                 H FNx′,x  =  Hx′,x                   forx  ′ ,x,s        x′,x <0,                                (17)
+
+                                              0                         forx  ′ ,x,s        x′,x >0,
+
+wheres               x′,x  = ΨT (x)Hx′,x ΨT (x′) (i.e,s         x′,x >0 indicates that thex→x     ′ crosses the nodal surface
+of the guiding function, or simply contributes to the Green’s functionλ−                  ˆHwith the “wrong”
+
+                                                                 9
+sign). The fixed-node Green’s function with the guiding function is then:
+                              GFN                             ΨT (x′)
+                                 x′,x  =  λδx′,x−H FNx′,x     ΨT (x)  =λδ    x′,x− ΨT (x′)ΨT (x)H FNx′,x                              (18)
+
+prevents walkers from crossing the nodal surface.
+
+    In LRDMC, the original continuous Hamiltonian is discretized with electron hopping with step
+sizea.  The corresponding Hamiltonian           ˆH a satisfies   ˆH a→   ˆHfora→0.  In other words, the
+kinetic and potential parts are approximated by a discretized form,   ˆH a≡  ˆKa + ˆVa. The discretized
+kinetic term is computed via the finite-difference Laplacian∇                                              2a acting on a functionf               (xi,y i,z i) as
+                ∇2a,i   f (xi,y i,z i) =  1  f (xi +a   )−f    (xi) +  f (xi−a   )−f    (xi)	↔y      i↔z      i.           (19)
+                                        a2
+
+More specifically, the discretized kinetic operator  ˆKa≡−1                       P
+                                                                                2    i∇2i,a   acts on|x⟩as:
+
+
+                                                   NeX                                  6N   eX
+                                 ˆKa|x⟩≡−   12         ∇2a,i |x⟩=      3N   ea2 |x⟩−      12a   2|x  j⟩,                                  (20)
+
+                                                  i=1                                   j=1
+leading to
+
+                                      ˆKax′,x ΨT (x′)                         ΨT (x′)
+                                            ΨT (x)  =  3N   ea2 δx′,x−   12a   2ΨT (x)δadx′,x,                                       (21)
+whereδ               adx′,x  =1 only ifx  ′ is adjacent tox, otherwise 0. Here, the point is that one should consider
+only6N             e  x′  adjacent  tox,  making  the  GFMC  approach  applicable  to  the  continuumab  initio
+Hamiltonian.  The 6N   e wave function ratios (Ψ  T (x′)/Ψ   T (x)) are computed in practice using the
+fast update method, described in Subsec. III E, which is critically important for a fast calculation
+of LRDMC. Once the kinetic term is discretized, the potential term  ˆVa is defined in such a way that
+the local energy of   ˆH a computed on the trial WF coincides with the local energy of the continuous
+Hamiltonian   ˆH.  In practice     ˆVa is divided into local and non-local terms,  ˆVa≡  ˆValoc +  ˆVnl, where
+only the local term depends on the discretized mesha. The non-local potential operator            ˆVnl exists
+only in the calculations with effective core potentials (ECPs). The details of the non-local potential
+operator are described in Sec. IV.
+
+
+2.    Implementation of LRDMC algorithms
+
+    Since several papers have already described the details of the LRDMC implementation4,18,38,47–49,
+we do not repeat them here.  jQMC implements two LRDMC algorithms:  the original (conven-
+tional) LRDMC scheme38 and the recently developed load-balanced scheme49. In the conventional
+
+                                                                10
+algorithm, for a given projection timeτ, the electrons are moved a number of times corresponding
+to the application of the projector exp(−τ         ˆH), and branching (reconfiguration) is then performed.
+Because  this  number  is  determined  stochastically,  the  number  of  electron  moves  varies  from
+walker to walker. As a result, in large-scale parallel calculations, load imbalance develops among
+walkers, which degrades weak scaling49. To remove this problem, we recently proposed an alterna-
+tive algorithm in which all walkers perform the same number of projection steps, and demonstrated
+that this substantially improves weak scaling49. Both algorithms are implemented in jQMC.
+
+    Here,  we  focus  on  one  implementation  aspect  that  has  received  less  attention  in  the  litera-
+ture, namely the branching (reconfiguration) step4, especially its MPI implementation involving
+inter-node communication.  In LRDMC, regardless of whether the conventional or load-balanced
+algorithm is used, branching (reconfiguration)4 is carried out as follows.  EveryN        proj projections,
+the code performs a branching step:
+
+  (1)New walkers are selected from the previous population with probability proportional to their
+        weights before branching:
+                                                          pα,n   =    wα,nP
+                                                                     β wβ,n .                                                     (22)
+  (2)The weights of all new walkers are reset to the average weight of the previous population:
+                                                                     X
+                                             wα,n+1      =¯w      n≡   1Nwwβ,n   ∀α.                                   (23)
+                                                                      β
+
+In the multi-walker formalism,  the walker state therefore carries an additional walker indexα,
+namely (x α,n ,w α,n  ). The selection of new configurations is implemented using an efficient reconfig-
+uration scheme in which the surviving walkers are chosen fromN            w correlatedrandom numbers               4:
+
+                                        Zα = ξ+α−1Nw  ,    α=1,...,N            w,                                          (24)
+
+whereξis a uniform random number in [0,1). These numbers are compared with the cumulative
+normalized weights to determine the new walker population. In our calculations, the survival rate
+is typically around 90%, and most walkers survive unchanged after each branching step.  There-
+fore, when walker replication and deletion are communicated across MPI ranks, all-to-all commu-
+nication is unnecessary.  Instead, point-to-point communication is sufficient, and this is essential
+for achieving good weak scaling. It is also important to perform communications simultaneously
+with the other computations associated with reconfiguration, that is, to use asynchronous commu-
+nication so that data transfer does not become a bottleneck.
+
+                                                            11
+C.    Error analysis
+
+
+    To estimate the mean and variance of an observable   ˆOfrom a Monte Carlo simulation, one
+accumulates its local values along the MCMC samples. Statistical efficiency is gained by running
+multipleindependentMCMC chains in parallel.  Leti∈{1,...,M}, whereMis the chain length,
+be the MCMC step index in a chain, andn∈{1,...,N}the index for an independent chain;X                                       i,n   is
+the electron configuration at thei-th step of then-th chain, andO                            i,n ≡  ˆO(X      i,n  ) are the accumulated
+local values. The autocorrelation of MCMC samples within a chain causes the naive independent
+and identically distributed (iid) variance estimator to underestimate the true variance of the sample
+mean, leading to underestimation of error bars.  To mitigate this problem, one usually uses two
+techniques, reblocking and jackknife resampling4.
+
+    Letbbe the block (bin) size andM                    b  =⌊M/b⌋the resulting number of binned samples per
+chain.  One defines the binned samplesO                    j,n   withj∈{1,...,M                   b}asO        j,n   =(1/b)       Pi∈B  j Oi,n  , where
+B j ={(j−1)b+1,...,jb}is the index set of MCMC steps belonging to thej-th block. When the
+block sizebexceeds the autocorrelation time, the binned samples become effectively independent,
+so naive iid-based variance estimators recover the correct standard error of the mean.  We notice
+that samples from different chains are already mutually independent,  so blocking is performed
+only along the in-chain directioniand never across the chain directionn.
+
+    When the statistical estimator is a nonlinear function of the Monte Carlo samples, such as a ratio
+estimator like the DMC/LRDMC mixed average, resampling techniques are required to estimate
+its uncertainty accurately.  jQMC employs the so-called jackknife method to estimate the mean
+and variance of the accumulated observables.  First, one flattens the binned samples{O                      j,n}into a
+single sequence{O                        l}NJl=1    withN           J =M    b·N, and defines them-th leave-one-out jackknife sample as
+         P
+            l,m   Ol
+OJm =    NJ−1     form∈{1,...,N                  J}. Then, the mean and variance are computed:
+
+
+                                                                        NJX
+                                                     µ=µ       J =   1NJ    OJm                                                        (25)
+                                                                       m=1
+and
+                                                                              NJX  OJm−µ    J 2.                                  (26)
+                                    σ2 =(N      J−1)(σ           J)2 =  NJ−1NJ
+                                                                             m=1
+    The jackknife (with reblocking) can also be applied to estimate the mean and variance of the
+accumulatedweightedobservables. This is needed for MCMC with the reweighting technique or
+
+                                                               12
+                                                                           P
+                                                                              l wlOl
+for LRDMC. The weighted average is defined as   ¯O=                          P           lrunning over all MCMC
+                                                                               l wl  , withP           P
+
+                                                                                      l,m   wlOl          l wlOl−w    mOm
+samples.  Them-th leave-one-out jackknife sample isO                  Jm  =          P                    P
+                                                                                        l,m   wl    =        l wl−w    m     .  If
+Iβ  denotes the set of MCMC step indices belonging to blockβ,  the leave-one-block-out jack-PP
+
+                                       l<I  β wlOl         l wlOl− Pl∈I β wlOl
+knife sample is thenO          Jβ =   P                    P
+                                         l<I  β wl   =       l wl− Pl∈I β wl    .  Then, the mean and variance are
+computed in the same way for theO       Jm quantities as described by Eqs. 25 and 26, respectively.
+
+
+
+III.    WAVE FUNCTIONS
+
+
+    jQMC employs a many-body wavefunction ansatzΨcomposed of the Jastrow factor and the
+antisymmetric (AS) part:
+
+                                                    Ψ =exp(J)×Φ                    AS,                                                       (27)
+
+where exp(J) is symmetric under electron exchange, whileΦ                        AS is antisymmetric. jQMC currently
+offers three choices ofΦ            AS: ( i ) the Antisymmetrized Geminal Power (AGP), (ii) the AGP with a
+constrained number of molecular orbitals (AGPn), and (iii) the single Slater determinant.  In this
+Section, we will describe the functional form of the Jastrow factor (sec. III A), the AGP (sec. III B),
+the AGPn (sec. III C), the SD (sec. III D), their fast-update implementations (sec. III E), and the
+basis set and atomic orbitals used in the Jastrow and AS parts (sec. III F).
+
+
+
+A.    Jastrow factor
+
+
+    The Jastrow factor, exp(J), is required to include electronic correlation and satisfy Kato’s cusp
+conditions50.  In jQMC, the Jastrow term is written as the sum of one-body, two-body, and three-
+or four-body contributions:J=J                       1 +J    2 +J    3/4   .  The one-body and two-body terms play a role
+in satisfying the electron-ion and electron-electron cusp conditions, respectively.  The three- and
+four-body terms account for additional electron correlation. The one-body Jastrow factorJ            1 is the
+sum of two parts, the homogeneous part for the electron-ion cusp:
+
+
+                                                   NeX  NaX  −(2Z   I)3/4   u (2Z     I)1/4 |ri−R    I|  ,                          (28)
+                           Jh1 (r1,...,r  N) =
+                                                   i=1  I=1
+
+                                                             13
+and the inhomogeneous part:
+
+                                                                      NeX   NaX X               ,                                    (29)
+                                         Jinh1   (r1,...,r  N) =                        LI,l χI,l  (ri)
+                                                                      i=1  I=1      l
+wherer               i are the electron positions,R                       I are the atomic positions with their atomic numberZ                  I,lruns
+over atomic orbitalsχ                  I,l   centered on the atomI,{L                  I,l}are variational parameters,  andu        (r) is a
+simple bounded function. In jQMC, two functional forms are available foru: the exponential form
+(default option),                                                           1−e  −rb   ei  ,                                                 (30)
+                                                     uexp (r) =    12b   ei
+
+and the Pad´e form,
+                                                      uPad´e (r) =  r2 (1+b       ei r)−1 ,                                                  (31)
+
+both depending on a single variational parameterb                        ei.   Both forms satisfy the electron-ion cusp
+condition and are bounded forr→∞.
+
+    The two-body Jastrow factor is defined as:
+                                                                        X              ri−r    j ,                                          (32)
+                                              J2 (r1,...,r  N) =              vσi,σ j
+                                                                         i<j
+
+wherev      σi,σ j is another simple bounded function. In jQMC, two functional forms are implemented:
+the Pad´e form (default),                                         =  ri,j  1+b       eeri,j −1 ,                                               (33)
+                                                   vPad´e  ri,j        2
+
+and the exponential form,                                       =    1       1−e  −b   ee ri,j   ,                                              (34)
+                                                   vexp  ri,j       2b   ee
+wherer               i,j   = ri−r    j, andb         ee is the variational parameter.  In principle,v         σi,σ j  depends on spin, if
+
+both like-spin and unlike-spin cusp conditions are fulfilled.  In jQMC, we have implemented so
+far only the spin-independent version, fulfilling the electron-electron cusp conditions for opposite
+spins.
+
+    The three/four-body Jastrow factor reads:
+                                                                 X     XX                           ,                                (35)
+                                     J3/4   (r1,...,r  N) =
+                                                                  i<j     l     l′   Ml,l ′χl(r  i)χ  l′(r   j)
+
+where the indiceslandl       ′ indicate different orbitals and{M                   l,l ′}are variational parameters.χare
+Gaussian-type atomic orbitals (GTOs), described later.
+
+                                                                      14
+B.    Antisymmetrized Geminal Power (AGP)
+
+
+    jQMC implements the antisymmetrized geminal power (AGP) ansatz for the fermionic anti-
+symmetric part of the trial wave function.  The AGP ansatz was first applied toab initioquantum
+Monte Carlo calculations by Casula and Sorella36, and has since been adopted in several QMC
+codes.  For simplicity, we first consider a system with an even numberNof electrons.  The AGP
+wave function is written as an antisymmetrized product of two-electron geminalg,
+
+                                 ΦAS(1,...,N)=A        g(1,2)g(3,4)···g(N−1,N)                       ,                              (36)
+
+wherei≡(r                      i,σi) denotes the spatial and spin coordinates of electroni.  The antisymmetrization
+operator is defined as                                               X
+                                                        A=      1N!        ϵP ˆP,                                                        (37)
+                                                                    P∈S       N
+whereS                N is the permutation group ofNelements,        ˆPis the operator associated with the permutation
+P, andϵ            P is the sign. LetGbe theN×Nmatrix whose elements are
+
+                                                            Gi j =g(i,j).                                                             (38)
+
+Because of fermionic antisymmetry, the geminal satisfies
+
+                                             g(i,j)=−g(j,i),        G                                  i j =−G        ji,                                            (39)
+
+and henceGis skew-symmetric. In this general spin-coordinate representation, the AGP amplitude
+is therefore proportional to the Pfaffian ofG.  The overall proportionality factor is irrelevant for
+variational Monte Carlo because the wave function is used up to normalization.  In the current
+implementation, jQMC supports only opposite-spin pairings.  Although the full geminalg(i,j) is
+defined in the spin-coordinate space, only the spin up–spin down block is evaluated explicitly in
+the opposite-spin implementation.  With the electrons ordered such that all spin-up are followed
+by all spin-down electrons, the full skew-symmetric geminal matrix has the block form
+                                                                   ,                                                          (40)
+                                                         G=         0   F
+                                                                  −F    T   0
+
+where
+                                                          Fi j =f(r  ↑i,r↓j).                                                           (41)
+
+                                                                 15
+The spin down–spin up block is therefore fixed by antisymmetry and does not need to be computed
+independently.  ForN ↑e  =N ↓e , the Pfaffian ofGis proportional to detF, and the irrelevant overall
+sign is absorbed in the normalization convention.  Thus, jQMC evaluates only the determinant of
+the spin up–spin down pairing matrixF:
+
+                                                         ΦAS(x ↑,x↓)=detF,                                                       (42)
+
+wherex    ↑ =(r  ↑1,...,r↑N↑) andx  ↓ =(r  ↓1,...,r↓N↓), with the matrixFdefined in Eq. 41.  The spatial
+pairing function is expanded on a chosen one-particle basis as
+                                                                X
+                                                f(r ↑i,r↓j)=          Λ↑↓lmψ↑l (r ↑i )ψ ↓m(r ↓j),                                             (43)
+                                                                  lm
+whereΛ    ↑↓ is the geminal coefficient matrix in the chosen orbital basis. The orbitalsψ        ↑l  andψ  ↓m can
+be either atomic or molecular.  The spin character of the pair is especially transparent when the
+spatial orbitals are spin independent,
+
+                                                       ψ↑l (r)=ψ   ↓l (r)≡ψ          l(r).                                                     (44)
+
+In this case, the opposite-spin geminal can be written as
+
+                                g(i,j)=f(r                    i,r  j)χ ↑(σ  i)χ ↓(σ   j)−f(r          j,r i)χ ↓(σ  i)χ ↑(σ   j).                            (45)
+
+Introducing the symmetric and skew-symmetric parts of the spatial pairing function,
+                                              fS (r  i,r  j)=   1 h f(r    i,r  j)+f(r          j,r i)i,                                           (46)
+                                                               2  h f(r    i,r  j)−f(r          j,r i)i,                                           (47)
+                                              fA(r  i,r  j)=   12
+
+the geminal becomes
+
+                                  g(i,j)=f                S (r  i,r  j)hχ↑(σ  i)χ ↓(σ   j)−χ  ↓(σ  i)χ ↑(σ   j)i
+
+                                              +f    A(r  i,r  j)hχ↑(σ  i)χ ↓(σ   j)+χ  ↓(σ  i)χ ↑(σ   j)i.                              (48)
+
+Thus,  the  symmetric  part  of  the  spatial  pairing  function  is  associated  with  a  spin-singlet  pair,
+whereas the skew-symmetric part is associated with theM       S  =0 component of a spin-triplet pair.
+Equivalently, when the same spin-independent orbital basis is used for both spins, the decomposi-
+tion is controlled by
+                 Λ↑↓ = ΛS + ΛA,       Λ S  =  1             hΛ↑↓ +(Λ  ↑↓)Ti,       Λ  A =  1           hΛ↑↓−(Λ  ↑↓)Ti.           (49)
+                                                         2                                          2
+
+                                                                    16
+A symmetricΛ       ↑↓ therefore gives a singlet AGP component, while a skew-symmetricΛ        ↑↓ gives the
+MS  =0 triplet AGP component. A general matrixΛ     ↑↓ contains both components. jQMC preserves
+a given symmetry of the geminal matrix during the WF optimization.
+
+    The AGP ansatz can also be generalized to spin-polarized systems. Without loss of generality,
+we can assumeN     ↑e >N ↓e and the system containsN     ↓e opposite-spin pairs withk=N     ↑e−N ↓e unpaired
+spin-up electrons. In this case, the determinant form is obtained by concatenating the spin up–spin
+down pairing matrix withkunpaired orbitals:
+
+                                                         ΦAS =det    ˜F,                                                            (50)
+
+where
+                                                        ˜F=  hF↑↓  U↑i.                                                          (51)
+
+Here,F    ↑↓  is anN  ↑e×N ↓e  matrix describing opposite-spin pairings,  andU  ↑  is anN  ↑e×kmatrix
+describing the unpaired orbitals. Explicitly,
+                                                 X
+                                        F↑↓i j  =     Λ↑↓lmψ↑l (r ↑i )ψ ↓m(r ↓j),                                                         (52)
+                                                  lm
+                                                 X
+                                        U↑ia =        Λ↑laψ↑l (r ↑i ),        a=1,...,k.                                        (53)
+                                                   l
+The resulting matrix  ˜Fis square, with dimensionN        ↑e×N ↑e , and its determinant gives the antisym-
+metric part of the wave function for the spin-polarized system.
+
+    We now describe the matrix form used in the implementation.  LetΨ  ↑ andΨ  ↓ be the orbital-
+value matrices,
+                                            Ψ↑li =ψ ↑l (r ↑i ),       Ψ ↓m j =ψ ↓m(r ↓j).                                             (54)
+
+For an atomic orbital (AO) basis of sizeN         ao, the dimensions of these matrices are (N  ao,N↑e ) and
+(N  ao,N↓e ), respectively. The paired block is assembled as a matrix–matrix product,
+
+                                                     F↑↓ =(Ψ  ↑)TΛ↑↓Ψ↓,                                                       (55)
+
+whereΛ    ↑↓ has dimension (N  ao,N ao). The unpaired block is similarly written as
+
+                                                        U↑ =(Ψ  ↑)TΛ↑,                                                          (56)
+
+whereΛ    ↑ has dimension (N  ao,k). Therefore,
+
+                                              ˜F=  h(Ψ ↑)TΛ↑↓Ψ↓  (Ψ ↑)TΛ↑i.                                              (57)
+
+                                                              17
+For convenience, the variational parameters may be stored as the concatenated matrix
+
+                                                        ˜Λ = hΛ↑↓  Λ↑i,                                                          (58)
+
+whose dimension is (M,M+k). The firstMcolumns define the opposite-spin pairing block, while
+the remainingkcolumns define the unpaired orbitals.
+
+    The same formalism applies whether the orbital basis is chosen to be AOs or molecular orbitals
+(MOs).  LetΨ   σ denote the AO-value matrix andΦ    σ the MO-value matrix for spinσ.  We use the
+convention
+                                               Φ↑ =C ↑Ψ↑,       Φ↓ =C ↓Ψ↓,                                               (59)
+
+whereC    ↑  andC  ↓  are the MO coefficient matrices,  whose dimensions are (N    ↑mo, N  ao) and (N ↓mo,
+Nao), respectively. In spin-polarized calculations, the MO coefficients may differ between the two
+spin sectors.  IfΛ ↑↓M  andΛ  ↑M are the geminal and unpaired-orbital coefficient matrices in the MO
+representation, respectively, the corresponding AO representation is
+
+                                                     Λ↑↓A  =(C  ↑)TΛ↑↓MC↓,                                                       (60)
+                                                      Λ↑A =(C  ↑)TΛ↑M.                                                            (61)
+
+With these definitions, the concatenated pairing matrix is invariant under the AO–MO transforma-
+tion:
+                                             ˜FAO = h(Ψ ↑)TΛ↑↓                        i,                                            (62)
+                                                                 A Ψ↓  (Ψ ↑)TΛ↑A
+                                             ˜FMO = h(Φ ↑)TΛ↑↓                         i,                                            (63)
+                                                                 MΦ↓  (Φ ↑)TΛ↑M
+                                             ˜FAO =  ˜FMO.                                                                             (64)
+
+Thus, the AGP wave functions expanded in AOs and MOs are evaluated by the same matrix oper-
+ations in jQMC.
+
+
+C.    AGP with constrained number of molecular orbital (AGPn)
+
+    If one expands the AGP pairing function with molecular orbitals, and neglects the non-diagonal
+terms of the pairing matrix or diagonalizes the pairing function to express it as a function of AGP
+natural orbitals, the resultant pairing function reads:
+
+                                      ˜FMO(x ↑,x↓)=[(Φ   ↑)TΛ↑,↓M,diag  Φ↓|(Φ ↑)TΛ↑M],                                    (65)
+
+                                                               18
+whereΛ    ↑,↓M,diag    is the diagonal matrix (i.e., the non-diagonal terms are set to zero, neglecting cou-
+plings between different MO indices). This is what we call the AGPn ansatz.
+
+
+D.    Single Slater determinant (SD)
+
+    The AGP ansatz is reduced to the Slater Determinant if one restrictsM                   mo =N ↑e or, equivalently,
+if the rank of theΛ  ↑,↓   matrix is equal toN ↓e , withN   ↑e−N ↓e  independent MOs. In this limit, we can
+neglect the non-diagonal elements ofΛ ↑,↓   andΛ  ↑, i.e.,λ  ↑,↓i,j   =δ    i,j   (dim.:N    ↓e,N↓e ) andλ  ↑l,k   =δ    l,k+N  ↓e
+(dim:N   ↑e,N↑e−N ↓e ). A typical starting point of a VMC calculation from HF/DFT is the SD anstaz
+with randomized (or zero) Jastrow factor parameters.
+
+
+E.    Fast update of wave function
+
+    jQMC employs a single-electron move algorithm in MCMC, where only one electron position
+is updated in each proposed MCMC step. The same single-electron update is also used in LRDMC,
+as the algorithm requires.  Furthermore, both MCMC and LRDMC require evaluating the wave
+function at specific spatial grid points for the non-local ECP term and for the discretized kinetic-
+energy operator (LRDMC only).  These evaluations involve moving only one electron at the time
+from the original electron configuration.  In such cases, one does not need to evaluate the wave
+function with all electron coordinates from scratch, but one needs just to compute its variation
+through the single-electron move.  In this situation, one should exploit the so-called fast-update
+technique to drastically save the computational cost for both the Jastrow factor and determinant
+parts.  More specifically, MCMC or LRDMC requires the evaluation of the wave function ratio
+Ψ(x  ′)/Ψ(x).  The ratio is decomposed into the determinant partD(x        ′)/D(x) ande                       J(x ′)/e   J(x)    , and
+computed separately.
+
+    The Jastrow ratio is computed ase     J(x ′)/e   J(x) ≡e   ∆J  , where∆J=J(x        ′)−J(x).  Most contribu-
+tions toJcancel exactly since only a single electron has been moved.  As already described in
+Sec. III A, the Jastrow factor is made of three different terms.  Each of them requires a different
+implementation for fast updates.
+
+    For the determinant ratio,  let   ˜Fold  be the spatial pairing matrix [the same   ˜Fas in Eq. (51)]
+before a proposed move and  ˜Fnew  the matrix after updating electronl.  A single-electron move
+modifies only one row or one column of  ˜F:  a spin-up move updates rowl, whereas a spin-down
+
+                                                           19
+move updates columnl. Therefore, the new matrix can always be written as a rank-1 update,
+
+                                                        ˜Fnew =  ˜Fold +u    lvTl,                                                       (66)
+
+with                                           el, [  ˜Fnew
+
+                                                         l,: −  ˜Foldl,:   ]T ,   spin-up move,
+                                (u  l,v l)=       ˜Fnew               ,        spin-down move,                                     (67)
+
+                                                   :,l −  ˜Fold:,l , e  l
+wheree               l is thel-th Cartesian basis vector. The Slater determinant is treated in the same way, since
+the single-determinant ansatz is a special case of AGP. Using the matrix determinant lemma,
+                           det[ ˜Fnew]=det[     ˜Fold +u    lvT                                  det[ ˜Fold],                       (68)
+                                                                l ]=   1+v       Tl ( ˜Fold)−1  ul
+
+and thus the determinant ratio is
+
+                                           ρdet≡  det[ ˜Fnew]det[ ˜Fold]  =1+v           Tl ( ˜Fold)−1  ul.                                          (69)
+
+Thus, the acceptance ratio can be evaluated without recomputing det[ ˜Fnew] from scratch. After an
+accepted move, the inverse matrix is updated using the Sherman-Morrison formula,
+            ( ˜Fnew)−1   =(    ˜Fold +u    lvT                                    1+v       T             −1   vT
+                                           l )−1   =(    ˜Fold)−1 −(    ˜Fold)−1  ul      l ( ˜Fold)−1  ul      l ( ˜Fold)−1 .      (70)
+
+The  cost  of  this  standard  procedure  is  dominated  by  matrix-vector  operations.   To  reduce  this
+overhead, McDaniel et al.51 proposed the delayed-update scheme, but this is not yet implemented
+in jQMC.
+
+
+F.    Atomic orbitals for the pairing function and the Jastrow factor
+
+
+    One of the most common choices for atomic orbitals is atom-centered Gaussian-type orbitals,
+denoted as GTOs. A GTO is composed of the radial and angular parts. There are two conventions
+for the angular part:  One is the solid harmonics, and the other is the polynomial functions in the
+Cartesian basis. jQMC implements both of them.
+
+
+1.    Gaussian-Type Atomic orbitals with Solid-harmonics basis functions
+
+    Primitive atomic orbitals (ψ  l,m,I    (r)) with the (regular) solid harmonic basis functions are given
+in the following Gaussian form:
+
+                                               ψl,m,I    (r)=N           solidl,m,I RI(r)S       l,m,I    (r),                                              (71)
+
+                                                                 20
+which can be evaluated using Cartesian coordinates (i.e.,x,y,z) because there is no singular point,
+where the radial part and solid harmonics are defined as:
+
+                                                                  RI(r)=e   −Z   I·|R   I−r|      2,                                                        (72)
+
+and                                                             r
+                                              Sl,m,I    (r)=         2l+1
+            vt                                                          4π  ·|R I−r|      l·Yl,m  (θ  I,ϕI),                                    (73)
+
+where           2l+1
+                   4π      inS     l,m,I    (r) is the Racah’s normalization factor for the solid harmonics part, re-
+sulting in R π        R  2π
+                  0    0   sinθdθdϕS      ∗l,m,I    (r)S       l,m,I    (r)=         4π2l+1      r2l  . The normalization factor,N  solidl,m,I     , is defined
+as                                                                       s
+                                                          N solid             (2Z     I/π)      3/2   (4Z     I)l
+                                                              l,I     =            (2l−1)!!     .                                                (74)
+
+The GTO can also be written with real spherical harmonics as:
+
+                                           ψl,m,I    (r)=N           sphel,m,I ·|R I−r|      l·RI(r)·Y       l,m  (θ  I,ϕI),                                  (75)
+
+whereθ               I andϕ         I are polar (0≤θ<π) and azimuthal (0≤ϕ<2π) angles in the spherical coordinate
+whose origin isR    I,Y l,m  (θ,ϕ) is the real spherical harmonics, andN              sphel,I     is the normalization factor:
+                                                                      s
+                                                       N sphe             22l+3    (l+1)!(2Z                    I)l+  32
+                                                          l,I     =              (2l+2)!  √π   .                                             (76)
+                                                                                                                       vt
+
+                                                                                                           l,m,I           2l+1
+Notice that the relation between the normalizations factors isN solidN sphe                                       =           4π     .
+                                                                                                           l,m,I
+
+2.    Gaussian-Type Atomic orbitals with Cartesian basis functions
+
+     Primitive atomic orbitals (ψ  l,m,I    (r)) with Cartesian basis functions are given in the following
+Gaussian form:
+                                        ψnx,n y,n z,I (r)=N           cartnx,n y,n z,I·e−Z   I·|R   I−r|      2·Pnx,n y,n z(x,y,z),                              (77)
+
+whereP               nx,n y,n z(x,y,z)=x                  nxyny xnz,N  cartnx,n y,n z,I  is the normalization factor for an orbital (n  x,n y,n z,I)
+discussed later. The normalizationN                                  cartnx,n y,n z,I  is computed as:
+                            s                                                               vut
+        N cart                          (2Z     I/π)      3/2   (4Z     I)nx+n   y+n   z        (2Z     I/π)      3/2   (8Z     I)nx+n   y+n   znx!n  y!n  z!
+           nx,n y,n z,I  =      (2n     x−1)!!(2n                  y−1)!!(2n                  z−1)!! ≡     (2n     x)!(2n         y)!(2n         z)!    .       (78)
+
+
+                                                                              21
+The total angular momentumlis defined asl=n                                        x +n    y +n    z. jQMC stores the polynomial functions
+in the canonical (or alphabetical) ordering, as in TREX-IO20, e.g.,l=0→s,l=1→p                                           x,p y,p z,
+l =2→d              xx,d  xy,d  xz,d yy,d yz,d zz.  Notice that the above equation implies that the normalization
+factor is not common for all orbitals with the samelexcept forsandporbitals. For instance, for
+dxx andd         xy orbitals,                                      r
+                                                   N cart              (2Z     I/π)      3/2   (4Z     I)2
+                                                      2,0,0,I       =             3     ,                                               (79)
+
+while
+                                                    N cart1,1,0,I       = p(2Z     I/π)      3/2   (4Z     I)2.                                                (80)
+
+
+IV.    COULOMB INTERACTION AND EFFECTIVE CORE POTENTIAL
+
+    The potential term is decomposed into two parts, bare Coulomb interactions and effective core
+potential parts,V(x)=V                            bare(x)+V           ecp(x). The bare Coulomb part is further decomposed into three
+components. i.e.,V         bare(x)=V           ei(x)+V           ee(x)+V           ii(x). They are:
+                                                                        X          ZI
+                                                        Vei(x)=−              |r l−R    I|,                                                   (81)
+                                                                          l,I
+
+                                                                       X          1
+                                                         Vee(x)=             |r l−r    l′|,                                                     (82)
+                                                                        l′>l
+
+                                                                      X        ZI′ZI
+                                                        Vii(x)=             |R I′−R    I|.                                                    (83)
+                                                                      I′>I
+Notice that the electron-ion potential is often computed with semi-local potentials when ECPs
+are employed.   In the latter case,  the atomic numberZ                  I  is replaced by the effective charge,  or
+pseudoatomic number,Z  effI  , such that the electron-ion potential readsV             ei(x)=−     Pl,I  ZeffI /|r    l−R    I|.
+Nevertheless, in jQMC the electron-ion potential is separated from the semi-local potential part for
+the sake of clarity. Thus,V              bare(x) is defined for both all-electron and ECP cases, withZ                I replaced
+byZ      effI   in Eqs. 81 and 83 if ECP are used.
+
+    In the presence of ECPs, one should treat their non-local contributions. The semi-local effective
+core potential is usually employed in QMC calculations, which for nucleusIis parametrized as
+follows:
+                                                                             lmaxX
+                                                       ˆVi,Iecp =  ˆVi,Ieloc +    ˆVi,Il   ˆPi,Il ,                                                  (84)
+
+                                                                             l=0
+
+                                                                      22
+whereiandIare electron and nucleus indices,                    ˆPi,Il   = Plm=−l  |Y lm⟩i,I⟨Y  lm|i,I   projects the angular part
+of electroni’s coordinates relative to nucleusIonto the angular momentuml, andV                                                                               i,Ieloc,V  i,Il   are
+radial functions ofr     i,I ≡|r i−R    I|.  Both   ˆVi,Ieloc≡V    Ieloc(r  i) and  ˆVi,Il ≡V    Il (r  i) are parametrized with
+three parameters,a,b, andn:
+
+
+
+
+                                                                NIX
+                              V Ieloc(r  i)=         1|r i−R    I|2 aI,k ·|r i−R    I|nI,k  exp(−b            I,k|r i−R    I|2),                       (85)
+                                                                k
+                                                            NI,lX
+                             V Il (r  i)=         1|r i−R    I|2 aI,k,l ·|r i−R    I|nI,k,l    exp(−b            I,k,l |r i−R    I|2),                      (86)
+                                                             k
+
+
+whereN               I andN         I,l   are the number of ECP terms of the local contribution and the non-local part with
+angular momentumlfor nucleusI, respectively.  Following the standard treatment of the semi-
+local form4,47,52,53, the action of  ˆVi,Il   ˆPi,Il   on a many-body wave functionΨreduces to an angular
+integration at fixed electron-nucleus distancer                    i,I  :
+
+
+                      ⟨x|    ˆVi,I               Z
+                            l   ˆPi,Il|Ψ⟩             dx ′⟨x|    ˆVi,I
+                           ⟨x|Ψ⟩              =                   l   ˆPi,Il|x′⟩⟨x ′|Ψ⟩⟨x|Ψ⟩                                                                  (87)
+
+                                                                 lX                Z
+                                            =V     i,Il   (r  i,I  ) Ylm(Ω  i,I  )      dΩ ′i,I   Y∗lm(Ω ′i,I  ) Ψ(...,r  ′i,...)Ψ(...,r        i,...)                 (88)
+                                                              m=−l       Z
+                                            =V     i,I                        dΩ ′i,I   Pl si,I ·s′i,I    Ψ(...,r  ′i,...)
+                                                   l   (r  i,I  ) 2l+14π                                  Ψ(...,r        i,...) ,                  (89)
+
+
+
+
+wheres               i,I ≡   ri−R    I|r i−R    I| ands  ′i,I ≡   r′i−R    I|r′i−R    I|.  The last identity of the above equation follows from a
+well-known property of the spherical harmonics52, called the addition theorem, Plm=−l      Ylm(Ω)Y  ∗lm(Ω ′)=
+2l+1
+   4π     Pl(s  i,I ·s′i,I  ) whereP               l(z) is thel-th Legendre polynomial.
+
+    jQMC implements the integration scheme proposed in Ref. 53 to perform a numerical quadra-
+ture with tetrahedrical (N  V  =4), octahedrical (N      V  =6,N        V  =18), or icosahedrical (N      V  =12)
+symmetry. The quadrature meshes are defined asR     I +δ    m·|r i−R    I|. Since the numerical quadra-
+ture is not exact for a general wave function, the direction ofzaxis of the spherical coordinate is
+selected randomly,θ(∈[0,π[) andϕ(∈[0,2π[) are selected randomly, to mitigate the bias.  With
+
+                                                                         23
+the mesh, the projection is rewritten as a sum ofN     V terms:
+       ⟨x|    ˆVi,I           Z
+            l   ˆPi,Il|Ψ⟩          dx ′⟨x|    ˆVi,I
+            ⟨x|Ψ⟩              =              l   ˆPi,Il|x′⟩⟨x ′|Ψ⟩⟨x|Ψ⟩                                                                                (90)
+
+                               NvX
+                          ∼         ⟨x|    ˆVi,Il   ˆPi,Il|x m⟩⟨x  m|Ψ⟩⟨x|Ψ⟩                                                                                   (91)
+                              m=1
+                               NvX
+                          =        (2l+1)·V                  i,Il   (r  i,I  )·w   m·P  l  si,I ·∆  m Ψ(···,R          I +δ    m·|r i−R    I|,···)Ψ(···r        i···)      ,(92)
+                              m=1
+wherea               m  are the weights of the quadrature,  andδ         m  are the points of the mesh,  and∆         m  is the
+normalized one:∆          m≡δ    m/|δ    m|.  The grid points are tabulated in Ref. 53, which are hard-coded
+in jQMC. The WF ratios on the grid points are efficiently computed via the fast-update algorithm,
+described in Sec. III E, which is critically important for a fast computation for both MCMC and
+GFMC.
+
+    The non-local contribution arising from the application of non-local operators is naturally con-
+sidered  in  GFMC,  and  more  specifically  in  LRDMC.  Indeed,  in  the  LRDMC  framework,  the
+                                                  ΨT (x′)
+non-local potentials defined as  ˆVnlx,x ′        ΨT (x)  is nothing but⟨x|       ˆVi,Il   ˆPi,Il|x m⟩⟨x  m|Ψ T⟩⟨x|Ψ      T⟩  for nucleusIand
+electroni.  Therefore, within the discretized summation implementation, one needs to consider
+only the non-diagonal hoppingsx→x        ′ satisfying|r      ′i−R    I|=|r      i−R    I|. Indeed, one should consid-
+ers onlyN           V·N  a·N  e non-diagonal matrix elements at maximum for the non-local PP term, even
+if, in practice, we can consider only a few neighboring atomsIto the target electron indexisince
+the potential decays exponentially, resulting in reducing the mesh size that should be considered
+to∼N        V·N  e.
+
+    With  the  semi-local  ECPs,  the  fixed-node  Hamiltonian  (Eq. 17)  corresponds  to  the  T-move
+approximation  of  the  standard  DMC  framework54.    If  one  replacesV                    nlx,x ′ΨT (x′)/Ψ   T (x)  with
+Vnlx,x ′DT (x′)/D   T (x), whereD               T represents the determinant part of the trial wave functionΨ                    T, the
+resultant fixed-node Hamiltonian corresponds to T-move with determinant locality approximation
+(DTM) in the standard DMC framework55.  jQMC implements the two fixed-node Hamiltonians
+for calculations with ECPs.
+
+
+V.    DERIVATIVES OF TOTAL ENERGY
+
+
+    The total-energy derivatives with respect to the variational parameters are a key component in
+order to optimize the many-body wave function.  Similarly, those with respect to atomic coordi-
+
+                                                                24
+nates (i.e., atomic forces) are essential for tasks such as geometry optimization, phonon dispersion
+calculations, and for making machine-learning interatomic potentials. Algorithmic Differentiation
+or Automatic Differentiation (AD) offers a powerful solution to this problem by systematically ap-
+plying the chain rule39. AD comes in two primary forms: forward-mode AD (FAD), which prop-
+agates derivatives from the inputs to the outputs, and adjoint-mode AD (AAD), which starts from
+the outputs to the inputs. They correspond to Jacobian-Vector products (JVPs) and Vector-Jacobian
+products (VJPs) in the JAX terminology31, respectively. When the number of input parameters sig-
+nificantly exceeds the number of outputs, AAD is more efficient, as it enables the evaluation of
+all gradients in a computational time comparable to that of a single function evaluation (e.g., the
+energy or wave function). This computational advantage makes AAD particularly well-suited for
+QMC simulations involving wave functions with many variational parameters. AAD was first in-
+troduced in the QMC context for atomic force calculations in Ref. 39. Our implementation, jQMC,
+leverages AAD provided by JAX (e.g. grad) to efficiently compute derivatives of the local energy
+and the logarithm of the wave function.
+
+
+
+A.    Derivatives with respect to variational parameters (MCMC)
+
+
+    The energy derivative with respect to a variational parameterα                        k is represented as a generalized
+force:
+                                        fk =− ∂E   (α)                ⟨Ψ α|  ˆH|Ψ α⟩
+                                                   ∂αk    =−  ∂∂αk      ⟨Ψ α|Ψ α⟩ .                                          (93)
+In MCMC, the derivative can be evaluated usingMconfigurations of electron coordinates                  4:
+                                                 P                            |Ψ α(x)|       2
+                                                    x eL(x)    Ok(x)−       ¯Ok
+                                      fk =−2                 P
+                                                                x|Ψ α(x)|       2                                         (94)
+                                                 PM
+                                                    i=1   wi eL(x  i) Ok(x  i)−   ¯Ok
+                                         ≈−2                  PM
+                                                                 i=1   wi       ,
+
+wheree               L (x)  is  the  local  energy, O k (x)  is  the  logarithmic  derivative  of  the  WF, i.e., O     k (x)  =
+ ∂                                                                                  MP                MP
+∂αk lnΨ   α (x)), and  ¯Ok is its average overMsamples,i.e.,                        ¯Ok =
+                                                                                   i=1   wiOk (xi)/  i=1   wi. In jQMC, the
+logarithmic derivativeO   k (x) is computed via JAX’s automatic differentiation (grad) functionality.
+In jQMC, the derivatives with respect to the wave function parameters are implemented only for
+MCMC at present; in the future, they will be implemented also for LRDMC.
+
+                                                            25
+B.    Derivatives with respect to nuclear coordinates: Atomic forces (MCMC)
+
+
+    jQMC employs the differential form of atomic force calculations with the space-warp coordi-
+nate transformation (SWCT) technique to reduce the statistical error56:
+
+
+                                *  d        +       "       *  d                          *
+                                                                               1                                 1
+                      FI =−       dR   I eL   +2     ⟨eL⟩     dR   I log J     2 Ψ +   −    eL   ddR   I log J   2 Ψ +#                  (95)
+
+
+
+whereJis the Jacobian of the SWCT. The SWCT is used to follow the displacement of charges
+around the nucleus,
+
+
+                                                         ¯ri =r    i +dR       IωI (ri),                                                      (96)
+
+
+
+
+
+                                                    ωI (r) =  κ (|r−R       I|)PNa
+                                                                     J=1  κ (|r−R       J|),                                                  (97)
+
+
+whereκ          (r) is a function that decays sufficiently fast for larger. The original                  56 choice,κ            (r) =1/r          4,
+is adopted in jQMC. The parameter derivatives are computed with the partial derivatives of the
+local energy and those of the logarithm of the wavefunction39:
+
+
+                                                   X
+         FVMCI      =−    dEdR   I  =− ⟨ ∂E   L∂R   I  + ω (RI,r i)∂E   L∂r   i⟩
+                                                      i  ∂logΨ
+                                                                          X    "                                 ∂ω (RI,r i)#⟩.  (98)
+                                   −2⟨(E           L−E)      ∂R   I    +        ω (RI,r i)∂logΨ∂r   i    + 12         ∂r   i
+                                                                            i
+
+
+                                                                                *∂E   L+    *∂logΨ      +   *∂E   L+   *∂logΨ      +
+Here, 6N   e +6N       a components have to be evaluated, i.e.,                           ,               ,          ,               39. The
+                                                                                   ∂r   i        ∂r   i       ∂R   I       ∂R   I
+
+dimensions of ∂E   L∂R   I, ∂E   L∂r   i , ∂logΨ∂R   I   , ∂logΨ∂r   i    , and ∂ω (RI,r i)∂r   i       are (N  a,3), (N   e,3), (N   a,3), (N   e,3), and
+(N  a,N e,3), respectively.ω   (RI,r i) is always a scalar value. One can define the following matrices
+
+                                                                    26
+to compute the force components with a given electronic configurationx:
+                                              
+
+                                                 ∂E   R≡ ∂E   L∂R   I                      dim.=(N             a,3),
+
+
+                                                 ∂E   r,↑ ≡ ∂E   L∂r ↑                     dim.=(N    ↑e,3),
+                                                                   i
+
+                                                 ∂E   r,↓ ≡ ∂E   L∂r ↓                     dim.=(N    ↓e,3),
+                                                                   i
+
+                                                 ∂Ψ   R≡ ∂logΨ∂R   I                   dim.=(N             a,3),
+
+
+                                                 ∂Ψ   r,↑ ≡ ∂logΨ∂r ↑                      dim.=(N    ↑e,3),                                                   (99)
+                                                                      i
+
+                                                 ∂Ψ   r,↓ ≡ ∂logΨ∂r ↓                      dim.=(N    ↓e,3),
+                                                                      i
+                                                                    ∂ω RI,r↑i
+                                                 ∂Ω   r,↑ ≡ Pi             ∂r ↑            dim.=(N             a,3),
+                                                                               i
+                                                                    ∂ω RI,r↓i
+                                                 ∂Ω   r,↓ ≡ Pi             ∂r ↓            dim.=(N             a,3),
+                                                                                          dim.=(N             a,N↑e ).i
+                                                 Ω↑≡ω   RI,r↑i
+                                                 Ω↓≡ω   RI,r↓                dim.=(N             a,N↓e ).
+                                                                        i
+
+Once the objects in Eq. 99 are evaluated and stored, the (N  a,3) force matrixF                  VMC can be obtained
+via matrix-matrix operations, according to the following contributions:
+
+                                                                 FVMC =F    HF +F    Pulay,                                                   (100)
+
+where the Hellmann–Feynman (HF) term is
+
+                                                   FHF =−⟨∂E         R + Ω↑∂E   r,↑  + Ω↓∂E   r,↓⟩,                                       (101)
+
+and the Pulay contribution reads
+
+
+                       FPulay  =−2⟨(E               L−E)(∂Ψ               R + Ω↑∂Ψ   r,↑  + Ω↓∂Ψ   r,↓  + 12(∂Ω     r,↑  +∂Ω       r,↓  ))⟩.            (102)
+
+
+     We validated the force implementation through the PES calculation of the Hydrogen and Nitro-
+gen dimer. To test the implementation, we verified that the the following conditions are satisfied:
+
+                                                                               27
+(a) The derivative of the PES with respect to the bond distance should be consistent with the com-
+puted atomic forces as long as all the parameters are variationally optimized, and (b), with the
+SWCT, the atomic forces acting on the left and right atoms of a dimer should have exactly the
+same absolute values57.
+
+
+
+C.    Derivatives with respect to nuclear coordinates: Atomic forces (LRDMC)
+
+
+    In LRDMC, the atomic force computation differs from the MCMC case (Sec. V B) in three
+respects: (i) the SWCT is not recommended because it leads to a bias, (ii) the Reynolds approxi-
+mation58 is introduced to replace the inaccessible derivative∂Ψ      0/∂R      I with the available∂Ψ                   T/∂R      I,
+and (iii) the Pathak-Wagner59 regularization is applied to suppress the divergence of the local en-
+ergy derivative near the nodal surface.
+
+    Since the SWCT is typically not used in LRDMC, allΩterms vanish (ω             I  =0), and the force
+expression simplifies considerably.  Using the same shorthand notation defined in Sec. V B, the
+force on atomIsampled from the mixed distributionΨ                          TΨ0 reads:
+
+
+                                                   FmixedI      =F    HFmixed +F    Pulaymixed,                                                 (103)
+
+
+where
+
+                                                    FHFmixed =−⟨∂E         R⟩ΨTΨ0,                                                   (104)
+
+                                             FPulaymixed =−2⟨(E               L−E)∂Ψ             R⟩ΨTΨ0.                                          (105)
+
+Here,⟨·⟩            ΨTΨ0  denotes  the  average  over  the  mixed  distribution  sampled  by  the  LRDMC  walker
+population,  in  contrast  to  the  MCMC  average  overΨ     2T.   The  mixed  estimatorF                       mixedI        is  biased
+because the sampling distributionΨ            TΨ0 differs from the pure distributionΨ                     20. This approximation
+becomes exact whenΨ             T = Ψ0.
+
+    Near the nodal surface ofΨ     T, the local energy and its derivatives can diverge, leading to large
+statistical fluctuations in the force estimator. To mitigate this issue, we employ the Pathak–Wagner
+regularization59.   According to the reweighting method,  the bracket⟨O⟩is evaluated using the
+regularized estimator with a functionR        η(x):
+
+                                                        ¯O=⟨O(x)R         η(x)⟩.                                                      (106)
+
+                                                                28
+Here,                                          
+                                  Rη(x)=         7ζ/η 6−15  ζ/η 4 +9  ζ/η 2,   ζ/η ≤1,                           (107)
+
+                                                 1,                                ζ/η >1,
+
+with
+
+                                                            ζ=   Ψ(x)∇Ψ(x)|∇Ψ(x)|                 2 .                                                       (108)
+
+Here,∇denotes the many-body gradient, collecting all particle-coordinate derivatives into a single
+vector. Defining
+                                                            Qi,k ≡ ∂∂r   i,k  Ψ(x),                                                       (109)
+
+one may regardQas an (N              e,3) matrix. Then,
+
+                                                           |∇Ψ(x)|                 2 =∥Q∥           2F,                                                       (110)
+
+and                                       ζ/η  = |Ψ(x)|
+
+                                                                        η∥Q∥          F,                                                        (111)
+where∥·∥               F denotes the Frobenius norm. The quantityζrepresents the normal distance betweenx
+and the nearest nodal point ofΨ, whileηcontrols the distance from the nodal surface within which
+the regularization is applied.
+    Each expectation values entering the total force are regularized as follows:
+
+                                                  FHFmixed =−⟨∂E         R·R η(x)⟩      ΨTΨ0,                                             (112)
+
+                                           FPulaymixed =−2⟨(E               L−E)∂Ψ             R·R η(x)⟩      ΨTΨ0,                                     (113)
+
+whereR      η(x) is the regularization function defined in Eq. (107), which smoothly suppresses contri-
+butions from walkers within a distanceηof the nodal surface.
+
+
+VI.    OPTIMIZATION OF WFs
+
+    Optimizing the variational parameters of the many-body wave function is the most challeng-
+ing task inab initioQMC calculations.  Since the QMC energy (and sometimes the variance) is
+evaluated stochastically and is strongly nonlinear in the variational parameters, a straightforward
+optimization method such as gradient descent does not work and is extremely inefficient.   The
+wave-function optimization in the context ofab initioQMC has been studied for a long time.
+
+                                                                    29
+Stochastic Reconfiguration (SR)  37 developed by Sorella, the Linear method (LM)  60 developed
+by Umrigar et al., and their variants 60–62 are the most widely adopted optimization methods in the
+QMC community. jQMC implements both of them.
+
+    In both SR and LR, themetricfor the parameter space (S), which measures the distance of the
+underlying normalized wavefunction63, plays a central role.  The normalized wavefunction at the
+given variational parametersαis defined as
+
+                                                | ˜Ψα⟩=|Ψ   α⟩/ p⟨Ψ α|Ψα⟩,                                                 (114)
+
+
+while its derivatives with respect to the variational parameters define asemi-orthogonalbasis set:
+
+                             | ˜Ψαk⟩=  ∂∂αk| ˜Ψα⟩=(     ˆOk−  ¯Ok)|  ˜Ψα⟩,        k=1,...,P,                          (115)
+
+
+wherePis the total number of variational parameters,               ˆOk is the logarithmic derivative operator,
+whose sample-wise representation, introduced in Sec. V A, isO    k(x)=∂logΨ         α(x)/∂α       k, and  ¯Ok =
+⟨ ˜Ψα| ˆOk| ˜Ψα⟩is its expectation value. Then, themetricfor the parameter space (S), which is based
+on the overlap matrix between thesemi-orthogonalbasis components, is computed as:
+
+
+       Sk,k ′ =⟨   ˜Ψαk| ˜Ψαk′⟩≡⟨ ˜Ψα|(  ˆOk−  ¯Ok)( ˆOk′−  ¯Ok′)|  ˜Ψα⟩= ⟨Ψ α|(  ˆOk−  ¯Ok)( ˆOk′−  ¯Ok′)|Ψ α⟩⟨Ψ α|Ψα⟩       .        (116)
+
+
+
+A.    Stochastic Reconfiguration (a.k.a. natural gradient optimization)
+
+
+    SR is a nonlinear optimization method for many-body wave functions developed by Sorella37.
+It uses a positive-definite preconditioning matrixSwhich represents the metric of the parameter
+space (Eq. 116), and the generalized force vectorf(Eq. 93), such that during an optimization step
+the WF parameters are updated as follows:
+
+
+                                                 αk→α      k + ∆·   S−1  f k.                                                  (117)
+
+
+The  matrixSis  stochastically  evaluated  usingMsamplesx=           {x1,x 2,...x  M}  (for  the  simple
+MCMC) with weightsw=    {w1,w 2,...w  M} (for the weighted MCMC):
+
+
+                                              MP     Ok (xi)−  ¯Ok  Ok′ (xi)−  ¯Ok′
+                                    Sk,k ′ =  i=1   wi         PM
+
+                                                                  i=1   wi         ,                                  (118)
+
+                                                            30
+                                                           MP                 MP
+whereO               k (xi)  =  ∂∂αklogΨ   α (xi),   ¯Ok  =
+                                                           i=1   wiOk (xi)/  i=1   wi,  andf is  computed  as  in  Eq.  94  of
+Sec. V A. We notice that the natural gradient method64  developed by Amari et al.   in a differ-
+ent context and used for machine learning in recent years has a direct correspondence with the
+SR.
+
+    The native SR method often suffers from numerical instabilities because the statistical noise
+makes the matrixSill-conditioned                    62.  jQMC mitigates the problem by the following numerical
+technique. First, to simplify the computation65 and to stabilize the solution, jQMC introduces the
+quantities                                                          √
+                                             Xk,i ≡X    k(x  i)=      wi(O  k(x  i)−   ¯Ok)q,                                         (119)
+                                                                            PM
+                                                                               i=1   wi
+and
+                                              ei≡e(x        i)= −2 √wi(e  L(x  i)−¯e        L)q,                                          (120)
+                                                                          PM
+                                                                             i=1   wi
+which giveS=XX           T  andf =Xe.  To makeSscale-invariant                        4, Xis rescaled row-wise by the
+inverse square root of the diagonal ofS:
+
+                                                        Xk,i ←X      k,i /pSk,k .                                                      (121)
+
+Notice thatedoes not need to be rescaled separately, since the rescaling offis considered via
+f=Xe. In this normalized basis, the regularized SR update reads
+
+                                                  δθ=τ(XX              T +ε    SRIP)−1  Xe,                                               (122)
+
+wherePis the total number of variational parameters. After solving forδθin the normalized basis,
+the natural-gradient direction is rescaled back viaδθ       k←δθ      k/pSk,k  .
+
+    The above reformulation also enables the use of the well-known push-through identity tech-
+nique66,67, namely (AB+λI)    −1  A=A(BA+λI)       −1  :
+
+                                                  δθ=τX(X                  T X+ε       SRIM)−1  e,                                               (123)
+
+which is more efficient when the number of samplesMis smaller than the number of parameters
+P.
+
+    Either with or without the push-through identity technique, jQMC does not compute the inverse
+of the matrixXX                T  orX     T X.  Instead, it solves the inversion problem using the conjugate gradient
+
+                                                                 31
+(CG) method.   Let each MPI rank hold a local blockX              (d) ∈R   P×M       d,  wherePis the number of
+variational parameters andM         d is the number of MCMC samples held by rankd.  The globalXis
+thenX=        X(1),X  (2), ...,X  (D)  ∈R   P×M ,    M=    PDd=1    Md.In the CG mode, jQMC never assembles
+S≡XX        T∈R   P×P     orX     T X∈R       M×M    ; it only stores the distributed blocksX                (d)   and auxiliary vectors.
+More specifically, jQMC implements a matrix-free CG method to solve  S+ε        SRIPθ=f(or its
+dual form), where each rankdindependently computes only its local matrix-vector contributions.
+Indeed, before starting the CG iterations, the right-hand side is constructed asf=    PDd=1    X(d)  e(d)  ,
+where all ranks first compute their local contributions (X  (d)  e(d)  ), summed them up using a global
+all-reduce.  Then, during the CG iterations, each rank repeatedly computes its local contribution,
+v7→X         (d)   X(d)T    v ,and a global all-reduce is then used to obtainv7→         PDd=1    X(d)   X(d)T    v  +ε    SRv.
+This naturally distributes both memory and compute workloads among CPUs or GPUs, yielding
+excellent weak-scaling behavior without storing the full SR matrix, as demonstrated in Sec. XII.
+
+    In practice, during an optimization, jQMC monitors the variational energy (E) and the maxi-
+mum value of the signal to noise ratio among all the force components:
+                                                                                             fk  !
+                                       signal-to-noise  ratio≡max             k            σ fk                                  (124)
+
+whereσ               fk represents the estimated error bar of the forcef            k. This value is used in jQMC as one of
+the convergence criteria of the WF optimization.
+
+
+B.    The Linear method and its variants
+
+    The  LM  starts  from  the  linear  expansion  of  the  normalized  variational  wave  function  with
+respect to the variational parametersα:
+
+                                                                pX                   pX
+                                     | ˜Ψα+δα0 ⟩=|     ˜Ψα0⟩+      δαk| ˜Ψαk⟩≡          zk| ˜Ψαk⟩,                                 (125)
+                                                              k=1                  k=0
+wherez               0 =1 andz            k =δα    k fork≥1. Here,|                   ˜Ψ0,α⟩≡| ˜Ψα⟩is the normalized wavefunction defined
+in Eq. 114, and|       ˜Ψk,α⟩is thesemi-orthogonalbasis defined in Eq. 115. By construction, this basis
+satisfies⟨             ˜Ψα0| ˜Ψαk⟩=0 for allk≥1. Using this expansion, the variational energy is written as
+                                                                        Pp
+                               Eα+δα     =⟨ ˜Ψα+δα0 | ˆH|    ˜Ψα+δα0 ⟩    Ppk,k ′=0   zkzk′⟨ ˜Ψαk| ˆH|    ˜Ψαk′⟩
+                                             ⟨ ˜Ψα+δα0 | ˜Ψα+δα0 ⟩   =       k,k ′=0   zkzk′⟨ ˜Ψαk| ˜Ψαk′⟩ .                          (126)
+Stationarity with respect toz     l leads to the generalized eigenvalue problem
+
+                                                            Hz=ESz,                                                           (127)
+
+                                                                32
+with
+                                          Hk,k ′ =⟨   ˜Ψαk| ˆH|    ˜Ψαk′⟩,  S    k,k ′ =⟨   ˜Ψαk| ˜Ψαk′⟩.                                   (128)
+
+The matrix elements can be evaluated efficiently by Monte Carlo sampling overπ(x)∝|Ψ          α(x)|       2.
+In particular,
+                                            ⟨ ˜Ψαk| ˆH|    ˜Ψαk′⟩=  D(O  k(x)−       ¯Ok)W  k′(x)  Eπ(x)  ,                                     (129)
+
+where
+                                                    Wk(x)=  ⟨x|     ˆH(    ˆOk−  ¯Ok)|Ψ α⟩⟨x|Ψ  α⟩    .                                             (130)
+
+This quantity is related to the derivatives of the local energy:
+                                  ∂E   L(x)
+                                     ∂αk    =⟨x|     ˆH(    ˆOk−  ¯Ok)|  ˜Ψ0,α⟩⟨x|    ˜Ψ0,α⟩   −E    L(x)(O         k(x)−       ¯Ok),                          (131)
+so that
+                                             Wk(x)=   ∂E   L(x)∂αk    +E    L(x)(O         k(x)−       ¯Ok).                                      (132)
+
+We  notice  that  if  the  local  energy  is  real,  then⟨∂E   L(x)/∂α       k⟩  =0  (see  Ref.  68).   Substituting
+Eq. (132) into Eq. (129), the LM Hamiltonian matrix is naturally decomposed asH=K+B, with
+
+                                                Kk,k ′ =⟨δO         k(x)δO          k′(x)E       L(x)⟩   π(x)  ,                                         (133)
+
+                                                 Bk,k ′ =⟨δO         k(x)  ∂E   L(x)∂αk′ ⟩π(x)  ,                                                   (134)
+
+whereδO                 k(x) =O           k(x)−       ¯Ok.   TheKmatrix  is  symmetric  inkandk        ′,  whereasBinherits  the
+asymmetry  of  theWderivation.   Since  the  exactHis  hermitian  (symmetric  for  the  real  wave
+functions considered in this study),K+Bis symmetrized post-hoc asH←(H+H                                                       T)/2 in jQMC
+to avoid the numerical instaibility.
+
+    We note that the elements of the LM overlap (S) and Hamiltonian (H) matrices involving the
+zeroth basis state are given as follows. Since the derivative basis is semi-orthogonal to the current
+normalized wave function, we haveS   00  =1 andS            0k   =S    k0   =0    (k≥1).  The corresponding
+Hamiltonian matrix elements areH       00 =⟨   ˜Ψα0| ˆH|    ˜Ψα0⟩=E  α,H k0  =⟨   ˜Ψαk| ˆH|    ˜Ψα0⟩= ⟨δO   k(x)E       L(x) ⟩π(x)    =
+
+−12 fk, andH         0k  =⟨   ˜Ψα0| ˆH|    ˜Ψαk⟩= ⟨Wk(x) ⟩π(x)    =−   12 fk. wheref               k (fork≥1) is the same as in Eq. 93.
+
+    The original LM optimizes allPparameters simultaneously by solving the full (P+1)×(P+1)
+generalized eigenvalue problem60,61,68. In practice, however, this can be numerically unstable and
+computationally expensive when many parameters with very different scales are present. For this
+reason, jQMC uses two practical variants based on the SR directiong                     k =(S  −1  f)  k, inspired by the
+TurboRVB’s implementation62.
+
+                                                                       33
+1.    Linear method with only the SR direction
+
+
+    The first practical variant addresses a key limitation of the original LM formalism, which re-
+quires solving a generalized eigenvalue problem with allPvariational parameters.  This variant
+keeps only the SR direction and removes all individual parameter directions. In this case, the LM
+update is constrained to
+                                               δαk =γg       k,        g k =(S  −1  f)  k,                                             (135)
+
+so that the optimization reduces to a single scalarγ. The energy becomes
+
+                                                Eα+δα     =  H0 +2γH          1 +γ    2H21+γ       2S 2   ,                                             (136)
+
+with
+                   H0 =E  α,        H 1 =−   12gTf,        H   2 =g    T(K+B)g,        S                      2 =g    TSg.             (137)
+
+MinimizingE(γ) yields a quadratic equation,
+
+                                            H1S 2γ2 +(H      0S 2−H    2)γ−H         1 =0,                                         (138)
+
+whose solution is                                             q
+                                           H2−H    0S 2±         (H  2−H    0S 2)2 +4H       21S 2
+                                     γ=                          2H   1S 2           .                                 (139)
+
+In jQMC, the root with the smaller absolute value is selected in order to avoid spuriously large
+steps. The final parameter update is simply
+
+                                                            δαk =γg       k.                                                            (140)
+
+
+2.    Linear method with the SR collective variable and selected parameters
+
+    For a more efficient approach, we combine a singleglobal SR collective mode, which considers
+the contribution of all parameters through the SR matrixS    −1  , combined with a small set ofindi-
+vidually resolved directionscorresponding to the parameters whose generalized forces have large
+signal-to-noise ratios.  Thus, the SR direction provides a global update for all parameters, while
+the selected directions based on the signal-to-ratios allow the LM to assign individually optimized
+steps to the few chosen parameters that should be far from their local minima.  Specifically, we
+define the SR collective state
+                                                      PX
+                                         | ˜ΨSR⟩=         gk| ˜Ψαk⟩,        g    k =(S  −1  f)  k,                                      (141)
+                                                     k=1
+
+                                                                34
+where the sum runs over all variational parameters. The SR direction provides a well-conditioned
+collective mode that automatically incorporates the scale information encoded in the overlap ma-
+trix. We then diagonalize the LM in the reduced subspace
+                                           n| ˜Ψα
+                                                0⟩,|   ˜ΨSR⟩,|   ˜Ψαk1⟩, ...,|   ˜Ψαkm⟩o,                                           (142)
+
+wherek               1,...,k  m  denote a small set of selected parameters.   In jQMC, these are chosen as the
+parameters with the largest signal-to-noise ratio of the generalized forcef            k, so that noisy directions
+are excluded from the explicit LM subspace. The generalized eigenvalue problem retains the same
+form, as in Eq. 127:
+                                                          ¯Hv=E        ¯Sv,                                                           (143)
+
+but now in a reduced (m+2)-dimensional basis. The matrix elements involving the SR collective
+variable follow from linearity:
+
+                      ¯H0,SR   =−   12gTf,           ¯HSR,SR     =g    T(K+B)g,                       ¯SSR,SR     =g    TSg,                 (144)
+
+and similarly for the mixed SR-selected-parameter blocks. The final update is written as
+                                                      
+                                  δαk =  vSR            vki/v   0,   k=k        i∈{k  1,...,k  m},                        (145)
+                                            v0  gk +    0,          otherwise.
+
+Thus, this variant supplements the global SR direction by a few individually optimized corrections.
+
+
+C.    Optimization of molecular orbital coefficients with constraints
+
+    In jQMC, the nodal surface of the wave function can be optimized via the determinant part,
+namely, the geminal matrixΛ    ↑,↓l,l ′  [Eq. (43)]. The most straightforward strategy is an unconstrained
+optimization, that is, optimizing all independent variational parameters in the geminal matrix sub-
+ject only to the required symmetry.  jQMC implements this simplest scheme.  In addition, jQMC
+also  implements  the  molecular-orbital-constrained  optimization  introduced  in  TurboRVB4,69,70.
+According to this scheme,  one can optimize the geminal matrixΛ    ↑↓  expanded over the atomic
+orbitals (Eq. 55) by preserving a targeted rank of the matrix, chosen in input. For AGP wave func-
+tions, this approach makes it possible to introduce an effective coherence-length cutoffin the AGP
+matrix4, for both insulators and metals, because the AO representation bears information on the
+correlation length of the geminal, through the ionic centers of the AO basis.  Moreover, the AGP
+
+                                                             35
+expanded over atomic orbitals has an equivalent natural orbital representation in its AGPn or SD
+form, expanded over molecular orbitals. Therefore, by constraining the rank ofΛ, the optimization
+can be carried out with a fixed number of molecular orbitals retained in the projection, denoted by
+n(n=N            e/2 for SD andn>N                  e/2 for AGPn), while exploiting the locality of the geminal built in
+the corresponding AO expansion. We describe the implementation of the fixed-rank optimization
+below. We notice that, following the convention stated at the beginning of Sec. II, all orbitals and
+the geminal matrix are taken to be real.
+
+    Below, we focus on the paired blockΛ   ↑,↓    of the geminal matrix;  the unpaired blockΛ   ↑  has
+no spin-down index and therefore no rank constraint, and is treated separately at the end of this
+Subsection. To keep the formulas simple, we specialize the derivation to the spin-unpolarized SD
+reference, wheren=N                     e/2=N   ↓e  and thenretained MOs coincide with the occupied MOs; we
+therefore use the standard occupied/virtual terminology throughout the rest of the subsection
+instead of retained/discarded.  The same formulas can be applied for AGPn (n>N                              e/2) with
+occupied replaced with the retainedn-dimensional MO subspace, and to the spin-polarized case
+via the substitutions for spin-dependent MO coefficients.
+
+    As shown in Eq. (65), the AGP pairing function (the spin-↑,↓part) can be represented in the
+MO basis as:                                                    nX
+                                             F↑,↓  (r,r  ′)=        λµΦµ(r)Φ   µ(r ′),                                           (146)
+                                                               µ=1
+where{Φ       µ}nµ=1     are  thenoccupied  MOs  and{λ        µ}the  corresponding  weights  (λ  µ  =1  for  SD).
+Expanding the occupied MOs in the AO basis:
+                                                                X     ˜Cl,µψl(r),                                                   (147)
+                                                    Φµ(r)=
+                                                                  l
+the pairing function takes the AO basis representation:
+                                                              X
+                                             F↑,↓  (r,r  ′)=                l,l ′ψl′(r ′),                                           (148)
+                                                               l,l ′ ψl(r)Λ  ↑,↓
+with
+                                                         Λ↑,↓   =  ˜Cλ    ˜CT,                                                         (149)
+
+whereλ=diag(λ                                   1,...,λn) is the (n,n) diagonal matrix of weights and        ˜Cis the (M      ao,n) matrix
+of occupied MO coefficients; thus,rank(Λ         ↑,↓  )≤n.  The columns of        ˜Csatisfy     ˜CTS ˜C=I        n withS
+being the AO overlap matrix.  We notice that, in this Section, the row and column indices of the
+MO coefficients           ˜Care flipped compared withCin Eq. 59 to follow the same notation as Ref. 4.
+
+                                                               36
+    A linearized rank-preserving variation is obtained by changing only the quantities that appear
+in Eq. (149), namely  ˜Candλ.  Under             ˜C→     ˜C+δ      ˜Candλ→λ+δλ, the first-order variation of
+the geminal matrix is
+                                        (δΛ ↑,↓  )c =δ   ˜Cλ    ˜CT +  ˜Cδλ      ˜CT +  ˜Cλδ      ˜CT.                                  (150)
+
+Here,δ          ˜Cdenotes  an  arbitrary  infinitesimal  change  of  the  occupied  MO  coefficients.   We  now
+introduce the AO-basis representations of the left and right projectors associated with the occupied
+MO subspace:
+
+                                                   R=(S        ˜C)    ˜CT,                                                                      (151)
+
+                                                   L=R        T =  ˜C(S     ˜C)    T =  ˜C ˜CTS,                                              (152)
+
+where  ˜Cis the same MO-coefficient matrix appearing in Eq. (149), satisfying                     ˜CTS ˜C=I        n, andS
+is the AO overlap matrix.Lacts on MO coefficient vectors from the left and is theS-orthogonal
+projector onto the occupied MO subspace, and thus, (I−L) is the complementary projector onto
+the virtual MO subspace, in the AO-basis representation69. These matrices satisfy
+
+                           L2 =L,        R         2 =R,        (I−L)               ˜C=0,                 ˜CT(I−R)=0.                    (153)
+
+The last two identities are the only ingredients needed to identify the forbidden component of a
+rank-nvariation. Applying the virtual projector on both AO indices of Eq. (150) gives
+
+              (I−L)(δΛ     ↑,↓  )c(I−R)
+
+               =(I−L)δ             ˜Cλ     ˜CT(I−R)|      {z      }+(I−L)           ˜C|    {z    }δλ    ˜CT(I−R)|      {z      }+(I−L)           ˜C|    {z    }λδ   ˜CT(I−R)
+
+                                            =0                =0                   =0               =0
+               =0.                                                                                                                           (154)
+
+Thus, every first-order variation generated within the factorized rank-nform has no virtual–virtual
+component:
+                                                    (I−L)(δΛ     ↑,↓  )c(I−R)=0.                                               (155)
+
+Equivalently,  the virtual–virtual block is absent from the tangent space of the rank-nAGP/SD
+ansatz.   Therefore,  the virtual–virtual component is the only component that must be removed
+from an arbitrary AO-basis variation in order to impose this linearized rank-nconstraint.
+
+    This observation gives a practical way to impose the rank constraint on an arbitrary optimization
+update. In other words, by eliminating the virtual–virtual component from a variation matrix, one
+
+                                                                    37
+can obtain a linearized rank-constrained update. The forbidden virtual–virtual component is
+
+                                            (δα ↑,↓  )vv =(I−L)δα     ↑,↓  (I−R).                                           (156)
+
+Therefore, the constrained variation is obtained by subtracting only this forbidden component:
+
+                                       (δα ↑,↓  )c =δα  ↑,↓ −(I−L)δα     ↑,↓  (I−R).                                     (157)
+
+This  projection  leaves  the  occupied–occupied,  occupied–virtual,  and  virtual–occupied  compo-
+nents unchanged,  while it removes the virtual–virtual component.   Therefore,  (δα ↑,↓  )c  satisfies
+Eq. (155) and keeps the rank-nAGP ansatz.
+
+    In  this  Subsection,δα        ↑,↓    denotes  the  matrix-valued  variation  of  the  paired  geminal  matrix
+Λ↑,↓    in  the  AO  basis,  with  matrix  elementsα      ↑,↓l,l ′  (dimension  (M  ao,M ao)).   In  addition,  the  per-
+sample logarithmic derivative for paired-block parameters is treated as a matrixO                paired with en-
+tries (O  paired)l,l ′ =∂logΨ/∂α     ↑,↓l,l ′ . This differs from the 1D flattened indexkused in Secs. VI A and
+VI B, whereα               k andO         k are scalars; the two views are related by unfolding the 1D indexkinto the
+matrix index pair (l,l ′). The jQMC implementation matches this picture: the per-sampleO-matrix
+is held with a 1D parameter axis, and only the lambda block is temporarily reshaped to 2D for the
+projection.
+
+    In practice, the rank constraint of Eq. (157) is enforced not only directly on the final parameter
+update but also upstream on the per-sample logarithmic-derivative matrixO                paired, from which the
+generalized force, the SR matrix, and the LM matrices are constructed4,69. Specifically, the paired
+observable is replaced by
+
+                                    ˜Opaired  =O    paired −(I−L            T)O  paired (I−R        T)                                  (158)
+
+before any downstream optimization quantity is formed4,69.  After solving the SR/LM equations,
+the paired update is projected once more via Eq. (157) to exactly fulfill the rank constraint.
+
+    For spin-polarized systems with unpaired electrons, the geminal matrix in the AO-basis rep-
+resentation  is  composed  of  the  spin-paired  and  spin-unpaired  blocks  (Eq.  51).   Since  the  rank
+constraint originates from the paired block,F    ↑,↓  ,  the optimization constraint should be applied
+only to the paired geminal blockΛ   ↑,↓  .  The unpaired blockΛ   ↑  carries no spin-down index and
+possesses no virtual–virtual subblock;  neither the corresponding logarithmic derivativeO   unpaired
+nor the unpaired parameter updateδα     ↑ is therefore subjected to any projection, and the unpaired
+part is optimized exactly as in the unconstrained SR/LM scheme of Secs. VI A and VI B.
+
+                                                              38
+VII.    IMPLEMENTATION DETAILS
+
+
+   jQMC clearly separatesdataandalgorithms.  Data structures are implemented using Python
+dataclass. More specifically, we take thestructclass from theflaxlibrary, which is compat-
+ible with JAX’sjitandgrad. Algorithms are then defined as functions that take these data class
+instances, along with electron coordinates and control parameters. An overview of the data classes
+and algorithms used in jQMC is provided in Table I, and the dependency relationships among the
+data classes are depicted as a diagram in Figure 1.
+
+
+
+
+
+   In jQMC, all computational kernels are JIT-compiled by JAX. These include the updates of
+electron  positions  in  MCMC,  the  evaluation  ofe     L  and∂e            L,  and  other  observables,  as  well  as
+the updates of electron positions in GFMC. In this sense, the numerically intensive kernels are
+executed on the GPU, while the CPU is used primarily for compilation and orchestration.  The
+branching step in LRDMC, however, is still performed on CPUs.  After the walker weights have
+been updated, the branching procedure based on these weights is executed on the CPU, because
+this step involves many conditional operations and also requires complex MPI communication
+associated with walker replication and deletion.
+
+   JAX transfers host data such as NumPy arrays from the CPU to the GPU when they are con-
+verted into JAX arrays or supplied to GPU-executed JAX computations. To avoid additional imple-
+mentation complexity and to minimize repeated host–device transfers, we adopt a design in which
+the data required for the main numerical kernels is kept on the GPU whenever possible,  while
+the memory demand on the GPU increases because most of the data required for the computation
+must reside in the GPU memory.
+
+   A typical workflow for performing LRDMC calculations with jQMC is illustrated in Figure 2.
+As it is standard in QMC simulations, the process begins by constructing a trial wave function,
+which typically requires input from HF or DFT calculations.   jQMC supports the construction
+of trial wave functions via the TREX-IO interface, making it easy to import wave function data
+from many establishedab initioelectronic structure packages, such as PySCF                                       71.  Once the trial
+wave function is imported, one may proceed to optimize the Jastrow factor and, if necessary, the
+determinant part. After the wave function optimization is completed, one can perform single-point
+
+                                                        39
+                      TABLE I.  The main dataclasses and classes implemented in jQMC.
+
+  Type               Module/Class               Description
+
+                 Hamiltonian        data        Holds all information needed to evaluate the Hamiltonian, includ-
+
+                                                ing structure, Coulomb potential, and wave function parameters.
+                   Structure      data          Stores  atomic  positions  in  3D  space,  atomic  numbers,  element
+
+                                                symbols, and textual labels for each atom.
+
+                    AOs   cart   data           Contains Cartesian atomic-orbital basis details such as the num-
+Dataclass                                       ber  of  orbitals,  contraction  exponents  and  coefficients,  angular
+
+                                                momenta, and polynomial orders for each Cartesian component.
+
+                    AOs   sphe   data           Contains spherical atomic-orbital basis details including the num-
+                                                ber  of  orbitals,  contraction  exponents  and  coefficients,  angular
+
+                                                momenta, and magnetic quantum numbers for each center.
+
+            Coulomb      potential      data    Stores Coulomb interaction parameters or effective core potential
+                                                (ECP) data such as core charges, angular momentum cutoffs, ra-
+
+                                                dial exponents, coefficients, and powers for each nucleus.
+
+                       MOs   data               Describes molecular-orbital information by storing the total num-
+                                                ber of MOs, the underlying atomic-orbital basis reference, and the
+
+                                                MO coefficient arrays.
+
+                    Geminal      data           Represents  the  pairing  (geminal)  matrix  and  orbitals  for  spin-
+                                                up and spin-down electrons along with their respective electron
+
+                                                counts.
+
+                    Jastrow      data           Aggregates all Jastrow factor data by combining one-body, two-
+                                                body, and three-body Jastrow parameter sets.
+
+               wave  function        data       Encapsulates the complete wave function description by combin-
+
+                                                ing Jastrow data and geminal pairing information.
+
+                          MCMC                  Implements  Markov-Chain  Monte  Carlo  method  and  manages
+  Class                                         variational Monte Carlo (WF optimization).
+
+                          GFMC                  Implements  Green  Function  Monte  Carlo  method  for  LRDMC
+
+                                                calculations.
+
+
+
+
+                                                            40
+FIG. 1.  The diagram of the main jQMC data classes.  Each box represents a data class.  The solid arrows
+
+demonstrate relations among the data classes. The broken arrows link a data class with calling functions.
+
+
+
+                                                              41
+FIG. 2.  A typical workflow of jQMC to perform VMC, MCMC and LRDMC calculations starting from a
+
+HF/DFT calculation.
+
+
+MCMC or LRDMC calculations. In the case of LRDMC, simulations are carried out with several
+lattice discretizations, and an extrapolation to the zero-lattice-spacing limit (a→0) is performed
+to obtain unbiased energy estimates.
+
+
+
+VIII.    MIXED-PRECISION SUPPORT
+
+
+   jQMC supports mixed-precision calculations.  In jQMC, AO (except for gradients and Lapla-
+cian calculations) and Jastrow evaluations are performed using 32-bit floating-point (FP32). This
+works because the rounding errors in the AO evaluation from low-precision calculations are mit-
+igated by the summation performed during MO calculations (in the case of SD) or geminal cal-
+culations (in the case of AGP), which are carried out in 64-bit floating-point (FP64).   Further-
+more,  since  the  Jastrow  term  involves  an  exponential  (exp)  function,  its  rounding  errors  from
+low-precision calculations are smoothed out by the exp function. In particular, using FP32 in AO
+evaluations yields a significant speed-up because many computationally intensive exponential cal-
+culations are required for GTO evaluations, and single-precision transcendental operations such
+as exp function are typically executed on special function units (SFUs), which are distinct from
+the main FP32/FP64 arithmetic pipelines              72.  Comparison of FP32/FP64 (mixed) and FP64 (full)
+calculations for water clusters is listed in Table II. The table shows that both calculations yield en-
+
+                                                         42
+TABLE  II.  Comparison  of  MCMC  total  energies  obtained  with  full  (FP64)  and  mixed  (FP32q          +FP64)
+
+precision.∆E=E                                mixed−E    full, andσ        c =σ2full +σ   2mixed. The speedup ist    full/t  mixed, where eachtis the net
+MCMC time summed over the restart chunks, divided by the total number of production steps. Numbers in
+
+parentheses indicate the statistical error on the last digits.
+                 System      Ne      Efull (Ha)  E          mixed (Ha)∆E(Ha)|∆E|/σ                                    cSpeedup
+
+                 H2O         8    -17.21800(16)   -17.21795(16)+5.0×10            −5      0.22      1.22×
+
+                 (H2O)2      16   -34.43316(14)   -34.43297(14)+1.9×10            −4      0.96      1.40×
+                 (H2O)4      32   -68.86243(16)   -68.86253(16)−1.0×10            −4      0.44      1.22×
+
+                 (H2O)6      48  -103.28575(16) -103.28556(16)+1.9×10            −4      0.84       1.30×
+
+                 (H2O)8      64  -137.70573(16) -137.70516(16)+5.7×10            −4      2.52       1.46×
+                 (H2O)20    160  -343.92181(15) -343.92162(16)+1.9×10            −4      0.87       1.30×
+
+
+ergies that are consistent within the error bars (3σ) for all compounds (even when the number of
+electrons is increased up to 160), and that FP32/FP64 calculations are approximately twice as fast
+as the full-precision ones.  We notice that users can switch between the full and mixed precisions
+via an input flag (the default is the full precision). In the following sections, full precision is used
+in Secs. X, XII, XIII, andXIV, whereas the mixed precision is used in Secs IX and XI.
+
+
+
+IX.    VECTORIZATION STRATEGY
+
+
+    Within a single process,  vectorization injQMCis realized throughJAX’svmapfunction.   In
+QMC algorithms, the top-level and most significant vectorization is overwalkers.  Since walkers
+in QMC simulations evolve nearly independently, batching over walkers provides the most natural
+and efficient way to exploit vectorization on modern hardware.  As a result, to maximize single-
+GPU performance, especially in QMC algorithms where matrix-matrix or matrix-vector operations
+inside the inner loops are not dominant in computational cost,  it is generally most efficient to
+assign as many walkers as possible to each GPU, up to the point where the GPU’s computational
+or memory throughput is saturated.
+
+    Figures 3 and 4 demonstrate the MCMC and LRDMC throughputs as the number of walkers
+per GPU is varied, for water clusters ranging from a single water molecule (N  e =8) to a cluster
+of twenty water molecules (N  e  =160),  using a single node of theMiyabiGPU cluster at the
+
+                                                            43
+44
+FIG. 3. The MCMC throughput as a function of the number of walkers per GPU. The vertical axis represents
+
+MCMC steps×number of walkers per sec., which measures the actual computational power of the QMC
+runs.   Each panel shows the four combinations of basis representation (spherical/cartesian GTOs) and
+
+precision (full/mixed precision).  The benchmark was performed for six systems, but only three of them,
+
+water(N                e =8),water  cluster  [8](N                    e =64), andwater  cluster  [20](N                         e =160), are plotted here.
+These benchmark tests were measured on a single Miyabi-G GPU node (NVIDIA H100) of the Miyabi
+
+supercomputer.
+
+
+University of Tokyo.  Notice that the throughput is the product of (i) the number of MCMC steps
+(or GFMC projections) executed per unit time by a single GPU multiplied by (ii) the number of
+walkers assigned to that GPU.
+
+    The  benchmark  calculations  were  performed  using  six  water  clusters:   H2O  (water, N                   e  =
+8), (H2O)2  (water  dimerN                  e =16), (H    2O)4  (water  cluster  [4], N             e =32), (H    2O)6  (water
+cluster  [6],N           e =48), (H    2O)10 (water  cluster  [8],N             e =64), and (H    2O)20 (water  cluster
+[20],N              e =160). We used theccECPpseudopotentials accompanied with thecc-pVTZbasis set.
+As  shown  in  Figs.  3  and  4,  performance  improves  monotonically  with  the  number  of  walkers
+per GPU, up to a saturation point.  This saturation reflects the GPU becoming fully utilized, as
+analyzed in the next Section,  and the corresponding walker count represents the most efficient
+configuration for that system. Since the optimal number of walkers per GPU depends on both the
+system size and hardware, users should perform preliminary benchmarking runs to identify the
+
+                                                             45
+FIG. 4.  The LRDMC throughput as a function of the number of walkers per GPU. The vertical axis rep-
+
+resents GFMC projections×number of walkers per sec., which measures the actual computational power
+of the QMC runs.  Each panel shows the four combinations of basis representation (spherical/cartesian
+
+GTOs) and precision (full/mixed precision). The benchmark was performed for six systems, but only three
+
+of them,water(N                             e =8),water  cluster  [8](N                    e =64), andwater  cluster  [20](N                         e =160), are
+plotted here.  These benchmark tests were measured on a single Miyabi-G GPU node (NVIDIA H100) of
+
+the Miyabi supercomputer.
+
+
+performance sweet spot before large-scale production simulations.
+
+
+
+X.    PERFORMANCE ANALYSIS ON NVIDIA GPU H100
+
+
+   In Section IX, we observed the throughputs of MCMC and LRDMC as the number of walk-
+ers increased,  but it was unclear to what extent the GPU was actually utilized.   Therefore,  we
+used NVIDIA Nsight Systems and NVIDIA Nsight Compute to analyze how jQMC’s MCMC and
+LRDMC computations run on the GH200 chip of Miyabi Supercomputer. For the benchmark sys-
+tem, we used the water-cluster [8] (N  e=64) employed in Section IX.   Figure 5 shows a roofline
+
+plot for the function that calculates atomic orbitals with Cartesian GTOs for a given batched elec-
+tron positions (dim.  of input: (number of walkers,N        e, 3)→dim.  of output: (number of walkers,
+number of AOs,N        e)), which is the most basic computational function in jQMC. The x-axis plots
+
+                                                           46
+the Arithmetic Intensity (AI), defined as floating-point operations (FLOPs) per byte, for the total
+data transfer involving (a) L1 cache, (b) L2 cache, and (c) DRAM (HBM3).  In the roofline plot,
+each dot represents a (fused) CUDA kernel generated via XLA for different numbers of walkers,
+with wall time measured by NVIDIA Nsight Compute used to size the circles.  The plot reveals
+that a single fused CUDA kernel dominates most of the AO computation. We focus on the kernel
+hereafter. Up toN     w =2048, the achieved number of floating-point operations per second (FLOPS
+or FLOP/s) increases as the number of walkers, resulting in the achieved FLOPS of 5.65 and the
+AI of 817.32. The achieved FLOPS is about 22% of the peak FLOPS of the CUDA 64-bit kernel.
+However, the achieved FLOPS are saturated afterN           w =2048, and the kernel point just shifts to the
+left (i.e., the AI decreases) without increasing FLOPS. Finally, none of the CUDA kernels are on
+the L1, L2, DRAM rooflines, even withN           w =32768.  NVIDIA Nsight Compute reveals that the
+bottleneck is neither L1, L2, nor DRAM BW (i.e., the bytes/s sustained between the Streaming
+Multiprocessors and each memory tier, as drawn by the roofline ceilings), but the L1 wavefront
+pipe (i.e., the transactions/cycle throughput of the L1 load/store unit, which is distinct from its byte
+BW when warp threads access non-contiguous addresses73).  Figure 6 plots, as a function ofN     w,
+the achieved fraction of the peak of five quantities.  The dashed lines (L1 byte BW, L2 byte BW)
+and the DRAM byte BW curve report the bytes/s delivered by the kernel normalized by the device-
+peak BW of each level, which correspond to the ceilings of the hierarchical roofline of Fig. 5. The
+two solid lines, in contrast, report a transaction-rate occupancy: L1 LSU (Load Store Unit) wave-
+front pipe is the number of wavefronts/cycle issued through the L1 load/store data pipe normalized
+by its peak, and L2 request pipe is the analogous quantity at the L2 boundary.  Figure 6 reveals
+that the L1 LSU wavefront pipe reaches∼90% of peak forN                             w =2048, while L1 byte BW shows
+plateaus near∼50%.  We notice that the∼40-point gap between the solid and the dashed red
+curves is invisible on the byte-only roofline yet identifies the kernel as L1 transaction-throughput
+bound rather than L1 BW bound.  The L2 request pipe stays at a lower absolute level (peaking
+near∼48%), indicating that the L1 absorbing is most of the gather traffic. DRAM byte BW only
+becomes appreciable at the largestN          w =32768, where the working set finally exceeds the on-chip
+L1 and L2 caches.   These results suggest that cache optimizations will be necessary for future
+improvements in FLOPS and AI performance. In addition, we analyzed each component, such as
+continuum kinetic energy, discretized kinetic energy, and non-local ECP computations, which are
+dominant in the computation of the local energy in MCMC and the projection in LRDMC. For
+example, Figure 7 shows the roofline plot for the discretized kinetic energy computation (Eq. 21)
+
+                                                         47
+withN           w =2048. The plot shows that the dominant (fused) CUDA kernels are all in DRAM-bound
+regions, suggesting that QMC calculations as a whole are also dominated by memory-bound op-
+erations.   The bottleneck of each kernel depends on whether it is L1-,  L2-,  or DRAM-limited,
+according to our Compute analysis with NVIDIA Nsight Compute, and the optimization must be
+tailored to the specific circumstances.  The CUDA-kernel-level optimization (i.e., via high-level
+operations (HLO) generated by JAX) for jQMC is an interesting future work.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+FIG. 5.  Hierarchical roofline of the functioncompute           AOs(Cartesian, FP64) kernel on H100, swept over
+
+Nw∈32,128,1024,8192,32768, with the (a) L1, (b) L2, and (c) DRAM diagonals (peak BW 27.58, 10.48,
+and 4.02 TB/s, respectively) and the 27.58-TFLOPS CUDA-core FP64 ceiling.  The L1, L2, and DRAM
+
+BWs and the FP64 peak performance are based on NVIDIA Nsight Compute measurements; the measured
+
+DRAM BW of 4.02 TB/s agrees well with the nominal Miyabi value of 4.02 TB/s. The FP64 horizontal line
+reflects the actual clock (∼1.5 GHz) and is lower than the 33.5 TFLOPS H100 datasheet boost-clock peak.
+
+These benchmark tests were measured on a single Miyabi-G GPU node (NVIDIA H100) of the Miyabi
+
+supercomputer.
+
+
+
+
+XI.    WALL-TIME BENCHMARK
+
+
+   The walltime required in practice for MCMC and LRDMC calculations depends strongly on
+the quality of the employed wave function, because the ultimate target of QMC simulations is the
+statistical error bar, and the efficiency for reaching a given error bar is significantly affected by the
+wave-function quality.  Since different QMC packages adopt different wave-function parameteri-
+
+                                                          48
+FIG. 6.  Achieved fraction of peak for the dominantcompute                   AOs(Cartesian, FP64) kernel, as a function
+of walker countN            w on a single H100 GPU. Dashed lines (L1/L2 byte BW and DRAM byte BW report the
+
+bytes-per-second utilization of each memory tier - the same quantities that set the ceilings of the hierarchical
+
+roofline. Solid lines (L1 LSU wavefront pipe, L2 request pipe) report instead the transaction-rate occupancy
+of each cache level’s issue pipe (wavefronts/cycle at L1, request packets/cycle at L2 cache), which is the
+
+binding throughput for scatter/gather access patterns and is structurally absent from a byte-BW roofline.
+
+This benchmark test was measured on a single Miyabi-G GPU node (NVIDIA H100) of the Miyabi super-
+computer.
+
+
+
+zations and different functional forms of the Jastrow factor, a fair comparison between packages is
+generally difficult.  However, TurboRVB and jQMC use the same Jastrow factor, enabling a gen-
+uinely fair comparison.  In this benchmark, we prepared exactly the same Jastrow–Slater ansatz
+in both TurboRVB and jQMC, and compared the absolute wall-clock time required to achieve a
+target statistical accuracy of 1 kcal/mol in the total energy for a given ansatz. Parameters related to
+computational efficiency, such as the electron hopping distance used in the MCMC proposal, the
+frequency of observable calculations in MCMC, and the lattice discretization mesh and projection
+time in LRDMC, were set to the same values for both TurboRVB and jQMC.
+
+    Benchmark  calculations  were  carried  out  for  six  systems  of  increasing  size:water(N                             e  =
+8),water  dimer(N                        e  =16),water  cluster  [4](N                         e  =32),water  cluster  [6](N                         e  =
+
+                                                              49
+FIG. 7. Roofline plot of the CUDA kernels involved in the discretized kinetic-energy computation, executed
+with 2048 walkers in FP64 on a single NVIDIA H100 GPU of the Miyabi supercomputer.  The horizontal
+
+axis  is  the  AI  (FLOPs  per  byte  of  DRAM  traffic)  and  the  vertical  axis  is  the  achieved  performance  in
+
+TFLOPS. Each gray marker represents one CUDA kernel;  its area is proportional to the NSYS-reported
+wall-clock contribution, so the dominant (fused) kernels appear as the largest disks.  Yellow-filled markers
+
+indicate the five kernels with the largest wall time. The orange diagonal line is the HBM-DRAM BW ceiling
+
+(4.02 TB/s) and the black horizontal line is the peak CUDA-core FP64 throughput (27.7 TFLOPS); the red
+cross marks the wall-clock-weighted average over all kernels (AI≈1.80, 2.77 TFLOPS). The DRAM BWs
+
+and  the  FP64  peak  performance  are  based  on  NVIDIA  Nsight  Compute  measurements;  thus,  the  FP64
+
+horizontal line reflects the actual clock (∼1.5 GHz) and is lower than the 33.5 TFLOPS H100 datasheet
+boost-clock peak.
+
+
+48),water  cluster  [8](N                     e  =64), andwater  cluster  [20](N                           e  =160).  All calculations
+employed theccECPpseudopotentials together with thecc-pVTZbasis set.  For the determinant
+part, we directly used the orbitals obtained from an LDA-PZ DFT calculation with PySCF-forge.
+TurboRVB employs spherical GTOs, whereas jQMC supports both spherical and Cartesian GTOs.
+Since the Cartesian representation is faster than the Spherical one in jQMC, we transformed the
+orbitals from spherical to Cartesian form for the jQMC calculations;  the physical energy is, of
+course, unchanged by this transformation.  For the Jastrow factor, we usedJ=J                 2 +J    3, whereJ               2
+was of Pad´e type andJ         3 was expanded in localized atomic orbitals, using H:[3s1p] and O:[4s2p1d].
+
+                                                             50
+          TABLE IV. Compilation and runtime environments used in the benchmark calculations.
+Code/platform   Environment
+
+TurboRVB-CPU  Intel compiler (ifort, icc) 2021.10.0; Intel MKL 2023.2; Intel MPI 2021.10
+
+TurboRVB-GPU nvfortran 23.9; CUDA 12.2.2; Open MPI 4.1.5; NVIDIA MPS (nvidia-cuda-mps-control)
+jQMC-CPU         Python 3.12.7; JAX 0.7.2; Open MPI 4.1.6; mpi4py 4.1.1
+
+jQMC-GPU         Python 3.12.7; JAX 0.7.2; Open MPI 4.1.6; mpi4py 4.1.1; CUDA 12.9
+
+
+The variational parameters of the Jastrow factor were optimized in TurboRVB, and the resulting
+values were copied into theJastrow            dataof jQMC. Using these wave functions, we computed
+the total energy and variance with both TurboRVB and jQMC by MCMC, and confirmed that the
+results agreed within the statistical error bars for all six systems.
+
+   For these wave functions,  we prepared one node (equipped with two multi-core CPUs with
+four GPUs) on the Genkai supercomputer, and measured the time required to achieve a statistical
+error bar of 1 kcal/mol in two cases:  using CPUs only and using CPU+GPUs (TurboRVB) or
+only  GPUs  (jQMC).  In  the  CPU-only  calculations,  both  TurboRVB  and  jQMC  used  120  MPI
+processes, corresponding to the maximum number available of cores on a single node, with one
+walker  assigned  to  each  MPI  process.   In  the  GPU  calculations  with  jQMC,  one  MPI  process
+was bound to each GPU, and the number of walkers per MPI process was chosen to maximize
+the MCMC and LRDMC throughput on the Genkai GPU node.  In contrast, TurboRVB does not
+implement walker-level vectorization, unlike jQMC; instead, NVIDIA CUDA MPS was used74,
+and 30 MPI processes (i.e., all cores in one NUMA domain, which is the optimal setting for the
+CPU-bound part, despite possibly oversubscribing a single GPU) were assigned to each GPU. The
+compilation and runtime environments are summarized in Table IV.
+
+   Figure 8 shows the absolute node-seconds required to reach a statistical error bar of 1 kcal/mol
+in the total energy for the systems listed above.  Focusing first on jQMC, one can clearly see that
+GPU acceleration yields speedups exceeding two orders of magnitude, if compared with the same
+calculations run on CPUs.  This is consistent with expectations, since JAX has been developed
+with GPU execution in mind. By contrast, in TurboRVB, the GPU calculations are slower than the
+CPU calculations for the system sizes and hardware configurations tested here.  This is because
+TurboRVB does not parallelize at the walker level, as noted above, and only partially offloads the
+computation to the GPU by replacing some matrix and vector operations (BLAS/LAPACK) with
+
+                                                       51
+cuBLAS and cuSolver routines.  In TurboRVB, the GPU version becomes more advantageous as
+the system size increases because kernels replaced with cuBLAS and cuSolver are more dominant;
+Fig. 8 demonstrates that for systems with roughlyN                   e∼100, GPU acceleration becomes clearly
+beneficial, particularly in the LRDMC implementation.  We expect that for even larger systems,
+the GPU version of TurboRVB will eventually be faster than the CPU one.
+
+   Figure  8  also  shows  that  the  current  CPU  version  of  jQMC  is  about  10  times  slower  than
+TurboRVB on the same CPU (Intel Xeon Platinum 8490H), even though jQMC implements es-
+sentially the same algorithm to the best of our knowledge. This indicates that the current jQMC is
+suboptimal on CPU via XLA. For instance, using hardware-counter measurements, we found that
+JAX/XLA emits mostly scalar instructions in the AO kernel, with only a small amount of AVX2
+and almost no AVX-512, even though the CPU supports them; forcing a 512-bit preferred vector
+width does not change this, pointing to a code-structure rather than a flag issue.  After rewriting
+the relevant part of the AO kernel, we obtained a speedup of a factor of 2 for the AO evaluation
+(c.f., We did not merge this change because it made the GPU version slightly slower). In contrast,
+a minimal Fortran/C implementation of the same operation, compiled with the Intel compiler, is
+almost fully vectorized with AVX-512 and is much faster (about 6 times over the baseline) than
+the JAX AO kernel. Beyond the AO kernel, there are most likely further CPU-side bottlenecks in
+other kernels of jQMC, which we leave for future identification. The current jQMC layout is well
+suited to GPU but remains suboptimal for CPU; a unified implementation that performs well on
+both is left for future work.
+
+   Comparing the two faster cases in each package, jQMC on GPUs with TurboRVB on CPUs,
+jQMC is faster for both MCMC and LRDMC in the wall times,  thanks to GPUs.   The jQMC
+MCMC and LRDMC are faster than the corresponding TurboRVB calculations by 10 times and 3
+times, respectively, for the system sizes taken into account here. In the LRDMC calculations, the
+speed-up offered by jQMC is not as drastic as that found in MCMC. This is because, in LRDMC,
+the computational bottleneck involves a significant amount of AO evaluations, needed in the dis-
+cretized kinetic energy and in the non-local ECP calculations, resulting in a performance gain that
+are not as significant as those achieved with MCMC. Further acceleration is expected if AO cal-
+culations can be made more optimal in jQMC. Nevertheless, the present benchmark demonstrates
+that jQMC has already been tuned to deliver wall-clock performance comparable to, or even better
+than, TurboRVB, despite the fact that TurboRVB is a long-optimized Fortran90 code benefiting
+
+                                                       52
+from Intel Fortran compiler optimizations.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+FIG. 8.  Wall-clock time (nodes·hours) required to obtain the target statistical error ofσ(E)=1 mHa,
+
+as a function of the number of valence electronsN                    e, for (a) MCMC and (b) LRDMC sampling.  The wall-
+clock time is estimated from a reference run viat       target  =(σ     run/σtarget)2·t net, wheret             net  refers to the net
+
+elapsed time of the reference run excluding initialization and equilibration. jQMC runs use cartesian GTOs
+
+in mixed precision; TurboRVB uses spherical GTOs in full precision. Solid lines are power-law fitst∝N            pe
+with the exponentpgiven in the legend.  In the LRDMC calculations, a lattice discretizationa=0.3 Bohr
+
+was employed.  These benchmark tests were measured on a single node (2×Intel Xeon Platinum 8490H
+
++4×NVIDIA H100) of the Genkai supercomputer.  In the CPU-only calculations, both TurboRVB and
+jQMC used 120 MPI processes with one walker assigned to each MPI process.  In the GPU calculations
+
+with jQMC, one MPI process was bound to each GPU and the number of walkers per MPI process was
+
+chosen to maximize the MCMC and LRDMC throughput. In the TurboRVB calculation on GPUs, 30 MPI
+processes were assigned to each GPU via NVIDIA CUDA MPS.
+
+
+
+
+XII.    PARALLELIZATION STRATEGY: WEAK SCALING BENCHMARKS
+
+
+    Although the vectorization scheme described above improves the throughput on a single GPU,
+production QMC calculations often require simulations that exceed the capacity of a single device.
+
+                                                            53
+InjQMC, multi-GPU calculations are therefore supported by explicit MPI-based parallelization via
+mpi4pyfor CPUs or by the sharding mechanisms provided byJAXfor GPUs.  We examined the
+weak-scaling performance ofjQMCon the Miyabi and Leonardo supercomputers. The benchmark
+target  is  the  water  cluster  (H2O)20  (N  e  =160).   In  these  benchmarks,  the  number  of  walkers
+per  GPU  is  fixed  at  100,  while  the  number  of  GPUs  was  increased,  allowing  us  to  assess  the
+implementation’s parallel efficiency in realistic multi-GPU settings.
+
+
+   Figure 9 shows the weak-scaling benchmark results for (a) VMC (MCMC sampling+one step
+of wave function optimization ) and (b) LRDMC. As seen, the weak-scaling behavior differs be-
+tween VMC and LRDMC. In the VMC case [Fig. 9(a)], the performance initially improves as the
+number of walkers increases, both on Miyabi and Leonardo. This improvement is attributed to the
+faster convergence of the CG solver when the number of walkers per GPU, and hence the total
+number of MCMC samples, is increased. With an even larger number of walkers, a slight degrada-
+tion is observed on Miyabi, whereas the good weak-scaling performance is maintained up to 1024
+GPUs on Leonardo.  The slowdown on Miyabi is likely due to network latency and/or hardware-
+induced GPU-to-GPU performance variability across different GPUs, which has not yet been iden-
+tified.  Nevertheless, the weak-scaling efficiency remains close to unity on Miyabi (1.02), while
+Leonardo maintains good performance (0.92) up to 1024 GPUs, corresponding to 102,400 walk-
+ers. In the LRDMC case [Fig. 9(b)], the slowdown is observed as the number of walkers increases
+on both Miyabi and Leonardo.   This behavior is expected since LRDMC requires inter-walker
+communication between two consecutive branching steps, as described in Sec. II B 2.  Here, we
+compare two branching schemes for LRDMC: the conventional algorithm38 and the load-balanced
+algorithm75.  As expected,  the load-balanced algorithm shows better weak-scaling performance
+than the conventional one on both Miyabi and Leonardo,  because it is specifically designed to
+balance the computational workload among walkers75. Both LRDMC algorithms maintain perfor-
+mance close to unity up to 512 GPUs on Miyabi and 256 GPUs on Leonardo. A more pronounced
+degradation is observed at 1024 GPUs on Miyabi and 512 GPUs on Leonardo, likely again due
+to network latency and/or hardware-induced GPU-to-GPU performance variability. Nevertheless,
+the load-balanced LRDMC algorithm still achieves good weak-scaling performance, with values
+of∼1.2 on Miyabi and∼1.1 on Leonardo, for the largest calculations considered, corresponding
+to 102,400 walkers. These benchmarks demonstrate that the MPI- and GPU-parallel implementa-
+tion introduces only a small overhead over the present range of system sizes, both for VMC and
+
+                                                       54
+LRDMC.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+FIG. 9.  Weak-scaling benchmark.  Elapsed time per (a) VMC step (MCMC sampling+one step of WF
+
+optimization) and (b) LRDMC branching step, normalized to the value obtained with 8 GPUs on each ma-
+chine.  Error bars show the min–max range across 2-5 independent runs on different node allocations.  The
+
+benchmark target is a water cluster (H2O)20 (N  e =160).  The number of walkers per GPU is fixed at 100,
+
+so the total walker count (top axis) scales linearly with the number of GPUs (bottom axis); this corresponds
+to the standard weak-scaling protocol in which the workload per GPU is held constant.  For LRDMC, two
+
+branching schemes are compared:  the conventional (GFMC                  tauclass) algorithm (filled markers) and the
+
+load-balanced (GFMC       braclass) algorithm (open markers), where the latter applies a fixed number of pro-
+jections per measurement chosen from the conventional LRDMC withτ=0.1 a.u.     −1  . The horizontal dashed
+
+line indicates ideal weak scaling (=1.0). Miyabi (green squares; NVIDIA H100 nodes at the University of
+
+Tokyo) was scanned from 8 to 1024 GPUs, and Leonardo (black triangles; NVIDIA A100 Booster module
+at CINECA) from 8 up to 1024 GPUs.  Both VMC and LRDMC retain near-ideal weak scaling across the
+
+full range tested, demonstrating that jQMC sustains its parallel efficiency up to 10       3 GPUs.
+
+
+
+
+
+
+
+                                                             55
+XIII.    VERIFICATION OF THE CODE
+
+
+A.    Intra-software tests
+
+   Theintra-software testsin jQMC are designed according to the following principle.  Achiev-
+ing high computational performance with JAX requiresjitcompilation andvmapvectorization.
+They may obscure the underlying algorithmic flow and make it more difficult to debug the code
+than conventional Python implementations.   To address the trade-offbetween performance and
+maintainability,  jQMC  adopts  a  dual-implementation  strategy.   More  specifically,  for  the  main
+functions, two versions are implemented in parallel:  a production version without a suffix and a
+corresponding debug version with the suffix           debug. The production version is used for production
+calculations and is highly optimized for performance. By contrast, the                  debugversion prioritizes
+readability by using standard Python constructs, allowing users and developers to follow the logic
+step by step.  Then, to ensure correctness, we implement consistency tests for as many function
+pairs as possible. These tests verify that the production and debug implementations produce equiv-
+alent results.  The CD/CI framework on GitHub triggerspytestevery time a change is pushed
+or nightly.  Every Python module is accompanied by a corresponding test Python module.  For
+example,test       wavefunction.pycontains comprehensive tests for the dataclasses and associ-
+ated functions defined inwavefunction.py. These tests help reduce the risk of introducing bugs,
+thereby improving the maintainability and reliability of jQMC.
+
+
+B.    Inter-software tests
+
+   In the QMC community, recent efforts have been made to systematically examine reproducibil-
+ity across multiple codes76. One notable study involved 11 different community-developed QMC
+codes and focused on computing the total energy and binding energy of the water–methane dimer.
+These calculations were performed using a common basis set (cc-pVTZ) and a common pseudopo-
+tential (ccECP), allowing a controlled investigation of reproducibility across implementations.  In
+DMC calculations employing ECPs, one of the technical challenges is how to deal with the non-
+local part of the ECP. Approaches such as the Locality Approximation (LA) and T-move (TM)
+are known to affect the zero-time-step (t→0) limit.  This is due not only to the non-local part
+treatment, but also to the amplitude of the wave function, set by the Jastrow factor.  As a result,
+differences in Jastrow implementations among codes can lead to discrepancies in energies. On the
+
+                                                        56
+FIG. 10.   The total energy of Methane,  Water,  and Methane-Water dimer,  and the binding energy.   The
+
+CASINO, QMCPACK, and CMQMC results are taken from Ref. 76. The TurboRVB values are taken from
+
+Ref. 49. The corresponding numbers are shown in Table V.
+
+
+other hand, the Determinant Locality Approximation (DLA) and DLA combined with TM (DTM)
+yield significantly better agreement among codes, as it minimizes sensitivity to the specific form
+of the Jastrow factor in the small-tor small-alimits.  We carry out calculations analogous to the
+consistency test in the aforementioned reproducibility study corresponding to the DTM locality
+approximation (i.e., we used LRDMC with DLA) to assess the consistency of our implementa-
+tion. We present our validation results in Fig. 10 and Table. V.
+
+
+
+XIV.    DEMONSTRATIONS: VMC AND LRDMC ATOMIC FORCES WITH
+OPTIMIZED JSD ANSATZ
+
+
+   Recently,  the quantitative disagreement between CCSD(T)77  and FN-DMC with a Jastrow–
+Slater determinant ansatz has been actively discussed. In particular, since the report of discrepan-
+cies of up to about 8 kcal/mol for the binding energies of dispersion-dominated systems, such as
+C60 encapsulated in a [6]cycloparaphenyleneacetylene ring (C60+5PPA), reported by Al-Hamdani
+and co-workers78, the origin of these discrepancies has been debated from both the CCSD(T) and
+DMC perspectives79–81.  Beyond total energies, first derivatives, namely atomic forces, have also
+been examined.  For the same molecular structures, Slootmanet al.computed the differences be-
+tween CCSD(T) and FN-DMC forces for ethanol82.  They reported that, for ethanol, DMC forces
+agree  with  all-electron  CCSD(T)  within  a  mean  absolute  error  (MAE)  of  1.5  kcal  mol−1   Å−1  ,
+
+                                                       57
+even when the Reynolds approximation is employed (Eq. 103).  In the present work, we extend
+this comparison by performing LRDMC force calculations for ethanol and malonaldehyde, both
+included in the rMD17 set83,84, and assessing their agreement with CCSD(T).
+
+   As in Ref. 85, we selected ethanol and malonaldehyde from the rMD17 dataset83,84, and com-
+puted (i) VMC forces with fully optimized wave functions, (ii) LRDMC forces using trial wave
+functions fully optimized at the VMC level, (iii) Hartree–Fock (HF), second-order Møller–Plesset
+perturbation theory (MP2), CCSD, and DFT forces, and (iv) CCSD(T) forces as references.  We
+extracted  50  structures  for  each  molecule  from  the  rMD17  dataset83,84.   We  employed  the  cc-
+pVQZ basis set for the HF, MP286, and CCSD87, and CCSD(T) calculations. We employed def2-
+QZVPPD88 basis set for DFT calculations with the SVWN89, PBE90, B3LYP91, PBE0+D3BJ                  92,
+orωB97M+D3BJ                            93,94  functionals.  In the MP2, CCSD, and CCSD(T) calculations, the 1score
+orbitals were kept frozen. The HF, DFT, MP2, CCSD, and CCSD(T) calculations were performed
+using the Psi4 software suite (version 1.9.1)95.  For the VMC and LRDMC calculations, we used
+ccECP96 together with the corresponding cc-pVTZ basis sets.  The MO coefficients in the Slater
+determinant and the parameters in the Jastrow factor were optimized variationally at the VMC
+level.  The Jastrow factor included inhomogeneous one-body (Eq. 29),  two-body (Eq. 32),  and
+three-body (Eq. 35) terms.   For the basis sets of the inhomogeneous one-body and three-body
+Jastrow terms, we used uncontracted primitive GTOs with [3s1p] for H and [4s2p1d] for C, N,
+and O. The Gaussian exponents were optimized for each configuration during the wave-function
+optimization.  The total numbers of optimized variational parameters were 38233 and 54749 for
+ethanol and malonaldehyde, respectively.  The trial wave functions were generated with PySCF-
+forge71.
+
+   To compare the methods considered here, we computed the pairwise MAEs between their force
+predictions and displayed them as a heat map in Fig. 11. The computed VMC and LRDMC forces
+carry statistical errors. Suppose that the error bar of each force component is an independent Gaus-
+sian random variable,ε                  i,I ∼N(0,σ          2i,I  ), whereiandIdenote sample index and force component.
+Since the MAE is computed using|d              i,I|≡|∆F     i,I  +ε    i,I|, the measured MAE is always biased by the
+statistical errors. Indeed, even when the two methods agree exactly (∆F      i,I   =0), the obtained MAE
+does not vanish but reaches a floor,                                r
+                                        MAEfloor =E[|ε           i,I|]=2
+                                                                       π⟨σ  i,I⟩,                                          (159)
+where the brackets denote the average over all samples and force components.  Notice thatσ         i,I   =
+
+                                                          58
+FIG. 11. Pairwise MAEs of atomic forces (kcal mol−1   Å−1  ) between all pairs of the benchmarked methods
+
+for (a) Ethanol and (b) Malonaldehyde. The numbers indicate the corresponding MAEs for each pair. The
+
+molecular structures were depicted using VESTA97.
+
+
+TABLE V.   The total energies (Ha) of the Methane,  Water,  and Methane-Water,  and its binding energy
+(meV), obtained with the extrapolation toτ→0 (DMC) anda→0 (LRDMC). The CASINO, QMCPACK,
+
+and CMQMC results are taken from Ref.76. The TurboRVB values are taken from Ref. 49.
+Package                                      Methane (Ha)   Water (Ha)   Methane–Water (Ha)              Binding energy (meV)
+
+CASINO (DMC)                                   -8.07856(1)   -17.23473(2)        -25.31432(3)                    -26.8(1.0)
+QMCPACK (DMC)                                  -8.07858(2)   -17.23482(3)        -25.31443(7)                    -29.0(1.1)
+
+CMQMC (DMC)                                    -8.07848(2)   -17.23460(1)        -25.31411(3)                     -27.8(3)
+
+TurboRVB (Conventional LRDMC)                  -8.07860(1)   -17.23479(1)        -25.31445(1)                     -28.1(3)
+
+TurboRVB (Load-balanced LRDMC)                 -8.07862(2)   -17.23482(2)        -25.31447(2)                     -29.0(7)
+
+jQMC (Conventional LRDMC)                      -8.07867(2)   -17.23478(2)        -25.31444(4)                     -28.3(8)
+jQMC (Load-balancing LRDMC)                    -8.07870(2)   -17.23477(2)        -25.31452(4)                     -27.9(8)
+
+
+[(σ    Ai,I  )2 +(σ      Bi,I  )2]1/2    when both methods are stochastic and independent. In the present calculations,
+the MAE floors are 0.35 and 0.72 kcal mol−1   Å−1   for VMC and LRDMC in ethanol, respectively
+(0.82 kcal mol−1   Å−1   when VMC is compared with LRDMC), and 0.33 and 1.13 kcal mol−1   Å−1
+
+                                                           59
+in malonaldehyde, repectively (1.20 kcal mol−1   Å−1   for VMC vs LRDMC). Unless the measured
+MAE clearly exceeds this floor, we cannot conclude that there is a genuine difference between the
+two methods.
+
+
+
+   For ethanol, Slootmanet al.                       82 reported a benchmark result for 200 configurations.  Their cal-
+culation yielded an MAE of 3.055 kcal mol−1   Å−1   for VMC forces, with respect to the CCSD(T)
+values taken as reference.  Our MAE on VMC forces for ethanol, (2.5 kcal mol−1  ) in MAE, is
+lower than theirs, likely because of the more flexible Jastrow factor used in the present study. We
+note, however, that our ethanol configurations are not identical to theirs and MAEs have the uncer-
+tainty as noted above, so this is not a strict one-to-one comparison. Slootmanet al.also reported
+an MAE of 2.0 kcal mol−1   Å−1   for DMC forces evaluated with the Reynolds approximation.  In
+our calculations, we obtained a similar MAE of 2.1 kcal mol−1   Å−1   for ethanol, which is close to
+the value reported by Slootmanet al.
+
+
+
+   For malonaldehyde, one of the authors of the present study previously reported a large discrep-
+ancy between VMC and CCSD(T) forces in Ref. 85, amounting to 7.2 kcal mol−1   Å−1   in RMSE
+(4.8 kcal mol−1   Å−1   in MAE). We reproduce the same inconsistency in the present study, obtaining
+an MAE of 5.8 kcal mol−1   Å−1   for the MCMC forces.  The obtained MAE differs from the value
+reported in Ref. 85 by 1 kcal mol−1   Å−1  .  We attribute the difference mainly to variations in the
+trial wave functions employed in the two calculations.  In this study, jQMC uses the exponential
+form for the two-body Jastrow factor, whereas the previous work uses the Pad´e form.  In addi-
+tion, the trial wave functions were generated using different XC functionals, namely B3LYP and
+LDA-PZ in the present and previous works, respectively. Finally, the GTOs used in the three-body
+Jastrow factor also differ between the two calculations, namely, Cartesian and Spherical GTOs,
+respectively (i.e., the number ofdorbitals are different).
+
+
+
+   Interestingly, even LRDMC shows a large discrepancy relative to CCSD(T), with an MAE of
+5.2 kcal mol−1   Å−1  . Since the trial wave function, including its nodal surface, was optimized at the
+VMC level, the mean-field nodal surface is unlikely to be the primary origin of the discrepancy.
+The reason for the significant deviation in malonaldehyde is not yet fully understood and will
+require further investigation from both the DMC and CCSD(T) perspectives.
+
+                                                         60
+XV.    CONCLUSIONS AND PERSPECTIVES
+
+
+   In  this  work,  we  presented  the  implementation  details  and  benchmark  results  of  jQMC,  a
+Python-basedab initioquantum Monte Carlo (QMC) package built on top of JAX. jQMC is de-
+signed  with  modern  heterogeneous  high-performance  computing  (HPC)  architectures  in  mind,
+particularly those combining CPUs and GPUs, which are rapidly becoming mainstream. The code
+is  parallelized  at  the  top  level  of  QMC  algorithms,  i.e.,  based  on  a  multi-walker  strategy.   By
+packing as many walkers as GPU memory permits,  jQMC fully leverages GPU computational
+power, leading to significant acceleration of QMC simulations.  Benchmark results confirm the
+effectiveness of this design.
+
+   jQMC remains under active development, and several important directions can be envisaged.
+From a physics perspective, the implementation of periodic boundary conditions is a major mile-
+stone for future work, which is in progress and will be most likely supported in the next release.
+From a performance point of view, improving cache and memory efficiencies is an urgent chal-
+lenge. While future hardware advancements may alleviate this issue, software-level solutions will
+also be essential.
+
+
+
+XVI.    CODE AND DATA AVAILABILITY
+
+
+   The code and data that support the findings of this study are available from GitHub repositories
+[https://github.com/jqmc-project/jQMC]  and  [https://github.com/jqmc-project/
+jQMC-data],  respectively.   All  calculations  in  this  work  were  performed  using  jQMC  version
+corresponding to v0.2.2.
+
+
+
+ACKNOWLEDGMENTS
+
+
+   K.N. is grateful for computational resources from the Numerical Materials Simulator at Na-
+tional Institute for Materials Science (NIMS), from Research Institute for Information Technol-
+ogy at Kyushu University under the category of General Projects on the supercomputer Genkai,
+from  Information  technology  center  at  the  University  of  Tokyo  under  the  category  of  Regular
+Use Projects on the supercomputer Miyabi.  The weak-scaling benchmark on Miyabi with more
+than 512 GPUs was conducted through ”Large-scale HPC Challenge” Project, Joint Center for
+
+                                                       61
+Advanced High Performance Computing (JCAHPC). M.C. and K.N. acknowledge EuroHPC for
+the computational grant EUHPC          B35    064 allocated on the Leonardo booster partition through the
+EuroHPC Benchmark Access Call.
+   K.N. acknowledges financial support from the MEXT Leading Initiative for Excellent Young
+Researchers (Grant No. JPMXS0320220025) and from Japan Science and Technology Agency
+(JST), PRESTO (Grant No. JPMJPR24J9).  M.C. acknowledges financial support from the Eu-
+ropean  High  Performance  Computing  Joint  Undertaking  (JU)  through  the  ”EU-Japan  Alliance
+in HPC” HANAMI project (Hpc AlliaNce for Applications and supercoMputing Innovation:  the
+Europe - Japan collaboration).
+   The authors acknowledge technical support of CINECA, especially grateful to Dr. Tommaso
+Gorni (CINECA) and Dr. Laura Bellentani (CINECA) for their assistance. The authors gratefully
+acknowledge fruitful discussions with our collaborators, especially Prof. Giuseppe Carleo (EPFL)
+and Prof. Filippo Vicentini (Ecole Polytechnique), on the JAX implementation and its application
+toab initioQMC. The authors thank Dr.  Tan Naruhiko and Dr.  Shinnosuke Furuya of NVIDIA
+for  carefully  reading  Sec.  X  and  providing  valuable  suggestions  for  improving  the  clarity  and
+wording.  K.N. acknowledges Dr.  Atsushi Togo (NIMS) for fruitful discussions on the high-level
+design and software architecture of the package.
+   Claude-code  (Anthropic)  and  Copilot  (Microsoft)  were  used  to  support  code  development,
+specifically  for  performance  tuning  and  memory-efficiency  optimization  on  GPUs.    The  AI-
+generated parts were critically tested and reviewed by K.N.
+
+
+
+REFERENCES
+
+
+1R. M. Martin,Electronic structure : basic theory and practical methods(Cambridge University
+
+  Press, 2004).
+
+2M. G. Medvedev, I. S. Bushmarinov, J. Sun, J. P. Perdew,  and K. A. Lyssenko, Science355, 49
+
+  (2017).
+
+3W. Foulkes, L. Mitas, R. Needs,  and G. Rajagopal, Rev. Mod. Phys.73, 33 (2001).
+
+4F. Becca and S. Sorella,Quantum Monte Carlo approaches for correlated systems(Cambridge
+
+  University Press, 2017).
+
+5N. Metropolis and S. Ulam, J. Am. Stat. Assoc.44, 335 (1949).
+
+6D. M. Ceperley and B. J. Alder, Phys. Rev. Lett.45, 566 (1980).
+
+                                                       62
+ 7D. Ceperley, J. Stat. Phys.43, 815 (1986).
+
+ 8R. J. Needs,  M. D. Towler,  N. D. Drummond,   and P. L. R´ıos, J. Phys. Condens. Matter22,
+
+  023201 (2009).
+
+ 9R. Needs, M. Towler, N. Drummond, P. L´opez R´ıos,   and J. Trail, J. Chem. Phys.152(2020),
+
+  10.1063/1.5144288.
+
+10R. Shinde, E. J. Landinez Borda, S. Shepard, E. Slootman, A. Cuzzocrea, V. Azizi, P. Lopez-
+
+  Tarifa, N. Renaud, C. Umrigar, S. Moroni,  and C. Filippi, “Cornell-Holland Ab-initio Materials
+  Package (CHAMP-EU) v2.3.0,”  (2024).
+
+11T.  A.  Anderson,  C.  Filippi,  F.  R.  Petruziello,  A.  D.  G”ucl”u,  J.  Toulouse,   and  C.  J.  Umri-
+
+  gar, “Cornell-Holland Ab-Initio Materials Package (CHAMP-US),”  (2024),https://github.
+  com/QMC-Cornell/CHAMP; accessed 2026-06-10.
+
+12W. A. Wheeler, S. Pathak, K. G. Kleiner, S. Yuan, J. N. B. Rodrigues, C. Lorsung, K. Krongchon,
+
+  Y. Chang, Y. Zhou, B. Busemeyer, K. T. Williams, A. Mu˜noz, C. Y. Chow,  and L. K. Wagner, J.
+  Chem. Phys.158, 114801 (2023).
+
+13A. Scemama, M. Caffarel, E. Oseret,  and W. Jalby, J. Comput. Chem.34, 938 (2013).
+
+14J. Kim, A. D. Baczewski, T. D. Beaudet, A. Benali, M. C. Bennett, M. A. Berrill, N. S. Blunt,
+
+  E. J. L. Borda, M. Casula, D. M. Ceperley, S. Chiesa, B. K. Clark, R. C. Clay, K. T. Delaney,
+  M. Dewing, K. P. Esler, H. Hao, O. Heinonen, P. R. C. Kent, J. T. Krogel, I. Kyl¨anp¨a¨a, Y. W.
+  Li, M. G. Lopez, Y. Luo, F. D. Malone, R. M. Martin, A. Mathuriya, J. McMinis, C. A. Melton,
+  L. Mitas, M. A. Morales, E. Neuscamman, W. D. Parker, S. D. P. Flores, N. A. Romero, B. M.
+  Rubenstein, J. A. R. Shea, H. Shin, L. Shulenburger, A. F. Tillack, J. P. Townsend, N. M. Tubman,
+  B. V. D. Goetz, J. E. Vincent, D. C. Yang, Y. Yang, S. Zhang,  and L. Zhao, J. Phys. Condens.
+  Matter30, 195901 (2018).
+
+15P. R. Kent, A. Annaberdiyev, A. Benali, M. C. Bennett, E. J. Landinez Borda, P. Doak, H. Hao,
+
+  K. D. Jordan,  J. T. Krogel,  I. Kyl¨anp¨a¨a,  J. Lee,  Y. Luo,  F. D. Malone,  C. A. Melton,  L. Mi-
+  tas, M. A. Morales, E. Neuscamman, F. A. Reboredo, B. Rubenstein, K. Saritas, S. Upadhyay,
+  G. Wang, S. Zhang,  and L. Zhao, J. Chem. Phys.152, 174105 (2020).
+
+16M. Barborini, J. Charry, M. Ditte, A. Leventis, G. Kafanas,  and A. Tkatchenko, J. Chem. Phys.
+
+  164, 062501 (2026).
+
+17L. K. Wagner, M. Bajdich,  and L. Mitas, J. Comput. Phys.228, 3390 (2009).
+
+18K.  Nakano,  C.  Attaccalite,  M.  Barborini,  L.  Capriotti,  M.  Casula,  E.  Coccia,  M.  Dagrada,
+
+  C. Genovese, Y. Luo, G. Mazzola, A. Zen,  and S. Sorella, J. Chem. Phys.152, 204121 (2020).
+
+                                                         63
+19K. Nakano, O. Kohul´ak, A. Raghav, M. Casula,   and S. Sorella, J. Chem. Phys.159, 224801
+
+  (2023).
+
+20E. Posenitskiy, V. G. Chilkuri, A. Ammar, M. Hapka, K. Pernal, R. Shinde, E. J. Landinez Borda,
+
+  C.  Filippi,  K.  Nakano,  O.  Kohul´ak,  S.  Sorella,  P.  de  Oliveira  Castro,  W.  Jalby,  P.  L.  R´ıos,
+  A. Alavi,  and A. Scemama, J. Chem. Phys.158, 174801 (2023).
+
+21E. Slootman, V. G. Chilkuri, A. Delval, M. Hoffer, T. Gorni, F. Coppens, J. van de Nes, R. L.
+
+  Panad´es-Barrueta,  E. Posenitskiy,  A. Ammar,  E. J. Landinez Borda,  K. Camus,  O. Kohul`ak,
+  E. Giner, P. de Oliveira Castro, C. Valensi, W. Jalby, C. Filippi,   and A. Scemama, J. Chem.
+  Phys.164, 112501 (2026).
+
+22R. Shinde, C. Filippi, A. Scemama,  and W. Jalby, Nat. Rev. Phys.7, 378–387 (2025).
+
+23E. Strohmaier, H. W. Meuer, J. Dongarra,  and H. D. Simon, Computer48, 42 (2015).
+
+24TOP500.org, “TOP500,”https://top500.org, [Online; accessed 10-Jun.-2026].
+
+25M. Sato, Y. Kodama, M. Tsuji,  and T. Odajima, IEEE Micro42, 26 (2022).
+
+26S. Wienke, P. Springer, C. Terboven,   and D. an Mey, inEuro-Par 2012 Parallel Processing,
+
+  Lecture Notes in Computer Science, Vol. 7484 (Springer, Berlin, Heidelberg, 2012) pp. 859–
+  870.
+
+27H. C. Edwards, C. R. Trott,  and D. Sunderland, J. Parallel Distrib. Comput.74, 3202 (2014).
+
+28C.  R.  Trott,  D.  Lebrun-Grandi’e,  D.  Arndt,  J.  Ciesko,  V.  Dang,  N.  Ellingwood,  R.  Gayatri,
+
+  E. Harvey, D. S. Hollman, D. Ibanez, N. Liber, J. Madsen, J. Miles, D. Poliakoff, A. Powell,
+  S. Rajamanickam, M. Simberg, D. Sunderland, B. Turcksin,  and J. Wilke, IEEE Trans. Parallel
+  Distrib. Syst.33, 805 (2022).
+
+29M.  Abadi,  A.  Agarwal,  P.  Barham,  E.  Brevdo,  Z.  Chen,  C.  Citro,  G.  S.  Corrado,  A.  Davis,
+
+  J. Dean, M. Devin, S. Ghemawat, I. Goodfellow, A. Harp, G. Irving, M. Isard, Y. Jia, R. Joze-
+  fowicz, L. Kaiser, M. Kudlur, J. Levenberg, D. Man´e, R. Monga, S. Moore, D. Murray, C. Olah,
+  M. Schuster, J. Shlens, B. Steiner, I. Sutskever, K. Talwar, P. Tucker, V. Vanhoucke, V. Vasude-
+  van, F. Vi´egas, O. Vinyals, P. Warden, M. Wattenberg, M. Wicke, Y. Yu,  and X. Zheng, “Ten-
+  sorFlow:  Large-scale machine learning on heterogeneous systems,”  (2015), software available
+  from tensorflow.org.
+
+30A.  Paszke,  S.  Gross,  F.  Massa,  A.  Lerer,  J.  Bradbury,  G.  Chanan,  T.  Killeen,  Z.  Lin,
+
+  N.  Gimelshein,  L.  Antiga,  A.  Desmaison,  A.  K¨opf,  E.  Yang,  Z.  DeVito,  M.  Raison,  A.  Te-
+  jani, S. Chilamkurthy, B. Steiner, L. Fang, J. Bai,  and S. Chintala, “Pytorch: an imperative style,
+  high-performance deep learning library,” inProceedings of the 33rd International Conference on
+
+                                                         64
+  Neural Information Processing Systems(Curran Associates Inc., Red Hook, NY, USA, 2019).
+
+31J. Bradbury, R. Frostig, P. Hawkins, M. J. Johnson, Y. Katariya, C. Leary, D. Maclaurin, G. Nec-
+
+  ula, A. Paszke, J. VanderPlas, S. Wanderman-Milne,  and Q. Zhang, “JAX: composable transfor-
+  mations of Python+NumPy programs,”  (2018).
+
+32D. Pfau, J. Spencer, A. de G. Matthews,  and W. Foulkes, Phys. Rev. Research2, 033429 (2020).
+
+33J. Hermann, Z. Sch¨atzle,  and F. No´e, Nat. Chem.12, 891 (2020).
+
+34N. Renaud, JOSS8, 5472 (2023).
+
+35W. Ren, W. Fu, X. Wu,  and J. Chen, Nat. Commun.14, 1860 (2023).
+
+36M. Casula and S. Sorella, J. Chem. Phys.119, 6500 (2003).
+
+37S. Sorella, Phys. Rev. Lett.80, 4558 (1998).
+
+38M. Casula, C. Filippi,  and S. Sorella, Phys. Rev. Lett.95, 100201 (2005).
+
+39S. Sorella and L. Capriotti, J. Chem. Phys.133(2010), 10.1063/1.3516208.
+
+40M. Rogowski, S. Aseeri, D. Keyes,  and L. Dalcin, IEEE Trans. Parallel Distrib. Syst.34, 611
+
+  (2023).
+
+41N. Metropolis, A. W. Rosenbluth, M. N. Rosenbluth, A. H. Teller,  and E. Teller, J. Chem. Phys.
+
+  21, 1087 (1953).
+
+42W. K. Hastings, Biometrika57, 97 (1970).
+
+43C. Attaccalite and S. Sorella, Phys. Rev. Lett.100, 114501 (2008).
+
+44D. F. Ten Haaf, H. J. Van Bemmel, J. M. Van Leeuwen, W. Van Saarloos,  and D. M. Ceperley,
+
+  Phys. Rev. B51, 13039 (1995).
+
+45M. Calandra Buonaura and S. Sorella, Phys. Rev. B57, 11446 (1998).
+
+46S. Sorella and L. Capriotti, Phys. Rev. B61, 2599 (2000).
+
+47M. Casula,New QMC approaches for the simulation of electronic systems: a first application to
+
+  aromatic molecules and transition metal compounds, Ph.D. thesis, SISSA (2005).
+
+48K. Nakano, R. Maezono,  and S. Sorella, Phys. Rev. B101, 155106 (2020).
+
+49K. Nakano, S. Sorella,  and M. Casula, J. Chem. Phys.163, 194117 (2025).
+
+50T. Kato, Commun. Pure Appl. Math.10, 151 (1957).
+
+51T. McDaniel,  E. F. D’Azevedo,  Y. W. Li,  K. Wong,   and P. R. C. Kent, J. Chem. Phys.147,
+
+  174107 (2017).
+
+52K. Gottfried and T.-M. Yan,Quantum mechanics: fundamentals. 2nd edition(Springer, 2003).
+
+53L. Mit´aˇs, E. L. Shirley,  and D. M. Ceperley, J. Chem. Phys.95, 3467 (1991).
+
+54M. Casula, Phys. Rev. B74, 161102 (2006).
+
+
+                                                         65
+55A. Zen, J. G. Brandenburg, A. Michaelides,  and D. Alf`e, J. Chem. Phys.151, 134105 (2019).
+
+56C. Umrigar, Int. J. Quantum Chem36, 217 (1989).
+
+57K. Nakano, A. Raghav,  and S. Sorella, J. Chem. Phys.156, 034101 (2022).
+
+58P. Reynolds, R. Barnett, B. Hammond, R. Grimes,  and W. Lester Jr, Int. J. Quantum Chem.29,
+
+  589 (1986).
+
+59S. Pathak and L. K. Wagner, AIP Adv.10, 085213 (2020).
+
+60C. J. Umrigar, J. Toulouse, C. Filippi, S. Sorella,  and R. G. Hennig, Phys. Rev. Lett.98, 110201
+
+  (2007).
+
+61J. Toulouse and C. J. Umrigar, J. Chem. Phys.126, 084102 (2007).
+
+62S. Sorella, M. Casula,  and D. Rocca, J. Chem. Phys.127, 014105 (2007).
+
+63G. Mazzola, A. Zen,  and S. Sorella, J. Chem. Phys.137, 134112 (2012).
+
+64S.-I. Amari, Neural Comput.10, 251 (1998).
+
+65R. Rende, L. L. Viteritti, L. Bardone, F. Becca,  and S. Goldt, Commun. Phys.7, 260 (2024).
+
+66H. V. Henderson and S. R. Searle, SIAM Review23, 53 (1981).
+
+67K. B. Petersen and M. S. Pedersen, “The matrix cookbook,”  (2012), version 20121115.
+
+68S. Sorella, Phys. Rev. B71, 241103 (2005).
+
+69M. Marchi, S. Azadi, M. Casula,  and S. Sorella, J. Chem. Phys.131, 154116 (2009).
+
+70N. Dupuy, S. Bouaouli, F. Mauri, S. Sorella,  and M. Casula, J. Chem. Phys.142, 214109 (2015).
+
+71Q. Sun, M. R. Hermes, X. Wu, H. Zhai, X. Zhang, A. M. Ahmed, J. J. Aucar, O. J. Backhouse,
+
+  S. Banerjee, P. Bao, N. A. Bogdanov, K. Bystrom, F. Chapoton, N.-Y. Chen, I. Y. Chernyshov,
+  H. S. Clifford, S. Cohen-Janes, Z.-H. Cui, Y. D. Damour, N. Dattani, L. B. Dittmer, S. Ehlert,
+  J. J. Eriksen, F. A. Evangelista, S. A. Ewing, A. Farahvash, K. Focke, Y. Gao, K. E. Gasperich,
+  N. Gillispie, J. Greiner, M. R. Hennefarth, J. Hermann, C. Hillenbrand, J. Huhtasalo, B. Ibrahim,
+  B. Jangid, A. N. Javaremi, A. J. Jenkins, Y. Jin, D. S. King, D. P. Kooi, J. S. Kurian, H. R. Lars-
+  son, B. T. G. Lau, S. Lee, S. Lehtola, C. Li, H. Li, J. Li, R. Li, S. Li, A. O. Lykhin, A. Mahajan,
+  N. Mauger, P. del Mazo-Sevillano, J. Moussa, K. Nakano, V. A. Neufeld, L. Peng, H. Q. Pham,
+  P. Pinski, P. Pokhilko, Z. Pu, Y. Qian, S. J. Quiton, W. T. Schulze, T. R. Scott, A. Seal, J. D.
+  Serna, J. E. T. Smith, K. E. Smyser, T. Stahl, C. Sun, K. J. Sung, E. Trushin, S. Upadhyay, E. A.
+  Vo, T. Vogels, S. Wang, T. Wang, X. Wang, X. Wang, Y. Wang, M. Williamson, J. Yang, H.-Z.
+  Ye, C.-N. Yeh, H. Yu, J. Yu, V. W. zhe Yu, C. Zhang, D. Zhang, Y. Zhang, Z. Zhao, Z. Zhou, A. J.
+  Zhu, T. Zhu, T. C. Berkelbach, L. Gagliardi, S. Sharma, A. Sokolov,  and G. K.-L. Chan, “The
+  python simulations of chemistry framework:  10 years of an open-source quantum chemistry
+
+                                                         66
+  project,”  (2026), arXiv:2603.14155 [physics.chem-ph].
+
+72NVIDIA  Corporation,CUDA  Math  API  Reference  Manual:   Single  Precision  Mathematical
+
+  Functions, NVIDIA Corporation (2026), version 13.2; accessed 19 May 2026.
+
+73NVIDIA Corporation,NVIDIA Nsight Compute Profiling Guide(2026), sections “Quantities”
+
+  and “Memory Tables: L1/TEX Cache”.
+
+74L.  Bellentani,  M.  Casula,    and  T.  Gorni,Maximizing  GPU  utilization  with  NVIDIA  Multi-
+
+  Process-Service  for  Quantum  Monte  Carlo  simulations  with  the  TurboRVB  code,  EPICURE
+  White Paper EPICURE-WP-2025-001 (EPICURE, 2026).
+
+75K. Nakano, S. Sorella,  and M. Casula, J. Chem. Phys.163, 194117 (2025).
+
+76F. Della Pia, B. X. Shi, Y. S. Al-Hamdani, D. Alf´e, T. A. Anderson, M. Barborini, A. Benali,
+
+  M. Casula, N. D. Drummond, M. Dubeck´y, C. Filippi, P. R. C. Kent, J. T. Krogel, P. L´opez R´ıos,
+  A. L¨uchow, Y. Luo, A. Michaelides, L. Mitas, K. Nakano, R. J. Needs, M. C. Per, A. Scemama,
+  J. Schultze, R. Shinde, E. Slootman, S. Sorella, A. Tkatchenko, M. Towler, C. J. Umrigar, L. K.
+  Wagner, W. A. Wheeler, H. Zhou,  and A. Zen, J. Chem. Phys.163, 104110 (2025).
+
+77K. Raghavachari, G. W. Trucks, J. A. Pople,  and M. Head-Gordon, Chem. Phys. Lett.157, 479
+
+  (1989).
+
+78Y.  S.  Al-Hamdani,  P.  R.  Nagy,  A.  Zen,  D.  Barton,  M.  K´allay,  J.  G.  Brandenburg,    and
+
+  A. Tkatchenko, Nat. Commun.12, 3927 (2021).
+
+79V. Fishman, M. Lesiuk, J. M. L. Martin,  and A. Daniel Boese, J. Chem. Theory and Comput.
+
+  21, 2311 (2025).
+
+80B. X. Shi, F. Della Pia, Y. S. Al-Hamdani, A. Michaelides, D. Alf`e,  and A. Zen, J. Chem. Phys.
+
+  162, 144107 (2025).
+
+81K. Nakano, B. X. Shi, D. Alf`e,  and A. Zen, “Assessing the impact of nodal surface optimization
+
+  in fixed-node diffusion monte carlo on non-covalent interactions,”   (2026), arXiv:2604.04329
+  [physics.chem-ph].
+
+82E. Slootman, I. Poltavsky, R. Shinde, J. Cocomello, S. Moroni, A. Tkatchenko,  and C. Filippi,
+
+  J. Chem. Theory Comput.20, 6020 (2024).
+
+83A. S. Christensen and O. A. von Lilienfeld, Mach. learn.: sci. technol.1, 045018 (2020).
+
+84A. S. Christensen and O. A. von Lilienfeld, “Revised md17 dataset (rmd17),”  (2020).
+
+85K. Nakano, S. Battaglia,  and J. Hutter, J. Chem. Phys.164, 124113 (2026).
+
+86C. Møller and M. S. Plesset, Phys. Rev.46, 618 (1934).
+
+87I. Purvis, George D. and R. J. Bartlett, J. Chem. Phys.76, 1910 (1982).
+
+
+                                                        67
+88F. Weigend and R. Ahlrichs, Phys. Chem. Chem. Phys.7, 3297 (2005).
+
+89S. H. Vosko, L. Wilk,  and M. Nusair, Can. J. Phys.58, 1200 (1980).
+
+90J. P. Perdew, K. Burke,  and M. Ernzerhof, Phys. Rev. Lett.77, 3865 (1996).
+
+91P. J. Stephens,  F. J. Devlin,  C. F. Chabalowski,   and M. J. Frisch, J. Phys. Chem.98, 11623
+
+  (1994).
+
+92C. Adamo and V. Barone, J. Chem. Phys.110, 6158 (1999).
+
+93N. Mardirossian and M. Head-Gordon, J. Chem. Phys.144, 214110 (2016).
+
+94A. Najibi and L. Goerigk, J. Chem. Theory and Comput.14, 5725 (2018).
+
+95D. G. A. Smith,  L. A. Burns,  A. C. Simmonett,  R. M. Parrish,  M. C. Schieber,  R. Galvelis,
+
+  P. Kraus,  H. Kruse,  R. Di Remigio,  A. Alenaizan,  A. M. James,  S. Lehtola,  J. P. Misiewicz,
+  M. Scheurer, R. A. Shaw, J. B. Schriber, Y. Xie, Z. L. Glick, D. A. Sirianni, J. S. O’Brien, J. M.
+  Waldrop, A. Kumar, E. G. Hohenstein, B. P. Pritchard, B. R. Brooks, I. Schaefer, Henry F., A. Y.
+  Sokolov, K. Patkowski, I. DePrince, A. Eugene, U. Bozkaya, R. A. King, F. A. Evangelista, J. M.
+  Turney, T. D. Crawford,  and C. D. Sherrill, J. Chem. Phys.152, 184108 (2020).
+
+96M. C. Bennett, C. A. Melton, A. Annaberdiyev, G. Wang, L. Shulenburger,   and L. Mitas, J.
+
+  Chem. Phys.147, 224106 (2017).
+
+97K. Momma and F. Izumi, J. Appl. Crystallogr.44, 1272 (2011).
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                         68

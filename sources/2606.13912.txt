@@ -1,0 +1,1638 @@
+           Low-variance estimators overcome the
+      phase-gradient bottleneck in complex-valued
+                          neural quantum states
+
+   Yi-Ran Xue1,2,  Rui Wang1,4,5,6∗        ,  Baigeng Wang1,4,5†      ,  Chenan
+                                         Wei1,2,3‡
+
+ 1*National Laboratory of Solid State Microstructures and Department
+           of Physics, Nanjing University, Nanjing 210093, China.
+     2Department of Physics, University of Massachusetts, Amherst,
+                             Massachusetts 01003, USA.
+3A. Alikhanyan National Science Laboratory, Br. Alikhanian 2, Yerevan
+                                     0036, Armenia.
+4Collaborative Innovation Center of Advanced Microstructures, Nanjing
+                        University, Nanjing 210093, China.
+                  5Jiangsu Physical Science Research Center.
+6Hefei National Laboratory, Hefei 230088, People’s Republic of China .
+
+
+        *Corresponding author(s). E-mail(s):rwang89@nju.edu.cn;
+                  bgwang@nju.edu.cn;chenanwei@umass.edu;
+
+
+                                         Abstract
+   Complex neural quantum states are difficult to optimize when their wavefunction
+   phase carries gauge, chiral, fermionic, or topological structure. We show that the
+   major failure mode is not only ansatz expressivity, but the Monte Carlo estima-
+   tor used to learn this phase. For separated amplitude-phase states, differentiating
+   the local energy at fixed samples gives a different unbiased estimator of the same
+   variational Monte Carlo phase force, without changing the objective. We further
+   extend the construction to coupled two-head networks by keeping the amplitude-
+   gradient contribution and applying the direct derivative only to the phase path.
+   An adaptive minimum-variance mixture interpolates between standard and direct
+   estimators  during  training.  Across  flux  ladders,  chiral  chains,  two-dimensional
+   flux cylinders, an interacting fermion ladder, shared-network controls, and a frac-
+   tional quantum Hall benchmark, the resulting estimators reduce phase-gradient
+
+
+
+                                              1
+       variance, suppress seed failures, and often move multi-percent standard-gradient
+       plateaus to sub-percent accuracy.
+
+       Keywords:neural quantum states, variational Monte Carlo, complex wavefunctions,
+       phase optimization, phase structure, quantum many-body computation
+
+
+1  Introduction
+
+Neural-network  quantum  states  (NQS)  have  evolved  from  a  proof-of-principle  vari-
+ational  ansatz  into  a  computational  platform  for  quantum  many-body  science.  In
+lattice models, neural wavefunctions now support symmetry resolution, autoregressive
+sampling,  recurrent  and  transformer  architectures,  and  large-scale  software  frame-
+works [1–9]. In quantum chemistry, materials science and related continuum problems,
+fermionic  neural  wavefunctions  and  neural-network  quantum  Monte  Carlo  have
+reached molecular and solid-state systems, and recent work has emphasized transfer-
+ability, spin symmetry, efficient Laplacians, and foundation-style neural wavefunctions
+for correlated electrons [10–24]. This progress has made a central computational ques-
+tion  unavoidable:  when  a  neural  wavefunction  fails  on  a  difficult  quantum  state,  is
+the limiting factor the expressivity of the ansatz, or the stochastic algorithm used to
+optimize it?
+    The difficult states in this question often have a nontrivial configuration-dependent
+wavefunction phase. For a basis configurationx, an amplitude–phase neural wavefunc-
+tion has the formψ(x) = exp[u(x) + iϕ(x)]. The log amplitudeu(x) sets the sampling
+weight|ψ(x)|            2, while the phase functionϕ(x) determines relative phases between con-
+figurations.  In  VMC  this  phase  enters  through  local-energy  ratiosψ(y)/ψ(x):  the
+relative phaseϕ(y)−ϕ(x) between configurations connected by the Hamiltonian con-
+trols the off-diagonal interference terms sampled by the optimizer. Nontrivial phase
+structure appears in many of the systems that motivate complex NQS: fermionic anti-
+symmetry underlies the sign problem in generic quantum Monte Carlo [25]; frustrated
+magnets evade simple Marshall sign rules [26], and previous NQS studies have identi-
+fied sign structure as a source of poor generalization, rugged landscapes, and optimizer
+failure [27–30]; gauge fields and twisted boundary conditions introduce Peierls phases
+and  Hofstadter-type  interference  patterns  [31–35];  time-reversal-symmetry-breaking
+interactions generate complex spin wavefunctions [36]; quantum Hall and other topo-
+logical  states  carry  intrinsically  complex  many-body  structure  [20, 21];  and  unitary
+real-time dynamics makes the wavefunction complex by construction [37]. In these set-
+tings, accurate amplitudes alone are not sufficient: the reliability of the phase-gradient
+sector directly affects the variational energy reached by optimization.
+    Most NQS strategies for hard states improve what the ansatz can express or how
+strongly physics is built into it: larger networks, symmetries, backflow, attention, pre-
+training, or more aggressive phase-network learning rates [38–40]. These developments
+are essential, but they leave a separate statistical question: even when an ansatz can
+support the needed wavefunction phase, is the Monte Carlo gradient used to optimize
+its phase parameters stable enough? Recent work on VMC importance sampling has
+
+
+                                                      2
+begun to address this estimator side by adapting the sampling distribution to reduce
+high-variance gradient estimates [41]. Here we take a different but aligned route: the
+sampling law is kept fixed, and only the phase-gradient random variable is changed. In
+the 100-site flux ladder, a compact width-128, depth-2 ansatz trained with the direct
+estimator  converges  below  one  percent  of  the  DMRG  reference,  whereas  standard-
+gradient networks widened or deepened under the same optimizer settings remain at
+much larger errors. This comparison is not a claim that larger networks are intrinsi-
+cally worse after separate retuning; it shows that increasing capacity is a less direct
+remedy  than  reducing  the  noise  in  the  phase-force  estimator.  Increasing  the  phase-
+network learning rate partly improves the standard estimator but only within a narrow
+range, after which it plateaus or destabilizes. This tuning sensitivity is itself part of
+the failure mode: when the raw gradient estimator has a high variance floor, scalar
+step-size tuning rescales signal and noise together rather than changing the random
+variable being estimated. The bottleneck can therefore be statistical, residing in the
+Monte Carlo estimator of the phase gradient rather than in ansatz capacity alone.
+    The mechanism is simple but consequential. The conventional VMC gradient treats
+amplitude and phase through one energy-gradient covariance, often preconditioned by
+stochastic reconfiguration or the quantum natural gradient [42–44]. For a separated
+amplitude–phase  ansatz,  however,  the  phase  force  is  a  covariance  between  ImE     loc
+and the phase score. It is therefore a score-function estimator in the same sense as
+REINFORCE gradients [45,46]. In broader Monte Carlo gradient estimation, score-
+function estimators are often contrasted with pathwise or reparameterized derivatives,
+which  can  have  much  lower  variance  when  the  sampling  distribution  permits  them
+[46,47]. The standard VMC phase estimator has the correct expectation, but its signal-
+to-noise  ratio  can  collapse  pre-asymptotically:  the  covariance  can  be  small  through
+cancellation even when the sample-wise fluctuations of ImE     loc remain large. The zero-
+variance principle only guarantees that this noise disappears at an exact eigenstate
+[48]; practical optimization must reach that limit through a noisy transient regime.
+    Here we use the structure of the wavefunction-phase sector to construct a lower-
+variance route to the same force. In a separated amplitude–phase parameterization,
+the  sampling  distribution|ψ|                           2  depends  on  the  log  amplitude  but  not  onϕ(x).  One
+may therefore differentiate the local energy itself at fixed sampled configurations. The
+resulting direct estimatorg                  dir  is unbiased for the same phase force as the standard
+score estimatorg                  std, but it is a different Monte Carlo random variable with different
+variance. It requires no knowledge of the model beyond the connected configurations
+already  used  to  evaluate  the  local  energy.  Because  neither  endpoint  has  uniformly
+lower  variance  along  a  training  trajectory,  we  also  introduce  an  adaptive  mixture
+gmix = (1−λ   ⋆)g  std+λ ⋆gdir. The coefficient is the clipped minimum-variance coefficient
+for the two raw unbiased phase-gradient estimators. In population, this construction
+identifies the minimum-variance convex interpolation of the two raw estimators and
+gives  an  explicit  sensitivity  identity  for  coefficient-estimation  error;  in  finite-batch
+preconditioned  VMC  it  should  be  read  as  a  variance-aware  estimator-combination
+rule, which we monitor directly through logged variance ratios.
+    We  test  the  resulting  estimator-design  narrative  on  flux  ladders,  FQHE,  chiral
+XXX  chains,  two-dimensional  flux  squares,  an  interacting  spinless-fermion  ladder,
+
+
+
+                                                      3
+exact-diagonalization  controls,  and  zero-flux  real-valued  controls.  The  theorem  and
+the main lattice benchmarks use separated amplitude and phase networks; later we
+state the coupled two-head generalization and use single-network calculations as sup-
+porting  transfer  tests.  The  main  benchmark  is  a  100-site  flux  ladder  with  DMRG
+references  [49, 50].  At  Φ  =  0.3π,g                     dir  reaches  a  median  tail-window  error  of  0.83%
+and the adaptive mixture 0.57%, while standard baselines with tuned phase-network
+learning  rates  remain  in  the  3.4–5.1%  range  and  the  unscaled  standard  estimator
+near 11%. At Φ = 0.2π, the adaptive mixture reaches 0.52%, while tuned standard
+baselines remain at 2.7–4.7%. Starting from DeepHall, the adaptive-mixture optimiza-
+tion reaches an energy below the second-Landau-level-projected exact-diagonalization
+reference,  consistent  with  accessing  Landau-level-mixing  correlations  beyond  that
+fixed-level projection. The gain transfers to chiral XXX chains, where the standard-
+to-direct mean-error ratio is 8.9×atN= 20,α= 1.0 and 4.85×atN= 100, to an
+8×8 flux square with high-bond-dimension finite-MPS DMRG references, and to the
+fermionic flux-ladder control in Extended Data Fig.1. Variance diagnostics, flux con-
+trols, and seed-resolved statistics all support the same conclusion: optimization of the
+complex wavefunction phase in NQS is not only an architecture problem, but a Monte
+Carlo gradient-estimator problem.
+
+2  Results
+
+The benchmark suite spans distinct physical origins of a nontrivial wavefunction phase
+ϕ(x). The flux ladder is a quasi-one-dimensional gauge-field model, the chiral XXX
+chain introduces  time-reversal-symmetry breaking  through  scalar chirality, the  two-
+dimensional flux square realizes a Hofstadter-type lattice gauge field, the interacting
+spinless-fermion ladder combines Peierls phases with fermionic signs and density inter-
+actions,  and  the  fractional  quantum  Hall  benchmark  probes  continuum  topological
+states  with  Landau-level  mixing.  Zero-flux  and  real  frustrated  controls  remove  or
+reduce the complex phase structure. The separated-network lattice calculations are the
+main validation of the estimator identity; the single-network FQHE and shared-trunk
+ladder calculations test how the same estimator idea transfers beyond that clean set-
+ting. Together these models provide controlled variations in the origin and strength of
+wavefunction-phase structure while retaining reference energies from exact diagonal-
+ization, projected exact diagonalization, or DMRG. The Hamiltonians and benchmark
+sectors are collected in Methods.
+
+2.1  Direct/adaptive-mixture phase gradients in a flux ladder
+We first use the flux ladder as a controlled setting in which the target wavefunction is
+complex but the reference energy is accurately accessible. The model is a two-leg spin-
+1/2 ladder withL= 50 rungs (100 sites), fixed magnetization, and a plaquette flux Φ;
+it is closely related to gauge-field ladder realizations of Meissner and vortex physics
+[31–33]. At finite flux, Peierls phases on the leg exchanges generate chiral currents and
+a tunable interference pattern in the ground-state wavefunction, making the ladder
+a  compact  benchmark  for  wavefunction-phase  optimization.  The  neural  ansatz  uses
+
+
+                                                     4
+separated real networks for log-amplitude and phase. Unless stated otherwise, all com-
+parisons share the same sampler, MLP architecture, stochastic-reconfiguration/minSR
+pipeline,  clipping,  damping,  and  learning-rate  schedule;  only  the  estimator  of  the
+phase-force vector is changed.
+    Figure1compares the standard score phase gradient with the direct local-energy
+derivative  and  the  adaptive  mixture.  At  Φ  =  0.3π,  the  direct  estimator  reaches  a
+median tail-window relative error of 0.83% (mean 0.83%, range 0.47–1.17% over ten
+seeds),  and  the  adaptive  mixture  reaches  0.57%  (range  0.44–1.26%).  The  unscaled
+standard estimator remains near 11.1% and shows a bimodal seed distribution. We
+also sweep the standard phase-network learning-rate multiplier to separate estimator
+variance  from  a  simple  step-size  mismatch:  if  the  gap  were  only  a  step-size  effect,
+a  larger  phase-network  step  would  close  it.  Acrossη     ϕ/η∈{2,3,4,5},  the  standard
+estimator still plateaus at 3.4–5.1% (Extended Data Fig.2). At Φ = 0.2π, the same
+ordering  holds.  The  adaptive  mixture  gives  the  lowest  median  error,  0.52%  (range
+0.44–1.33%), the direct estimator gives 1.2%, the unscaled standard estimator remains
+near 10.9%, and the tuned standard baselines remain in the 2.7–4.7% range. Thus,
+tuning  the  score  estimator  helps  only  partially  and  introduces  an  additional  search
+cost, whereas replacing the phase-gradient random variable moves the calculation from
+multi-percent plateaus to sub-percent accuracy in the same optimization pipeline.
+
+
+
+
+
+2.2  Estimator choice is more efficient than increasing capacity
+A natural interpretation of poor wavefunction-phase optimization is that the network
+is too small. We therefore compare the estimator change with standard-gradient capac-
+ity changes under matched optimizer hyperparameters. In Fig.2, the direct estimator
+with the shallow width-128, depth-2 MLP reaches a median tail-window error below
+1% (0.89%). The standard estimator does not improve under the same training recipe:
+the width-128, depth-2 standard MLP gives 8.4%, the width-256, depth-2 MLP gives
+14.9%, and  the width-128, depth-4 MLP  gives 24.6%.  We  do not use  this sweep  to
+argue that larger standard-gradient architectures cannot be rescued by their own tun-
+ing protocols. The point is different: a good phase-gradient estimator makes a compact
+ansatz efficient. It reduces the need to compensate for estimator noise by enlarging the
+network and reopening a separate architecture-by-architecture hyperparameter search.
+    The  same  conclusion  survives  an  architecture  change.  A  translation-equivariant
+convolutional ResNet with spatial sum-pooling (24 channels, depth 6) again shows a
+clear estimator gap: the direct estimator continues to descend after the standard runs
+have  plateaued,  reaching  a  median  tail-window  error  of  0.46%  (range  0.27–1.03%)
+versus 2.75% (range 1.92–4.21%) for the standard gradient. The ResNet comparison is
+conservative in favor of the baseline because the standard-gradient runs use twice the
+batch size of the direct runs (512 versus 256). The practical message is that architecture
+and estimator are distinct levers; in these tests, changing the estimator is the more
+efficient way to make the phase sector train reliably.
+
+
+                                                      5
+Fig.  1  Direct  and  adaptive-mixture  phase  gradients  on  the  100-site  flux  ladder.All
+panels  use  theL=  50  flux  ladder  (100  sites,  half  filling),  an  MLP  with  width  128  and  depth  2,
+batch  size  1024,  48  MCMC  sweeps  per  optimization  step,  base  learning  rateη=  0.03,  and  ten
+seeds per estimator. Each row is one flux: Φ = 0.2π(top, DMRGE           ref  =−44.826) and Φ = 0.3π
+(bottom,  DMRGE   ref  =−43.303).  (Left  column)  relative-error  training  curves;  solid  lines  show
+means,  dotted  lines  medians,  and  shaded  bands  interquartile  ranges.  (Right  column)  tail-window
+relative-error statistics for the direct, adaptive-mixture, and standard estimators including the phase-
+learning-rate  multipliers;  bars  show  medians,  whiskers  interquartile  ranges,  and  points  individual
+seeds.
+
+2.3  Controls identify a phase-specific variance mechanism
+The  estimator  advantage  should  appear  only  when  the  phase  sector  is  statistically
+difficult. Figure3tests this prediction. The small flux ladder and flux chain are finite-
+size versions of the Peierls-phase setting, where complex hopping or exchange phases
+produce a controlled wavefunction phase. The frustratedJ                   1–J  2 chain introduces non-
+trivial  sign  structure  through  competing  exchanges,  providing  a  useful  comparison
+between discrete sign structure and irreducibly complex phases. In the clean zero-flux
+bipartite control, the phase structure is trivial, and the standard and direct estima-
+tors have essentially identical mean errors. These controls separate the method from a
+generic optimization improvement: the gain follows the presence of a complex phase.
+    The same figure also gives two diagnostics for the proposed mechanism. First, on
+a representative complex-flux trajectory, the standard-to-direct phase-gradient trace-
+variance ratio has median 5.4×and maximum 19.3×. Second, exact-diagonalization
+controls on small chains and ladders reproduce the large standard/direct gaps without
+
+
+                                                         6
+Fig. 2  Estimator choice beats capacity scaling under matched training.The benchmark
+is theL= 50 (100-site) flux ladder at Φ = 0.3π, with the same optimizer settings as Fig.1for every
+architecture, except that the ResNet comparison (panels c,d) uses batch size 512 for the standard-
+gradient  runs  and  256  for  the  direct  runs  (an  asymmetry  that  favors  the  standard  baseline).  (a)
+Width sweep: tail-window error of the direct and standard phase-gradient estimators at width 128
+and width 256 (depth 2). (b) Architecture comparison: the shallow direct network (width 128, depth
+2) against standard-gradient MLPs of width 128 depth 2, width 256 depth 2, and width 128 depth
+4; under these matched optimizer settings, increasing standard-gradient capacity does not close the
+estimator  gap.  (c,d)  ResNet  comparison  over  ten  seeds  (thin  lines,  individual  seeds;  solid,  mean;
+dotted, median; shaded band, interquartile range): relative-error (c) and energy (d) convergence, with
+the direct estimator descending past the standard plateau to a median tail-window error of 0.46%
+versus 2.75% for the standard gradient.
+
+
+relying on DMRG reference uncertainty. Together with the learning-rate sweep, these
+results support the variance-limited picture: multiplying the noisy phase update can
+partly improve early descent, but it does not remove the raw estimator variance and
+eventually destabilizes.
+
+2.4  Adaptive mixing makes estimator choice variance-aware
+The direct estimator is not expected to dominate universally. Near an exact eigenstate,
+the standard estimator inherits the usual zero-variance property, whereas the direct
+estimator need not be zero-variance componentwise. The adaptive mixture is designed
+for this changing regime. It forms a convex combination of the standard and direct
+
+
+                                                        7
+Fig. 3  Mechanism and controls.(a) Mean relative-error controls for a flux ladder withL= 8, a
+flux chain withN= 16, a frustratedJ                             1–J  2  flux chain withN= 16, and a zero-flux ladder control;
+the large ratios in complex models come mainly from fewer bad-basin seeds for the direct estimator.
+(b) Standard/direct phase-gradient variance ratios on a representative complex-flux trajectory, sum-
+marized by median, mean, and maximum ratio. (c) Phase-learning-rate sweep for estimators over the
+displayed learning-rate multipliers. (d) Exact-diagonalization controls for a chain withN= 16 and
+a ladder withL= 10. The advantage appears as improved robustness in complex flux models and
+disappears in the zero-flux real control.
+
+
+
+
+
+phase  estimators  using  a  trace  minimum-variance  coefficient  estimated  on  the  pre-
+update ensemble, with convex clipping of the reported coefficient to 0≤λ  ⋆≤1.
+    Figure4logs the variance ratios and the mixing coefficient during training. On both
+flux-ladder points and on the 2D flux square, the standard estimator has larger and
+more persistent phase-gradient variance over much of the trajectory. The adaptive mix-
+ture tracks a lower-variance interpolation between the standard and direct estimators
+over much of training without imposing a fixed interpolation. The learned coefficient
+starts close to the direct endpoint and drifts away fromλ    ⋆ = 1 as training proceeds,
+matching the Methods prediction that the population-optimal raw-gradient mixture
+returns  toward  the  standard  estimator  as  the  zero-variance  regime  is  approached.
+These diagnostics are important because the theory is a statement about raw gradient
+estimators,  whereas  the  production  calculation  also  contains  finite-batch  coefficient
+
+
+                                                         8
+Fig.  4  Gradient-variance  reduction  and  adaptive  mixing.Logged  phase-gradient  variance
+ratios and mixing coefficientλ ⋆ along training, for theL= 50 flux ladder at Φ = 0.2πand Φ = 0.3π
+and for the 2D cylinder (Φ = 0.2πand 0.3π,J       z = 0). Solid curves show Var(standard)/Var(direct);
+the  mixing-coefficient  panels  show  means  (solid),  medians  (dotted),  individual  seeds  (thin),  and
+interquartile bands.
+
+
+estimates, clipping, and stochastic-reconfiguration preconditioning. The logged behav-
+ior  shows  that  the  complete  pipeline  uses  the  variance  information  in  the  intended
+direction.
+
+2.5  Continuous-space generality: Landau-level mixing in the
+       fractional quantum Hall effect
+The  estimator-design  principle  is  not  specific  to  lattice  spin  models.  It  also  applies
+when a continuous-coordinate neural state learns a complex phase. We use the frac-
+tional  quantum  Hall  effect  (FQHE)  as  a  test  of  this  transfer.  The  ground  state  is
+not  confined  to  a  single  Landau  level  (LL);  it  admixes  higher-LL  components,  and
+capturing thisLandau-level mixingis precisely where a flexible neural ansatz can go
+beyond a fixed-LL exact-diagonalization (ED) treatment. We therefore studyN= 6
+electrons at fillingν= 1/3 on the Haldane sphere with a DeepHall ansatz, a single
+complex  network  in  the  FermiNet  family,  trained  with  the  standard  and  adaptive-
+mixture  phase-gradient  estimators  under  otherwise  identical  settings,  ten  seeds  per
+
+
+                                                        9
+Fig. 5  Generality to a continuous-space fractional quantum Hall benchmark (DeepHall).
+Single-network neural quantum state built on the transform forN= 6 electrons at fillingν= 1/3
+on the Haldane sphere, trained with the adaptive-mixture (mix) and standard (std) phase-gradient
+estimators, ten seeds per estimator. (a) Corrected energy per particle versus optimization step (median
+over seeds; shaded band, interquartile range; per-seed curves rolling-median smoothed). Dashed lines
+mark  the  lowest-Landau-level  exact-diagonalization  energy  (−0.410950),  the  two-Landau-level  ED
+energy (−0.411760, gap = 1), and the published DeepHall neural baseline (−0.411688). The adaptive
+mixture  descends  below  the  two-Landau-level  ED  value,  consistent  with  beyond-two-Landau-level
+mixing,  while  the  standard  estimator  stays  above  it;  a  high-statistics  MCMC  evaluation  at  fixed
+final parameters givesE c/N=−0.411898 for the adaptive mixture andE        c/N=−0.411555 for the
+standard estimator. (b) Adaptive mixing coefficientλ ⋆ along training, shown on an expanded vertical
+scale.
+
+
+
+estimator (Fig.5). This benchmark is intentionally presented as a transfer test beyond
+the separated-network lattice setting developed above.
+    The adaptive-mixture estimator drives the energybelowthe two-Landau-level ED
+benchmark—the ground-state energy obtained by exact diagonalization restricted to
+the lowest two LLs—whereas the standard phase-gradient estimator plateaus above
+it.  In  the  high-precision  frozen  evaluation,  the  adaptive  mixture  reachesE/N=
+−0.411898e                    2/ϵℓB, below the two-LL ED value−0.411760 (LL gap= 1) by 1.4×10       −4  ,
+while  the  standard  estimator  settles  at−0.411555,  above  the  two-LL  ED  value  by
+2.0×10   −4  . The crossing of the two-LL reference is consistent with the adaptive-mixture
+network accessing beyond-two-LL mixing correlations, the regime in which a fixed two-
+LL projection remains variationally constrained. The adaptive mixture also improves
+on the previously reported DeepHall neural-network energy (−0.411688), giving the
+lowest value among the compared methods on this benchmark. The learned mixing
+coefficient in Fig.5b is smaller than in the lattice flux ladders but remains nonzero
+on the expanded vertical scale, so the continuum result should be read as a sensitive
+variance-aware correction to the FermiNet-class optimization rather than as a whole-
+sale replacement of the standard gradient. The FQHE result therefore strengthens the
+main message: estimator choice can decide whether a complex neural state resolves a
+small but physically meaningful phase-correlation energy.
+
+
+                                                       10
+2.6  The estimator advantage persists across lattice phase
+       structures
+We next test whether the advantage is tied to a particular ladder Hamiltonian. The chi-
+ral XXX benchmark is a time-reversal-breaking spin chain with Heisenberg exchange
+supplemented  by  a  scalar-chirality  interaction,  motivated  by  recent  finite-size  and
+conformal-field-theory  studies  of  chiral  spin  states  [36].  The  couplingαtunes  the
+strength of chirality and therefore the amount of complex wavefunction structure gen-
+erated without Peierls hopping phases. Extended Data Fig.5shows that the direct
+phase gradient remains better across chirality strength, system size, and optimizer set-
+ting. AtN= 20,α= 1.0, the standard-to-direct mean-error ratio is 8.9×; atN= 100,
+the ratio remains 4.85×. The transfer from Peierls flux to scalar chirality is a useful
+stress test because the source of the complex phase is physically different while the
+estimator structure is the same.
+    In  addition,  we  study  an  8×8  square  lattice  with  a  uniform  Peierls  flux  per
+plaquette (Fig.6), using high-bond-dimension finite-MPS DMRG references. This two-
+dimensional  flux  square  is  a  spin  analogue  of  a  Hofstadter-type  lattice  gauge-field
+problem: the Landau-gauge Peierls phases make the off-diagonal interference pattern
+genuinely two-dimensional, while theJ   z term controls the strength of density–density
+interactions  in  the  spin  representation.  The  main  figure  showsJ  z  =  0,  where  the
+flux-induced complex phase is the only source of sign structure. On a cylinder (peri-
+odicx, openy) at Φ = 0.2π, the direct estimator reaches 0.54% median tail-window
+error and the adaptive mixture 0.74%, while the standard estimator plateaus at 2.61%
+with a broader seed distribution. At Φ = 0.3πthe direct estimator and the adaptive
+mixture both reach 0.98%, compared with 3.00% for the standard estimator. Adding
+an  interactionJ       z  =  0.5  leaves  the  ordering  intact:  at  Φ  =  0.2πthe  adaptive  mix-
+ture  reaches  2.37%  versus  6.59%  standard,  and  at  Φ  =  0.3πthe  direct  estimator
+reaches 3.65% versus 7.57% standard (Extended Data Fig.3). Across the four two-
+dimensional cells, the standard-to-lower-error estimator ratio spans 2.1–4.8×. The gain
+is again mainly reliability: the standard estimator often converges to a negative energy,
+but its seed distribution is higher and wider. Extended Data Fig.1shows the same
+qualitative ordering on a 100-site interacting spinless-fermion flux ladder with a high-
+bond-dimension  finite-MPS  DMRG  reference.  This  fermionic  benchmark  combines
+Peierls phases, density interactions, and particle-exchange signs after Jordan–Wigner
+mapping, indicating that the estimator effect is not restricted to spin-only benchmarks.
+    Finally, we include a deliberately smaller shared-parameter test in Extended Data
+Fig.4.  The  main  proof  and  main  lattice  figures  use  separate  amplitude  and  phase
+parameter blocks. The shared-trunk control instead uses one trunk with two output
+heads and the coupled-force construction described in Methods: the amplitude/Pulay
+score term is retained, while the direct summand differentiates only the phase path
+with the amplitude path stopped. The direct and adaptive-mixture estimators remain
+better than the standard estimator in this setting, so the observed advantage is not
+merely an artifact of splitting amplitude and phase into two independent networks.
+Because this shared-network evidence is narrower than the separated-network bench-
+mark  suite,  we  treat  it  as  a  transfer  check  rather  than  the  main  validation  of  the
+theory.
+
+
+                                                     11
+Fig. 6  Generality on a two-dimensional8×8flux square.Relative-energy-error training tra-
+jectories (left column) and tail-window relative-error statistics (right column; bars, median; whisker,
+interquartile range; points, individual seeds) for the direct, adaptive-mixture, and standard estima-
+tors atJ  z  = 0, on an 8×8 cylinder (periodicx, openy) with a uniform Peierls flux per plaquette
+(Φ = 0.2π, top row; Φ = 0.3π, bottom row), ten seeds per estimator. Reference energies are high-
+bond-dimension finite-MPS DMRG values (χup to 768; Methods). At fixed cylinder geometry the
+standard estimator is both higher and more broadly dispersed than the direct and adaptive-mixture
+estimators, and its error grows with flux; the same ordering at the interacting pointJ z = 0.5 is shown
+in Extended Data Fig.3.
+
+3  Discussion
+
+The  central  message  is  that  complex-phase  NQS  optimization  can  be  a  gradient-
+estimator  problem.  Although  the  standard  VMC  phase  force  is  unbiased,  its  score-
+function covariance signal can become small through cancellation while fluctuations
+of ImE     loc remain large. In this regime, replacing the estimator can be more efficient
+than increasing capacity: on the flux ladder, wider or deeper standard-gradient net-
+works did not close the gap at matched settings, whereas the compact direct-gradient
+ansatz  reached  sub-percent  error.  The  chiral-chain  and  two-dimensional  flux-square
+benchmarks show that the effect is not ladder-specific.
+    The estimator identity also fixes the scope. For strictly separated amplitude and
+phase parameters, the direct estimator leaves the variational objective unchanged and
+estimates the same population phase force as the score estimator; only the finite-sample
+random variable changes. The adaptive mixture interpolates between the score and
+
+
+                                                       12
+direct forms with a minimum-variance coefficient, so any deterministic convex mixture
+remains unbiased at the population level and the optimal coefficient minimizes raw
+phase-gradient variance. In training, this coefficient is estimated from the same finite
+batch inside the clipped, preconditioned pipeline; its behavior is assessed by the logged
+variance diagnostics and seed statistics.
+    The practical improvement is mostly reliability. Some standard-gradient seeds can
+be  competitive,  but  the  standard  estimator  produces  more  high-error  or  bad-basin
+runs; reducing this failure rate matters because seed restarts, learning-rate sweeps and
+architecture retuning are costly. The phase-network learning-rate sweeps in Fig.1and
+Extended Data Fig.2should therefore be read as stress tests, not as a requirement
+for equally elaborate tuning of the new estimator. On lattice benchmarks the direct
+estimator has little measured per-step overhead because it reuses connected configu-
+rations already evaluated for the local energy. In the FQHE benchmark it costs more
+(about 2.8×slower at the full walker batch; Methods), so the method partly converts
+reruns and hyperparameter search into a variance-aware estimator cost.
+    The numerical formulation used in the main lattice experiments deliberately uses
+separated  amplitude  and  phase  networks,  where  the  unbiasedness  identity  is  trans-
+parent  because  sampling  does  not  depend  on  phase  parameters.  We  then  separate
+the broader claim into a raw-gradient extension for coupled real two-head networks
+and  narrower  single-network  transfer  tests  in  the  shared-trunk  ladder  and  FQHE
+benchmarks. In the coupled construction, the direct summand is a stopped-amplitude,
+active-phase derivative and must be combined with the amplitude/Pulay score term;
+the  full  pathwise  derivative  is  not  the  VMC  gradient.  The  covariance  corrections
+for the adaptive coefficient are specified in Methods. Testing the resulting full-force
+variance  reduction  more  broadly  in  shared  representations,  autoregressive  states,
+electronic-structure  and  other  fermionic  continuum  wavefunctions,  and  foundation-
+style quantum-state models is a natural next step. Quantum chemistry is a natural
+but  architecture-dependent  extension:  the  most  direct  targets  are  complex-valued
+VMC  settings—magnetic  fields,  spin–orbit  coupling,  twisted  or  periodic  boundary
+conditions, current-carrying states and Berry-phase problems—whereas real zero-field
+molecules would require a sign/nodal analogue rather than a literal phase estimator.
+    Overall, difficult NQS calculations should be diagnosed not only through architec-
+tures, symmetries, transferability and physical priors, but also through the stochastic
+estimator  used  to  learn  the  phase.  Pathwise  derivatives,  control  variates  and  adap-
+tive  estimator  combinations  belong  inside  VMC,  not  only  around  it.  For  fermions,
+gauge fields, twisted boundaries, quantum Hall states, chiral interactions and real-time
+dynamics, the wavefunction-phase bottleneck is not only an architecture or capacity
+bottleneck; it is also a noise floor, and noise floors can be engineered down.
+
+4  Methods
+4.1  Amplitude–phase parameterization
+For a discrete basis configurationx, we write a complex neural quantum state as
+
+                                  ψθ(x) = exp[u     θ1(x) + iϕ  θ2(x)],                                      (1)
+
+
+                                                    13
+whereu     θ1 is the log-amplitude network andϕ   θ2 is the phase network. The local energy
+is
+                                          Eloc(x) =  X        Hxyψθ(y)ψθ(x)  .                                          (2)
+                                                          y
+The standard VMC gradient for a real parameterθis
+                                                  h                                i
+                                  ∂θE= 2 Re         ⟨(E   loc−E)O  ∗θ(x)⟩  |ψ|    2  ,                                 (3)
+
+whereO     θ(x) =∂   θ logψ  θ(x). For the separated networks this gives
+
+                                  gampθ1    = 2⟨[ReE          loc(x)−E]∂      θ1u(x)⟩,                                 (4)
+                                   gstdθ2   = 2⟨ImE        loc(x)∂   θ2ϕ(x)⟩.                                          (5)
+
+    Two clarifications frame what follows. First, the standard phase estimator is unbi-
+ased:  its  expectation  equals  the  exact  phase  force,  so  the  difficulty  studied  in  this
+work is statistical, not a formal bias. Concretely, resolving a gradient component from
+Nsamples  requiresN≳Var(                     ˆg)/|g|         2,  and  for  the  phase  sector  this  ratio  can  grow
+without bound, because the force is a covariance that can become small through can-
+cellation while the per-sample fluctuations of ImE     loc remain large. Second, this noise
+problem is pre-asymptotic. At an exact eigenstate the local energy is constant over
+configurations,  so  ImE     loc ≡0  pointwise  and  the  standard  phase  estimator  is  then
+itself zero-variance, consistent with the zero-variance principle [48]; practical optimiza-
+tion operates far from that limit, and the crossover between the two regimes is made
+quantitative in the variance-mixing subsection below.
+
+4.2  Direct local-energy derivative
+The direct estimator differentiates the local energy at fixed sampled configuration:
+
+                             ∂θEloc(x) =  X         Hxyψθ(y)ψθ(x)     [Oθ(y)−O    θ(x)   ],                           (6)
+                                              y̸=x
+
+because the diagonal termH    xx is independent ofθ. For phase parameters,O            θ2(x) =
+i∂ θ2ϕ(x), so Eq. (6) directly probes how changing the phase modifies the off-diagonal
+interference ratios.
+    The relation to the phase force follows from a Hermiticity identity that holds for
+any  parameter  and  any  basis.  DifferentiatingE             loc  =ψ −1 Hψat  fixed  configuration
+and taking the|ψ|          2 expectation,
+
+                         ⟨∂ θEloc⟩=⟨    (E∗loc−E   loc)Oθ⟩=−2⟨ImE                  loc iO θ⟩.                       (7)
+
+For separated phase parameters,O          θ2 = i∂ θ2ϕ, so the expectation is purely real,
+
+                                        ⟨∂ θ2Eloc⟩= 2⟨ImE           loc∂θ2ϕ⟩,                                       (8)
+
+
+                                                          14
+and  the  direct  local-energy  derivative  targets  exactly  the  same  phase  force  as  the
+standard phase gradient, with a different Monte Carlo estimator.
+    Equation (7) also delimits the scope of the method. For a parameter that affects
+the amplitude as well,∂  θu̸= 0, the exact gradient decomposes as
+
+                           ∂θE= 2⟨    [ReE     loc−E   ]∂θu⟩+ Re⟨∂     θEloc⟩,                            (9)
+
+
+and the direct estimator alone omits the first (score) contribution: its bias relative to
+the full gradient is exactly−g                 ampθ    . Thus a direct local-energy derivative by itself is not a
+valid full-gradient estimator for any parameter that also changes the amplitude. In the
+separated phase block this issue is absent because∂     θ2u= 0. In a coupled real two-head
+network  the  obstruction  can  instead  be  removed  by  restoring  the  amplitude/Pulay
+force and restricting the pathwise derivative to the phase output, with the amplitude
+values held fixed; this construction is derived in Sec.4.7. A genuinely tied or holomor-
+phic single-complex parameterization is not covered unless such a stopped-amplitude,
+active-phase derivative is a well-defined operation.
+    Two structural properties of the direct estimator follow immediately from Eq. (6).
+    Diagonal decoupling.The diagonal term drops out exactly: they=xratio is
+identically one, so∂  θHxx-type contributions vanish sample by sample; in continuum
+notation the same statement reads∂    θV(R) = 0, so the direct estimator is sample-wise
+independent of diagonal (potential) fluctuations.
+    The  diagonal-energy  statement  should  be  interpreted  narrowly:  the  diagonal
+matrix  elementH xx  drops  out  of  the  direct  local-energy  derivative  in  Eq.  (6).
+For  a  purely  separated  phase  network,  a  real  diagonal  term  also  does  not  directly
+enter the standard phase-gradient expectation, which depends on ImE     loc. The vari-
+ance  advantage  is  therefore  more  accurately  stated  as  an  estimator-level  reduction
+observed  in  phase-structured  systems.  By  contrast,  in  shared  or  single-complex-
+network  parameterizations  the  score-function  estimator  couples  every  parameter  to
+ReE     loc  fluctuations  through  Eq.  (9),  and  diagonal  (potential)  noise  does  leak  into
+phase directions; that observation was the original motivation for this work.
+    Global gauge invariance.The direct estimator depends on the phase network
+only  through  differences∂         θ2ϕ(y)−∂     θ2ϕ(x)  on  connected  pairs.  Hence,  global-phase
+directions vanish identically sample by sample. In an uncentered score-function imple-
+mentation,  the  corresponding  standard  phase  variable  contains  the  pure-noise  term
+2 ImE     loc×const;  a  centered  covariance  implementation  can  remove  this  particu-
+lar global mode. The broader variance comparison below therefore concerns the full
+standard/direct random variables, not only this gauge direction.
+
+
+4.3  Unbiased phase estimators and variance mixing
+The estimator comparison can be made explicit for each phase parameterβand each
+sampled configurationR. Write
+
+                                       ∂β log Ψ(R) = i∂    βΦ(R),                                         (10)
+
+
+                                                      15
+and define two real per-configuration quantities
+
+                                A(R) = ImE              loc(R)∂   βΦ(R),                                              (11)
+
+                                B(R) =   X             HRR′ Ψ(R ′)Ψ(R)    ∂βΦ(R ′).                             (12)
+                                             R′  Im
+
+The standard score estimator and the direct local-energy-derivative estimator can then
+be written as
+                           ˆgstdβ   (R) = 2A(R),                      ˆgdirβ  (R) =A(R)−B(R).                       (13)
+Hermiticity gives⟨B⟩=−⟨A⟩, so both estimators have the same expectation,
+
+                                            ⟨ˆgstdβ ⟩=⟨    ˆgdirβ ⟩= 2⟨A⟩.                                          (14)
+
+Thus the direct estimator does not change the exact variational gradient; it changes
+the finite-sample random variable used to estimate the same phase force.
+    Let
+                               a2 =⟨A     2⟩,   b  2 =⟨B     2⟩,   c=⟨AB⟩.                            (15)
+Because the two estimators have the same mean, comparing their variances gives the
+simple criterion
+                           Var ˆgdirβ <Var  ˆgstdβ      ⇐⇒b    2−2c<3a           2.                        (16)
+
+
+This  condition  is  not  a  universal  inequality;  it  is  an  instance-dependent  statement
+about the phase-gradient noise, and the two regimes of training sit on opposite sides
+of it.
+    Pre-asymptotic    regime.The    phase    force    is    a    covariance,    2⟨A⟩     =
+2 Cov(ImE       loc,∂βΦ),  since⟨ImE                loc⟩=  0  for  HermitianH.  The  force  can  therefore
+be  small  through  cancellation  while  the  noise  floora    2  =⟨A     2⟩remains  at  the  scale
+of⟨(ImE            loc)2⟩: the signal-to-noise ratio of the standard estimator can collapse long
+before the energy converges. This is the regime in which the direct estimator helps.
+    Eigenstate  limit.At  an  exact  eigenstate,  ImE                loc ≡0  pointwise,  so     ˆgstdβ     is  a
+zero-variance estimator. The direct estimator  ˆgdirβ   =−Bretains a generally nonzero
+variance, because only the unweighted sum over connected configurations vanishes at
+the eigenstate, not its∂  βΦ(R ′)-weighted counterpart. In this limitV    s→0 andC→0,
+so the optimal mixing coefficient defined below obeysλ   ⋆→0: the adaptive-mixture
+returns to the standard estimator exactly when the zero-variance principle begins to
+favor it. The measuredλ        ⋆ trajectories in Fig.4, which start near the direct endpoint
+and drift away fromλ    ⋆ = 1 during training, follow this prediction.
+    The  same  decomposition  suggests  a  variance-aware  interpolation.  The  optimal
+convex  combination  of  two  unbiased  estimators  is  a  classical  control-variate  or
+minimum-variance  linear-combination  construction  in  Monte  Carlo  and  machine-
+learning  gradient  estimation  [46, 51–55].  Our  contribution  is  not  this  generic  con-
+struction  itself,  but  its  use  in  the  phase  sector  of  NQS-VMC:  we  derive  a  direct
+local-energy-derivative phase estimator and apply the minimum-variance combination
+
+
+                                                          16
+to  the  standard/direct  phase-gradient  pair.  This  is  useful  because  the  relative  vari-
+ance ordering of the two estimators can change during training, so a fixed choice of
+estimator  is  not  obviously  optimal.  Since  both  endpoints  are  unbiased,  any  convex
+combination
+                              ˆgβ,λ = (1−λ)        ˆgstdβ   +λ   ˆgdirβ ,       0≤λ≤1,                           (17)
+targets the same population force for every deterministicλ. Denoting
+
+                    Vs = Var(ˆgstdβ   ),  V d = Var(ˆgdirβ  ),  C= Cov(    ˆgstdβ , ˆgdirβ  ),                (18)
+
+the unconstrained minimum-variance mixing coefficient is
+
+                                            λ⋆ =   Vs−CVs +V d−2C  ,                                            (19)
+
+with the practical convex choiceλ    ⋆clip = min[1,max(0,λ          ⋆)].
+    The denominator is itself a variance,V      s +V d−2C= Var(       ˆgstdβ − ˆgdirβ  )≥0, so the
+mixture varianceV(λ)≡Var(                     ˆgβ,λ) is a convex quadratic on [0,1]; convexity here is a
+theorem, not an assumption. (If the denominator vanishes, the two estimators differ
+by a constant and everyλis equivalent.) Because the endpointsλ= 0,1 lie in the
+feasible interval, the population minimum over convex mixtures obeys
+
+                             Var    ˆgβ,λ⋆clip  ≤min Var(ˆgstdβ   ),Var(   ˆgdirβ  ).                           (20)
+
+For an estimated coefficient, the same quadratic gives a sensitivity bound. Completing
+the square gives the exact identity
+
+                             V(λ) =V(λ      ⋆) + (Vs +V d−2C     ) (λ−λ   ⋆)2,                          (21)
+
+so a deterministic or independently estimated coefficient whose value is ˆλhas variance
+exceeding the population optimum by (V s +V d−2C) (       ˆλ−λ   ⋆)2 for that realization, and
+by (V s+V d−2C)E[(           ˆλ−λ   ⋆)2] after averaging over the coefficient estimate. Thus Eq. (20)
+is an exact raw-population statement, while a finite coefficient estimate can deviate
+from the population optimum by an amount controlled by Eq. (21). In production we
+use the corresponding trace version as a scalar plug-in coefficient,
+
+                                  λ⋆t  = clip[0,1]           TrV s−TrCTrV s + TrV d−2 TrC  ,                                (22)
+
+where the trace sums over phase-parameter components. The coefficient is estimated
+on  the  pre-update  walker  ensemble  at  the  logged  optimization  state  and  then  held
+fixed  for  the  subsequent  stochastic-reconfiguration  update.  No  exponential  moving
+average is used; the only stabilization is the convex clippingλ       ⋆t∈[0,1] and the same
+local-energy clipping used by the gradient estimators. In the separated-network exper-
+iments, both endpoints estimate the same phase force and the plug-inλ      ⋆t  chooses the
+interpolation used for that step; any residual same-batch correlation betweenλ   ⋆t  and
+
+
+                                                         17
+estimator noise is a finite-sample implementation effect, not a change in the population
+force being targeted. We therefore monitor the actual finite-batch behavior directly
+through the loggedλ     ⋆t  and variance-ratio trajectories in Fig.4. With a single scalar
+coefficient,  the  population  statement  applies  to  the  summed  (trace)  phase-gradient
+variance  rather  than  to  each  component  individually.  The  coefficient  in  Eq.  (22)  is
+the one used for the separated amplitude–phase experiments. For a coupled two-head
+network  the  object  whose  variance  is  minimized  is  the  full  shared-parameter  force,
+not  the  phase  block  alone;  the  corresponding  coefficient  contains  amplitude–phase
+cross-covariances and is given in Sec.4.7.
+
+4.4  Variance sets the attainable descent speed
+The practical consequence of estimator variance can be understood through an ideal-
+ized unpreconditioned phase-sector SGD step; we restate the standard argument [56]
+in the present setting. This subsection adapts the convergence analysis from an early
+version  of  this  work  and  should  be  read  as  a  regime  statement  under  smoothness
+assumptions, not as a global convergence theorem for the nonconvex, preconditioned
+VMC dynamics used in production.
+    Assume the energy restricted to the phase sector (amplitude parameters held fixed
+at their current values) isL-smooth. For an unbiased estimator      ˆgof the sector gradient
+∇E, withE∥               ˆg∥  2 =∥∇E∥             2 +V, one stochastic-gradient step of sizeηobeys
+
+                        E[E  t+1 ]−E  t≤−η∥∇E∥               2 +  12Lη2 ∥∇E∥         2 +V .                     (23)
+
+Optimizing this bound overηgivesη    ⋆ =∥∇E∥             2/[L(∥∇E∥                 2 +V)] and the maximal
+expected one-step decrease
+
+                                      ∆E    max =−    1        ∥∇E∥         4
+                                                       2L   ∥∇E∥         2 +V  .                                     (24)
+
+Two regimes follow. WhenV≪∥∇E∥                       2, the decrease is the deterministic−∥∇E∥                       2/2L.
+WhenV≫∥∇E∥                       2, it collapses to−∥∇E∥                 4/(2LV): a quartic stall in which progress
+is inversely proportional to the gradient variance. Combined with the pre-asymptotic
+signal-to-noise  collapse  identified  above,  this  places  noisy  wavefunction-phase  opti-
+mization in the stalled regime, while the amplitude sector — whose residual (ReE       loc−
+E)   2  is  suppressed  by  the  variational  principle  itself  [48]  —  can  descend  at  the
+deterministic rate.
+    Two corollaries connect Eq. (24) to the experiments. First, in this idealized unpre-
+conditioned SGD model, if the optimizer is in the stalled regimeV≫∥∇E∥                         2, aκ-fold
+reduction of the phase-gradient variance raises the optimized one-step descent bound
+by the same factorκ. The logged variance ratios in Fig.4should therefore be read
+as variance-controlled descent-speed headroom, rather than as an exact convergence
+theorem for the full minSR update. Second, rescaling the phase-network learning rate
+cannot remove this raw-gradient variance ceiling: Eq. (24) is already optimized over a
+scalar step size, so amplifyingη         ϕ rescales signal and noise together, and steps beyond
+
+
+                                                        18
+η⋆ violate the descent condition. This is consistent with the phase-network learning-
+rate baselines, which improve up toη  ϕ/η= 3, plateau above the direct estimator, and
+destabilize at large multipliers.
+
+4.5  Why the estimator can improve wavefunction-phase
+      optimization
+The mechanism is quantitative at the estimator level: theA/Bdecomposition gives
+the instance criterion of Eq. (16), the diagonal and gauge structure ofg          dir  removes
+identifiable  noise  channels  exactly,  and  Eq.  (24)  explains  how  measured  variance
+ratios translate into descent-speed headroom in an idealized raw-gradient model. We
+therefore formulate the mechanism as a conditional proposition rather than an uncon-
+ditional convergence theorem: when the phase network is expressive enough, sampling
+is adequate, and the optimization does not become trapped in unrelated variational
+basins,  replacing  the  standard  phase-gradient  estimator  by  the  direct/adaptive-
+mixture  local-energy  derivative  can  reduce  phase-gradient  variance  and  accelerate
+descent.
+
+4.6  Separate amplitude and phase updates
+The numerical experiments in this work use separated amplitude and phase parameter
+blocks. In that setting, we keep the conventional amplitude update and replace only
+the phase estimator:
+
+                             ∆θ    1 =−η   ugampθ1 ,       ∆θ     2 =−η   ϕgdirθ2 .                              (25)
+
+This avoids using the direct estimator as a biased amplitude update. At the level of
+exact population forces for a strictly separated amplitude–phase ansatz, the update
+combines  the  conventional  amplitude  force  with  a  phase  force  whose  expectation  is
+identical for the standard, direct, and adaptive-mixture estimators. Because the two
+forces  act  on  disjoint  parameter  blocks,  the  exact  composite  force  vanishes  if  and
+only if both sector forces vanish. Thus, before finite-sample preconditioning, clipping,
+or  same-batch  estimates  ofλ  ⋆t  are  introduced,  the  stationary  points  of  the  sector-
+separated  raw-gradient  update  coincide  with  those  of  the  exact  variational  energy
+gradient;  the  estimator  change  does  not  introduce  new  population-level  stationary
+points.
+    The estimator identities in this section concern raw, population gradient estima-
+tors. The production runs use the same minSR-style preconditioner for every compared
+method:  amplitude  and  phase  parameters  are  concatenated  into  one  tangent-space
+system, with amplitude scores entering through the real log-amplitude derivatives and
+phase scores entering through the imaginary phase derivatives. The sampled config-
+urations, MCMC schedule, damping, clipping, and linear-solve pipeline are identical
+for the standard, direct, and adaptive-mixture estimators; only the phase-force vec-
+tor is changed. Because the preconditioner, the adaptive mixing coefficient, and the
+clipped force vectors are sample-dependent, the raw-gradient expectation equivalence
+
+
+                                                    19
+is a population statement rather than a literal identity for every finite-sample precon-
+ditioned update. The theorem identifies the force targeted by the separated estimator,
+and the numerical comparisons test the complete preconditioned pipeline.
+    Two caveats bound the stationarity statement above, and they motivate the control
+that  follows.  First,  the  coincidence  is  with  the  stationary  points  of  the  parameter-
+space energyE(θ), which for a neural ansatz is weaker than reaching an eigenstate:
+the  sector  forces  are  the  Hilbert-space  gradient  projected  onto  the  network’s  tan-
+gent directions, so they can vanish at spurious critical points where the Hilbert-space
+gradient is nonzero but annihilated by the network Jacobian. No uniqueness or global-
+convergence claim is therefore made for arbitrary neural parameterizations. Second,
+the table ansatz over the full finite Hilbert space removes exactly this confounder: there
+every Hilbert-space direction is a parameter direction, the representation can express
+the exact eigenvector, and critical points on the full-support stratum are eigenstates,
+so table-ansatz experiments isolate estimator behavior from network expressivity. For
+neural  networks  the  corresponding  statement  is  empirical:  across  the  benchmarks
+studied here, the direct phase estimator improves the reliability and the final energy
+whenever a non-trivial complex phase structure is present.
+
+4.7  Generalization to coupled two-head networks
+The preceding estimator identities are used in this paper primarily for separated ampli-
+tude  and  phase  networks.  A  closely  related,  but  distinct,  construction  applies  to  a
+coupled real two-head ansatz
+
+
+                    ψθ(x) = exp[U     θ(x) + iΦ  θ(x)],   p   θ(x) =   e2U θ(x)P
+                                                                                 ze2U θ(z) ,                 (26)
+
+where the same real parameter vectorθcan affect bothU        θ  and Φθ. This subsection
+gives the raw-gradient population identity for this case. It underlies the shared-trunk
+control in Extended Data Fig.4, but the numerical coverage of coupled networks is
+much narrower than the separated-network benchmark suite.
+    Fix a current parameter value and an infinitesimal directionv. Write
+
+                           ˙Uv(x) =∇   θUθ(x)·v,               ˙Φv(x) =∇   θΦθ(x)·v,                       (27)
+
+and denoteR(x) = ReE                          loc(x) andI(x) = ImE                       loc(x) at the currentθ. Differentiating
+
+                                          E(θ) =  X      pθ(x)R   θ(x)                                           (28)
+                                                      x
+
+alongvgives
+                            DE(θ)[v] =    X       ˙p(x)R(x) +     X    pθ(x)     ˙R(x).                          (29)
+                                              x                    x
+The first term is the derivative of the sampling law. Sincep    θ∝e   2U θ,
+                                                       h ˙Uv(x)−⟨      ˙Uv⟩i
+                                     ˙p(x) = 2p    θ(x)                     ,                                    (30)
+
+
+                                                       20
+and therefore        X
+                                             ˙p(x)R(x) = 2 Cov       pθ(R,   ˙Uv).                                   (31)
+                                         x
+This  is  the  amplitude/Pulay  contribution.  Its  Monte  Carlo  summand  is  the  state-
+dependent coefficient
+
+                                 2 [R(x   i)−µ  R]∇ θUθ(x i),   µ R =⟨R⟩,                            (32)
+
+so the sampling derivative is included precisely when the amplitude force is included.
+     The explicit local-energy derivative in Eq. (29) splits as
+
+                                     ˙R(x) =D     UR(x)[       ˙Uv] +D   ΦR(x)[       ˙Φv].                                (33)
+
+For Hermitian,θ-independentH, the explicitU-path term has zero real expectation.
+To see this, define
+
+
+                              Bxy =p θ(x)H   xyψθ(y)ψθ(x)     = ψθ(x) ∗Hxyψθ(y)P
+                                                                           z|ψ θ(z)|     2  .                          (34)
+
+Hermiticity givesB  yx =            Bxy. Hence
+                               D              E
+                                 DUR[    ˙Uv]    = ReX         Bxy [ ˙Uv(y)−      ˙Uv(x)].                          (35)
+                                                          x,y
+
+The contribution of the pair (x,y) and (y,x) is
+                                      h Bxy−                                     i
+                                  Re               Bxy[ ˙Uv(y)−      ˙Uv(x)]       = 0,                              (36)
+
+becauseB     xy−      Bxy is purely imaginary while  ˙Uv(y)−      ˙Uv(x) is real. Thus
+                                                  D              E
+                                                    DUR[    ˙Uv]    = 0.                                              (37)
+
+     The explicit phase term gives the usual phase force. Indeed,
+
+
+                          DΦEloc(x)[    ˙Φv] = iX          Hxyψθ(y)ψθ(x)    [ ˙Φv(y)−      ˙Φv(x)].                     (38)
+                                                       y
+
+Using the same Hermitian pairing as above,
+                               D               E        D       E
+                                  DΦR[    ˙Φv]    = 2     I  ˙Φv   = 2 Covpθ(I,   ˙Φv),                           (39)
+
+where the last equality uses⟨I⟩= 0 for HermitianH.
+
+
+                                                            21
+    Combining Eqs. (31)–(39), for every directionv,
+
+                      DE(θ)[v] = 2 Cov     pθ(R,∇ θUθ·v) +⟨D         ΦR[∇  θΦθ·v]⟩.                  (40)
+
+Equivalently, in vector form,
+
+ ∇θE=g       amp +g   ph,   gamp = 2 Covpθ(R,∇ θUθ),   g  ph = 2 Covpθ(I,∇ θΦθ). (41)
+
+The phase forceg         ph  can equivalently be estimated by a stopped-amplitude pathwise
+derivative,                                 D                                   E
+                                   gph =      ∇θR(x)  Φ-path,Udetached          .                                 (42)
+Thus the coupled-network analogue of the direct estimator is not the bare pathwise
+derivative through all ofθ. It is the reconstructed force
+
+                                               bGcoupleddir       = bA+ bD,                                             (43)
+
+where
+
+                 NX
+      bA=     2N     [R i−µ R]∇ θUθ(x i),                                                                        (44)
+
+                i=1
+                 NX
+      bS=    2       [I i−µ I]∇ θΦθ(x i),                                                                         (45)
+            N   i=1
+                 NX          "X                                                                          #
+     bD=     1       ∇θRe           Hxiy exp(sg [U θ(y)−U    θ(x i)] + i[Φθ(y)−Φ    θ(x i)])               .     (46)
+            N   i=1              y
+
+Here  sg  denotes  a  stop-gradient  operation  in  this  summand.  The  standard  coupled
+force is bA+ bS, and the mixed coupled force is
+
+                                      bGcoupledλ         = bA+ (1−λ)    bS+λ  bD.                                   (47)
+
+With  exact  current-law  sampling,  fixed  population  baselines,  and  deterministicλ,
+Eqs. (40)–(47) give
+                           hbGcoupledi
+                        E      λ          =∇ θE     for every fixed 0≤λ≤1.                     (48)
+
+This  is  the  raw-population  identity.  In  a  finite  implementation  using  the  adaptive
+version,  the  clipped  coefficientλ ⋆coupled  is  estimated  from  samples  and  the  force  is
+also affected by empirical self-centering ofµ  R,µI, stale Markov chains, clipping, and
+stochastic-reconfiguration preconditioning. These are implementation approximations
+around the same estimator-design principle; in coupled networks, where the amplitude
+and phase paths share parameters, they should be interpreted more cautiously than
+the separated-block identity.
+
+
+                                                          22
+    Parameter  sharing  changes  the  variance  optimization.  For  the  separated  phase
+block, the adaptive coefficient in Eq. (22) minimizes the trace variance of the phase
+estimator alone. For a coupled network the full random vector is
+
+                                           bA+ (1−λ)    bS+λ  bD.                                            (49)
+
+Let
+
+Vs = tr Var[bS],  V  d = tr Var[bD],  C= tr Cov[  bS,bD],  A  s = tr Cov[bA,bS],  A  d = tr Cov[bA,bD].
+                                                                                                         (50)
+Then the trace-variance-minimizing unconstrained coefficient is
+
+
+                                 λ⋆coupled = (V s−C) + (A    s−A d)Vs +V d−2C     ,                                 (51)
+
+
+with  the  practical  value  clipped  to  [0,1].  The  separated  formula  is  recovered  when
+As =A d, in particular when the amplitude and phase forces have disjoint parameter
+supports.  The  new  quantitiesA    s  andA   d  are  the  diagnostic  signature  of  coupling:
+a direct phase estimator can reduce the phase-channel variance while still failing to
+reduce the full-force variance if its covariance with the amplitude force is unfavorable.
+    This coupled construction applies to real two-head networks for which the stopped-
+U,  active-Φ  derivative  in  Eq.  (46)  is  well  defined.  It  does  not  apply  to  a  tied
+parameterization in which no such phase-path derivative can be formed. In particular,
+a  genuinely  holomorphic  complex-weight  network,  whereUand  Φ  are  Cauchy–
+Riemann tied as functions of the parameters, would require a separate analysis; mixing
+a biased full-pathwise derivative with the standard estimator would generally be biased
+forλ>0.
+
+4.8  Computational cost
+Per sampled configuration, the local energy already requires the wavefunction at every
+connected  configurationy.  In  the  separated  implementation  used  for  the  reported
+runs,  the  direct  estimator  adds  only  the  contraction  of  phase-network  derivatives
+appearing  in  Eq.  (6)  with  the  corresponding  off-diagonal  Hamiltonian  ratios.  This
+contraction can be evaluated as a batched vector-Jacobian product of the phase net-
+work over the (batch×connected) configuration tensor, using the same weights that
+enter the local-energy derivative; it does not require materializing the full per-sample
+Jacobian∂       θ2ϕ(y).  On  the  lattice  this  uses  first-order  logarithmic  derivatives  only,
+with no spatial Laplacians. Operationally, the separated direct estimator requires one
+additional reverse-mode/VJP evaluation over the already-computed off-diagonal local-
+energy graph, whose size is set by the Hamiltonian connectivity, and it reuses theψ(y)
+forward evaluations while leaving the amplitude network untouched. In the coupled
+two-head extension of Sec.4.7, theUvalues in the direct summand are detached rather
+than differentiated, while the shared trunk still receives gradients through the Φ out-
+put. Its cost should therefore be measured separately for the given architecture; the
+population identity does not by itself guarantee the same wall-time overhead as the
+
+
+                                                     23
+separated implementation. The archived A100 wall-time logs for the separatedL= 50
+flux-ladder setting, batch size 1024, and 48 MCMC sweeps per step show no resolvable
+per-step overhead at this scale: after excluding the initial compilation/transient region,
+the median logged time per optimization step is 0.142 s for the standard estimator,
+0.144 s for the direct estimator, and 0.133 s for the adaptive mixture. We therefore
+interpret the reported training-step comparisons as essentially per-unit-time compar-
+isons within run-to-run timing noise, rather than as hiding a large computational-cost
+penalty. This near-free overhead is specific to the lattice, where the phase force needs
+only first-order logarithmic derivatives over the finite set of connected configurations.
+On  the  continuous-space  fractional  quantum  Hall  benchmark  the  direct  estimator
+instead carries a genuine cost: the local energy contains the second-order Laplacian
+kinetic term, and the direct estimator differentiates it through the phase network for
+every walker, materializing a grad-through-Laplacian graph over the full walker batch
+rather  than  reusing  a  precomputed  off-diagonal  graph.  Measured  on  a  single  A100
+(40  GB)  atN=  6,ν=  1/3,  batch  size  1120,  in  matched  compile-excluded  steady
+state, the standard estimator runs at 0.108 s per optimization step with 5.0 GB peak
+GPU memory, whereas the full direct estimator over all 1120 walkers runs at 0.300 s
+per  step  (2.8×slower)  with  36  GB  peak  memory  (+31  GB),  nearly  saturating  the
+device. Subsampling the direct-gradient contraction to 280 walkers recovers most of
+this—0.167  s  per  step  (1.5×)  and  13  GB  peak  (+8  GB  over  standard)—and  is  the
+setting used for the reported FQHE runs, with no resolvable change in the reported
+energies.  The  continuum  estimator  overhead  therefore  scales  with  the  walker  batch
+and is controlled by this subsample.
+
+
+4.9  Idealized descent path in the table-ansatz limit
+It  is  useful  to  separate  two  statements  that  are  often  conflated.  In  the  infinite-
+sample  limit,g          dirθ2   and  the  standard  phase  gradient  have  the  same  expectation  for
+separated phase parameters; therefore  the direct estimator does not define a differ-
+ent  variational  energy  surface.  Its  advantage  is  the  estimator-level  change  in  noise
+and conditioning analyzed above. A stronger convergence statement is available only
+in  an  idealized  full-Hilbert-space  limit,  under  assumptions  that  are  standard  in  the
+nonconvex-optimization literature but that we do not prove for the sampled dynamics.
+    Consider a table ansatz on a finite Hilbert space, with independent log-amplitude
+and   phase   parameters   (u x,ϕx)   for   every   basis   configuration,   and   letp(x)   =
+|ψ(x)|          2/Pz|ψ(z)|          2.  The  exact  sector  forces  coincide  with  the  coordinate  partial
+derivatives,
+
+                 ∂E
+                ∂ux  = 2p(x)        [ReE     loc(x)−E        ],    ∂E∂ϕx  = 2p(x) ImE              loc(x),            (52)
+
+so the exact separated update
+
+                                      ˙θ1 =−g       ampθ1 ,         ˙θ2 =−g       dirθ2                                        (53)
+
+
+                                                      24
+is  a  genuine  gradient  flow  of  the  Rayleigh  quotientE[ψ]   =⟨ψ|H|ψ⟩/⟨ψ|ψ⟩ in
+amplitude–phase coordinates, with
+
+                                         dE
+                                          dt  =−∥∇ θE∥   2≤0.                                           (54)
+
+Relative to the Hilbert-space metric, the coordinate flow is preconditioned by a positive
+diagonal weight proportional top(x), which degenerates asp(x)→0.
+    On  the  full-support  stratum,  the  stationary  points  of  the  Rayleigh  quotient  are
+eigenstates up to gauge, and every excited eigenstate is a strict saddle: if|n⟩has energy
+En and|m⟩is any lower-energy eigenstate, then
+
+            |ψ(ϵ)⟩=    p1−ϵ      2|n⟩+ϵ|m⟩ ⇒E[ψ(ϵ)] =E               n +ϵ   2(E m−E n),        (55)
+
+exactly, which decreases forE  m <En. Convergence of the idealized flow to the ground-
+state manifold then rests on three assumptions: (A1) exact expectations replace Monte
+Carlo  estimates;  (A2)  the  support  stays  bounded  away  from  zero  along  the  trajec-
+tory, so thep(x) weight never degenerates; and (A3) generic initializations avoid the
+measure-zero strict-saddle manifolds, as established for gradient methods on smooth
+nonconvex landscapes [57], with convergence of the iterates for analytic costs following
+from  Lojasiewicz-type arguments [58]; Rayleigh-quotient flows are a classical instance
+of this theory [59]. These are standard assumptions rather than statements we prove
+for the sampled dynamics.
+    We emphasize that (A2) is a genuine restriction, not a technicality: by Eq. (52)
+the force onu  x is proportional top(x), so configurations whose weight collapses stop
+receiving  updates,  and  the  flow  possesses  additional  quasi-stationary  states  at  the
+support  boundary  that  are  not  eigenstates  of  the  full  Hamiltonian.  This  boundary
+failure mode — distinct from interior saddles — is the idealized counterpart of the
+bad-basin trajectories observed in finite-sample runs, and it is not removed by either
+phase estimator.
+    For neural networks this picture becomes an assumption rather than a theorem: the
+network image must contain a lift of a descending trajectory, and the parameter land-
+scape must not introduce additional spurious local minima. The role of the numerical
+experiments is precisely to test how well this idealized estimator-level picture survives
+in finite-width neural networks and finite-sample VMC.
+
+4.10  Flux-ladder Hamiltonian
+The primary benchmark is a two-leg ladder with complex Peierls phases on the leg
+exchange terms. In the spin representation,
+                                                                eiAijS+
+                   Hladder = X             JzSziSzj + Jleg2             i S−j  + h.c.  
+                                ⟨ij⟩∈legs
+                                                                       S+
+                                +  X            JzSziSzj + Jrung2        i S−j  + h.c.    ,                (56)
+                                   ⟨ij⟩∈rungs
+
+
+                                                      25
+whereA     ij  =  +Φ/2  on one  leg andA       ij  =−Φ/2 on  the other leg  in the  symmetric
+gauge. We useJ      leg = 1,J   rung = 0.8, andJ     z = 0.5. The main benchmark usesL= 50
+rungs in the fixedS    ztot = 0 sector, equivalentlyN  ↑ =N/2 for the spin basis. The legs
+have open boundary conditions, and the finite DMRG references use the same open
+ladder  Hamiltonian  and  rung-by-rung  site  ordering.  The  references  were  generated
+with a TeNPy finite-MPS DMRG workflow using conservation of total magnetization,
+an MPO built from the same lattice edges, maximum bond dimension up toχ= 384
+for the mainL= 50 references, singular-value cutoff 10    −10  , and up to 20 sweeps; the
+resulting finite-system reference energies used here areE      ref  =−44.826 at Φ = 0.2π
+andE       ref =−43.303 at Φ = 0.3π.
+
+
+4.11  Interacting spinless-fermion flux ladder
+The  interacting-fermion  Extended  Data  benchmark  uses  a  100-site  spinless-fermion
+two-leg flux ladder at half filling, with nearest-neighbour interactionV= 2 and plaque-
+tte flux Φ = 0.5π. In the gauge convention used for the spin ladder, the corresponding
+fermion Hamiltonian is written as
+                             X                                           X
+            Hf =−t       leg          eiAijc†icj + h.c.     −t   rung              c†icj + h.c.
+                           ⟨ij⟩∈legs                                  ⟨ij⟩∈rungs
+                   +V X(n i−  12)(n j−  12),                                                                (57)
+                         ⟨ij⟩
+
+
+wheren     i  =c †ici,A ij   =  +Φ/2  on  one  leg  andA       ij   =−Φ/2  on  the  other,  and
+tleg =t   rung = 1. The density interaction is written in the particle-hole-symmetric form
+used in the production runs (the interaction enters the Jordan–Wigner-mapped spin
+Hamiltonian  as  a  uniformJ   z  =Vbond  term,  with  no  on-site  shift).  The  model  is
+represented in the fixed-particle-number sector and Jordan–Wigner mapped to a spin
+basis  for  the  NQS  implementation.  The  finite-system  reference  energy  used  for  the
+plotted relative errors is obtained from a high-bond-dimension finite-MPS DMRG cal-
+culation with the same Hamiltonian, boundary geometry, and particle-number sector.
+Convergence with bond dimension and the final reference value are recorded in the
+data-audit table for Extended Data Fig.1; this benchmark is used as an additional
+generality check for sign-structured fermionic phases.
+
+
+4.12  Chiral XXX benchmarks and controls
+The chiral XXX benchmarks follow the time-reversal-breaking chiral spin-chain setting
+discussed in Ref. [36]. The working model is a spin-1/2 XXX chain supplemented by
+a scalar-chirality interaction,
+
+
+                      Hchiral =J XSi·S i+1  +α X                Si·(S i+1 ×S i+2 ),                    (58)
+                                       i                     i
+
+                                                      26
+We use periodic boundary conditions and isotropic exchangeJ= 1 throughout. The
+small-system references (N≤24) are obtained by exact diagonalization in the fixed-
+magnetization sector, with the three-spin scalar-chirality term included exactly, while
+the larger sizes (N= 50 andN= 100) use finite-MPS DMRG references. The reference
+values used to compute the plotted errors includeE              ref =−9.5149 forN= 20,α= 1.0,
+Eref =−11.378061 forN= 24,E                           ref =−23.748041 forN= 50, andE                            ref =−47.469523
+forN= 100. Relative energy error is reported as|E−E                     ref|/|E     ref|, and the data-audit
+tables list the source paths and seeds. We scanα, system size, and optimizer/ansatz
+controls.
+
+4.13  Two-dimensional flux-square benchmark
+The two-dimensional benchmark is an 8×8 (64-site) square lattice of spin-1/2 moments
+with a uniform Peierls flux Φ per plaquette. The Hamiltonian is
+                                                             eiAijS+
+                         H□ =X          JzSziSzj + Jxy2              i S−j  + h.c.   .                      (59)
+                                  ⟨ij⟩
+
+We use the Landau gaugeA           (x,y),(x+1,y)                 =−ΦyandA                   (x,y),(x,y+1)              = 0, so every pla-
+quette encloses flux Φ. We useJ   xy = 1 and, holding the cylinder geometry (periodic
+x, openy) fixed, scan the flux Φ∈{0.2π,0.3π}and the interactionJ                     z∈{0,0.5}in
+the fixedS    ztot = 0 sector, giving four cells. NQS runs use ten seeds per estimator with
+the same sampler and minSR pipeline as the flux ladder, but a wider MLP (width 256,
+depth 2; the one-dimensional ladders use width 128, depth 2). DMRG references were
+computed with TeNPy finite-MPS DMRG using total-magnetization conservation and
+singular-value cutoff 10−10  , with a bond-dimension ladder up toχ= 768 to control
+the finite-bond-dimension error. The per-cell reference energies areE      ref  =−28.6722
+(Φ = 0.2π,J    z = 0),−32.7913 (Φ = 0.2π,J          z = 0.5),−27.0269 (Φ = 0.3π,J            z = 0), and
+−31.7306 (Φ = 0.3π,J        z = 0.5); relative energy errors are computed against these and
+are listed per seed in the data-audit tablesquare2d                   cylinder      tail30     summary.csv.
+
+4.14  Neural architectures and optimization
+Unless  otherwise  stated,  flux-ladder  neural  runs  use  separate  real  networks  for
+log-amplitude  and  phase;  the  exception  is  the  shared-trunk  two-head  control  in
+Extended  Data  Fig.4.  The  main  MLP  has  width  128  and  depth  2.  Additional
+sweeps use wider/deeper MLPs and a convolutional ResNet for the phase: translation-
+equivariant  residual  convolutional  blocks  (24  channels,  depth  6)  followed  by  spatial
+sum-pooling over the lattice, with a fixed sinusoidal positional encoding of the rung
+index  (so  the  architecture  is  translation-equivariant  but  not  exactly  translation-
+invariant, and is not a full translation-group symmetrization). Training uses stochastic
+reconfiguration/minSR-style updates with identical hyperparameters across compared
+estimators  unless  specified  in  a  sweep.  The  main  runs  use  batch  size  1024,  100
+warmup sweeps, 48 MCMC sweeps per optimization step, base learning rateη= 0.03,
+learning-rate decay factor 0.3, diagonal shift 0.02, minimum diagonal shift 0.005, and
+update-norm  clipping  at  5.0.  The  minSR  solve  concatenates  amplitude  and  phase
+
+
+                                                       27
+parameters  into  a  single  preconditioned  systemG=MM                  T +λ   diagI,  then  applies
+the same damping and solve to every estimator. The main sampler uses global fixed-
+magnetization  exchange  proposals:  one  up  spin  and  one  down  spin  are  drawn  and
+swapped, preservingS         ztot = 0. The logged acceptance is the mean Metropolis accep-
+tance over the proposal sweeps at a training step. The ResNet comparison uses ten
+seeds per estimator. Exceptions to the otherwise-matched hyperparameters are spec-
+ified in the corresponding figure captions: the ResNet comparison uses batch size 512
+for  the  standard-gradient  runs  and  256  for  the  direct  runs  (an  asymmetry  favoring
+the standard baseline), and the shared-trunk two-head control (Extended Data Fig.4)
+uses a smaller learning rate (η= 0.01) and diagonal floor (γ         min = 0.0017).
+    The  same  estimator-independent  training-stabilization  safeguard  is  enabled  for
+every compared flux-ladder method. It is used only to keep stochastic optimization
+from catastrophic numerical excursions and is applied identically across estimators; the
+supplementary seed-level tables retain the corresponding event counts. Reported final
+bar plots use the tail-30 logged energy window for all displayed methods. Reported
+curves aggregate the seed traces using mean, median, and interquartile ranges. For the
+flux-ladder benchmarks all ten direct-gradient and adaptive-mixture seed traces are
+included,  and  standard-gradient  phase-network  learning-rate  baselines  are  reported
+using the same seed convention in the processed source tables.
+
+4.15  Variance diagnostics
+For  variance  diagnostics,  the  standard,  direct,  and  adaptive-mixture  phase-gradient
+estimators  are  evaluated  at  logged  adaptive-mixture  training  states  using  the  same
+sampled  configurations.  We  report  the  trace  variance,  i.e.  the  sum  over  phase-
+parameter components of the sample variance, and ratios of this trace variance between
+the standard estimator and the comparison estimator. These logged diagnostics cor-
+respond to the separated phase block used in the reported experiments. For a coupled
+two-head implementation, the analogous diagnostics should also include the full-force
+trace variances of bA+ bS,  bA+  bD, and  bA+ (1−λ     ⋆coupled)bS+λ   ⋆coupledbD, together with
+the cross-covariancesA       s andA   d in Eq. (51).
+
+Data availability
+
+The  processed  seed-level  tables,  chiral  XXX  JSON  summary,  the  2D  flux-square
+per-seed  table,  and  the  per-cell  2D  DMRG  reference  energies  (χup  to  768)  are
+included in the submission packagetables/directory, together withDATA                          AUDIT.md
+andSEEDS      AND  SOURCES.md. The processed data and plotting scripts used to generate
+the figures will be made available in the project repository upon publication.
+
+Code availability
+
+The   code   implements   separated   amplitude   and   phase   networks,   standard   and
+direct/adaptive-mixture phase-gradient estimators, stochastic reconfiguration/minSR
+updates, and benchmark scripts for the flux ladder, chiral XXX, and 2D flux-square
+models. A public release will accompany the manuscript.
+
+
+                                                    28
+Acknowledgements
+
+We acknowledge Yubing Qian, Xiaoyong Ni and Khachatur Nazaryan for fruitful dis-
+cussions. We also thank Ji Chen’s group for making the DeepHall code available, parts
+of which served as a reference for our implementation. This work was supported by
+the National R&D Program of China (2024YFA1410500, 2022YFA1403601), the Inno-
+vation Program for Quantum Science and Technology (Grant No. 2021ZD0302800),
+the National Natural Science Foundation of China (No. 12322402, No. 12274206), the
+Natural Science Foundation of Jiangsu Province (No. BK20233001), the Fundamental
+Research Funds for the Central Universities (No. KG202501), the Armenian Higher
+Education and Science Committee ARPI Remote Laboratory program 24RL-1C024,
+research projects 21AG-1C024 and 25Post-Doc1C003.
+
+Competing interests
+
+The authors declare no competing interests.
+
+References
+
+ [1]Carleo,  G.,  Troyer,  M.:  Solving  the  quantum  many-body  problem  with  artifi-
+     cial neural networks. Science355(6325), 602–606 (2017)https://doi.org/10.1126/
+     science.aag2302
+
+ [2]Gao, X., Duan, L.-M.: Efficient representation of quantum many-body states with
+     deep neural networks. Nature Communications8, 662 (2017)https://doi.org/10.
+     1038/s41467-017-00705-2
+
+ [3]Choo,  K.,  Carleo,  G.,  Regnault,  N.,  Neupert,  T.:  Symmetries  and  many-body
+     excitations  with  neural-network  quantum  states.  Physical  Review  Letters121,
+     167204 (2018)https://doi.org/10.1103/PhysRevLett.121.167204
+
+ [4]Sharir,  O.,  Levine,  Y.,  Wies,  N.,  Carleo,  G.,  Shashua,  A.:  Deep  autoregres-
+     sive  models  for  the  efficient  variational  simulation  of  many-body  quantum
+     systems.  Physical  Review  Letters124,  020503  (2020)https://doi.org/10.1103/
+     PhysRevLett.124.020503
+
+ [5]Hibat-Allah,  M.,  Ganahl,  M.,  Hayward,  L.E.,  Melko,  R.G.,  Carrasquilla,  J.:
+     Recurrent neural network wave functions. Physical Review Research2, 023358
+     (2020)https://doi.org/10.1103/PhysRevResearch.2.023358
+
+ [6]Nomura, Y., Imada, M.: Dirac-type nodal spin liquid revealed by refined quan-
+     tum many-body solver using neural-network wave function, correlation ratio, and
+     level spectroscopy. Physical Review X11, 031034 (2021)https://doi.org/10.1103/
+     PhysRevX.11.031034
+
+ [7]Vicentini, F., Hofmann, D., Szab´o, A., Wu, D., Roth, C., Giuliani, C., Pescia, G.,
+     Nys, J., Vargas-Calder´on, V., Astrakhantsev, N., Carleo, G.: NetKet 3: Machine
+
+
+                                                 29
+     learning toolbox for many-body quantum systems. SciPost Physics Codebases, 7
+     (2022)https://doi.org/10.21468/SciPostPhysCodeb.7
+
+ [8]Medvidovi´c, M., Robledo Moreno, J.: Neural-network quantum states for many-
+     body physics. The European Physical Journal Plus139, 631 (2024)
+
+ [9]Lange, H., Walle, A., Abedinnia, A., Bohrdt, A.: From architectures to applica-
+     tions: A review of neural quantum states. Quantum Science and Technology9(4),
+     040501 (2024)https://doi.org/10.1088/2058-9565/ad7168
+
+[10]Han, J., Zhang, L., E, W.: Solving many-electron schr¨odinger equation using deep
+     neural  networks.  Journal  of  Computational  Physics399,  108929  (2019)https:
+     //doi.org/10.1016/j.jcp.2019.108929
+
+[11]Pfau, D., Spencer, J.S., Matthews, A.G.D.G., Foulkes, W.M.C.: Ab initio solution
+     of the many-electron Schr¨odinger equation with deep neural networks. Physical
+     Review Research2, 033429 (2020)https://doi.org/10.1103/PhysRevResearch.2.
+     033429
+
+[12]Hermann, J., Sch¨atzle, Z., No´e, F.: Deep-neural-network solution of the electronic
+     Schr¨odinger equation. Nature Chemistry12, 891–897 (2020)https://doi.org/10.
+     1038/s41557-020-0544-y
+
+[13]Li,  X.,  Li,  Z.,  Chen,  J.:  Ab  initio  calculation  of  real  solids  via  neural  net-
+     work ansatz. Nature Communications13, 7895 (2022)https://doi.org/10.1038/
+     s41467-022-35627-1
+
+[14]Scherbela, M., Reisenhofer, R., Gerard, L., Marquetand, P., Grohs, P.: Solving
+     the electronic schr¨odinger equation for multiple nuclear geometries with weight-
+     sharing  deep  neural  networks.  Nature  Computational  Science2(5),  331–341
+     (2022)https://doi.org/10.1038/s43588-022-00228-x
+
+[15]Li, R., Ye, H., Jiang, D., Wen, X., Wang, C., Li, Z., Li, X., He, D., Chen, J., Ren,
+     W., Wang, L.: A computational framework for neural network-based variational
+     monte carlo with forward laplacian. Nature Machine Intelligence6(2), 209–219
+     (2024)https://doi.org/10.1038/s42256-024-00794-x
+
+[16]Li,  Z.,  Lu,  Z.,  Li,  R.,  Wen,  X.,  Li,  X.,  Wang,  L.,  Chen,  J.,  Ren,  W.:  Spin-
+     symmetry-enforced solution of the many-body schr¨odinger equation with a deep
+     neural  network.  Nature  Computational  Science4(12),  910–919  (2024)https:
+     //doi.org/10.1038/s43588-024-00730-4
+
+[17]Gerard, L., Scherbela, M., Sutterud, H., Foulkes, W.M.C., Grohs, P.: Transferable
+     neural wavefunctions for solids. Nature Computational Science5(12), 1147–1157
+     (2025)https://doi.org/10.1038/s43588-025-00872-z
+
+[18]Tang,  Z.,  Chen,  H.,  Li,  Y.,  Qian,  Y.,  Wang,  Y.,  Fu,  W.,  Li,  J.,  Si,  C.,
+
+
+                                                    30
+     Duan,  W.,  Chen,  J.,  Xu,  Y.:  Deep-learning  electronic  structure  calculations.
+     Nature Computational Science5(12), 1133–1146 (2025)https://doi.org/10.1038/
+     s43588-025-00932-4
+
+[19]Luo,  D.,  Dai,  D.D.,  Fu,  L.:  Pairing-based  graph  neural  network  for  simulat-
+     ing quantum materials. arXiv preprint arXiv:2311.02143 (2023)arXiv:2311.02143
+     [cond-mat.str-el]
+
+[20]Teng, Y., Dai, D.D., Fu, L.: Solving the fractional quantum hall problem with
+     self-attention neural networks. Physical Review B111, 205117 (2025)https://
+     doi.org/10.1103/PhysRevB.111.205117
+
+[21]Qian, Y., Zhao, T., Zhang, J., Xiang, T., Li, X., Chen, J.: Describing landau level
+     mixing  in  fractional  quantum  hall  states  with  deep  learning.  Physical  Review
+     Letters134, 176503 (2025)https://doi.org/10.1103/PhysRevLett.134.176503
+
+[22]Zaklama, T., Guerci, D., Fu, L.: Attention-based foundation model for quantum
+     states. arXiv:2512.11962 (2025)
+
+[23]Zaklama,  T.,  Geier,  M.,  Fu,  L.:  Large  electron  model:  A  universal  ground
+     state predictor. arXiv preprint arXiv:2603.02346 (2026)arXiv:2603.02346[cond-
+     mat.str-el]
+
+[24]Nazaryan, K., Fu, L.: QERNEL: A scalable large electron model. arXiv preprint
+     arXiv:2604.26018 (2026)arXiv:2604.26018[cond-mat.str-el]
+
+[25]Troyer,  M.,  Wiese,  U.-J.:  Computational  complexity  and  fundamental  limita-
+     tions  to  fermionic  quantum  Monte  Carlo  simulations.  Physical  Review  Letters
+     94, 170201 (2005)https://doi.org/10.1103/PhysRevLett.94.170201
+
+[26]Marshall, W.: Antiferromagnetism. Proceedings of the Royal Society of London.
+     Series A232, 48–68 (1955)https://doi.org/10.1098/rspa.1955.0200
+
+[27]Westerhout,  T.,  Astrakhantsev,  N.,  Tikhonov,  K.S.,  Katsnelson,  M.I.,  Bagrov,
+     A.A.: Generalization properties of neural network approximations to frustrated
+     magnet ground states. Nature Communications11, 1593 (2020)https://doi.org/
+     10.1038/s41467-020-15402-w
+
+[28]Szab´o,  A.,  Castelnovo,  C.:  Neural  network  wave  functions  and  the  sign  prob-
+     lem.   Physical   Review   Research 2,   033075   (2020)https://doi.org/10.1103/
+     PhysRevResearch.2.033075
+
+[29]Bukov,  M.,  Schmitt,  M.,  Dupont,  M.:  Learning  the  ground  state  of  a  non-
+     stoquastic quantum Hamiltonian in a rugged neural network landscape. SciPost
+     Physics10, 147 (2021)https://doi.org/10.21468/SciPostPhys.10.6.147
+
+[30]Chen, A., Choo, K., Astrakhantsev, N., Neupert, T.: Neural network evolution
+
+
+
+                                                    31
+     strategy for solving quantum sign structures. Physical Review Research4, 022026
+     (2022)https://doi.org/10.1103/PhysRevResearch.4.L022026
+
+[31]Orignac, E., Giamarchi, T.: Meissner effect in a bosonic ladder. Physical Review
+     B64, 144515 (2001)https://doi.org/10.1103/PhysRevB.64.144515
+
+[32]Atala,  M.,  Aidelsburger,  M.,  Lohse,  M.,  Barreiro,  J.T.,  Paredes,  B.,  Bloch,  I.:
+     Observation  of chiral currents  with ultracold atoms  in bosonic ladders. Nature
+     Physics10, 588–593 (2014)https://doi.org/10.1038/nphys2998
+
+[33]H¨ugel,  D.,  Paredes,  B.:  Chiral  ladders  and  the  edges  of  quantum  Hall  insula-
+     tors. Physical Review A89, 023619 (2014)https://doi.org/10.1103/PhysRevA.
+     89.023619
+
+[34]Ledinauskas, E., Anisimovas, E.: Universal performance gap of neural quantum
+     states applied to the Hofstadter–Bose–Hubbard model. SciPost Physics18, 011
+     (2025)https://doi.org/10.21468/SciPostPhys.18.1.011
+
+[35]D¨oschl,  F.,  Palm,  F.A.,  Lange,  H.,  Grusdt,  F.,  Bohrdt,  A.:  Neural  network
+     quantum  states  for  the  interacting  Hofstadter  model  with  higher  local  occu-
+     pations  and  long-range  interactions.  Physical  Review  B111,  045408  (2025)
+     https://doi.org/10.1103/PhysRevB.111.045408
+
+[36]Wei, C., Mkhitaryan, V.V., Sedrakyan, T.A.: Unveiling chiral states in the XXZ
+     chain: Finite-size scaling probing symmetry-enrichedc= 1 conformal field the-
+     ories.  Journal  of  High  Energy  Physics2024(6),  125  (2024)https://doi.org/10.
+     1007/JHEP06(2024)125
+
+[37]Schmitt, M., Heyl, M.: Quantum many-body dynamics in two dimensions with
+     artificial  neural  networks.  Physical  Review  Letters125,  100503  (2020)https:
+     //doi.org/10.1103/PhysRevLett.125.100503
+
+[38]Chen,  A.,  Heyl,  M.:  Empowering  deep  neural  quantum  states  through  efficient
+     optimization.  Nature  Physics20,  1476–1481  (2024)https://doi.org/10.1038/
+     s41567-024-02566-1
+
+[39]Zhang, Y.-H., Di Ventra, M.: Transformer quantum state: A multipurpose model
+     for quantum many-body problems. Physical Review B107, 075147 (2023)https:
+     //doi.org/10.1103/PhysRevB.107.075147
+
+[40]Ou, X., Huang, T., Ozoli¸nˇs, V.: Improving neural network performance for solving
+     quantum sign structure. Physical Review B112, 165122 (2025)https://doi.org/
+     10.1103/fqxr-r8vw. arXiv:2510.02051
+
+[41]Misery,   A.,   Gravina,   L.,   Santini,   A.,   Vicentini,   F.:   Looking   elsewhere:
+     improving  variational  monte  carlo  gradients  by  importance  sampling.  arXiv
+     preprint   arXiv:2507.05352   (2025)https://doi.org/10.48550/arXiv.2507.05352
+
+
+                                                    32
+     arXiv:2507.05352[quant-ph]
+
+[42]Sorella, S.: Green function Monte Carlo with stochastic reconfiguration. Physical
+     Review  Letters80,  4558–4561  (1998)https://doi.org/10.1103/PhysRevLett.80.
+     4558
+
+[43]Becca,  F.,  Sorella,  S.:  Quantum  Monte  Carlo  Approaches  for  Correlated  Sys-
+     tems. Cambridge University Press, Cambridge (2017).https://doi.org/10.1017/
+     9781316417041
+
+[44]Stokes, J., Izaac, J., Killoran, N., Carleo, G.: Quantum natural gradient. Quantum
+     4, 269 (2020)https://doi.org/10.22331/q-2020-05-25-269
+
+[45]Williams, R.J.: Simple statistical gradient-following algorithms for connectionist
+     reinforcement learning. Machine Learning8, 229–256 (1992)https://doi.org/10.
+     1007/BF00992696
+
+[46]Mohamed, S., Rosca, M., Figurnov, M., Mnih, A.: Monte Carlo gradient estima-
+     tion in machine learning. Journal of Machine Learning Research21(132), 1–62
+     (2020)
+
+[47]Kingma,  D.P.,  Welling,  M.:  Auto-encoding  variational  Bayes.  In:  International
+     Conference on Learning Representations (ICLR) (2014). arXiv:1312.6114
+
+[48]Assaraf,   R.,   Caffarel,   M.:   Zero-variance   principle   for   Monte   Carlo   algo-
+     rithms. Physical Review Letters83, 4682–4685 (1999)https://doi.org/10.1103/
+     PhysRevLett.83.4682
+
+[49]White,  S.R.:  Density  matrix  formulation  for  quantum  renormalization  groups.
+     Physical   Review   Letters69,   2863–2866   (1992)https://doi.org/10.1103/
+     PhysRevLett.69.2863
+
+[50]Schollw¨ock, U.: The density-matrix renormalization group in the age of matrix
+     product states. Annals of Physics326, 96–192 (2011)https://doi.org/10.1016/j.
+     aop.2010.09.012
+
+[51]Owen, A.B.: Monte Carlo Theory, Methods and Examples. Stanford University,
+     (2013). Available at https://artowen.su.domains/mc/
+
+[52]Greensmith, E., Bartlett, P.L., Baxter, J.: Variance reduction techniques for gra-
+     dient estimates in reinforcement learning. Journal of Machine Learning Research
+     5, 1471–1530 (2004)
+
+[53]Tucker, G., Mnih, A., Maddison, C.J., Lawson, J., Sohl-Dickstein, J.: REBAR:
+     Low-variance, unbiased gradient estimates for discrete latent variable models. In:
+     Advances in Neural Information Processing Systems 30 (NeurIPS), pp. 2627–2636
+     (2017)
+
+
+
+                                                    33
+[54]Grathwohl, W., Choi, D., Wu, Y., Roeder, G., Duvenaud, D.: Backpropagation
+     through  the  void:  Optimizing  control  variates  for  black-box  gradient  estima-
+     tion.  In:  International  Conference  on  Learning  Representations  (ICLR)  (2018).
+     arXiv:1711.00123
+
+[55]Ranganath,  R.,  Gerrish,  S.,  Blei,  D.M.:  Black  box  variational  inference.  In:
+     Proceedings  of  the  17th  International  Conference  on  Artificial  Intelligence  and
+     Statistics  (AISTATS).  Proceedings  of  Machine  Learning  Research,  vol.  33,  pp.
+     814–822 (2014)
+
+[56]Bottou,  L.,  Curtis,  F.E.,  Nocedal,  J.:  Optimization  methods  for  large-scale
+     machine learning. SIAM Review60(2), 223–311 (2018)https://doi.org/10.1137/
+     16M1080173
+
+[57]Lee, J.D., Simchowitz, M., Jordan, M.I., Recht, B.: Gradient descent only con-
+     verges to minimizers. In: 29th Annual Conference on Learning Theory (COLT).
+     Proceedings of Machine Learning Research, vol. 49, pp. 1246–1257 (2016)
+
+[58]Absil,  P.-A.,  Mahony,  R.,  Andrews,  B.:  Convergence  of  the  iterates  of  descent
+     methods for analytic cost functions. SIAM Journal on Optimization16(2), 531–
+     547 (2005)https://doi.org/10.1137/040605266
+
+[59]Helmke, U., Moore, J.B.: Optimization and Dynamical Systems. Communications
+     and Control Engineering. Springer, London (1994)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                    34
+Extended Data Fig. 1  Generality to interacting fermions.A 100-site spinless-fermion two-
+leg flux ladder (nearest-neighbour interactionV= 2, Φ = 0.5π, ten seeds), Jordan–Wigner mapped
+to spins: relative-error training curves, tail-window bars, the standard/direct variance ratio, and the
+mixing coefficientλ ⋆. Against the DMRG referenceE                ref =−106.957, the median tail-window errors
+are 2.2% (direct) and 1.9% (adaptive mixture) versus 3.7% (standard); the standard/direct gradient-
+variance ratio exceeds an order of magnitude throughout training.
+Extended Data
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                           35
+Extended Data Fig. 2  Full phase-learning-rate sweep.Standard phase-gradient baselines at
+multipliersη    ϕ/η= 1–5 on the 100-site flux ladder; the standard estimator plateaus well above the
+direct and adaptive-mixture estimators at every multiplier.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Extended Data Fig. 3  2D flux cylinder at the interacting pointJ z  = 0.5.Relative-error
+training curves (left column) and tail-window relative-error statistics (right column; bars, median;
+whisker, interquartile range; points, individual seeds) on the 8×8 cylinder atJ    z = 0.5 (the main text
+showsJ  z = 0), for Φ = 0.2π(top row) and Φ = 0.3π(bottom row). In the training panels, solid lines
+show means, dotted lines medians, and shaded bands interquartile ranges; ten seeds per estimator,
+105 optimization steps.
+
+
+                                                            36
+Extended  Data  Fig.  4  Single  shared-network  flux  ladder  atΦ  =  0.2π. The  main  flux-
+ladder runs use separate amplitude and phase networks; here a single shared-trunk MLP (width 256,
+depth 2, tanh activations) feeds two linear heads that output the log amplitude and the phase. The
+shared  trunk  is  widened  to  256.  These  runs  use  the  same  minSR  pipeline  as  the  main  flux-ladder
+runs  but  a  smaller  learning  rate  (η=  0.01)  and  diagonal  floor  (λ         min  =  0.0017).  For  the  direct
+and adaptive-mixture estimators, the coupled-force construction retains the amplitude/Pulay score
+term  and  applies  the  direct  derivative  only  along  the  stopped-amplitude  phase  path.  Median  tail-
+window relative error (bars; whisker, interquartile range; tail = last 30 logged points) per estimator
+with individual-seed points (ten seeds) on theL= 50 ladder (E          ref  =−44.826, DMRG). The direct
+phase-gradient (1.92%) and adaptive-mixture (1.08%) estimators remain several times more accurate
+than the standard phase-gradient estimator (9.92%), so the advantage is not an artifact of splitting
+amplitude and phase into separate networks.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                               37
+Extended Data Fig. 5  Chiral XXX benchmarks.(a)αscan at fixed sizeN= 20 overα=
+0.5,1.0,1.5,2.0. (b) Size scaling atα= 1.0 forN= 20,24,50,100. (c) Optimizer control atα= 1.0,
+comparing the default MLP/minSR setting with a lower-diagonal minSR setting. (d) Summary of
+the standard/direct error ratios from theαand size scans.
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                               38

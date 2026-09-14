@@ -1,0 +1,909 @@
+ An Iterative Dual-Channel Neural Quantum State Algorithm for
+                              Selected Configuration Interaction
+
+  Jen-Yu Chang1,†  , Yi-Chun Chang2,†  , Yu-Jui Lin3,†  , Ming-Chun Yang1,†  , Hsiu-Chi Tsai2,
+              Tai-Yue Li4, Nan Yow Chen4, Tsung-Wei Huang5,6, and En-Jui Kuo1,*
+
+    1Department of Electrophysics, National Yang Ming Chiao Tung University, Hsinchu,
+                                                         Taiwan
+   2Arete Honors Program, National Yang Ming Chiao Tung University, Hsinchu, Taiwan
+ 3Master Program in Quantum Science and Technology, National Yang Ming Chiao Tung
+                                           University, Hsinchu, Taiwan
+      4National Center for High-performance Computing, National Institutes of Applied
+                                            Research, Hsinchu, Taiwan
+     5Quantum Information Center, Chung Yuan Christian University, Taoyuan, Taiwan
+       6Master Program in Intelligent Computing and Big Data, Chung Yuan Christian
+                                           University, Taoyuan, Taiwan
+                                      †These authors contributed equally.
+                                              *Corresponding author.
+
+
+                                         E-mail:kuoenjui@nycu.edu.tw
+
+
+
+                                                         Abstract
+          Accurately solving the electronic Schrödinger equation for strongly correlated systems remains a
+      central challenge in quantum chemistry, where the exponential growth of configuration space limits the
+      applicabilityofexactmethods. SelectedConfigurationInteraction(SCI)algorithmsaddressthischallenge
+      by adaptively constructing compact determinantal expansions, yet their efficiency depends critically on
+      the quality of the sampling strategy used to identify chemically important configurations.  Here we
+      introduce the Handover Iterative Neural Quantum State (HI-NQS) algorithm, which embeds a classically
+      trained autoregressive Transformer neural quantum state within the iterative sample–diagonalize–update
+      framework of Sample-Based Quantum Diagonalization. A dual-channel Transformer architecture with
+      explicit spin-up/spin-down cross-attention encodes fermionic spin structure as an architectural inductive
+      bias, enabling expressive and physically informed wavefunction representations.  After each subspace
+      diagonalization, the resulting eigenvector is distilled back into the network through a factorized spin-
+      marginal teacher signal, establishing a closed feedback loop between generative sampling and exact
+      diagonalization. Benchmarks across a range of small molecules and a systematic nitrogen active-space
+      series demonstrate that HI-NQS achieves chemical accuracy on all systems tested, with determinant-
+      count scaling substantially more favorable than conventional CIPSI-based SCI for all but the smallest
+      active spaces. All calculations are performed on GPU hardware without quantum computing resources,
+      establishing HI-NQS as an efficient and scalable purely classical approach to the selected configuration
+      interaction problem.
+
+1   Introduction
+
+Accurately computing the ground-state energy of strongly correlated molecular systems is a central challenge
+ofab initioquantum chemistry, because the many-body Hilbert space grows exponentially with system size.
+Full Configuration Interaction (FCI) expands the wavefunction on the complete Slater-determinant basis1
+
+
+                                                              1
+and is therefore intractable beyond small active spaces, a bottleneck that has driven a succession of reduction
+strategies on both classical and quantum hardware.
+    On the classical side, SCI algorithms2–6  retain only the most energetically important determinants, iter-
+atively growing the basis through excitation-based candidate generation and perturbative screening. Com-
+plementary approaches include the density matrix renormalization group (DMRG),7 which reaches high
+accuracy for quasi-one-dimensional correlation topologies, and FCI Quantum Monte Carlo (FCIQMC),8
+which samples the complete determinant space stochastically without explicit enumeration. Modern SCI
+variants reach chemical accuracy on small-to-medium active spaces, but their candidate pool grows com-
+binatorially with excitation rank, and the subspace diagonalization that follows scales cubically in basis
+size—limiting their reach into strongly correlated regimes where the relevant basis must grow rapidly.
+    Quantum hardware has motivated a parallel lineage. The Variational Quantum Eigensolver (VQE)9,10
+and its adaptive variants such as ADAPT-VQE11 parameterize the wavefunction through a circuit, but bar-
+ren plateaus,12,13   measurement overheads that already reach10   9–10  10 shots for small molecules at chemical
+accuracy,14,15   and irreducible gate noise render it impractical at scale. Sample-Based Quantum Diagonal-
+ization (SQD)16,17   and the related quantum-selected configuration interaction (QSCI) scheme18 addressed
+these costs with ahybridstrategy: the quantum device samples bitstrings from the circuit distribution, while
+a classical computer constructs the second-quantized Hamiltonian restricted to that sampled subspace and
+diagonalizes it exactly. This separation reduces the measurement burden substantially, but each invocation
+of the quantum sampler remains a one-shot procedure with no mechanism to refine the sampled subspace
+across calls.
+    Handover Iterative VQE (HI-VQE)19,20   formalized and extended this hybrid strategy into thehandover
+principle—the defining idea captured in its name: the quantum device is responsible solely for proposing
+configurations, and all energy evaluation is permanently handed over to classical exact diagonalization.
+Crucially, HI-VQE closes a feedback loop: after each subspace diagonalization, the resulting eigenvector
+is fed back to update the variational circuit parameters, concentrating subsequent sampling on the most
+energetically relevant configurations. This iterativesample–diagonalize–updatecycle converges to chemical
+accuracy on systems such as N2 and Fe–S clusters with shot counts substantially below those of standard
+VQE.
+    A parallel line attempts to realize the same selection-plus-feedback idea using classical Neural Quantum
+States (NQS),21–25   which encode the wavefunction implicitly in network parameters. Pure NQS variational
+MonteCarlo(VMC),however, reliesonStochasticReconfiguration,26 whoseFisher-matrixinversionscalesas
+O(P      3)forPparameters,      27,28   and —more fundamentally—provides no external accuracy anchor: whatever
+energy the network converges to, there is no mechanism to diagnose or correct its residual variational bias.
+Two complementary families of neural-network-augmented SCI close this gap by adding an external scoring
+or diagonalization step. The first isdiscriminative: Neural-Network Configuration Interaction (NNCI),                  29–31
+extending earlier neural-network-driven CI selection,32,33   trains a convolutional classifier via active learning
+to score determinants drawn from an externally enumerated single- and double-excitation pool, reproducing
+the N2 correlation energy with∼4×10                   5 determinants in a 52-orbital active space where the underlying FCI
+dimension exceeds10               10. Being a classifier over an externally enumerated pool, NNCI’s reachable configu-
+ration space is tied to the excitation rank used to build that pool, and its 1D-CNN architecture treats the
+occupation vector as a singleα-then-βconcatenated sequence with no cross-channel attention between the
+spin-up and spin-down blocks.
+    The second family isgenerative: an NQS is trained to sample candidate determinants directly from a
+learned Born distribution, with the CI subspace diagonalization providing the external accuracy anchor.
+Five recent methods fall in this family:
+
+    •QiankunNet-cuSCI  34 (builtontheQiankunNetTransformerNQSframework35,36  ): GPU-accelerated
+       NQS+SCI scaling to active spaces of up to 84 qubits (Cr2); the Transformer is trained by variational
+       energy minimization and candidates are proposed through GPU-kernel-accelerated Hamiltonian exci-
+       tation enumeration.
+
+    •NQS-SC:            37 neural-backflow ansatz on a selected-configuration subspace; energy minimization on the
+       selected space, with new candidates drawn from the  ˆH-connected expansion     ˆHS    select.
+
+    •HAAR-SCI:                38 gated Transformer that samples determinants autoregressively with Gumbel Top-K    39
+
+
+                                                                 2
+       exploration; trained by regression to Lanczos eigenvector amplitudes, with GPU min-heap kernels
+       retaining only configurations with the largest Hamiltonian couplings.
+
+    •ARNN-SCI:                40 masked-autoregressivedense(MADE-style41)networktrainedbymaximumlikelihood
+       on configurations sampled from each iteration’s SCI eigenvector; new configurations are then proposed
+       by direct autoregressive sampling.
+    •GTNN-SCI  42 (also built on QiankunNet35,36  ): generative Transformer regressed to CI eigenvector
+       amplitudes; operates in two phases, transitioning from Hamiltonian-guided candidate scoring to direct
+       autoregressive sampling once the learned distribution is sufficiently sharp.
+These methods confirm that generative NQS sampling and CI subspace diagonalization are synergistic;
+three of them (HAAR-SCI,38 ARNN-SCI,40 GTNN-SCI42) already feed CI eigenvector information back
+into the NQS through supervised losses. Their shared architectural limitation, however, is that all of these
+networks—whether a backflow ansatz (NQS-SC), a single-stream Transformer (QiankunNet-cuSCI, HAAR-
+SCI, GTNN-SCI), or a masked-dense ARNN (ARNN-SCI)—process theαandβspin-orbital indices as
+positions in a single sequence, with no dedicated cross-channel attention between the spin-up and spin-down
+subsystems.
+    We proposeHI-NQS, which adopts the handover loop of HI-VQE              19,20   as its architectural backbone,
+substitutes the quantum-circuit sampler with a classically trained autoregressive Transformer NQS, and
+retains SQD as the classical subspace solver. Building on the second-quantized autoregressive ansatz43,44  —
+which factorizes the Born distributionπ          θ(x) =  Qipθ(x i|x <i)to enable exact ancestral sampling under hard
+particle-number constraints—we choose a Transformer rather than a recurrent or backflow backbone for two
+practical reasons: its conditionals are evaluable in parallel in a single forward pass, and its self-attention
+mechanism extends naturally to the cross-channel coupling described next. The first architectural element is
+adual-channeldesign in which a spin-αstream of causal self-attention layers is coupled to a spin-βstream
+via cross-attention to the fullαconfiguration, making theα/βseparation of second-quantized fermions an
+explicit architectural prior rather than one the network must learn from data; this contrasts directly with the
+single-stream encodings of all five generative baselines and with NNCI’s concatenated 1D-CNN encoding.
+    The second contribution lies in how the network is trained and how it explores configuration space.
+After each SQD diagonalization, the resulting eigenvectorΨ          0 is distilled into the NQS through a teacher
+signal given by the factorized product of its spin-resolved marginals,p         α(σ α)p β(σ β), optimized with exactly
+backpropagated gradients rather than by energy minimization alone. Three of the generative baselines above
+(HAAR-SCI, ARNN-SCI, GTNN-SCI) already employ supervised losses against CI amplitudes; the contribu-
+tionhereisthefactorizationofthattargetintoper-spin-channelmarginals, whichisarchitecturallyconsistent
+with the two-channel network of the preceding paragraph and turns the dual-channel cross-attention into
+an actively supervised pathway rather than a passive structural prior. A deterministic classical expansion
+of single and double excitations of the dominant determinants in the current basis is added in parallel with
+the NQS proposals to counteract the mode collapse45 that afflicts autoregressive samplers at late iterations
+and to guarantee a steady supply of fresh determinants in the  ˆH-connected vicinity of the high-amplitude
+region. Benchmarks on an eight-point N2 active-space series sweeping CAS(6,6) through CAS(14,20) (12 to
+40 qubits, cc-pVDZ) together with ten small molecules at 12–30 qubits demonstrate that HI-NQS attains
+chemical accuracy (|E−E          ref|<1.6mHa) on all eighteen systems, with the N           2 variational basis growing from
+∼4×10          4 determinants at CAS(14,14) to∼1.7×10                 5 at CAS(14,20) (40 qubits)—roughly200×(≈2.3orders
+of magnitude) fewer than CIPSI-SCI at the largest active space, and yielding a log-linear scaling exponent
+αNQS = 0.089±0.011inN                             det versus qubit count, roughly half that of CIPSI-SCI (α  CIPSI = 0.180) and a third
+that of complete active-space CI (CASCI;α                  CASCI  = 0.262). At 40 qubits HI-NQS requires∼200×fewer
+determinants than CIPSI-SCI while matching or exceeding its accuracy, all on commodity GPU hardware
+without quantum resources.
+
+2   Method
+
+The HI-NQS algorithm iterates between six stages: (i) an autoregressive Transformer NQS that proposes
+candidate Slater determinants; (i′) a deterministic classical expansion that enumerates single and double ex-
+citationsofthedominantdeterminantsinthecurrentbasis, counteractingmodecollapseoftheautoregressive
+
+                                                                  3
+Figure 1: Dual-channel autoregressive Transformer NQS architecture.  The spin-αstream (left) applies
+causal self-attention to generate spin-up conditionals; its output is re-encoded without masking to form the
+α-contextH     α. The spin-βstream (right) interleaves causal self-attention with cross-attention toH       α, so each
+βconditional has access to the complete spin-up configuration. Each channel terminates in a per-position
+sigmoid output head; all conditionals are evaluable in a single forward pass.
+
+
+sampler; (ii) a perturbation-theory scoring stage that selects the most energetically relevant configurations
+from the combined candidate pool; (iii) an SQD diagonalization that yields an updated ground-state energy
+and eigenvector; (iv) a supervised update in which the SQD eigenvector is distilled back into the NQS as a
+teacher signal; and (v) a convergence check that terminates the loop once the variational energy has stabi-
+lized. After variational convergence, the converged energyE             var is a strict upper bound to the exact energy
+and is the quantity reported throughout this work; no post-processing PT2 correction is applied, because
+the Epstein–Nesbet46,47   correction is non-variational—it can push the total energy below the exact FCI
+ground state at insufficient basis sizes—and CIPSI-SCI likewise reports bare variational energies, placing
+both methods on equal footing. Each component is described in the following subsections.
+
+2.1    Neural quantum state architecture
+We represent the electronic wavefunction with an autoregressive Transformer48—related self-attention an-
+sätze in first-quantized molecular electronic structure include Psiformer49—that models the joint probability
+distribution over occupation-number stringsx= (x                  1,x2,...,x2M  ), whereMis the number of spatial orbitals
+and eachx i∈{0,1}indicates whether spin-orbitaliis occupied. We organize the occupation string into a
+spin-αsub-stringσ             α = (x α1,...,xαM)and a spin-βsub-stringσ              β = (x β1,...,xβM), so thatx= (σ      α,σβ), and
+factorize the Born distribution as
+
+                                                  MY                   MY
+                                       πθ(x) =        pθ(x αi |x α<i)      pθ(x βj|x β<j, σα),                        (1)
+                                                  i=1                 j=1
+
+an exact chain-rule factorization in which theβconditionals depend on the fullαsub-string. This autoregres-
+sive form is chosen so that (i)π  θ(x)is normalized by construction andlogπ        θ admits an analytic, partition-
+function-free evaluation; (ii) configurations can be drawn as independent samples by sequential conditional
+sampling, without Markov-chain mixing or rejection; and (iii) discrete symmetries such as particle-number
+conservation can be imposed exactly at the level of each conditional, as described below. Together these
+
+
+                                                                   4
+three properties—exact log-probabilities, unbiased samples, and built-in symmetry—are precisely what the
+perturbative selection step of Sec.2.2.3and the supervised update of Sec.2.2.5require, and they motivate
+the autoregressive architecture detailed below in preference to Markov-chain-based neural ansätze.
+    The two factors in Eq. (1) are parameterized by two dedicated Transformer streams, which we refer to
+as theαchannel and theβchannel (Fig.1). Theαchannel is a stack ofL                  α pre-LayerNorm50 Transformer
+blocks with causal (masked) multi-head self-attention that generates the spin-up conditionalsp          θ(x αi |x α<i).
+The full sampledσ       α is then re-encoded through the sameαweights without the causal mask to produce a
+bidirectional contextual representationH     α∈R M×d       model, which we refer to as theα-context. Theβchannel
+is a second stack ofL  β Transformer blocks, each of which augments causal self-attention over previously
+sampledβpositions withcross-attentionto theα-contextH                            α, so that eachβconditional has access to the
+completeαconfiguration. Each output head produces a single logit per position, passed through a sigmoid
+to yieldp    θ(x i  = 1|·), so thatlogπ        θ(x)can be evaluated in parallel over all positions in a single forward
+pass via binary cross-entropy with logits.
+    Particle-number symmetry is enforcedduringautoregressive sampling rather than by post-hoc rejection.
+At each sampling stepithe logitℓ        i is clipped to a large positive value whenever the remaining sites in the
+current spin channel must all be occupied to reach the target electron count, and to a large negative value
+whenever the target has already been saturated. Every drawn configuration therefore satisfies Pixαi  =n eα
+andPixβi  =n eβ by construction; a residual particle-number filter is retained only as a numerical safety net.
+Fixing(n      eα,neβ)separately also fixes the total spin projectionS      z = (n eα−n eβ)/2;       ˆS2 is not constrained at the
+ansatz level and is resolved by the subsequent subspace diagonalization.
+
+2.2    Iterative handover loop
+Given a second-quantized molecular Hamiltonian  ˆH= P                                          P
+                                                                           pqhpq ˆa †pˆa q +  12  pqrsgpqrs ˆa †pˆa †qˆa sˆa r +E    nuc in an
+orthonormal orbital basis, the algorithm proceeds as follows (Fig.2).
+
+2.2.1  Step 1: NQS sampling
+At iterationtthe NQS drawsN          s occupation strings autoregressively [Eq. (1)] at a temperatureT(t)that
+is annealed linearly fromT         0  =  1.0toT          min  =  0.3over the course of the run.  The schedule biases early
+iterations toward broader exploration and later iterations toward the peak of the learned Born distribution.
+Configurations duplicating entries of the cumulative basisBare removed, yielding a set of NQS-proposed
+candidatesC                      NQSt   .
+
+2.2.2  Step 1′: Classical expansion
+In addition to the stochastic NQS proposals, a deterministic expansion is performed every iteration once an
+eigenvector is available (t≥1). LetB                (N e)top ⊂Bdenote theN    e basis determinants with the largest amplitudes
+|c i|in the current eigenvectorΨ           0. We enumerate every singly and doubly excited determinant connected to
+any element ofB    (N e)top  by a non-zero Hamiltonian matrix element,
+
+                                         Cclt  = y/∈B:∃x∈B               (N e)top ,⟨y|      ˆH|x⟩̸= 0  	,                         (2)
+
+and mergeC            clt  withC         NQSt    to form the full candidate poolC t =C    NQSt  ∪Cclt . This step compensates for the
+gradual collapse ofπ  θ onto high-amplitude regions ofBat later iterations: even when the NQS proposal
+distribution becomes peaked, the classical expansion guarantees a steady supply of fresh determinants in the
+ˆH-connected vicinity of the dominant amplitudes. We useN    e = 1000throughout this work.
+
+2.2.3  Step 2: Configuration scoring and basis update
+Candidates are ranked by their expected contribution to the ground-state energy, and the cumulative basis
+Bis updated accordingly. The ranking criterion depends on whether an approximate eigenvector is available
+from a previous diagonalization.
+
+
+
+                                                                     5
+                                          Figure 2: The iterative HI-NQS handover loop.
+
+
+Iterationt= 0(cold start).No eigenvectorΨ                                           0 is yet available. Candidates are ranked by their diagonal
+Hamiltonian matrix elementH  xx =⟨x|       ˆH|x⟩. TheK                  0 lowest-energy candidates form the initial basisB, with
+the cold-start budgetK              0 chosen no larger than the per-iteration budgetKused in later iterations.
+
+Iterationt= 1(full rescore).Once the first eigenvectorΨ                                                      0 is available, both existing entries inBand
+newcandidatesC                     1 arerescoredusingtheEpstein–Nesbetsecond-orderperturbationtheory(PT2)importance
+measure
+                                                             s(x) =  |⟨x|      ˆH|Ψ     0⟩|2|E 0−H   xx|,                                   (3)
+
+where the coupling⟨x|                  ˆH|Ψ     0⟩= PiciHx,x  i is evaluated over the eigenvector coefficients{c  i}and basis
+determinants{x  i}.  The absolute value in the denominator makess(x)≥0a magnitude-only ranking
+criterion. The basis is then rebuilt from scratch:Bis replaced by the topKconfigurations ranked bys(x).
+The hard capB   max is not applied at this step so that every cold-start determinant—which was selected by
+
+
+                                                                          6
+a weaker diagonal criterion—receives at least one PT2 evaluation before being eligible for eviction.
+
+Iterationst≥2(incremental update).Only new candidatesC                           t are scored via Eq. (3); the topKare
+appended toB. If|B|>B               max, the lowest-scored entries are evicted.
+
+2.2.4  Step 3: Subspace diagonalization
+The projected HamiltonianH       B with matrix elements[H B]ij  =⟨x  i| ˆH|x  j⟩is constructed and diagonalized
+with a Davidson eigensolver.51 By default we use an incremental SQD backend that persists a PySCF52
+selected_cistate across iterations and warm-starts Davidson from the previous eigenvector, with IBM’s
+solve_fermionroutine                 16 retained as a fallback. This yields the total ground-state energyE             0 =E    corr +E    nuc
+in the selected subspace and the corresponding eigenvectorΨ          0 expressed as a linear combination of the basis
+determinants. Because this step is an exact diagonalization withinB,E                 0 is variational with respect to the
+selected subspace.
+
+2.2.5  Step 4: NQS update
+The NQS is retrained to reflect the eigenvectorΨ          0 obtained in Step 3. Training uses a composite loss
+                                   Ltotal =w    teachLteacher +w    enerLenergy +w    entrLentropy,                     (4)
+whose components are defined below.
+
+Teacher weights.We compute spin-resolved marginals of|Ψ           0|2,
+
+                                                   pα(σ α) =X        |Ψ 0(σ α,σβ)|  2,                                (5)
+                                                                 σβ
+                                                   pβ(σ β) =X
+                                                                 σα|Ψ 0(σ α,σβ)|  2,                                (6)
+and assign each basis configurationx=  (σ             α,σβ)the factorized teacher weightw(x)  =p      α(σ α)p β(σ β),
+normalized so that Px∈B w(x) = 1. This factorized form discards the phase ofΨ              0 and the residualα–β
+correlation of|Ψ     0|2.
+
+Loss components.The three terms are
+
+                                               Lteacher =− X        w(x) logπ      θ(x),                                (7)
+                                                              x∈B
+                                               Lenergy =X        w(x)A(x) logπ          θ(x),                             (8)
+                                                            x∈B
+                                              Lentropy =   1     X    logπ  θ(x),                                   (9)
+                                                             |B| x∈B
+
+whereA(x) =H                     xx−E    0 is the single-determinant advantage relative to the current ground-state energy.
+Lteacher is the cross-entropy between the teacher weightsw(x)andπ         θ(x)evaluated onB. L                energy is a
+REINFORCE-style policy-gradient53 term that raiseslogπ       θ(x)forA<0and lowers it forA>0.L                               entropy
+is an anti-concentration regularizer: minimizing it lowers the average log-probability onB, redistributing
+probability mass toward configurations outside the current basis. Gradients are computed on mini-batches
+of sizemin(5000,|B|)and clipped to a maximum norm of1.0; parameter updates use Adam                      54 with exactly
+backpropagated gradients.
+
+2.2.6  Step 5: Convergence
+
+The variational loop terminates when the energy change|E             (t)0 −E    (t−1)0  |falls below a thresholdδ= 10      −9   Ha
+for five consecutive iterations, or when a maximum number of iterations is reached. We use a maximum of
+50iterations throughout this work. We denote the converged variational energy byE       var≡lim t→∞ E(t)0 .
+
+
+                                                                    7
+3   Results and Discussion
+
+Across 18 benchmark systems spanning12–40qubits, HI-NQS attains chemical accuracy on every system
+tested, with a log-linearN                   det scaling exponent ofα    NQS = 0.089±0.011—half that of CIPSI-SCI (α                           CIPSI =
+0.180) and a third that of CASCI (α            CASCI = 0.262, Fig.3). At the largest active space tested (CAS(14,20),
+40 qubits) this compounds to a∼200×(≈2.3orders of magnitude) determinant reduction relative to
+CIPSI-SCI.
+    We benchmark HI-NQS against CIPSI-SCI (implemented via PySCF’sselected_cimodule           2,52 ) and,
+where tractable, against the exact FCI limit on two families: ten small molecules at12–30qubits (Group
+A) and a single N2 active-space series, CAS(6,6) through CAS(14,20), spanning12–40qubits in the cc-
+pVDZ basis (Group B). For each method we report itsnatural-convergencedeterminant countN         det: the
+smallest basis (ordered by size) from which the energy stays within0.1mHa of its own converged plateau.
+This self-convergence criterion is applied identically to CIPSI-SCI and to the NQS variational basis, so
+the two are compared at matched convergence rather than against a fixed external target. Both methods
+report bare variational energies: CIPSI uses the subspace-diagonalization energy at its converged iteration,
+and NQS reportsE        var (no Epstein–Nesbet PT2 correction), a strict upper bound to the exact energy.
+ReferenceenergiesareexactFCIforseventeenoftheeighteensystems(E  ref =E    FCI),computedwithPySCF’s
+Davidson FCI solver (pyscf.fci.direct_spin1). The sole exception is N                                                       2-CAS(14,20) (40 qubits,∼6×10                       9
+determinants), where exact FCI is computationally infeasible; we substitute a Dice semistochastic heat-bath
+CI (SHCI)+det-PT2 reference3,4  (heat-bath variational selection with deterministic Epstein–Nesbet PT2),
+Eref =E    SHCIvar    +E    PT2, converged across a seven-point cutoff sweepε∈[10   −3 ,10−6  ]. Selected configuration-
+interaction at this cutoff is generally converged to within≲10    −5  Ha of exact FCI, two orders below the
+1.6×10   −3  Ha chemical-accuracy scale of any quantitative claim in this work. NQS energies are averaged
+over three seeds in Table1and Fig.3, and over ten seeds in Fig.4(median±IQR). Table1collects the
+comparison.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 3: Determinant count at natural convergence vs. qubit count for the N2 CAS series. Full CASCI
+dimension (red), CIPSI-SCI (orange), NQS variational (green); dashed lines are log-linear fitslog      10Ndet =
+αXnq+β X (slopeα X permethod)withα         CASCI = 0.262±0.006,α                          CIPSI = 0.180±0.012,α                          NQS = 0.089±0.011.
+Error bars on NQS span the three-seed min–max.
+
+    Small molecules (Group A).All ten systems reach chemical accuracy,|E−E                ref|<1.6mHa, with both
+methods, and the NQS variational basis is more compact than CIPSI-SCI on all ten. The gains are largest for
+the weakly correlated cases—H2S (0.066×, a15×reduction), BeH                          2 (0.24×), and N              2 (0.27×)—and remain
+
+
+                                                                     8
+                      Table 1: NQS vs. CIPSI-SCI at natural convergence; the convergence criterion and reference conventions
+                      are defined in the main text.  Columns:Eare converged energies (Ha),N                                 det the corresponding deter-
+                      minant counts,N     NQS/NCIPSI the compactness ratio (<1: NQS more compact),N                            Refdet the reference (FCI)
+                      Hilbert dimension, and∆E≡E                  method−E    ref (mHa).BoldN                         NQS/NCIPSI and∆E           NQS mark the Pareto-
+                      dominant systems (NQS more compactandat least as accurate).  Entries shown as0.000lie below the
+                      ∼10 −5  mHa numerical-noise floor (sign not meaningful). ⋆Near-exact-FCI Dice-SHCI surrogate with deter-
+                      ministic Epstein–Nesbet PT2 (ε= 10 −6 ; see text).
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                      substantial for the more strongly correlated systems: HCN and C2H2 (0.53×each), H              2O (0.55×), C              2H4
+                      (0.56×), and NH              3 (0.42×). The smallest advantage is LiH (0.91×), where the dominant determinants are
+                      few and both methods converge at near-identical basis sizes. All ten NQS variational energies lie above the
+                      exact FCI (∆E      NQS≥0), with the largest overshoot+0.099mHa at C                        2H2—well within chemical accuracy.
+                           Active-space scaling (Group B).The N       2 series isolates the size dependence.  Figure3plotsN                         det at
+                      convergence against qubit count; all three methods grow log-linearly, log  10Ndet≈α Xnq +β X, with the
+                      NQS exponent roughly half that of CIPSI-SCI and a third that of full CASCI (fitted values in Fig.3
+                      caption). The determinant advantage is therefore not a constant prefactor butcompoundswith active-space
+                      size: from parity at CAS(6,6) (both methods saturate the400-determinant FCI space) the NQS/CIPSI ratio
+                      falls monotonically through0.30at CAS(10,10),0.036at CAS(14,14), to5.0×10                    −3  at CAS(14,20)—a∼200×
+                      (≈2.3orders of magnitude) determinant reduction relative to CIPSI-SCI, and∼4.5orders below the full
+                      CASCI dimension, at40qubits (for context, the current frontier of distributed FCI implementations reaches
+                      the trillion-determinant scale55). For CAS(14,16) and CAS(14,18) the reference is exact PySCF FCI on
+                      Hilbert spaces of1.3×10             8 and1.0×10                 9 determinants, respectively; for CAS(14,20) (6.0×10           9 determinants)
+                      exact FCI is infeasible at single-node scale and we substitute a Dice-SHCI+det-PT2 estimate atε= 10  −6
+                      as an FCI proxy; see caption of Table1for details. TheN                   NQS/NCIPSI ratios in Table1therefore compare
+                      two independent natural-convergence picks at every qubit count.
+                           Accuracy–cost Pareto front.Figure4shows the full trade-off for four representative sizes (CAS(10,10),
+                      (14,14), (14,18), and (14,20)). At every active space shown, the NQS curve lies to the left of the CIPSI-
+                      SCI sweep—it reaches any given accuracy with fewer determinants—and the horizontal separation widens
+                      monotonically from CAS(10,10) to CAS(14,20), the per-system manifestation of the exponent gap in Fig.3.
+                      At the largest active spaces both curves approach a sub-mHa accuracy floor; all NQS variational energies sit
+                      above their respective references, consistent with the variational upper-bound property ofE    var.
+                           A monotonically size-dependent advantage.Taken together, the data show that the NQS compactness
+                      gain is present across the full benchmark and grows monotonically with active-space size. On 13 of the 18
+Molecule      Qubits  Basis    Ref.    E      CIPSI   NCIPSIsystems this advantage isPareto-dominant: HI-NQS uses fewer determinantsandlands at least as close toNNQS
+                                                                        det       Evar  NNQSdet             NCIPSI    NRefdet    ∆E   CIPSI    ∆E   NQS
+                      the reference (bold entries in Table1); on the four remaining small molecules (BeH           2, N2, C2H2, H2S) it(Ha)               (Ha)                        (mHa)  (mHa)
+Group A — small molecules
+LiH          12   STO-3G  FCI  −7.882311   35 −7.882323 32 0.91    225 +0.013   +0.001
+BeH2         14   STO-3G  FCI −15.595118  169−15.595096 40   0.24      1,225 0.000    +0.022
+CH4          18   STO-3G  FCI −39.805955  629−39.8059994590.73  15,876+0.080   +0.036              9
+N2           20   STO-3G  FCI −107.654122 1,088−107.654097289   0.27     14,4000.000    +0.025
+HCN          22   STO-3G  FCI −91.842150 2,333−91.8421521,2470.53 108,900+0.054   +0.052
+H2S          22   STO-3G  FCI −394.354742  865−394.354670 57  0.066      3,025 0.000    +0.071
+C2H2         24   STO-3G  FCI −76.024487 3,302 −76.0244751,740   0.53     627,264+0.087    +0.099
+H2O          26   6-31G    FCI −76.12096311,001−76.1209996,0060.551,656,369+0.096   +0.060
+C2H4         28   STO-3G  FCI −77.23524316,001−77.2352599,0090.569,018,009+0.099   +0.083
+NH3          30   6-31G    FCI −56.29291336,001−56.29311115,0150.429,018,009+0.294   +0.096
+Group B — N2 active-space scan (cc-pVDZ)
+N2-CAS(6,6)     12   cc-pVDZ  FCI −109.090227  400−109.090227  400   1.0        400   0.000      0.000
+N2-CAS(8,8)     16   cc-pVDZ  FCI −109.111247 2,601−109.1113072,1930.84   4,900+0.060 0.000
+N2-CAS(10,10)   20   cc-pVDZ  FCI −109.12544726,244−109.1255097,7840.30  63,504+0.062 0.000
+N2-CAS(12,12)   24   cc-pVDZ  FCI −109.142317266,256−109.14232630,0000.11 853,776+0.009 0.000
+N2-CAS(14,14)   28   cc-pVDZ  FCI −109.1566771,060,900−109.15669738,0000.03611,778,624+0.020 0.000
+N2-CAS(14,16)   32   cc-pVDZ  FCI −109.1158584,955,076−109.11588062,0000.0131.31×10                                                                                 8     +0.025   +0.003
+N2-CAS(14,18)   36   cc-pVDZ  FCI −109.17314613,075,456−109.173221118,6670.00911.01×10                                                                                      9     +0.092   +0.016
+N2-CAS(14,20)   40   cc-pVDZ  SHCI⋆ −109.19791833,907,329−109.197978169,3330.00506.01×10                                                                                   9     +0.102   +0.041
+Figure 4:  Accuracy–cost Pareto fronts:|E−E             ref|vs. determinant count for four representative active
+spaces. CIPSI-SCI sweep (orange) and NQS variational (green, median±IQR over ten seeds); the dotted
+line marks chemical accuracy (1.6mHa). References are exact PySCF FCI except for CAS(14,20), where a
+Dice-SHCI+det-PT2 estimate (ε= 10 −6 ) serves as an FCI proxy.
+
+
+
+
+
+
+
+
+
+                                                                 10
+is still more compact but slightly less accurate, its energy trailing CIPSI by less than0.1mHa and always
+within chemical accuracy. The sole neutral point in the entire benchmark is CAS(6,6), where both methods
+saturate the400-determinant FCI space. Across Group A the advantage ranges from near-parity at LiH
+(0.91×) to15×at H                          2S, with NQS more compact on all ten systems. In Group B the NQS/CIPSI ratio falls
+continuously from0.84at CAS(8,8) through0.036at CAS(14,14) to5.0×10                −3  at CAS(14,20). The learned,
+physics-supervised NQS sampler concentrates amplitude into a compact support that grows far more slowly
+(α  NQS  =  0.089) than CIPSI’s perturbatively ordered expansion (α            CIPSI  =  0.180); the compactness gain
+is thus a scaling phenomenon that becomes decisive precisely in the strongly correlated, large-active-space
+regime these methods target.
+    Relation to other generative neural selected-CI.HI-NQS shares the generative selected-CI strategy of
+several recent neural ansätze—QiankunNet-cuSCI,34 NQS-SC,37 HAAR-SCI,38 ARNN-SCI40 and GTNN-
+SCI42—all of which sample determinants from a learned distribution and diagonalize the selected subspace.
+It differs in the two architectural respects developed in Sec.2: a dual-channelα/βTransformer whoseβ
+stream cross-attends to the fullαconfiguration, encoding opposite-spin correlation as an explicit inductive
+bias rather than as a single flattened occupation string; and a supervised distillation loss that feeds the exact
+subspace eigenvector back through a factorized spin-marginal teacher. We attribute the shallow determinant-
+scaling exponent reported here to this combination, although a controlled head-to-head on identical active
+spaces—not recoverable from the published numbers of those works—would be required to isolate each
+contribution.
+    Limitations.Several caveats bound these claims. Table1reports the bare variational NQS energyE                                      var
+(no PT2 correction), which is a strict upper bound to the exact energy.  Consequently∆E          NQS ≥0on
+every exact-FCI reference row (seventeen of the eighteen systems), with the largest deviation+0.099mHa
+at C2H2—within chemical accuracy.  The sole non-exact-FCI row—N2-CAS(14,20) (Dice-SHCI+det-PT2
+proxy atε= 10  −6 )—also has positive∆E      NQS (+0.041mHa) against the substitute reference; since selected
+configuration-interaction at this cutoff is generally converged to within≲10     −5  Ha of exact FCI,3,4  the
+chemical-accuracy claim is unaffected. The CAS(14,20) row caps the verifiable accuracy ofanymethod at
+the proxy’s residual (∼10 −5  Ha), still two orders below our chemical-accuracy claim. The autoregressive
+sampler is prone to late-iteration mode collapse, which the deterministic single/double classical expansion
+mitigates but does not eliminate; and total spinS         2 is not constrained at the ansatz level, being restored only
+by the subspace diagonalization. Finally, all benchmarks are at a single molecular geometry; dissociation
+curves and broken-symmetry transition-metal systems remain to be tested.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                  11
+4   Conclusion
+
+We have introduced HI-NQS, a handover iterative algorithm that replaces the quantum-circuit sampler of
+HI-VQE19,20   with a classically trained autoregressive Transformer and retains SQD16 as the exact classical
+subspace solver. The two defining architectural elements—a dual-channelα/βcross-attention architecture
+that encodes opposite-spin correlation as an explicit inductive bias, and a supervised distillation loop that
+feedseachSQDeigenvectorbackintothenetworkthroughafactorizedspin-marginalteachersignal—together
+close the feedback loop between generative sampling and exact diagonalization that open-loop NQS+SCI
+methods leave open. A deterministic classical expansion of single and double excitations of the dominant
+determinants is run in parallel with the NQS proposals to ensure a steady supply of fresh configurations in
+the  ˆH-connected neighborhood at late iterations.
+    Benchmarks onten smallmoleculesand aneight-point N2 active-space seriesdemonstrate thatthisdesign
+yields a systematic and compounding computational advantage over CIPSI-SCI.2 HI-NQS achieves chemical
+accuracy on all ten Group A systems and on the full Group B active-space series up to CAS(14,20), while
+the log-linear scaling exponent of the required determinant count,α   NQS = 0.089±0.011, is roughly half that
+of CIPSI-SCI (α  CIPSI = 0.180) and a third that of CASCI (α            CASCI = 0.262). At 40 qubits, HI-NQS requires
+roughly200×(≈2.3orders of magnitude) fewer determinants than CIPSI-SCI and approximately4.5orders
+of magnitude fewer than the full CASCI Hilbert space, with HI-NQS dominating the accuracy–cost trade-off
+across all active spaces above CAS(6,6), where the two methods tie at the saturated FCI space.
+    Threenear-termapplicationsemergedirectlyfromthebenchmarkresults. Thefavorablescalingexponent
+(α  NQS = 0.089) suggests the method can extend to substantially larger active spaces with manageable de-
+terminant growth, and the dual-channel architecture admits natural extensions to several settings of current
+interest. (i)Strongly correlated transition-metal chemistry.Fe–Sclusters              16,20   andmetaldimerssuchasCr234
+are canonical multireference benchmarks where the compactness gain should be most consequential—the de-
+terminant tail exhibits the strongest combinatorial growth there, precisely the regime in which HI-NQS’s
+scaling advantage compounds fastest. The recent classical solution of the FeMo-cofactor model to chemi-
+cal accuracy via DMRG and coupled cluster56 redefines the frontier for tractable active-space targets; the
+∼76-orbital active space treated there is squarely within the regime where HI-NQS’s compounding deter-
+minant advantage should be decisive. (ii)Larger Gaussian basis sets.Extending from the cc-pVDZ basis
+used here to cc-pVTZ and beyond would test whether the scaling exponent carries through toward the com-
+plete basis-set limit. (iii)Bond-breaking and dissociation studies.Potential energy surface scans through
+dissociation regimes are a natural target for the dual-channel architecture’s explicit spin-coupling structure.
+(iv)Quantum-classical hybrid implementations.Active spaces such as the iron–molybdenum cofactor of
+nitrogenase—a long-standing benchmark for fault-tolerant quantum algorithms57—motivate workflows in
+which a classical Transformer sampler provides high-quality reference states that reduce the circuit depth
+required for quantum diagonalization.  By preserving the handover mechanism of HI-VQE,19,20   HI-NQS
+retains a natural interface to future quantum-circuit samplers, where the classical Transformer can serve as
+either a noise-resilient baseline or a warm-start initialization for shorter-depth circuit-sampled SQD.16,17
+    More broadly, these benchmarks point to a structural shift: as active-space size grows, a classical gen-
+erative sampler with inductive bias matched to fermionic spin structure can outpace perturbatively ordered
+SCI methods in basis compactness, suggesting that the gap between selected-CI and neural quantum states
+is a matter of architecture rather than principle. Recent NQS+SCI methods—NQS-SC,37 HAAR-SCI,38
+ARNN-SCI,40 GTNN-SCI,42 and the QiankunNet family34–36  —are converging on a shared design principle:
+explicit feedback between a generative sampler and exact subspace diagonalization. Scaling-law analyses of
+Transformer-based NQS suggest that this class of ansatz has not yet reached its performance ceiling as a
+function of model size and active-space dimension,58 reinforcing the case for continued architectural invest-
+ment. HI-NQS contributes to this convergence by demonstrating that an inductive bias matched to the spin
+structure of fermionic Hamiltonians, when coupled to factorized eigenvector supervision, yields a sub-CIPSI
+scaling exponent on GPU hardware without any quantum-hardware resource.  HI-NQS thus stands as a
+practical classical algorithm for strongly correlated quantum chemistry that preserves a direct interface to
+future hybrid classical–quantum workflows.
+
+
+
+
+
+
+                                                                12
+Competing Interests
+
+The authors declare no competing financial interest.
+
+Data Availability
+
+The data supporting this study are available from the corresponding author upon reasonable request.
+
+Acknowledgements
+
+J.-Y. Chang, Y.-C. Chang, Y.-J. Lin, and M.-C. Yang contributed equally to this work.  EJK acknowl-
+edges financial support from the National Science and Technology Council (NSTC) of Taiwan under Grant
+No. NSTC 114-2112-M-A49-036-MY3.
+
+References
+
+ [1]Szabo, A.; Ostlund, N. S.Modern Quantum Chemistry: Introduction to Advanced Electronic Structure
+     Theory; Macmillan: New York, 1982.
+
+ [2]Huron, B.; Malrieu, J. P.; Rancurel, P. Iterative perturbation calculations of ground and excited state
+     energies from multiconfigurational zeroth-order wavefunctions.J. Chem. Phys.1973,58, 5745–5759.
+
+ [3]Holmes, A. A.; Tubman, N. M.; Umrigar, C. J. Heat-bath configuration interaction: An efficient selected
+     configuration interaction algorithm inspired by heat-bath sampling.J. Chem. Theory Comput.2016,
+     12, 3674–3680.
+
+ [4]Sharma, S.; Holmes, A. A.; Jeanmairet, G.; Alavi, A.; Umrigar, C. J. Semistochastic heat-bath configu-
+     ration interaction method: Selected configuration interaction with semistochastic perturbation theory.
+     J. Chem. Theory Comput.2017,13, 1595–1604.
+
+ [5]Tubman, N. M.; Freeman, C. D.; Levine, D. S.; Hait, D.; Head-Gordon, M.; Whaley, K. B. Modern Ap-
+     proaches to Exact Diagonalization and Selected Configuration Interaction with the Adaptive Sampling
+     CI Method.J. Chem. Theory Comput.2020,16, 2139–2159.
+
+ [6]Schriber, J. B.; Evangelista, F. A. Communication: An adaptive configuration interaction approach for
+     strongly correlated electrons with tunable accuracy.J. Chem. Phys.2016,144, 161106.
+
+ [7]Chan, G. K.-L.; Sharma, S. The density matrix renormalization group in quantum chemistry.Annu.
+     Rev. Phys. Chem.2011,62, 465–481.
+
+ [8]Booth, G. H.; Thom, A. J. W.; Alavi, A. Fermion Monte Carlo without fixed nodes: a game of life,
+     death, and annihilation in Slater determinant space.J. Chem. Phys.2009,131, 054106.
+
+ [9]Peruzzo, A.; McClean, J.; Shadbolt, P.; Yung, M.-H.; Zhou, X.-Q.; Love, P. J.; Aspuru-Guzik, A.;
+     O’Brien, J. L. A variational eigenvalue solver on a photonic quantum processor.Nat. Commun.2014,
+     5, 4213.
+
+[10]McClean, J. R.; Romero, J.; Babbush, R.; Aspuru-Guzik, A. The theory of variational hybrid quantum-
+     classical algorithms.New J. Phys.2016,18, 023023.
+
+[11]Grimsley, H. R.; Economou, S. E.; Barnes, E.; Mayhall, N. J. An adaptive variational algorithm for
+     exact molecular simulations on a quantum computer.Nat. Commun.2019,10, 3007.
+
+[12]McClean, J. R.; Boixo, S.; Smelyanskiy, V. N.; Babbush, R.; Neven, H. Barren plateaus in quantum
+     neural network training landscapes.Nat. Commun.2018,9, 4812.
+
+
+
+                                                                 13
+[13]Larocca, M.; Thanasilp, S.; Wang, S.; Sharma, K.; Biamonte, J.; Coles, P. J.; Cincio, L.; McClean, J. R.;
+      Holmes, Z.; Cerezo, M. Barren plateaus in variational quantum computing.Nat. Rev. Phys.2025,7,
+      174–189.
+
+[14]Wecker, D.; Hastings, M. B.; Troyer, M. Progress towards practical quantum variational algorithms.
+      Phys. Rev. A2015,92, 042303.
+
+[15]Gonthier, J. F.; Radin, M. D.; Buda, C.; Doskocil, E. J.; Abuan, C. M.; Romero, J. Measurements
+      as a roadblock to near-term practical quantum advantage in chemistry: Resource analysis.Phys. Rev.
+      Research2022,4, 033154.
+
+[16]Robledo-Moreno, J. et al. Chemistry beyond the scale of exact diagonalization on a quantum-centric
+      supercomputer.Sci. Adv.2025,11, eadu9991, arXiv:2405.05068.
+
+[17]Yu, J. et al. Quantum-centric algorithm for sample-based Krylov diagonalization.arXiv2025,
+      arXiv:2501.09702.
+
+[18]Kanno, K.; Kohda, M.; Imai, R.; Koh, S.; Mitarai, K.; Mizukami, W.; Nakagawa, Y. O. Quantum-
+      selected configuration interaction: classical diagonalization of Hamiltonians in subspaces selected by
+      quantum computers.Phys. Rev. Research2026,8, 023268, arXiv:2302.11320.
+
+[19]Pellow-Jarman, A.;  McFarthing, S.;  Kang, D. H.;  Yoo, P.;  Elala, E. E.;  Pellow-Jarman, R.;
+      Nakliang, P. M.; Kim, J.; Rhee, J.-K. K. HIVQE: handover iterative variational quantum eigensolver
+      for efficient quantum chemistry calculations.arXiv2025, arXiv:2503.06292.
+[20]Yoo, P. et al. Extending the handover-iterative VQE to challenging strongly correlated systems: N       2 and
+      Fe–S cluster.arXiv2026, arXiv:2601.06935.
+
+[21]Carleo, G.; Troyer, M. Solving the quantum many-body problem with artificial neural networks.Science
+      2017,355, 602–606.
+
+[22]Pfau, D.; Spencer, J. S.; Matthews, A. G. D. G.; Foulkes, W. M. C. Ab initio solution of the many-
+      electron Schrödinger equation with deep neural networks.Phys. Rev. Research2020,2, 033429.
+
+[23]Hermann, J.; Schätzle, Z.; Noé, F. Deep-neural-network solution of the electronic Schrödinger equation.
+      Nat. Chem.2020,12, 891–897.
+
+[24]Choo, K.; Mezzacapo, A.; Carleo, G. Fermionic neural-network states for ab-initio electronic structure.
+      Nat. Commun.2020,11, 2368.
+
+[25]Lange, H.; Van de Walle, A.; Abedinnia, A.; Bohrdt, A. From architectures to applications: a review of
+      neural quantum states.Quantum Sci. Technol.2024,9, 040501.
+
+[26]Sorella, S. Green function Monte Carlo with stochastic reconfiguration.Phys. Rev. Lett.1998,80,
+      4558–4561.
+
+[27]Li, X.; Huang, J.-C.; Zhang, G.-Z.; Li, H.-E.; Cao, C.-s.; Lv, D.; Hu, H.-S. A nonstochastic optimization
+      algorithm for neural-network quantum states.J. Chem. Theory Comput.2023,19, 8156–8165.
+[28]Chen, A.; Heyl, M. Empowering deep neural quantum states through efficient optimization.Nat. Phys.
+      2024,20, 1476–1481.
+
+[29]Schmerwitz, Y. L. A.; Thirion, L.; Levi, G.; Jónsson, E. O.; Bilous, P.; Jónsson, H.; Hansmann, P.
+      Neural-Network-Based Selective Configuration Interaction Approach to Molecular Electronic Structure.
+      J. Chem. Theory Comput.2025,21, 2301–2310, arXiv:2406.08154.
+
+[30]Bilous, P.; Thirion, L.; Menke, H.; Haverkort, M. W.; Pálffy, A.; Hansmann, P. Neural-network-
+      supported basis optimizer for the configuration interaction problem in quantum many-body clusters:
+      Feasibility study and numerical proof.Phys. Rev. B2025,111, 035124, arXiv:2406.00151.
+
+
+
+                                                                   14
+[31]Thirion, L.; Schmerwitz, Y. L. A.; Kroesbergen, M.; Levi, G.; Jónsson, E. O.; Bilous, P.; Jóns-
+     son, H.; Hansmann, P. Natural-orbital-based neural network configuration interaction.arXiv2025,
+     arXiv:2510.27665.
+
+[32]Coe, J. P. Machine Learning Configuration Interaction.J. Chem. Theory Comput.2018,14, 5739–5749.
+
+[33]Herzog, B.; Casier, B.; Lebègue, S.; Rocca, D. Solving the Schrödinger Equation in the Configuration
+     Space with Generative Machine Learning.J. Chem. Theory Comput.2023,19, 2484–2490.
+
+[34]Sun, D. et al. A Fully GPU-Accelerated Framework for High-Performance Configuration Interaction
+     Selection with Neural Network Quantum States.arXiv2026, arXiv:2604.15768.
+
+[35]Wu, Y.; Guo, C.; Fan, Y.; Zhou, P.; Shang, H. NNQS-Transformer: An Efficient and Scalable Neural
+     Network Quantum States Approach for Ab initio Quantum Chemistry. Proceedings of the International
+     Conference for High Performance Computing, Networking, Storage and Analysis (SC’23). 2023.
+
+[36]Shang, H.; Guo, C.; Wu, Y.; Li, Z.; Yang, J. Solving the many-electron Schrödinger equation with a
+     transformer-based framework.Nat. Commun.2025,16, 8464.
+
+[37]Solanki, M. J.; Ding, L.; Reiher, M. Neural Quantum States Based on Selected Configurations.arXiv
+     2026, arXiv:2602.12993.
+
+[38]Zhang, H.; Zeng, X.; Li, Z.; Zhou, Y. Hamiltonian-guided autoregressive selected-configuration inter-
+     action achieves chemical accuracy in strongly correlated systems.J. Chem. Theory Comput.2025,21,
+     12622–12633.
+
+[39]Kool, W.; van Hoof, H.; Welling, M. Stochastic beams and where to find them: The Gumbel-top-k
+     trick for sampling sequences without replacement. Proceedings of the 36th International Conference on
+     Machine Learning (ICML). 2019; pp 3499–3508, arXiv:1903.06059.
+
+[40]Thompson, S.; Gunlycke, D. Auto-regressive neural quantum state sampling for selected configuration
+     interaction.arXiv2026, arXiv:2603.24728.
+
+[41]Germain, M.; Gregor, K.; Murray, I.; Larochelle, H. MADE: Masked autoencoder for distribution es-
+     timation. Proceedings of the 32nd International Conference on Machine Learning (ICML). 2015; pp
+     881–889.
+
+[42]Kan, B.; Shang, H. Accelerating many-body quantum chemistry via generative Transformer-enhanced
+     configuration interaction.J. Chem. Theory Comput.2025,21, 11989–12000.
+
+[43]Barrett, T. D.; Malyshev, A.; Lvovsky, A. I. Autoregressive neural-network wavefunctions forab initio
+     quantum chemistry.Nat. Mach. Intell.2022,4, 351–358, arXiv:2109.12606.
+
+[44]Sharir, O.; Levine, Y.; Wies, N.; Carleo, G.; Shashua, A. Deep autoregressive models for the efficient
+     variational simulation of many-body quantum systems.Phys. Rev. Lett.2020,124, 020503.
+
+[45]Malyshev, A.; Schmitt, M.; Lvovsky, A. I. Neural quantum states and peaked molecular wave functions:
+     Curse or blessing?arXiv2024, arXiv:2408.07625.
+[46]Epstein, P. S. The Stark effect from the point of view of Schroedinger’s quantum theory.Phys. Rev.
+     1926,28, 695–710.
+
+[47]Nesbet, R. K. Configuration interaction in orbital theories.Proc. R. Soc. A1955,230, 312–321.
+
+[48]Vaswani, A.; Shazeer, N.; Parmar, N.; Uszkoreit, J.; Jones, L.; Gomez, A. N.; Kaiser, Ł.; Polosukhin, I.
+     Attention Is All You Need. Advances in Neural Information Processing Systems 30 (NIPS 2017). 2017;
+     arXiv:1706.03762.
+
+[49]von Glehn, I.; Spencer, J. S.; Pfau, D. A self-attention ansatz forab-initioquantum chemistry. The
+     Eleventh International Conference on Learning Representations (ICLR). 2023; arXiv:2211.13672.
+
+
+                                                                  15
+[50]Xiong, R.; Yang, Y.; He, D.; Zheng, K.; Zheng, S.; Xing, C.; Zhang, H.; Lan, Y.; Wang, L.; Liu, T.-Y. On
+      layer normalization in the Transformer architecture. Proceedings of the 37th International Conference
+      on Machine Learning (ICML). 2020; pp 10524–10533.
+
+[51]Davidson, E. R. The iterative calculation of a few of the lowest eigenvalues and corresponding eigenvec-
+      tors of large real-symmetric matrices.J. Comput. Phys.1975,17, 87–94.
+
+[52]Sun, Q. et al. Recent developments in the PySCF program package.J. Chem. Phys.2020,153, 024109.
+
+[53]Williams, R. J. Simple statistical gradient-following algorithms for connectionist reinforcement learning.
+      Mach. Learn.1992,8, 229–256.
+
+[54]Kingma, D. P.; Ba, J. Adam: A method for stochastic optimization.arXiv2014, arXiv:1412.6980.
+
+[55]Gao, H.; Imamura, S.; Kasagi, A.; Yoshida, E. Distributed Implementation of Full Configuration Inter-
+      action for One Trillion Determinants.J. Chem. Theory Comput.2024,20, 1185–1192.
+
+[56]Zhai, H.; Li, C.; Zhang, X.; Li, Z.; Lee, S.; Chan, G. K.-L. Classical computational simulation of the
+      FeMo-cofactor model to chemical accuracy and its implications.arXiv2026, arXiv:2601.04621.
+
+[57]Reiher, M.; Wiebe, N.; Svore, K. M.; Wecker, D.; Troyer, M. Elucidating reaction mechanisms on
+      quantum computers.Proc. Natl. Acad. Sci. USA2017,114, 7555–7560.
+
+[58]Knitter, O.; Zhao, D.; Leichenauer, S.; Veerapaneni, S. Large language model scaling laws for neural
+      quantum states in quantum chemistry.Mach. Learn.: Sci. Technol.2026,7, 025033, arXiv:2509.12679.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                    16
+TOC Graphic placeholder.
+Replace                   this                   box                   with
+\includegraphics{toc_graphic}.
+JCTC recommended size: 8.5 cm×3.5 cm.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                     17

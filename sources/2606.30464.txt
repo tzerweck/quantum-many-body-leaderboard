@@ -1,0 +1,655 @@
+             NQS-Agent:  Health-Aware Agentic Hyperparameter Optimization for
+                                             Neural-Network Quantum States
+
+                 Jia-Qi Wang,1  Xiao-Qi Han,1  Ze-Feng Gao,1  Rong-Qiang He,1,∗  and Zhong-Yi Lu1, 2,†
+      1School of Physics and Key Laboratory of Quantum State Construction and Manipulation (Ministry of Education),
+                                          Renmin  University  of  China,  Beijing  100872,  China
+                                            2Hefei  National  Laboratory,  Hefei  230088,  China
+                                                            (Dated:  June 30, 2026)
+                  Neural-network quantum states (NQS) provide expressive variational representations for strongly
+                correlated  quantum  many-body  systems,  but  their  practical  accuracy  depends  sensitively  on
+                architecture-level hyperparameters and optimization schedules.  Here we develop NQS-Agent, an im-
+                plemented open-source software framework for health-aware hyperparameter optimization (HPO)
+                in  NQS  calculations.   Its  workflow  monitors  energy  trajectories,  detects  destructive  optimization
+                events, stops unstable calculations, modifies the learning-rate schedule, resumes optimization from
+                safe checkpoints, and ranks candidates with an anomaly-aware score.  We demonstrate the approach
+                on a residual convolutional NQS for the square-lattice HeisenbergJ       1-J  2 model, using architectures
+                with parameter counts comparable to aCNN, a convolutional NQS architecture used here as a ref-
+                erence.  The results show that NQS-Agent improves over the reported human-tuned aCNN baseline
+                for the aCNN reference architecture and identifies a structurally distinct wide-and-shallow competi-
+                tive candidate within the parameter-count-matched residual-CNN search space.  These results show
+                that  the  stability  and  recovery  history  of  an  optimization  trajectory  should  be  considered  when
+                assessing an NQS result.  Health-aware HPO therefore provides a reproducible tuning protocol that
+                goes beyond selecting a single lowest-energy calculation.
+
+
+                    I.    INTRODUCTION                                       learning  compact  but  expressive  wave-function  ans¨atze
+                                                                             directly from the variational principle.
+  Strongly  correlated  quantum  many-body  systems  re-                        In practice, however, the accuracy of an NQS calcula-
+main  a  central  challenge  in  computational  physics.   In                tion is influenced not only by the architecture class but
+frustrated  magnets  and  other  two-dimensional  lattice                    also by architecture and optimizer hyperparameters.  For
+models, the exponential growth of Hilbert space prevents                     convolutional NQS, the channel number, kernel size, net-
+direct exact treatment beyond small clusters,  while the                     work depth, residual-block count, learning rate, learning-
+competition  among  local  constraints,  long-range  corre-                  rate  schedule,  regularization,  random  seed,  and  num-
+lations, and possible ordered or disordered phases makes                     ber of optimization steps can all influence the final en-
+accurate ground-state calculations especially demanding.                     ergy [16].  Hyperparameter optimization (HPO) provides
+Representative  numerical  approaches  include  quantum                      systematic  ways  to  search  these  choices.   Examples  in-
+Monte  Carlo  [1],  tensor-network  methods  [2],  density-                  clude random search [23], model-based search with a tree-
+matrix  renormalization  group  calculations  [3–5],   and                   structured  Parzen  estimator  (TPE)  [24],  and  methods
+variational Monte Carlo [6].  Nevertheless, accurate solu-                   that  evaluate  many  candidates  briefly  before  assigning
+tions of intermediate-size frustrated two-dimensional sys-                   more optimization steps to the more promising ones, such
+tems remain difficult because the different methods face                     as  Hyperband  [25],  the  asynchronous  successive  halv-
+sign  problems,  entanglement  growth,  boundary  effects,                   ing algorithm (ASHA) [26], and BOHB, which combines
+or large variational search spaces, respectively.                            Bayesian  optimization  with  Hyperband  [27].   Software
+  Neural-network  quantum  states  (NQS)  offer  a  flex-                    frameworks such as Optuna support the practical execu-
+ible  variational  route  to  this  problem  by  representing                tion of these searches [28]; broader overviews are available
+many-body  wave  functions  with  trainable  neural  archi-                  in the automated-machine-learning literature [29].  Thus,
+tectures [7–12].  Combined with variational Monte Carlo                      architectural choices such as depth and width and opti-
+(VMC), NQS methods have been applied to spin mod-                            mizer choices such as the learning-rate schedule must be
+els,  frustrated  systems,  and  quantum  chemistry,  using                  tuned together under a physically meaningful comparison
+a  growing  range  of  architectures,  including  restricted                 protocol.
+Boltzmann machines [7, 11], convolutional networks [13–                         On the other hand, in practice, navigating this space
+16],   recurrent  networks  [17,  18],   graph-inspired  net-                often requires substantial manual tuning.  Expert prac-
+works  [19,  20],  and  Transformers  or  vision-Transformer                 titioners inspect energy curves, notice abnormal jumps,
+variants [21, 22].  Their appeal lies in the possibility of                  decide whether an instability is transient or destructive,
+                                                                             reduce the learning rate when the variational parameters
+                                                                             become sensitive, and resume from a saved state when a
+                                                                             promising calculation becomes unstable.  Such interven-
+∗ rqhe@ruc.edu.cn                                                            tions are feasible for a few supervised calculations,  but
+† zlu@ruc.edu.cn
+                                                                             they do not scale naturally to tens or hundreds of queued
+                                                                                                                                                   2
+
+candidate experiments on shared GPU resources.  This is                      defined  evaluation  milestones.   Section  III  presents  the
+where  parallel  evaluation  and  progressive  allocation  of                aCNN  benchmark,  the  representative  parameter-count-
+optimization steps become useful.                                            matched  architectures,  representative  recovered  energy
+  This difficulty is particularly acute in NQS optimiza-                     trajectories,  and  the  comparison  with  human-tuned  re-
+tion because the energy landscape can be rugged and the                      sults.   Section  IV  discusses  the  scope,  limitations,  and
+training dynamics can be highly sensitive to the learning-                   implications of health-aware HPO as a reproducible NQS
+rate scale.  A small learning rate often improves stability                  tuning protocol.
+but may slow exploration and trap the optimization in a
+poor local region.  A large learning rate can cross shallow
+barriers and accelerate early descent, but it also increases                                          II.    METHOD
+the probability of upward energy jumps,  non-finite val-
+ues,  and  destructive  events  from  which  the  calculation
+may not recover without intervention.  Even when adap-                          A.    Neural-Network Quantum States and VMC
+tive optimizers or prescribed learning-rate schedules are                                               Optimization
+used,  the  observed  energy  trajectory  can  still  become
+unstable  and  must  be  assessed  as  a  time-ordered  opti-                   An NQS represents a variational wave function by as-
+mization curve rather than by its final value alone.  This                   signing  a  complex  wave-function  valueψ   θ(σ)  to  each
+sensitivity is closely related to the broader challenge of                   many-body configurationσ,  whereθdenotes the train-
+optimizing neural quantum states with stochastic recon-                      able neural-network parameters.  In the present work,σ
+figuration [30], MinSR and related natural-gradient ap-                      denotes a spin configuration of the square-lattice Heisen-
+proaches [31], or other second-order methods [22, 32].  A                    bergJ      1-J  2 model. The aCNN implementation used in the
+scalable  HPO  system  for  NQS  must  therefore  evaluate                   numerical experiments represents the real-valued ampli-
+the  stability  of  the  optimization  trajectory,  not  merely              tude sector,  but the notationψ       θ(σ) is kept general be-
+the energy reached at a fixed evaluation point.                              cause NQS ans¨atze may also encode phases or full com-
+  Here  we  introduce  NQS-Agent,  an  open-source  soft-                    plex wave functions.
+ware  framework  for  health-aware  HPO  that  converts                         Expectation values are evaluated by Monte Carlo sam-
+these  manual  interventions  into  recorded  and  repro-                    pling from the probability distributionp          θ(σ)∝|ψ   θ(σ)|      2.
+ducible automated operations.  Recent surveys describe                       For a HamiltonianH, the variational energy can be writ-
+the broader development of agent-based scientific work-                      ten as
+flows  [33]  and  large-language-model  multi-agent  sys-
+tems [34]; MetaGPT [35] and AutoGen [36] provide rep-                                          Eθ =⟨H⟩    θ =E pθ [E loc(σ)],                 (1)
+resentative examples of structured multi-agent coordina-
+tion.  NQS-Agent combines persistent experiment state,                       where the local energy is
+predefined  evaluation  milestones,  runtime  health  moni-
+toring, anomaly-aware scoring, and recovery from saved
+states.  When a destructive event is detected, the work-                                        Eloc(σ) =  X
+flow stops the affected execution, identifies a safe check-                                                   σ′ Hσσ′ψθ(σ ′)ψθ(σ)  .                  (2)
+point  (a  saved  model  and  optimizer  state  from  which
+optimization  can  continue),  modifies  the  learning-rate                     The network parameters are optimized to minimizeE       θ.
+schedule,  and  resumes  the  same  candidate  experiment                    In gradient-based VMC, the energy gradient is estimated
+instead of discarding it or restarting from the beginning.                   from sampled configurations as
+  We  demonstrate  the  workflow  on  the  square-lattice
+HeisenbergJ      1-J  2   model  using  residual  convolutional                ∇θEθ = 2Re [E pθ [(E   loc−E pθ[E loc])∇ θ logψ  θ(σ)]]. (3)
+NQS  based  on  the  architecture  reported  in  the  aCNN
+study  [16].   We  consider  architectures  with  parameter
+counts within±5% of the 6538-parameter aCNN archi-                           Stochastic  reconfiguration  or  related  natural-gradient
+tecture.  From 30 architectures in this range, nine repre-                   methods can also be viewed as approximate imaginary-
+sentatives, denoted A1–A9, are selected to cover different                   time  evolution  projected  onto  the  variational  manifold,
+channel numbers, kernel sizes, and residual-block counts.                    with a parameter update controlled by a learning-rate or
+Calculations on the 6×6 lattice provide an initial com-                      time-step scale [30, 31].
+parison, after which selected candidates are optimized on                       This  optimization  problem  is  unusually  sensitive  be-
+10×10 lattices atJ            2/J1  = 0.50 and 0.55 with runtime             cause the sampled local energy, the Monte Carlo variance,
+monitoring and checkpoint-based recovery.                                    the parameterization, and the learning-rate schedule in-
+  The  remainder  of  this  paper  is  organized  as  follows.               teract during training.  We therefore treat optimizer-level
+Section  II  describes  the  NQS/VMC  formulation,  the                      choices and structural choices as a unified HPO problem:
+NQS-Agent framework architecture and workflow, the di-                       the learning rate controls the trajectory through the vari-
+agnosis of unstable optimization, the use of saved check-                    ational  manifold,  while  structural  hyperparameters  de-
+points for recovery, and the ranking of candidates at pre-                   termine the shape and conditioning of that manifold.
+                                                                                                                                                   3
+
+    B.    NQS-Agent Framework Architecture and                               learning-rate schedule, launches the continuation, and re-
+               Health-Aware HPO Workflow                                     tains the complete recovery history for later ranking and
+                                                                             inspection.
+  NQS-Agent  is  an  implemented  open-source  software                        The  framework  release  provides  the  implementation,
+framework  composed  of  an  agent  coordination  layer,  a                  configuration templates, and execution interfaces needed
+persistent  shared  research  state,  and  executable  tools                 to  reproduce  this  workflow  or  apply  the  same  tools  to
+for  HPO  and  optimization-health  management.   To  be                     another  physical  task  and  search  space.    The  health-
+specific, NQS-Agent is implemented with LangGraph, a                         monitoring,  scoring,  and  recovery  components  are  in-
+graph-based  framework  for  orchestrating  long-running,                    cluded as reusable modules.
+stateful agents [37].  The accompanying source code im-
+plements the components and interactions summarized in
+Fig. 1.  The agents coordinate research-level operations,                      C.    Optimization Health Diagnosis and Runtime
+whereas the executable tools perform well-defined numer-                                                  Recovery
+ical and data-management operations such as construct-
+ing candidate settings, generating simulation inputs, dis-                     The central diagnostic object is the energy trajectory
+patching  calculations,  monitoring  energy  logs,  selecting                of a candidate experiment.  In Fig. 1, runtime monitor-
+checkpoints,  modifying  learning-rate  schedules,  scoring                  ing reads the energy log and checkpoint information pro-
+candidates, and continuing selected calculations.                            duced  during  optimization.   A  useful  trajectory  should
+  The agent coordination layer separates complementary                       reach a competitive energy while remaining stable enough
+roles.  Task interpretation converts the user-defined ob-                    to continue. The monitor evaluates rolling-window statis-
+jective into task definitions stored in the shared research                  tics, the variance and slope near the end of the trajectory,
+state.  Simulation design prepares the physical problems,                    non-finite  values,  and  abnormal  fluctuations,  including
+search spaces, and experiment plans; the simulation run-                     upward deviations from a trusted reference energy.  This
+ner  invokes  the  corresponding  executable  tools.   Data                  reference is updated only from a sufficiently stable rolling
+analysis reads the recorded energies, health events, and                     window:  the window standard deviation, normalized by
+ranking  results,  and  report  generation  uses  the  shared                the magnitude of the window mean energy, must not ex-
+state to produce a human-readable summary. The shared                        ceed 5%.  An isolated, implausibly low value is recorded
+state  therefore  connects  the  agent  roles  with  the  exe-               but is not allowed to redefine the reference energy.
+cutable toolchain by storing candidate settings, resource                      We  define  a  destructive  optimization  event  as  an  in-
+assignments, energy logs, checkpoint information, recov-                     stability that requires the current execution segment to
+ery decisions, and ranking tables throughout the calcu-                      stop before optimization can continue.  One signature is
+lation.                                                                      an upward energy jump that does not recover within the
+  The  workflow  distinguishes  a  candidate  experiment                     confirmation window.  A non-finite energy or loss value,
+from an execution segment.  A candidate experiment is                        such  as  NaN  or  Inf,  is  classified  immediately  as  a  de-
+defined  by  the  physical  problem,  network  architecture,                 structive event.  Both types can be recovered when a safe
+optimizer setting,  and random seed.  An execution seg-                      checkpoint exists and the allowed number of recovery at-
+ment is one uninterrupted calculation, either the initial                    tempts has not been exhausted.  They are distinct from
+calculation or a continuation resumed from a checkpoint.                     short  transient  fluctuations  that  return  to  the  trusted
+Several  execution  segments  can  therefore  belong  to  the                energy range without intervention.
+same  candidate  experiment.   This  distinction  allows  a                    Operationally,  the  monitor  follows  a  reproducible  se-
+promising candidate to remain in the comparison after a                      quence of checks.  When an abnormal fluctuation appears
+destructive event, provided that optimization is success-                    in the energy trajectory, the event is first treated as provi-
+fully resumed from a safe checkpoint.                                        sional.  The trajectory is then followed over a predefined
+  For the HPO task studied here, the simulation-design                       confirmation interval. If the energy returns to the trusted
+and simulation-runner agents provide the main coordina-                      range and remains stable, the event is classified as a tran-
+tion functions, while planning, job dispatch, health mon-                    sient  fluctuation  and  the  calculation  continues  without
+itoring, recovery, and ranking are executed by determin-                     intervention.  If the energy does not recover within the
+istic  tools.   These  tools  can  be  invoked  either  through              confirmation interval, the event is classified as a destruc-
+the  agent  coordination  layer  or  through  a  lower-level                 tive fluctuation and the recovery procedure is triggered.
+command-line/API entry for reproducibility checks, de-                       Non-finite values, such as NaN or Inf, bypass this waiting
+bugging, and user-specified batch execution.  The latter                     period  and  are  classified  as  destructive  events  immedi-
+entry does not replace the agents; rather, it exposes the                    ately.  When the fluctuation starts too close to the end of
+same deterministic tools when the research-level planning                    the  current  evaluation  interval  to  make  this  distinction
+and reporting functions of the agent layer are not needed.                   reliably, the event is left for later review instead of being
+Both entry routes use the same shared state and execu-                       assigned a transient or destructive label.
+tion rules.  Runtime recovery is deliberately restricted to                    The  underlying  VMC  calculations  use  the  Adam  op-
+recorded  and  reproducible  actions:   the  system  records                 timizer  [38]  together  with  the  prescribed  learning-rate
+the  event,  chooses  a  safe  checkpoint,  writes  a  modified              schedule  from  the  aCNN  study  [16]:   the  learning  rate
+                                                                                                                                                      4
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+FIG.  1.   NQS-Agent  framework  architecture  and  task-specific  health-aware  HPO  workflow.   The  agent  coordination  layer
+interprets the user task, prepares and runs experiment plans, analyzes the results, and generates reports.  Task interpretation
+writes  the  task  definition  to  the  shared  research  state,  while  report  generation  reads  the  recorded  state  to  summarize  the
+completed study. The simulation runner invokes an executable toolchain for HPO planning, input generation, NQS optimization,
+runtime health monitoring, checkpoint-based recovery, anomaly-aware scoring, and top-kcandidate selection.  The CLI/API
+entry provides a lower-level access path to the same deterministic tools for reproducibility checks, debugging, and user-specified
+batch  execution,  while  the  agent  layer  coordinates  research-level  planning,  state  updates,  analysis,  and  reporting.   Agents
+and tools exchange task definitions, candidate settings, energy logs, checkpoints, recovery decisions, and rankings through the
+persistent shared research state.
+
+
+first increases from zero to the target value and is then                              D.    Checkpoint-Based Continuation and
+reduced at predefined decay milestones. NQS-Agent does                                           Anomaly-Aware Ranking
+not  replace  this  optimizer;  instead,  it  intervenes  only
+when  the  monitored  energy  trajectory  indicates  a  de-                      The search is organized as a staged continuation pro-
+structive event.  When such an event is detected at run-                      cess rather than as a set of independent fixed-length cal-
+time,  NQS-Agent  stops  the  current  execution  segment                     culations.  Candidates are first run to a prescribed evalu-
+and  searches  for  the  latest  safe  checkpoint  before  the                ation milestone, defined as a target number of optimiza-
+event.    It  then  starts  a  continuation  with  a  modified                tion steps at which their energy trajectories and health
+learning-rate schedule.  If the event occurs after the ini-                   records are scored.  Candidates that pass this compari-
+tial increase to the target value, the schedule is modified                   son are promoted to a later stage with a larger number
+to  multiply  the  learning  rate  by  0.5  shortly  before  the              of optimization steps, whereas less promising or invalid
+event.  For an event during this initial increase, the max-                   candidates are stopped. This staged allocation of calcula-
+imum learning rate is limited to the pre-event value.  The                    tion length is related to Hyperband, ASHA, and BOHB,
+continuation remains part of the same candidate experi-                       which use short early evaluations to decide which candi-
+ment, so later ranking uses the recovered trajectory while                    dates should receive longer follow-up calculations.  In the
+retaining  the  complete  instability  and  recovery  history.                present  workflow,  however,  a  promoted  NQS  candidate
+Recovery is attempted only a limited number of times,                         continues from a checkpoint that stores both the network
+with the allowed number of attempts increasing with the                       parameters and optimizer state.  This avoids restarting
+target optimization length.                                                   the candidate as a new calculation and preserves the same
+                                                                              optimization trajectory, including the adaptive-optimizer
+                                                                              state, checkpoint history, and any recovery events already
+                                                                              recorded.
+                                                                                                                                                       5
+
+   NQS-Agent   also   supports   ASHA   and   TPE-based                        5×10  −4    otherwise  for  a  ranking-eligible  candidate.   A
+search.    Those  general  methods  are  appropriate  when                     candidate  is  excluded  from  ranking  rather  than  merely
+the  performance  of  each  candidate  can  be  represented                    penalized  when  the  energy  log  is  missing  or  invalid,  a
+by  a  single  scalar  objective,  such  as  the  best  valid  en-             process or resource failure prevents a valid result, a de-
+ergy  reached  at  a  given  optimization  length.   For  the                  structive event remains unrecovered, the allowed recov-
+aCNN  benchmark,  candidate  selection  instead  uses  a                       ery  attempts  are  exhausted,  no  complete  checkpoint  is
+task-specific  top-krule  because  the  decision  must  con-                   available for continuation, or the energy is discontinuous
+sider the energy trajectory, recovery status, and availabil-                   immediately after continuation.  NaN or Inf alone is not
+ity of a safe checkpoint in addition to the energy value.                      an irreversible failure:  it is treated as a destructive event
+   For each physical task,  the evaluation milestones are                      and can enter the recovery procedure when a safe check-
+specified in the experiment plan.  A checkpoint is a saved                     point and an unused recovery attempt are available.
+state used for continuation, whereas an evaluation mile-                          This ranking rule differs from selecting the lowest final
+stone is a target optimization length at which candidates                      energy at a fixed step.  A candidate with a low but unsta-
+are scored and compared.  Early milestones compare and                         ble energy may be unsuitable for continuation to a larger
+identify promising random seeds, learning-rate and archi-                      number  of  optimization  steps.   The  score  therefore  re-
+tecture combinations; later milestones test the promoted                       quires both a competitive energy and sufficient stability,
+candidates under longer optimization.  Within each com-                        including the ability to recover safely when an instability
+parison group, the top-kcandidates are selected only af-                       occurs.
+ter every candidate has completed, stopped with an error,
+or been cancelled.  The evaluation sequence used in the
+present benchmark around the aCNN reference architec-                                                    III.    RESULTS
+ture is summarized in Fig. 2.
+   The workflow can also refine the tested learning rates                            A.    Benchmark Task, Human Baseline, and
+between two evaluations.  When the two leading learning                                Parameter-Count-Matched Search Space
+rates,η           1 andη       2, differ by a sufficiently large multiplica-
+tive  factor,  NQS-Agent  can  test  their  geometric  mean,                      We benchmark the workflow on the square-lattice spin-
+√η1η2,  in  an  additional  confirmation  calculation.   This
+choice places the new value midway betweenη       1  andη       2              1/2  HeisenbergJ           1-J  2  model  with  periodic  boundary
+when the learning rates are compared by their ratio and                        conditions,  a  standard  benchmark  for  frustrated  mag-
+tests whether a favorable region lies between two coarse                       netism  studied  by  tensor-network,  DMRG,  VMC,  and
+grid values.                                                                   NQS methods.  The main comparison tasks use 10×10
+   Ranking  uses  an  anomaly-aware  score.   The  leading                     lattices  atJ    2/J1  =  0.50  and  0.55,  where  the  reported
+term is the lowest median energy ever seen of the rolling                      human-tuned aCNN reference energies are−0.495627(6)
+window.  The remaining terms penalize several signs of                         and−0.483490(5)  per  site,  respectively  [16].   The  pri-
+unreliable optimization: deterioration near the end of the                     mary observable is the energy per site, with lower values
+trajectory,  a positive late-time slope,  large tail fluctua-                  indicating better variational states.
+tions, recorded anomaly events, recovery attempts, and                            The  architecture  reported  in  the  aCNN  study  is  de-
+incomplete  checkpoint  status.   For  a  candidate  that  is                  noted  A5  and  has  channel  numberc=  3,  kernel  size
+allowed to enter the ranking at evaluation milestonem,                         k= 5, residual-block countb= 14, and 6538 real-valued
+the score is                                                                   parameters.   To  compare  different  channel,  kernel-size,
+                                                                               and  depth  choices  at  a  similar  parameter-count  scale,
+         Sm =E    trusted +P    tail +P    var +P    slope                     we  allow  a±5%  window  around  6538  parameters,  cor-
+                 +P    anomaly +P    recovery +P    checkpoint,      (4)       responding to 6211–6864 parameters.  About 30 residual-
+                                                                               CNN architectures satisfy this condition.  The nine rep-
+HereE         trusted is the median energy of the selected trusted             resentatives in Table I were selected from this eligible set
+window,P     tail  =  max(0,           ¯Etail−E    trusted)  measures  de-     to cover different depth, width, and kernel-size regimes;
+terioration  of  the  trajectory  end,  andP       var  = √vartail             candidates with kernel size one were not included in the
+penalizes  tail  fluctuations.    The  quantitys   tail  is  the               representative subset because they provide little spatial-
+slope  obtained  by  a  linear  fit  of  energy  against  op-                  convolution variation for the present comparison.
+timization  step  within  the  final  rolling  window;  thus,
+Pslope  = max(0,s         tail) penalizes an overall upward trend
+near  the  end  of  the  trajectory.   The  anomaly  penalty                      B.    Multi-Stage HPO and Automatic Recovery
+Panomaly = 5×10  −4 Ntransient+2×10  −3 Ndestructive counts                                        from Destructive Events
+transient and destructive anomaly events with different
+weights,  whereN            transient  andN       destructive  are  the  corre-   The HPO process progressively reduces the number of
+sponding event counts.  The recovery penaltyP   recovery =                     candidates,  as  summarized  in  Fig.  2.   The  calculations
+10−3 Nrecovery  increases with the number of recovery at-                      for the 6×6 lattice atJ          2/J1 = 0.55 compare nine archi-
+tempts.  The checkpoint penalty isP   checkpoint = 0 when a                    tectures using four learning rates and four random seeds
+safe full-resume checkpoint is available andP        checkpoint =              and select A5, A9, and A6 for subsequent calculations for
+                                                                                                                                                       6
+
+
+TABLE I. Representative parameter-count-matched residual-CNN architectures.  The allowed parameter count is within±5%
+of  the  6538-parameter  A5  architecture.   Herec, k,  andbdenote  the  channel  number,  kernel  size,  and  residual-block  count,
+respectively.  The nine representatives are selected from about 30 eligible architectures to cover different depth,  width,  and
+kernel-size regimes.  A5 is the architecture reported in the aCNN study, and A9 is the widest and shallowest representative in
+this subset.
+                               Arch.c  k  b Parameters  Qualitative type
+                                 A1     2   5  32       6631       very narrow, medium kernel, very deep
+                                 A2     2   7  16       6535       very narrow, large kernel, deep
+                                 A3     2   9  10       6847       very narrow, very large kernel, medium depth
+                                 A4     3   3  39       6610       narrow, small kernel, extremely deep
+                                 A5     3   5  14       6538       aCNN reference, balanced depth and width
+                                 A6     3   7   7        6514       medium width, large kernel, shallow
+                                 A7     3   9   4        6346       medium width, very large kernel, very shallow
+                                 A8     5   3  14       6536       medium width, small kernel, medium depth
+                                 A9    11  3   3        6810       very wide, small kernel, very shallow
+
+
+
+the 10×10 lattice.  In the flowchart,a/l/s|ndenotesa                           C.    Comparison with Human-Tuned aCNN Results
+architectures,llearning rates, andsrandom seeds, giv-
+ingn=a×l×sexecuted calculations.  The calculations                                Table  II  summarizes  the  parameter-count-matched
+for the 10×10 lattice then compare the retained architec-                      HPO results for the two 10×10 physical tasks, includ-
+ture and learning-rate candidates, reassess random-seed                        ing  settings  that  were  not  continued  to  the  final  com-
+outcomes  with  the  anomaly-aware  score,  select  the  re-                   parison  stage.   Among  the  retained  final  results,  NQS-
+maining candidates, and continue them for longer confir-                       Agent obtains energies below the reported human-tuned
+mation calculations.                                                           aCNN  baseline  for  bothJ       2/J1  =  0.50  and  0.55.   The
+  As  described  in  Sec.  II C,  NQS-Agent  complements                       A5 results directly test automated optimizer tuning and
+the Adam-based optimization protocol used in the aCNN                          recovery-based continuation for the architecture reported
+study rather than replacing it.  In the examples below,                        in  the  aCNN  study.   The  A9  results  show  that  the  ar-
+the  workflow  monitors  the  observed  energy  curve,  de-                    chitecture  comparison  points  to  a  structurally  distinct
+tects  destructive  events,  and,  when  needed,  resumes  a                   wide-and-shallow setting with competitive energies.  Be-
+promising candidate from a checkpoint with a modified                          cause  the  present  calculations  were  not  designed  as  a
+learning-rate schedule.                                                        controlled head-to-head comparison between A9 and A5
+  Figure 3 shows a representative recovered energy tra-                        across all seeds and optimization settings, A9 is reported
+jectory for the 10×10,J              2/J1 = 0.55, A5 calculation with          as a promising additional architecture rather than as a
+learning rate 0.0013 and seed 8.  A non-destructive fluc-                      definitive replacement for A5.
+tuation occurs near step 650 at the end of a rapid energy                         The  A5  calculation  with  learning  rate  0.001265  il-
+decrease and does not trigger recovery.  In contrast, the                      lustrates the optional learning-rate refinement in which
+upward fluctuations in the intervals 840–978 and 2657–                         NQS-Agent tests an intermediate value between two se-
+2788 are identified as destructive events.  After each con-                    lected learning rates.  It tests the geometric mean of two
+firmed event, the workflow stops the unstable execution                        selected learning rates for theJ  2/J1 = 0.55 A5 compar-
+segment, selects a safe checkpoint before the event, mod-                      ison.  Although it does not give the lowest A5 energy in
+ifies the learning-rate schedule,  and continues the same                      Table II, it demonstrates that NQS-Agent can add a tar-
+candidate  experiment.   This  example  shows  that  NQS-                      geted follow-up calculation rather than remaining limited
+Agent acts during optimization rather than only ranking                        to the initial learning-rate grid.
+completed calculations:  it converts an interrupted candi-                        The  A9  results  have  a  different  implication.    A9  is
+date into a continued calculation that can still be evalu-                     not the architecture reported in the aCNN study; it is a
+ated.                                                                          structurally distinct residual CNN with many more chan-
+                                                                               nels, a smaller kernel, and far fewer residual blocks.  Its
+  Figure 4 shows two A9 energy trajectories used in the                        competitive  energies,  including  values  below  the  aCNN
+final  parameter-count-matched  comparison.   Both  con-                       baseline  at  both  tested  coupling  ratios,  show  that  the
+tain abnormal fluctuations, including destructive fluctu-                      parameter-count-matched  residual-CNN  space  contains
+ations, but the workflow does not discard the candidates                       promising candidate alternatives to the human-selected
+solely because these fluctuations occur.  Instead, recovery                    architecture.  This outcome is noteworthy because it does
+from  checkpoints  with  modified  learning-rate  schedules                    not support a simple assumption that a deeper residual
+allows the same candidate experiments to continue. With                        CNN is always the most reliable route to improved vari-
+this recovery procedure, candidates that pass through de-                      ational  accuracy.   Within  the  present  search  space,  A9
+structive  events  can  subsequently  reach  energies  below                   should be regarded as a promising architecture identified
+the reported human-tuned aCNN baseline.                                        by the HPO workflow, while A5 remains the appropriate
+                                                                                                                                                             7
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+FIG. 2.  Progressive architecture and learning-rate selection in the present benchmark around the aCNN reference architecture.
+The calculations for the 6×6 lattice compare nine parameter-count-matched residual-CNN architectures using four learning
+rates and four random seeds and select A5, A9, and A6 for the calculations for the 10×10 lattice.  At 10×10, candidates are
+evaluated at predefined optimization milestones, compared with the anomaly-aware score, and the candidate set is progressively
+reduced before longer confirmation calculations.  The notationa/l/s|ndenotesaarchitectures,llearning rates, andsrandom
+seeds, withn=a×l×sexecuted calculations in the corresponding comparison group.
+
+
+TABLE II. Parameter-count-matched HPO results on the 10×10 HeisenbergJ                1-J  2  tasks.  LR denotes learning rate.  Energy
+values are reported only when a calculation was continued to a reported final value.  “Not promoted” means that the setting was
+not selected for longer optimization, and “Failed after promotion” means that the continued calculation exhausted the allowed
+recovery attempts without producing a valid final result.  The A5 calculation with learning rate 0.001265 was an additional
+refinement  test  atJ     2/J1  =  0.55,  obtained  as  the  geometric  mean  of  two  selected  learning  rates;  no  corresponding  test  was
+performed atJ     2/J1 = 0.50, as indicated by “—”.
+                            Arch.  and configuration      J                             2/J1 = 0.50                J         2/J1 = 0.55
+                            A5, LR=0.005, seed 8        −0.495892(6)                   Not promoted
+                            A5, LR=0.0013, seed 8                            Not promoted    −0.482319(10)
+                            A5, LR=0.002, seed 9        −0.495959(5) −0.483502(7)
+                            A5, LR=0.001265, seed 8                                 —       −0.483208(6)
+                            A9, LR=0.008, seed 9        −0.495941(6)                   Not promoted
+                            A9, LR=0.020, seed 10                     Failed after promotion−0.483528(8)
+                            A9, LR=0.0126, seed 12                          Not promoted −0.483512(5)
+                            aCNN human-tuned baseline  −0.495627(6)    −0.483490(5)
+
+
+
+
+                                                                                  reference architecture for the direct comparison between
+                                                                                  automated and human tuning.
+
+
+                                                                                  D.    Architecture-Dependent Optimization Behavior
+                                                                                                       and Workflow Efficiency
+
+                                                                                     Architecture hyperparameters strongly affect both op-
+                                                                                  timization  behavior  and  practical  computational  cost.
+                                                                                  We  therefore  compare  the  static  complexity  estimates,
+                                                                                  measured execution speeds, and later HPO outcomes of
+FIG.  3.   Representative  energy  trajectory  for  the  10×10,                   the nine parameter-count-matched architectures.  A1–A4
+J2/J1  = 0.55,  A5 calculation with learning rate 0.0013 and                      are  not  selected  for  the  subsequent  calculations  for  the
+seed  8.   This  calculation  illustrates  typical  stability  and  re-           10×10  lattice,  and  A6  is  selected  but  does  not  domi-
+covery behavior rather than the final selected setting.  A non-                   nate the later HPO results.  The balanced A5 architec-
+destructive fluctuation occurs near step 650.  Destructive fluc-                  ture  remains  the  primary  setting  for  testing  the  HPO
+tuations are detected in the intervals 840–978 and 2657–2788,                     protocol, whereas the wide-and-shallow A9 architecture
+after which NQS-Agent stops the unstable execution, resumes                       emerges  as  a  competitive  alternative.   Comparable  pa-
+from safe checkpoints, and modifies the learning-rate sched-                      rameter counts do not imply equal computational cost,
+ule.                                                                              because the architectures differ substantially in residual-
+                                                                                  block count, stored activations, and practical execution
+                                                                                                                                                            8
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+FIG. 4.  Energy trajectories for two selected A9 settings in the 10×10 parameter-count-matched comparison.  Left:J                 2/J1 =
+0.50,  learning  rate  0.008,  seed  9.   Right:J           2/J1  =  0.55,  learning  rate  0.0126,  seed  12.   Both  trajectories  exhibit  destructive
+fluctuations, yet checkpoint-based recovery with modified learning-rate schedules allows the candidate calculations to continue
+and subsequently reach energies below the reported human-tuned aCNN baseline.
+
+
+
+TABLE III. Static complexity estimates for the nine residual-
+CNN architectures in the calculations for the 6×6 lattice. The
+reported Forward FLOPs and Stored activations are normal-
+ized to A5.  Forward floating-point operations (FLOPs) esti-
+mate the arithmetic work in one network forward pass. Stored
+activations estimate the amount of intermediate layer output
+stored during training so that gradients can be computed.
+         Arch.    Forward FLOPs    Stored activations
+           A1               1.008                       1.467
+           A2               1.003                       0.756
+           A3               1.055                       0.489
+           A4               0.988                       2.667
+           A5               1.000                       1.000
+           A6               1.003                       0.533                    FIG.  5.   Relative  computational  speed  of  the  nine  architec-
+           A7               0.980                       0.333                    tures in the calculations for the 6×6 lattice, normalized to
+           A8               0.991                       1.667                    A5.  Relative speed is calculated from the average computa-
+           A9               1.044                       0.978                    tion time required for one optimization step under the same
+                                                                                 6×6 calculation protocol, with values above one indicating
+                                                                                 faster execution than A5.  All timing measurements were per-
+                                                                                 formed on an NVIDIA RTX 4090 GPU.
+efficiency.
+   These quantities are architecture-level estimates:  For-                      forward FLOPs and stored activations close to A5 but is
+ward FLOPs count arithmetic work in the network evalu-                           approximately 2.47 times as fast as A5 in the measured
+ation, whereas stored activations approximate the inter-                         6×6 timing test, whereas A4 is only about 0.60 times as
+mediate layer outputs that must be retained for gradient                         fast as A5.  These differences show that parameter count
+computation.  They are calculated from the architecture                          and static FLOPs alone do not predict practical execu-
+rather than measured with a performance-analysis tool,                           tion speed; residual-block count, architecture-dependent
+and stored activations should not be interpreted as direct                       parallelism, the overhead of launching many layers, and
+measurements of peak GPU memory.                                                 details of the aCNN implementation can also contribute.
+   The forward FLOPs vary only from about 0.98 to 1.06                              Computational  efficiency  and  optimization  outcome
+times the A5 value, whereas the stored activations span                          are related but distinct criteria. A3 and A7 execute faster
+approximately  0.33–2.67  times  the  A5  value.   Figure  5                     than A5 but are not selected for the later calculations for
+shows  that  the  measured  speed  ordering  is  not  deter-                     the 10×10 lattice, showing that faster execution does not
+mined by Forward FLOPs alone.  The two deepest can-                              necessarily imply better optimization or variational per-
+didates,  A4  and  A1,  have  the  largest  stored-activation                    formance.   A5  remains  a  strong  balanced  architecture,
+values  and  the  lowest  measured  relative  speeds.   Shal-                    whereas  A9  is  notable  because  it  combines  the  highest
+lower architectures such as A7,  A3,  and A6 have lower                          measured relative speed with competitive variational re-
+stored-activation values, although their measured speeds                         sults in the later calculations for the 10×10 lattice.  A8
+do not follow the FLOPs ordering.  Most notably, A9 has                          provides  a  similar  example  that  faster  execution  does
+                                                                                                                                                9
+
+not  necessarily  coincide  with  selection  by  the  energy-              Second, the current recovery rules are deterministic and
+and stability-based HPO procedure.  These observations                     deliberately conservative.  More flexible agent-based de-
+support reporting architecture-dependent computational                     cisions  may  help  with  ambiguous  fluctuations  near  the
+cost alongside energy and optimization stability in HPO                    end of a trajectory, but such decisions must remain sub-
+studies.                                                                   ject  to  explicit  safety  rules.   Third,  the  present  results
+  These  trends  should  not  be  interpreted  as  universal               concern residual CNN architectures based on the aCNN
+statements about depth, width, or speed in NQS. They                       study; the generality of the protocol should therefore be
+apply to the residual-CNN family,  the parameter-count                     assessed with additional NQS ansatz classes and physical
+window  around  6538  parameters,  and  the  calculations                  problems.
+considered here.  Nevertheless, they show why architec-                       More  broadly,  the  results  indicate  that  optimization
+ture hyperparameters belong in HPO: a human-selected                       health should be assessed together with energy when de-
+architecture  can  be  strong,  while  architectures  in  the              ciding whether an NQS candidate is reliable and suitable
+same parameter-count window can have competitive ac-                       for  continuation.   By  integrating  this  assessment  with
+curacy and substantially different computational costs.                    recorded  recovery  and  selection  decisions,  NQS-Agent
+  Workflow efficiency also has an organizational compo-                    makes automated NQS studies easier to audit and repro-
+nent beyond architecture-dependent computational cost:                     duce, providing a practical basis for broader automation
+NQS-Agent  improves  the  management  and  traceability                    in this research area.
+of  large  HPO  studies.   For  each  candidate,  it  records
+the simulation settings, comparison group, saved check-
+points,  detected  health  events,  recovery  decisions,  and                                      V.    SUMMARY
+ranking  status.   These  records  make  it  possible  to  de-
+termine  why  a  candidate  was  continued  for  additional                   We  introduced  NQS-Agent  as  an  implemented  open-
+optimization, stopped, recovered, or excluded from rank-                   source  software  framework  for  health-aware  HPO  of
+ing.   Such  traceability  turns  a  large  collection  of  HPO            neural-network quantum states.  The central motivation
+calculations into a reproducible scientific workflow.                      is  that  an  NQS  candidate  should  not  be  judged  only
+
+                                                                           by  the  energy  reached  at  a  selected  evaluation  point:
+                      IV.    DISCUSSION                                    the  stability  of  the  energy  trajectory,  destructive  fluc-
+                                                                           tuations,  checkpoint  availability,  and  recovery  history
+  The main contribution of this work is a shift from se-                   also  determine  whether  the  result  is  reliable  and  suit-
+lecting NQS candidates only by energy to health-aware                      able  for  continuation.   NQS-Agent  supports  large-scale
+HPO. General HPO methods can evaluate many candi-                          automated searches over NQS optimization and architec-
+date settings, but NQS optimization requires additional                    ture parameter spaces by combining trajectory monitor-
+information  about  the  energy  trajectory.   A  candidate                ing,  anomaly-aware ranking,  checkpoint-based recovery,
+that briefly reaches a low energy can still be unsuitable                  and learning-rate schedule adjustment within a recorded
+if  it  has  no  safe  checkpoint,  ends  with  an  unrecovered            and reproducible workflow.  Applied to parameter-count-
+destructive fluctuation, or becomes discontinuous imme-                    matched residual CNNs for the square-lattice Heisenberg
+diately after continuation from a checkpoint.  Conversely,                 J1-J  2  model,  the  workflow  improves  over  the  reported
+a promising candidate that undergoes an abnormal fluc-                     human-tuned result for the aCNN reference architecture
+tuation should not necessarily be discarded when the cal-                  and  identifies  A9  as  a  structurally  distinct  competitive
+culation can be safely recovered.                                          candidate.   These  results  show  that  health-aware  HPO
+  The aCNN benchmark separates two effects.  The A5                        provides a practical protocol for NQS tuning and archi-
+results test whether automated optimization of learning-                   tecture comparison.  More broadly, NQS-Agent provides
+rate settings can improve a human-selected reference ar-                   an implemented framework and basic toolset for repro-
+chitecture.   The  A9  results  test  whether  varying  struc-             ducible automated research in NQS.
+tural hyperparameters within the same parameter-count
+window  can  reveal  a  qualitatively  different  candidate.                                 ACKNOWLEDGMENTS
+These  results  require  different  claim  strengths:   A5  di-
+rectly  evaluates  automated  tuning  against  human  tun-
+ing  for  the  same  architecture,  whereas  A9  shows  that                  This  work  was  supported  by  the  National  Natural
+the same HPO protocol can identify promising structural                    Science  Foundation  of  China  (Grant  No.    12434009)
+candidates under controlled comparison conditions.                         and the National Key R&D Program of China (Grants
+  Several limitations remain.  First, the architectures are                No.     2024YFA1408602  and  No.     2024YFA1408601).
+matched by parameter count, not by total computational                     Z.-Y.L.  was  also  supported  by  the  Innovation  Pro-
+cost.   Although  the  results  on  the  6×6  lattice  reveal              gram for Quantum Science and Technology (Grant No.
+substantial architecture-dependent differences in relative                 2021ZD0302402).    Computational  resources  were  pro-
+speed, the measured ratios may depend on the software                      vided by the Physical Laboratory of High Performance
+environment  and  details  of  the  aCNN  implementation.                  Computing in Renmin University of China.
+                                                                                                                                                             10
+
+                                                                                                        CODE AVAILABILITY
+
+                                                                                      The NQS-Agent source code [39] will be made publicly
+                                                                                   available on GitHub upon publication.  The release will
+                                                                                   include  the  implementation  shown  in  Fig.  1,  configura-
+                                                                                   tion  templates,  and  example  CLI/API  entry  points  for
+                                                                                   running and reproducing the workflow.
+
+
+
+
+
+ [1]A. W. Sandvik, Finite-size scaling of the ground-state pa-                           quantum many-body systems, arXiv:2206.07370  (2022).
+     rameters of the two-dimensional Heisenberg model, Phys.                       [16]J.-Q.  Wang,  H.-Q.  Wu,  R.-Q.  He,  and  Z.-Y.  Lu,  Vari-
+     Rev. B56, 11678 (1997).                                                             ational optimization of the amplitude of neural-network
+ [2]W.-Y.  Liu,  S.-S.  Gong,  Y.-B.  Li,  D.  Poilblanc,  W.-Q.                         quantum many-body ground states, Phys. Rev. B109,
+     Chen,  and  Z.-C.  Gu,  Gapless  quantum  spin  liquid  and                         245120 (2024).
+     global  phase  diagram  of  the  spin-1/2j                  1-j  2  square  an-[17]M. Hibat-Allah, M. Ganahl, L. E. Hayward, R. G. Melko,
+     tiferromagnetic  Heisenberg  model,  Science  Bulletin67,                           and J. Carrasquilla, Recurrent neural network wave func-
+     1034 (2022).                                                                        tions, Phys. Rev. Res.2, 023358 (2020).
+ [3]E.   Stoudenmire   and   S.   R.   White,   Studying   two-                    [18]H.  Lange,  F.  D¨oschl,  J.  Carrasquilla,  and  A.  Bohrdt,
+     dimensional systems with the density matrix renormal-                               Neural network approach to quasiparticle dispersions in
+     ization  group,  Annual  Review  of  Condensed  Matter                              doped antiferromagnets, Communications Physics7, 187
+     Physics3, 111 (2012).                                                               (2024).
+ [4]S.-S. Gong, W. Zhu, D. N. Sheng, O. I. Motrunich, and                          [19]D. Kochkov, T. Pfaff, A. Sanchez-Gonzalez, P. Battaglia,
+     M. P. A. Fisher, Plaquette ordered phase and quantum                                and  B.  K.  Clark,  Learning  ground  states  of  quantum
+     phase diagram in the spin-1/2J                  1−J    2 square Heisenberg          Hamiltonians  with  graph  networks,  arXiv:2110.06390
+     model, Phys. Rev. Lett.113, 027201 (2014).                                          (2021).
+ [5]L.  Wang  and  A.  W.  Sandvik,  Critical  level  crossings                    [20]C. Roth, A. Szab´o, and A. H. MacDonald, High-accuracy
+     and  gapless  spin  liquid  in  the  square-lattice  spin-1/2                       variational monte carlo for frustrated magnets with deep
+     J1−J    2  Heisenberg  antiferromagnet,  Phys.  Rev.  Lett.                         neural networks, Phys. Rev. B108, 054410 (2023).
+     121, 107202 (2018).                                                           [21]Y.-H.  Zhang  and  M.  Di  Ventra,  Transformer  quantum
+ [6]W.-J.  Hu,  F.  Becca,  A.  Parola,  and  S.  Sorella,  Direct                       state:   A  multipurpose  model  for  quantum  many-body
+     evidence for a gaplessZ                2 spin liquid by frustrating N´eel           problems, Phys. Rev. B107, 075147 (2023).
+     antiferromagnetism, Phys. Rev. B88, 060402(R) (2013).                         [22]R.  Rende,  L.  L.  Viteritti,  L.  Bardone,  F.  Becca,  and
+ [7]G.  Carleo  and  M.  Troyer,  Solving  the  quantum  many-                           S.  Goldt,  A  simple  linear  algebra  identity  to  optimize
+     body  problem  with  artificial  neural  networks,  Science                         large-scale neural network quantum states, Communica-
+     355, 602 (2017).                                                                    tions Physics7, 260 (2024).
+ [8]H. Lange, A. Van de Walle, A. Abedinnia, and A. Bohrdt,                        [23]J.  Bergstra  and  Y.  Bengio,  Random  search  for  hyper-
+     From  architectures  to  applications:   a  review  of  neural                      parameter  optimization,  Journal  of  Machine  Learning
+     quantum  states,  Quantum  Science  and  Technology9,                               Research13, 281 (2012).
+     040501 (2024).                                                                [24]J. Bergstra, R. Bardenet, Y. Bengio, and B. K´egl, Algo-
+ [9]J.   Hermann,   J.   Spencer,   K.   Choo,   A.   Mezzacapo,                         rithms for hyper-parameter optimization, inAdvances in
+     W. M. C. Foulkes, D. Pfau, G. Carleo, and F. No´e, Ab                               Neural  Information  Processing  Systems,  Vol.  24  (2011)
+     initio quantum chemistry with neural-network wavefunc-                              pp. 2546–2554.
+     tions, Nature Reviews Chemistry7, 692 (2023).                                 [25]L. Li, K. Jamieson, G. DeSalvo, A. Rostamizadeh, and
+[10]J.  Carrasquilla  and  G.  Torlai,  How  to  use  neural  net-                       A.  Talwalkar,  Hyperband:   A  novel  bandit-based  ap-
+     works to investigate quantum many-body physics, PRX                                 proach to hyperparameter optimization, Journal of Ma-
+     Quantum2, 040201 (2021).                                                            chine Learning Research18, 1 (2018).
+[11]Y.  Nomura,  Boltzmann  machines  and  quantum  many-                          [26]L.   Li,   K.   Jamieson,   A.   Rostamizadeh,   E.   Gonina,
+     body  problems,  Journal  of  Physics:  Condensed  Matter                           M. Hardt, B. Recht, and A. Talwalkar, A system for mas-
+     36(2023).                                                                           sively parallel hyperparameter tuning, inProceedings of
+[12]M. Medvidovi´c and J. R. Moreno, Neural-network quan-                                Machine  Learning  and  Systems, Vol. 2 (2020) pp. 230–
+     tum states for many-body physics, The European Phys-                                246.
+     ical Journal Plus139, 631 (2024).                                             [27]S. Falkner, A. Klein, and F. Hutter, BOHB: Robust and
+[13]K. Choo,  T. Neupert, and G. Carleo, Two-dimensional                                 efficient  hyperparameter  optimization  at  scale,  inPro-
+     frustratedJ                      1−J    2  model  studied  with  neural  network    ceedings of the 35th International Conference on Machine
+     quantum states, Phys. Rev. B100, 125124 (2019).                                     Learning,  Proceedings  of  Machine  Learning  Research,
+[14]X. Liang, W.-Y. Liu, P.-Z. Lin, G.-C. Guo, Y.-S. Zhang,                              Vol. 80 (2018) pp. 1437–1446.
+     and  L.  He,  Solving  frustrated  quantum  many-particle                     [28]T. Akiba, S. Sano, T. Yanase, T. Ohta, and M. Koyama,
+     models  with  convolutional  neural  networks,  Phys.  Rev.                         Optuna:   A  next-generation  hyperparameter  optimiza-
+     B98, 104426 (2018).                                                                 tion   framework,   inProceedings   of   the   25th   ACM
+[15]C. Fu, X. Zhang, H. Zhang, H. Ling, S. Xu, and S. Ji, Lat-                           SIGKDD  International  Conference  on  Knowledge  Dis-
+     tice convolutional networks for learning ground states of                           covery and Data Mining(2019) pp. 2623–2631.
+                                                                                                                                                           11
+
+[29]F.  Hutter,  L.  Kotthoff,  and  J.  Vanschoren,  eds.,Auto-                  [34]X. Li, S. Wang, S. Zeng, Y. Wu, and Y. Yang, A survey on
+     mated Machine Learning:  Methods, Systems, Challenges                              llm-based multi-agent systems:  workflow, infrastructure,
+     (Springer, 2019).                                                                  and challenges, Vicinagearth1, 9 (2024).
+[30]S. Sorella, M. Casula, and D. Rocca, Weak binding be-                         [35]S.  Hong,  M.  Zhuge,  J.  Chen,  X.  Zheng,  Y.  Cheng,
+     tween  two  aromatic  rings:   Feeling  the  van  der  Waals                       J.  Wang,  C.  Zhang,  Z.  Wang,  S.  K.  S.  Yau,  Z.  Lin,
+     attraction  by  quantum  monte  carlo  methods,  J.  Chem.                         L. Zhou, C. Ran, L. Xiao, C. Wu, and J. Schmidhuber,
+     Phys127, 10.1063/1.2746035 (2007).                                                 MetaGPT: Meta programming for a multi-agent collab-
+[31]A. Chen and M. Heyl, Empowering deep neural quantum                                 orative framework, inThe Twelfth International Confer-
+     states through efficient optimization, Nature Physics20,                           ence on Learning Representations(2024).
+     1476 (2024).                                                                 [36]Q.  Wu,  G.  Bansal,  J.  Zhang,  Y.  Wu,  B.  Li,  E.  Zhu,
+[32]M. Drissi,  J. W. T. Keeble,  J. Rozal´en Sarmiento, and                            L. Jiang, X. Zhang, S. Zhang, J. Liu, A. H. Awadallah,
+     A. Rios, Second-order optimization strategies for neural                           R.  W.  White,  D.  Burger,  and  C.  Wang,  Autogen:  En-
+     network  quantum  states,  Philosophical  Transactions  of                         abling  next-gen  LLM  applications  via  multi-agent  con-
+     the Royal Society A: Mathematical, Physical and Engi-                              versations,  inFirst  Conference  on  Language  Modeling
+     neering Sciences382, 20240057 (2024).                                              (2024).
+[33]J. Wei, Y. Yang, X. Zhang, Y. Chen, X. Zhuang, Z. Gao,                        [37]LangChain, Inc., LangGraph:  A low-level orchestration
+     D. Zhou, G. Wang, Z. Gao, J. Cao, Z. Qiu, M. Hu, C. Ma,                            framework for building stateful agents,https://github.
+     S.  Tang,  J.  He,  C.  Song,  X.  He,  Q.  Zhang,  C.  You,                       com/langchain-ai/langgraph(2026), accessed June 15,
+     S.  Zheng,  N.  Ding,  W.  Ouyang,  N.  Dong,  Y.  Cheng,                          2026.
+     S. Sun, L. Bai, and B. Zhou, From ai for science to agen-                    [38]D. P. Kingma and J. Ba, Adam:  A method for stochastic
+     tic science:  A survey on autonomous scientific discovery,                         optimization, arXiv:1412.6980  (2017).
+     arXiv:2508.14111  (2025).                                                    [39]Repository        URL:        https://github.com/QTMEC-
+                                                                                        RUC/NQS-Agents.

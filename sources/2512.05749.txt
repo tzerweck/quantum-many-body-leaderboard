@@ -1,0 +1,1080 @@
+   Stochastic Reconfiguration with Warm-Started SVD
+
+    Dexuan Zhoua, Huajie Chena, Cheuk Hin Hob, Xin Liuc,d, Christoph
+                                          Ortnerb
+
+ aSchool of Mathematical Sciences, Beijing Normal University, Beijing, 100875, China
+     bDepartment of Mathematics, University of British Columbia, Vancouver, V6T
+                                      1Z2, BC, Canada
+cState Key Laboratory of Mathematical Sciences, Academy of Mathematics and Systems
+              Science, Chinese Academy of Sciences, Beijing, 100190, China
+          dSchool of Mathematical Sciences, University of Chinese Academy of
+                             Sciences, Beijing, 101408, China
+
+
+
+Abstract
+The combination of the variational Monte Carlo (VMC) method with deep
+learning wave function architectures has led to several successes in ground-
+state calculations of quantum many-body systems in recent years.  However,
+commonly used stochastic gradient–based methods often perform poorly on
+these  parameter  training  problems  and  typically  lack  convergence  guaran-
+tees.   The  stochastic  reconfiguration  (SR)  method  provides  a  robust  pre-
+conditioner  of  the  stochastic  gradient,  whose  computational  cost  becomes
+prohibitive  for  large  parameter  spaces  owing  to  the  repeated  inversion  of
+large covariance matrices.  To overcome this bottleneck, we propose a warm-
+started stochastic reconfiguration (WSSR) method, which integrates warm-
+start techniques from singular value decomposition (SVD) to refine low-rank
+approximations of the preconditioning matrix iteratively.  Numerical experi-
+ments on typical atomic and molecular systems highlight the effectiveness of
+the WSSR method within VMC calculations.
+Keywords:many-electron Schr¨odinger equation, variational Monte Carlo,
+stochastic reconfiguration, warm-started singular value decomposition
+PACS:02.70.Ss
+2000 MSC:81-08, 65C05, 65N25
+1.  Introduction
+
+    Calculating the ground state of the many-electron Schr¨odinger equation
+remains an extremely challenging task. Traditional variational methods, such
+as Hartree–Fock [30], configuration interaction [39], and multi-configuration
+self-consistent field [18], evaluate the electron energy and its first order vari-
+ation by pre-computed one- and two-electron integrals.  In contrast, the vari-
+ational Monte Carlo (VMC) method estimates the energy through stochastic
+methods and offers greater flexibility in the choice of wave function ansatz,
+such as the Slater-Jastrow and the Slater-Jastrow-Backflow models [3].  Re-
+cent advancements in machine learning-based wave function representations
+[10, 13, 17, 35, 45] have significantly expanded the scope of wave function
+modeling  and  have  gained  increasing  attention  for  their  ability  to  capture
+complex correlations with both high flexibility and accuracy.  However, find-
+ing parameters that minimize the energy on a complex landscape remains a
+significant challenge.  First-order optimization techniques, such as stochastic
+gradient  descent  [1,  20]  and  Adam  [21,  29],  often  suffer  from  convergence
+difficulties, either failing to converge or converging very slowly.
+    One of the most effective approaches to date is the stochastic reconfigu-
+ration (SR) method, initially introduced in [40] for lattice systems and later
+extended to small atoms and molecules [5, 6].  The SR method leverages the
+geometric structure of the parameter space, updating parameters along the
+descent direction within the Fubini-Study metric [3, 14].  Updating the pa-
+rameters in the SR method requires inverting a covariance matrixS, which
+poses  several  key  challenges  in  optimization  [24]:   (i)  sampling  introduces
+stochastic errors in estimatingS,  necessitating a large number of samples;
+(ii)Sis  often  singular  in  practice,  leading  to  instability  in  the  optimiza-
+tion process; (iii) the size ofSgrows with the number of model parameters,
+making its inversion computationally expensive for large models.
+    To tackle these challenges, several modifications have been proposed.  In
+[31], an exponentially decaying averaging scheme is developed to estimate the
+S-matrix, incorporating historical estimates to improve stability.  In [7, 19,
+34, 36, 38, 41], various regularization techniques are proposed to stabilize the
+optimization process,  such as adding a diagonal shift to theS-matrix and
+setting  a  cut-off  tolerance  for  small  singular  values.   Recent  advancements
+have suggested modifications to the SR update rule, replacing the inversion
+of  theS-matrix  with  the  inversion  of  a  smallerT-matrix,  which  reduces
+computational  costs  while  maintaining  accuracy  [7,  14,  36].   Despite  these
+
+
+                                                2
+improvements, a method that fully addresses these challenges (i.e.  ensuring
+stability,  enhancing efficiency,  and enabling effective averaging schemes for
+theS-matrix) remains an open problem.
+    In this work, we propose a warm-started stochastic reconfiguration (WSSR)
+optimizer that integrates a warm-started singular value decomposition (SVD)
+algorithm  into  the  SR  method,  to  achieve  efficient  matrix  inversion  while
+maintaining the simplicity of averaging and regularization.  We observe that
+calculating the largestksingular values can be formulated as an optimiza-
+tion problem [28]. This formulation allows for the application of a warm-start
+technique, which significantly reduces computational costs by leveraging the
+small changes to the target matrices in consecutive VMC iterations.  Instead
+of recomputing the entire SVD from scratch, one adjusts the existing decom-
+position from previous VMC steps, reusing the singular vectors to accelerate
+the process.  This approach is particularly beneficial in our VMC framework
+as theS-matrices are frequently updated.  We further introduce a dynamic
+selection  mechanism  for  the  truncation  rank  to  enhance  optimization  effi-
+ciency.
+    To demonstrate the effectiveness of the WSSR optimizer, we apply it to
+optimize an ACE wave function [45] for both small atoms and molecule, a
+wave function architecture on which standard stochastic gradient methods
+perform particularly poorly.  Our results show that WSSR can achieve com-
+parable convergence as the state-of-art SR method, SPRING [14] (see Section
+3.2), while requiring less computational cost for each update step.
+    Outline.The  rest  of  this  paper  is  organized  as  follows.   In  Section  2,
+we provide a brief review of the many-electron Schr¨odinger equation and the
+VMC method.  In Section 3, we present the standard SR method, as well as
+its various modifications.  In Section 4, we propose the WSSR optimizer and
+design an adaptive rank selection scheme.  In Section 5, we show numerical
+simulations  on  typical  atomic  and  molecular  systems.   Finally,  concluding
+remarks are given in Section 6.
+
+2.  Background
+
+2.1.  Many-electron Schr¨odinger equation
+    We consider a many-particle system consisting ofMnuclei andNelec-
+trons.   LetR RR:=  (R RR1,···,RRRM)∈(R       3)M  and  (Z  1,···,Z M)∈(Z       +)M  de-
+note  positions  and  charges  of  nuclei,  respectively.    Meanwhile,  letr rr :=
+
+
+                                               3
+(rrr1,···,rrrN)∈(R       3)N  andσ  σσ:= (σ     1,···,σ N)∈(Z       2)N  stand for spatial and
+spin coordinates of electrons.  Here and throughout, we usex xx:= (x xx1,···,xxxN)
+to  denote  theN-electron  configuration  withx      xxi  =  (rrri,σi)∈R     3×Z    2  (i=
+1,···,N).   Using  the  Born-Oppenheimer  approximation  [4],  the  electron
+Hamiltonian of the system is given in atomic units by
+                            NX            MX    NX      ZI                          1
+              H:=−       12     ∇2rrri−             |rrri−RRRI| + X             |rrri−r rrj|.          (1)
+                            i=1          I=1   i=1                  1≤i<j≤N
+The ground state of this system can be obtained by minimizing the energy
+functional                                           Z
+
+
+
+                                                       xxx∈  ZR3×Z   2N Ψ(x xx)  HΨ (xxx) dx xx
+      E0 = minΨ∈A  E(Ψ)    withE(Ψ) :=                                                                (2)
+
+
+                                                           xxx∈  R3×Z   2N|Ψ(x xx)|     2 dxxx
+in the admissible class of the wave functionn                                      o
+              A:=        Ψ∈H        1((R    3×Z    2)N) : Ψ is antisymmetric         ,                 (3)
+and the integral with respect to the electron configurationZZ   x        xxmeansZ
+
+                                               ··· X
+                    xxx∈  R3×Z   2N  := Xσ1∈Z   2 σN∈Z   2  R3  dr   1···   R3  dr N,
+and the anti-symmetry condition is given by
+          Ψ xxxπ(1) ,···,xxxπ(N)   = (−1)   ϵπΨ xxx1,···,xxxN  ∀π∈S    N,            (4)
+whereS     N  denotes the permutation group andϵ        π  denotes the parity of the
+permutationπ∈S         N.   Note  that  the  ground-state  energyE              0  is  the  lowest
+eigenvalue of the HamiltonianHwith the corresponding eigenfunction be-
+longing toA.
+    In  practical  calculations,  the  wave  function  is  parameterized  using  a
+physics-informed  or  machine-learning  ansatz,  Ψθθθ ∈A,  with  parameters
+θθθ∈R  M.  Then the ground-state solutionE                 0 can be approximated by solving
+the following optimization problem,
+                             min
+                            θθθ∈R M L(θ θθ)    withL(θ     θθ) :=E(Ψ     θθθ),                          (5)
+which reduces the variational spaceAin (2) into a lower-dimensional pa-
+rameter spaceR   M.  Nevertheless, we note that calculatingL(θ         θθ) still involves
+a high-dimensional integral.
+
+                                                    4
+2.2.  Variational Monte Carlo
+     Within the VMC framework, the loss functionL(θ       θθ) can be expressed as
+the expectation value of the “local energy” as [3]
+                Z
+   L(θ θθ) =
+                  xxx∈  R3×Z   2NEL(xxx; Ψ θθθ)·P(x  xx; Ψ θθθ) dxxx=E   xxx∼P(·;Ψ    θθθ)EL(xxx; Ψ θθθ),  (6)
+
+where  the  probability  densityP(x  xx; Ψ)  and  the  local  energyE                 L(xxx; Ψ)  are,
+respectively, defined as
+                                   Ψ(x xx) 2                                            HΨ (xxx)
+     P(x xx; Ψ) :=     Z                  Ψ(x xx) 2 dxxx  andE        L(xxx; Ψ) :=        Ψ(x xx)  .     (7)
+
+
+                         xxx∈  R3×Z   2N
+
+To optimize the loss function, the gradient ofL(θ   θθ) is also required.  A similar
+derivation [27] yields
+                                                 h ∇θθθ log|Ψ   θθθ(xxx)|  EL(xxx; Ψ θθθ)−L(θ   θθ) i
+  g(θ θθ) :=∇   θθθL(θ θθ) = 2E  xxx∼P(·;Ψ    θθθ)                                                         .  (8)
+
+In practice, bothL(θ    θθ) andg(θ    θθ) are estimated stochastically using Markov-
+Chain Monte Carlo sampling [12] to generateNsamples fromP(x          xx; Ψ), de-
+noted asS N  :={x  xx1,···,xxxN}.  Unbiased estimates for the lossL(θ    θθ) and the
+gradientg(θ θθ) are then given by
+                         X
+      L(θ θθ)≈     1N           EL(xxx; Ψ θθθ) =:L N (θθθ),                                                 (9)
+                        xxx∈S N
+                       X
+      g(θ θθ)≈     2N           ∂θθθ log|Ψ   θθθ(xxx)|  EL(xxx; Ψ θθθ)−L  N (θθθ)       =:g N (θθθ).      (10)
+                      xxx∈S N
+
+Note  thatg   N (θθθ)  is  an  unbiased  estimator  of  the  gradient∇  θθθL(θ θθ),  which
+however is not equal to the gradient ofL N (θθθ).
+     NowL(θ  θθ) can be minimized using optimization methods, such as stochas-
+tic gradient descent (SGD) [1, 20], i.e., the parameterθ     θθ(k)   at thek-th iteration
+is updated as
+
+                                    θθθ(k+1)    =θ θθ(k) −η    (k) ·gN (θθθ(k)   ),                              (11)
+
+
+
+                                                         5
+whereη             (k)  >0 is the learning rate.  However, SGD-based methods, including
+modifications like Adam [21, 29], generally perform poorly for complex sys-
+tems and complex wave function architectures, as the updates often get stuck,
+oscillating back and forth along steep regions of the energy landscape instead
+of converging along the flatter directions [34].  We have observed particularly
+severe effects of this kind for the ACE wave functions introduced in [45].  (We
+speculate that this is due to the hierarchical features that ACE employs.)  In
+practice, the Stochastic Reconfiguration (SR) method [5, 6, 40] is frequently
+used, as it takes advantage of the geometry of the parameterization space,
+offering a more reliable and efficient optimization scheme.
+
+Remark 1 (Spin Models).Beside the many-electron Schr¨odinger equation,
+spin models have also attracted growing attention within the VMC framework,
+particularly with the integration of machine learning architectures [8, 22, 26].
+All algorithms proposed in this work can be readily extended to spin models.
+
+3.  Stochastic Reconfiguration
+3.1.  Standard Stochastic Reconfiguration method
+    The  SR  method  is  based  on  the  idea  of  performing  an  imaginary  time
+evolution  and  finding  parameter  updates  by  minimizing  the  Fubini-Study
+distance at each small imaginary time step [3, 14].  This results in a precon-
+ditioned gradientS  θθθ−1 g θθθ, where the preconditionerS(θ         θθ) is represented
+as a covariance matrix,
+
+                  S(θ θθ) :=E   xxx∼P(·;Ψ    θθθ)O(x xx;θ θθ)·O(x  xx;θ θθ) ⊤∈R M×M,               (12)
+
+with
+                                                         h                  i
+       O(x xx;θ θθ) =  ∂θθθ logΨθθθ(xxx)|−E    xxx∼P(·;Ψ    θθθ)∂θθθ logΨθθθ(xxx)|∈R M.       (13)
+
+In practice, the expectation in (12) can be stochastically estimated as follows
+
+                     S(θ θθ)≈  X      O(x xx;θ θθ)·O(x  xx;θ θθ) ⊤ =:S N (θθθ).                        (14)
+                               xxx∈S N
+Consequently, rather than using (11), the parameter update is expressed in
+the form
+
+                      θθθ(k+1)    =θ θθ(k) −η    (k) SN θθθ(k) −1 gN θθθ(k) .                         (15)
+
+                                                  6
+Remark 2 (More interpretation of theS-Matrix).TheS-matrix in(12)
+can be understood from several perspectives.  By definition, theS-matrix rep-
+resents  the  covariance  matrix  of  the  gradient  of  the  logarithm  of  the  wave
+function, quantifying the variance of gradient estimates across different sam-
+ples.   Moreover,  the  SR  method,  often  referred  to  as  the  natural  gradient
+method, links theS-matrix to the Fisher Information Matrix (FIM) [35, 27],
+encodes the geometric structure of the parameter space, allowing the gradient
+directions to be adjusted for more efficient parameter updates.
+
+    In  practice,  one  can  expressS    N (θθθ)  andg   N (θθθ)  in  an  alternative  matrix
+form.  If we define
+            O(S  N ;θθθ) =     1√   O(x xx1;θθθ)··· O(x  xxN ;θθθ) ∈R M×N    and        (16)
+                                N   L(x xx1;θθθ)··· L(x  xxN ;θθθ) ∈R N,                     (17)
+             L(S  N ;θθθ) =     1√N
+
+whereL(x     xx;θ θθ)  is  given  byL(x  xx;θ θθ)  :=E      L(xxx; Ψ θθθ)−L  N (θθθ),  thenS   N (θθθ)  and
+gN (θθθ) can then be written as
+
+    SN (θθθ) =O(S   N ;θθθ)O(S   N ;θθθ) ⊤       and g  N (θθθ) = 2O(S   N ;θθθ)L(S   N ;θθθ).
+
+These representations will be used in the following.
+
+3.2.  Variants of the SR method
+    The SR update (15) involves an inversion of theS-matrix, which comes
+with  three  key  issues  (as  discussed  in  Introduction):   stochastic  error,  in-
+vertibility,  and  high  computational  cost.   To  address  these  issues,  several
+modifications have been proposed.
+    For the first issue related to statistical errors, a common approach is to use
+averaging techniques that incorporate information from previous iterations
+[31, 35], i.e.,S  N  in (15) is replaced byS   aveN   of the following form
+                           
+         SaveN θθθ(k)  =     SN θθθ(k) ,                                      ifk= 1,
+                           δS   aveN θθθ(k−1)   + (1−δ)S   N θθθ(k) ,   otherwise,                          (18)
+
+
+whereδ∈(0,1) represents the weight of averaging.
+
+
+
+                                                    7
+    For the second issue on invertibility ofS, a broad class of regularization
+schemes have been developed [34, 36], which replaceS    N  in (15) byS   regN   of
+the form
+                                                         
+                                                            (1 +ϵ)  SN (θθθ) ii,   ifi=j,
+SregN  (θθθ) =S  N (θθθ) +ϵI or     SregN  (θθθ) ij =    SN (θθθ)                  ,
+                                                                       ij,             otherwise
+
+whereε >0  is  a  hyper-parameter  for  regularization.   A  different  type  of
+regularization replacesS     −1N   with its pseudo-inverse,S   †N  [7, 19], i.e.,
+
+                               SN (θθθ) † =U(θ  θθ)Σ(θ  θθ) †U(θ θθ) ⊤,                                  (19)
+
+whereS    N (θθθ) =U(θ   θθ)Σ(θ  θθ)U(θ  θθ) ⊤ is the SVD calculation ofS N (θθθ) and Σ(θ  θθ) † is
+a cutoff of Σ(θ θθ) −1   with diagonal elements
+                                  
+                           σ†        1/σ i,   if|σ  i|≥ε    tol|σ max|,
+                             i  = 
+                                     0,       otherwise.                                                             (20)
+
+Here,σ     i  are the diagonal elements of Σ(θ θθ),σ      max  is the maximum singular
+value, andε        tol >0 is the relative tolerance used to truncate small singular
+values.  We emphasize that the choice of regularization schemes has a signif-
+icant  impact  on  convergence:  over-regularization  leads  to  underfitting  and
+inefficiency [23], while under-regularization may cause instability.
+    To  address  the  third  issue,  the  computational  cost  of  invertingS,  sev-
+eral variants of the SR method have been developed, including Krylov-type
+methods  [13,  33]  and  the  Kronecker-Factored  Approximate  Curvature  (K-
+FAC) method [35, 31].  Additionally, the recently developed minimum-step
+Stochastic Reconfiguration (MinSR) method [7, 9, 36] exploits the relation
+
+                   SN (θθθ) −1 gN (θθθ) = 2O(S   N ;θθθ)T N (θθθ) −1 L(S  N ;θθθ),                     (21)
+
+whereT    N (θθθ)  :=O(S   N ;θθθ) ⊤O(S  N ;θθθ),  andO(S     N ;θθθ),L(S   N ;θθθ)  are  given  in
+(16)  and  (17),  respectively.   This  approach  circumvents  the  need  to  invert
+SN (θθθ)∈R  M×M  by  instead  inverting  the  smaller  matrixT    N (θθθ)∈R  N×N ,
+which is computationally advantageous asM≫Nin most cases.
+    As a substantial modification of MinSR, the Subsampled Projected-Increment
+Natural Gradient (SPRING) method [14] introduces a momentum term to
+
+
+                                                    8
+the parameter updating formula,
+
+         θθθ(k+1) −θ θθ(k)    =ϕ(θ  θθ(k)   ) +µ  θθθ(k) −θ θθ(k−1)  ,   with                           (22)
+
+                 ϕ(θ θθ(k)   ) =−η        (k) ON SN ;θθθ(k) TN (θθθ) −1   ˜L(S  N ;θθθ(k)   ),   where
+            ˜L(S  N ;θθθ(k)   ) :=L(S   N ;θθθ(k)   )−µO  N SN ;θθθ(k) ⊤(θθθ(k) −θ θθ(k−1)     ).
+
+This removes the momentum component that conflicts with the current sub-
+problem,  controlled  by  a  decay  parameterµ∈[0,1).   Whenµ=  0,  the
+method reduces to MinSR. MinSR updates parameters based on single mini-
+batch, whereas SPRING exploits the history of past optimization.  It is rea-
+sonable  to  doubt  that  averaging  past  gradients,  instead  of  averaging  the
+S-matrix, may successfully mitigate the stochastic error.
+    The  goal  of  this  work  is  to  develop  a  method  that  simultaneously  ad-
+dresses all three issues within a unified framework, and to provide a compar-
+ison with existing approaches.
+
+4.  Stochastic reconfiguration with warm-started SVD
+
+    In this section,  we propose a Warm-Started Stochastic Reconfiguration
+(WSSR) method, whose main idea is to utilize historical information to ac-
+celerate the convergence of the iterative SVD algorithm at each optimization
+step.   In  what  follows,  we  first  present  a  framework  that  provides  a  low-
+rank approximation of the “averaged” covariant matrix (18) in Section 4.1,
+then  combine  the  warm-started  SVD  algorithm  to  solve  the  bottleneck  in
+computing the low-rank approximation in Section 4.2.  To further enhance
+efficiency and automate hyper-parameter tuning, we introduce an adaptive
+rank selection scheme in Section 4.3.
+
+4.1.  Low-rank approximation of the averagedS-matrix
+    In this subsection, we develop a low-rank approximation method for the
+averagedS-matrix, which can be viewed as an efficient combination of  (18)
+and (19).
+    Letr∈Z             + be a chosen rank.  At thek-th VMC step, rather than directly
+storing  and  averaging  the  gradient  andS-matrix,  we  use  a  matrix                      O(k) ∈
+RM×r        and a vector   L(k) ∈R                                                           r   to retain the essential information from the
+relevant historical data.
+
+
+                                                  9
+     Fork= 0, we set              O(0)∈R M×r        by a zero matrix and                    L(0)∈R                                                           r   by a zero
+vector, respectively.  They are updated in the VMC iteration as follows.  At
+thek-th step (k>0), after evaluatingO(S           N ;θθθ(k)   ) andL(S    N ;θθθ(k)   ) defined in
+(16) and (17), we set
+                              h√                                                  i
+                  ˆO(k)    :=      δ  O(k−1)  ,√1−δO(S    N ;θθθ(k)   )              ∈R M×(r+N)     ,         (23)
+                  ˆL(k)    := h√                                                 i
+                                   δ  L(k−1)  ,√1−δL(S    N ;θθθ(k)   )             ∈R                                                           r+N  ,                  (24)
+
+whereδ∈(0,1) acts as a averaging weight.  Then we calculate the rank-r
+truncated SVD for  ˆO(k)    as
+                                              ˆO(k) ≈U    (k)   Σ(k) V (k) ,                                     (25)
+whereU             (k) ∈R M×r      ,V  (k) ∈R                                                           r×(r+N)           are orthogonal matrices,  and Σ(k)    is
+a diagonal matrix containing the largestr singular valuess                            (k)i    in descending
+order,  i.e.,s        (k)1 ≥s    (k)2 ≥···≥s    (k)r  >0.  Finally we can construct the new
+O(k)    and    L(k)    by
+                                         O(k)    :=U      (k)   Σ(k) ∈R M×r   ,                                (26)
+
+                                         L(k)    :=V      (k)   ˆL(k) ∈R                                                           r .                                      (27)
+
+     With the above computations, we are able to replace the gradientg N (θθθ(k)   )
+and covariance matrixS    N (θθθ(k)   ) with the following                         g(k)    and   S(k)   ,
+
+                                      g(k)    :=  ˆO(k)   ˆL(k) ∈R M,                                        (28)
+
+                                     S(k)    :=  O(k)  O(k) ⊤∈R M×M,                             (29)
+
+which approximate the averaged gradient vector and the averagedS-matrix,
+respectively.  These approximations enable efficient computation and storage
+of the gradient vectors and covariance matrices,  by capturing the essential
+information while reducing computational complexity and memory usage.
+Remark 3 (Connection to the averaging scheme).If we perform an ex-
+act  SVD  at  each  step,  with  no  truncation  applied,  the  update  rule  for  the
+S-matrix, as shown in(29), becomes equivalent to
+
+                                   S(k)    =δ    S(k−1)     + (1−δ)S   N (θθθk),
+
+                                                            10
+which aligns with the averaging scheme in(18).  Similarly,  the gradient                            g(k)
+is updated in an averaging manner,
+
+                              g(k)    =δ  g(k−1)     + (1−δ)g   N (θθθk).
+
+However,  in  practical  calculations  it  is  not  feasible  to  keep  increasing  the
+rank in this manner.  Therefore, we introduce a rank selection strategy later
+in section 4.3 to reduce computational costs.
+
+    In practical calculations, we typically haver<min(M,N), which means
+that  S(k)    is singular.  As a result, additional regularization schemes are nec-
+essary  to  avoid  the  singularity  issue  and  ensure  stable  parameter  updates.
+Note that only the firstr singular values of                 S(k)   , denotedσ          (k)   , are obtained
+from the truncated SVD calculation of  ˆO(k)   .  Specifically,σ  (k)i    = (s  (k)i   )2  for
+1≤i≤r,  wheres                           (k)i    is  the  singular  value  of   ˆO(k)   .   Therefore,  we  trun-
+cate  the  remaining  singular  values  of  theS-matrix  to  beσ                    ,  whereσ      is  a
+hyperparameter for regularization.
+    The low-rank approximation is now written as
+
+                        θθθ(k+1)    =θ θθ(k) −η    (k)  S(k)†    +σ−1S(k)⊥ g(k) ,                    (30)
+
+
+whereη             (k)  >0 is the learning rate,S(k)+    and   S(k)⊥     are given by
+
+       S(k)†     :=U      (k)  Σ(k) −2  U (k) ⊤    and S(k)⊥     :=I−U            (k)  U (k) ⊤.
+
+The update scheme presented in (30) incorporates a low-rank approximation,
+weighted averaging, and regularization techniques to enhance computational
+efficiency, accuracy, and stability of the optimization process.  This combina-
+tion allows for more efficient handling of large-scale optimization problems.
+The main computational overhead of this approach arises from the partial
+SVD calculation in (25), which has a complexity ofO(MNr).
+
+Remark 4 (SVD with Randomized Sketching).Randomized sketching
+[15, 32] is a stochastic strategy to handle large-scale matrices computations,
+by projecting data into lower-dimensional spaces with random matrices.  Meth-
+ods  equipped  with  randomized  sketching  reduce  the  dimensionality  of  large
+matrices or datasets, improving efficiency for tasks such as solving linear sys-
+tems, low-rank matrix approximations, and regression.  This strategy reduces
+
+
+                                                  11
+the computational complexity of traditional methods, such as the simple sub-
+space iteration (SSI) and so on, in calculating partial SVD toO(MNlogr),
+which comes at the cost of potential accuracy loss.  In Appendix  A, we present
+more  details  for  performing  partial  SVD  with  randomized  sketching.  In  the
+following,  we  refer  to  the  SR  method  that  computes  the  partial  SVD(25)
+with randomized sketching as the Randomized Sketching Stochastic Reconfig-
+uration (RSSR) method.
+
+4.2.  Warm-started SVD
+    Building on the previous iteration, we observe that computation of the
+largest singular values can be updated via simple subspace iteration (SSI) or
+reformulated as an optimization problem [2, 37].  By concurrently updating
+the singular vectors during the solution process, we implement a warm-start
+strategy  that  capitalizes  on  the  incremental  changes  between  consecutive
+iterations to substantially reduce computational costs.
+    The  SSI  method  generalizes  the  power  method  for  the  case  ofr  =  1
+to  compute  the  firstr dominant  eigenvalues  of  a  matrix  through  iterative
+matrix multiplications and orthogonalization.  Fundamentally, SSI is based
+on computing eigenpairs of the symmetric matrix  ˆO(k+1)   ˆO(k+1) ⊤, which can
+be formulated as maximizing the Rayleigh–Ritz function under orthogonality
+constraints,
+                       max
+                     U∈R  M×r  ∥ ˆO(k+1) U∥   F    subject toU ⊤U=I.                  (31)
+We consider an iterative algorithm by refining an initial subspace spanned
+byU   (k)   ,  i.e.,  one  starts  with  an  initial  subspaceU            (k+1),0         :=U      (k) ∈R M×r      ,
+and updates it iteratively by
+                              ˆO(k+1)   ˆO(k+1) ⊤U (k+1),i−1
+        U (k+1),i        = orth                                          fori= 1,2,···.
+
+Here,  orth(V) denotes the set of orthonormal bases for the range space of
+V.   The  method  ensures  that,  after  a  few  iterations,U               (k+1),i        converges  to
+the firstr dominant singular vectors of          ˆO(k+1)   ˆO(k+1) ⊤.  Through straight-
+forward calculations, we obtain the SVD of  ˆO(k+1)   , specifically determining
+U (k+1) ,Σ (k+1)   , andV         (k+1)    in (25) for the (k+ 1)-th step.  Its detailed proce-
+dure is presented in Algorithm 1.
+    For the complexity of the SSI-SVD algorithm,  the cost of matrix-block
+multiplications in the subspace iteration isO(mMNr), and the cost of or-
+thonormalization (i.e., by QR factorization) isO(mMr                      2), wheremdenotes
+
+                                                 12
+Algorithm 1SVD with Subspace Iteration (SSI-SVD)
+Input:Matrix              ˆO(k+1) ∈R M×(N+r)            , rankr, maximum number of iterations
+m, Initial guessU                (k)
+ 1:LetU           (k+1),0         =U    (k)
+ 2:fori= 1 tomdo
+ 3:     Compute QR decompositionU                  (k+1),i        =Q    (k+1),i   R(k+1),i
+ 4:     ComputeV                        (k+1),i        = ( ˆO(k+1)   )⊤Q(k+1),i
+ 5:     ComputeU                        (k+1),i        =  ˆO(k+1) V (k+1),i
+ 6:end for
+ 7:Perform the QR decomposition:V                    (k+1),m        =QR
+ 8:Sort diag(R) in descending order by absolute value:  ind = sort(diag(R))
+ 9:RearrangeU                  (k+1),m       ,  diag(R),  andQaccording to ind to obtainU                                    (k+1)   ,
+     Σ(k+1)   , andV         (k+1)   .
+Output:U                    (k+1)   , Σ(k+1)   ,V  (k+1)
+
+
+the number of iteration steps.  The computational efficiency largely depends
+on the number of subspace iteration steps, and hence the quality of the initial
+guess.
+     In our framework, when the averaging weightδis large and the learning
+rate for parameter updates is small, the matrix  ˆO(k+1)    generated by (23) is
+very close to  ˆO(k)    from the previous step.  Consequently, the singular vectors
+of   ˆO(k+1)    and   ˆO(k)    are  likely  to  be  very  similar  due  to  the  perturbation
+theory  of  eigenvalue  decomposition.   To  verify  this,  at  each  VMC  stepk
+for the Helium atom, we computed a high-accuracy SVD of  ˆO(k)    and stored
+its  leadingr left  singular  vectorsU                               (k)   .   We  then  monitored∥s                         (k+1) −s    (k) ∥
+(withs            (k)    containing the firstr singular values) and∥P                      (k+1) −P     (k) ∥(with
+P (k)     :=U      (k) U (k)⊤     in  Table  1.   We  observe  that  during  the  optimization
+procedure  of  VMC,  the  differences  in  singular  values  remain  at  the  10−3
+level, while the projector differences are typically between 0.01 and 0.1.  Thus
+by employing the warm-started strategy, the singular vectorsU             (k)    from the
+previous step can serve as an excellent initialization for the subspace iteration
+on  ˆO(k+1)   , significantly reducing the computational cost.
+
+Remark 5 (Iterative Methods for Large Matrices).Several methods have
+been proposed to accelerate the convergence of the SSI method, several itera-
+tive algorithms such as Arnoldi [25], Lanczos [42], and Jacobi–Davidson [43],
+which  efficiently  handle  large  sparse  or  structured  matrices.   Usually,  these
+
+                                                        13
+                                     4,000             8,000            16,000           32,000
+            s(k+1) −s    (k)      4.06×10        −3       8.66×10        −3       4.55×10        −3       3.32×10        −3
+           P (k+1) −P    (k)          0.027             0.111             0.017             0.036
+
+
+   Table 1:  Differences between consecutive SR matrices  ˆO(k)    for the Helium example.
+
+approaches do not benefit from a warm-start strategy.  For large unstructured
+matrices, specialized methods like the limited memory block Krylov subspace
+optimization (LMSVD) [28] accelerate SVD computations by using a dynam-
+ically selected subspace from previous iterations.
+
+4.3.  Adaptive rank selection scheme
+    The remaining issue is to select a rank truncation, i.e., the hyper-parameter
+r,  for the SVD at each iteration step.  This plays a crucial role in balanc-
+ing accuracy and computational efficiency:  If the rank is set too high,  the
+model retains unnecessary components, leading to excessive computational
+cost;  Conversely,  if the rank is set too low,  essential information of theS-
+matrix may be lost, resulting in a poor preconditioner for the gradients.  To
+navigate this trade-off, we introduce an adaptive strategy.
+    Intuitively,  we  truncate  the  singular  values  based  on  their  ratio  to  the
+maximum singular value, i.e., we setr to be the cardinality of
+
+                                  Ireg :=i:r   reg≤σ  i/σmax	,
+
+where theσ   i  are the singular values ofSin descending order,σ                    max =σ    1 is
+the largest singular value, andr        reg∈(0,1) is the truncation ratio.
+    To further control the computational cost, we compute only the firstr    max
+singular values.  Specifically, the rank is determined by using the following
+criterion:                                  n                          o
+                                r = max       i∈I  reg :i≤r         max  .                             (32)
+The maximum rankr            max is adjusted dynamically by an adaptive algorithm.
+We begin with an initial maximum rank,r             max =r      0.  If a predefined criterion
+is met, sayr     max∈Ireg, the rank is expanded byr     max→(1 +ϵ)r               max.  Our
+numerical experiments show that the maximum rank usually will not explode,
+see Section 5.
+    The  proposed  WSSR  optimizer  with  adaptive  rank  selection  scheme  is
+summarized in Algorithm 2.
+
+                                                   14
+Algorithm 2  Warm-Started Stochastic Reconfiguration (WSSR)
+Input:Maximum  number  of  iterationsk                                    max,  learning  rate  scheduleη              (k)   ,
+batch sizeN, averaging weightδ, regularization parameterσ                                      , relative cutoff
+rreg, initial maximum rankr            0, rank expansion factorϵ, initial parameterθ        θθ(0)
+ 1:r     max =r      0
+ 2:fork= 1,...,k               max do
+ 3:     SampleS     N  fromP(·; Ψ       θθθ(k)  )
+ 4:     ComputeO(S        N ;θθθ) andL(S   N ;θθθ) with (16) and (17)
+ 5:     Construct     ˆO(k)    in (23) and  ˆL(k)    in (24)
+ 6:    ifk>1then
+ 7:          Perform SSI-SVD     ˆO(k)    =U    (k)   Σ(k) V (k)    by Algorithm 1, with rank
+      r  max and initial guessU            (k−1)
+ 8:    else
+ 9:          Perform LMSVD     ˆO(k)    =U    (k)   Σ(k) V (k)    with rankr            max
+10:   end if
+11:   ifσ                                                                                                                                                        r  max >rregσmax then
+12:                                                                                                       r        max = (1 +ϵ)r          max
+13:   end if
+14:   Update            O(k)    and   L(k)    with (26) and (27).
+15:   Updateθ   θθ(k+1)    with (30)
+16:end for
+ Output:θ     θθ=θ θθ(k  max)
+
+
+4.4.  Summary and comparisons with other SR variants
+     We now compare WSSR with other SR variants, highlighting the novelty
+of  our  method.   In  particular  we  focus  on  comparisons  with  two  state-of-
+the-art SR methods (described in Section 3.2):  MinSR and SPRING. The
+differences between WSSR and these methods primarily lie in the following
+three aspects.
+     The first difference lies in how historical information is averaged to con-
+struct  the  preconditioned  gradient.   The  parameter  update  of  the  MinSR
+method depends solely on the current optimization step, discarding all his-
+torical information.  The SPRING method reintroduces historical informa-
+tion  by  incorporating  a  momentum  term  and  does  not  explicitly  perform
+averaging ofS.  In contrast, our WSSR method averages both theS-matrix
+and the gradient within a unified and systematic framework.
+
+
+                                                         15
+    The second difference resides in the regularization strategy of the approx-
+imateS-matrix.  The MinSR method applies a diagonal shift to theT-matrix
+(defined in (21)).  The SPRING method further improves numerical stabil-
+ity  by  adding  a  matrix  with  all  elements  set  to  1/Nto  theT-matrix,  in
+addition to the diagonal shift.  On the other hand, our WSSR method dy-
+namically  truncates  the  singular  values  based  on  their  decay  and  sets  the
+remaining  ones  to  a  constant,  allowing  for  efficient  matrix  inversion  while
+ensuring good numerical stability.
+    The last difference consists in how the matrix inversion of theS-matrix
+is performed.  Both the MinSR and SPRING methods compute the inverse
+of smaller matrices to achieve an equivalent result, which can be interpreted
+as an application of the Sherman-Morrison-Woodbury formula.  The domi-
+nant costO(MN               2) arises from formingT     N (θθθ) :=O(S    N ;θθθ) ⊤O(S  N ;θθθ), which
+exceeds the costO(N               3) for the subsequent Cholesky factorization ofT N  [14].
+    In contrast, WSSR performs the inversion implicitly through an SSI–SVD
+applied to the averaged matrix  ˆO(k)    without formingTorSmatrix.  After
+the SSI–SVD procedure produces the truncated singular vectors, the subse-
+quent low-rank SR update only involves matrix–vector projections onto the
+resulting subspace and incurs a cost lower than the SSI–SVD itself.
+    The SSI–SVD step requiresO(mMNr) operations for the matrix–block
+multiplications andO(mMr                           2) for orthonormalization, wheremdenotes the
+number of subspace-iteration steps.  Since under our warm-start strategym
+remains  small  (often  3∼5)  andr≤min{M,N},  the  overall  cost  of  the
+SSI–SVD procedure can be regarded asO(MNr).
+    By exploiting the similarity between the singular vectors of  ˆO(k)    in con-
+secutive VMC steps, warm-starting techniques enhances computational effi-
+ciency while maintaining accurate preconditioning.
+
+5.  Numerical experiments
+
+    We apply our WSSR method for the ground state calculations of some
+atomic  and  molecular  systems.   An  efficient  machine-learning  architecture,
+the atomic cluster expansion (ACE), is employed to parameterize the many-
+electron wave functions [11, 45].  We provide the details of ACE parameter-
+ization  in  Appendix   B.   All  results  are  given  in  atomic  units  (a.u.).   The
+simulations are performed via ourJuliaimplementationsACEpsi.jl[44].
+All simulations were performed on Digital Research Alliance of Canada. Each
+job was assigned a single NVIDIA H100 GPU.
+
+                                                16
+    Recall thatNdenotes the number of electrons,Mthe number nuclei and
+Zthe atomic number of a nucleus.  We perform simulations for the beryllium
+atom withN= 4,M= 1,Z= 4, the oxygen atom withN= 8,M= 1,
+Z= 8, the nitrogen atom withN= 10,M= 1,Z= 10, the lithium-hydrogen
+(LiH) molecule with Li-H bond length of 3.015, and the lithium-lithium Li2
+molecule with a Li-Li bond length of 5.051.
+    We first test the choices of key hyperparameters:  the relative cutoffr            reg,
+the maximum rankr            max, and the averaging weightδ.  We show in Fig.  2 the
+convergence behavior of the WSSR algorithm for the beryllium atom under
+different parameter choices.  For the regularizationr                              reg, we find that smaller
+values  yield  faster  convergence,  accompanied  with  a  relatively  large  rank
+in the adaptive selection scheme.  For the rank cutoffr               max, the optimization
+becomes unstable and fails to converge reliably whenr              max = 200, and increas-
+ingr         max improves stability and yields lower energy values.  For the parameter
+averaging weightδ, settingδ= 0.0 leads to unstable optimization with fluc-
+tuations,  whileδ= 0.5 andδ= 0.95 produce stable convergence behavior
+and slightly better convergence.  These results highlight the importance of
+incorporating historical information for stable and efficient optimization and
+indicate that excessively larger             max is unnecessary.
+    We  compare  the  convergence  of  different  SR  methods  in  Fig.   3.   The
+hyperparameters used in these methods are presented in Appendix   C.  We
+observe that both the WSSR and SPRING methods achieve similar accuracy
+and convergence rates, whereas RSSR converges slightly more slowly. We fur-
+ther compare in Table 2 the computational time required by the SPRING and
+WSSR methods across different atomic systems and basis sets.  For WSSR,
+increasing the rankr slightly raises the computational cost, and the benefit
+becomes marginal beyondr          max = 800, where the reduction in optimization
+time  is  minimal  relative  to  the  additional  expense.   These  results  demon-
+strate that WSSR offers superior computational efficiency while maintaining
+comparable accuracy for the case of wave function architectures based on the
+ACE framework.
+
+6.  Conclusions
+    In this work, we develop the WSSR optimizer for VMC ground state cal-
+culations of many-electron systems, which incorporates a warm-started SVD
+algorithm to accelerate the matrix inversions in the stochastic reconfigura-
+tion method.  By leveraging optimization history and adaptively increasing
+
+                                               17
+Figure 1:  Rank Selection for (beryllium atom).  Left:  Relative cutoffr            reg.  Right:  Rank
+growth with iterations.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 2:  Convergence with respect to different numerical parameters (beryllium atom).
+Left:  Maximum rankr           max.  Right:  Averaging weightδ.
+
+the rank, this method significantly reduces computational costs.  Our numer-
+ical experiments show that the WSSR method outperforms alternative SR
+methods in terms of convergence rate and computational time.
+
+Acknowledgements
+    The  work  of  Dexuan  Zhou  was  supported  by  National  Natural  Science
+Foundation of China (124B2020).  The work of Huajie Chen was supported
+by the National Natural Science Foundation of China (12371431).  The work
+of Xin Liu was supported in part by the National Natural Science Foundation
+of China (12125108, 12288201), and RGC grant JLFS/P-501/24 for the CAS
+AMSS–PolyU Joint Laboratory in Applied Mathematics.  Christoph Ortner
+was supported by the Natural Sciences and Engineering Research Council of
+
+                                              18
+Figure 3:  Convergence comparison of different SR methods.  First row (atoms):  O; Ne.
+Second row (molecule):  LiH; Li2.  All UHF and CCSD(T) reference energies are computed
+using the cc-pVTZ basis set.
+
+Canada through an NSERC Discovery grant.  This research was supported
+in part through computational resources and services provided by the Digi-
+tal Research Alliance of Canada (alliancecan.ca) and by Advanced Research
+Computing at the University of British Columbia.  Conflict of interest disclo-
+sure:  Christoph Ortner is a partner in Symmetric Group LLP which licenses
+force fields commercially.
+
+Appendix  A.  SVD with Randomized Sketching
+    In  this  section,  we  give  a  brief  overview  of  the  randomized  sketching
+scheme for approximating the singular value decomposition (SVD) of aM×
+Nmatrix     ˆO(k)    with rankr, following [15].
+    Given a target rankr and an oversampling parameterp, our first goal is
+
+
+
+                                              19
+             System   Basis         SPRING                          WSSR
+                                                     200        400        800        1600
+             Be          DZ            3.98         0.88       1.25       1.78        3.39
+                          TZ           7.20         1.74       3.02       5.37       10.39
+             O            DZ           3.50         1.08       1.56       2.30        4.59
+                          TZ           8.16         1.80       3.26       6.11       14.65
+             Ne          DZ            3.64         0.92       1.56       2.57        5.40
+                          TZ           7.16         1.70       3.20       5.68       13.46
+
+Table  2:  Comparison  of  computational  time  between  SPRING  and  WSSR  for  different
+atomic  systems  and  basis  sets.   The  WSSR  method  is  evaluated  for  different  values  of
+r  max.  The baseline unit is defined as the time required for VMC calculations, excluding
+the optimization steps (sampling, gradient computation, and energy calculation).  For each
+iteration,  SVD  of  rankr         max  is  computed,  following  with  the  application  of  truncation
+criterion eq. (32), see Section 4.3 for details.
+
+to construct a matrixQwithr +porthonormal columns such that
+
+                     ∥ ˆO(k) −QQ ⊤ ˆO(k) ∥≈  min
+                                                    rank(X)≤r    ∥ ˆO(k) −X∥.
+
+The  matrixQspans  a  subspace  that  captures  most  of  the  action  of                ˆO(k)   .
+Whenp= 0, the columns ofQare exactly the dominant left singular vec-
+tors  of   ˆO(k)   .   Forp >0,  the  additional  flexibility  improves  computational
+efficiency.
+    To construct the matrixQ, we first generater +prandom samples as
+                       Ω = (ω  (1),ω(2),···,ω   (r+p)      )∈R M×(r+p)     .
+
+These random vectors are likely to form a linearly independent set, and no
+linear  combination  falls  within  the  null  space  of   ˆO(k)   .   Consequently,  the
+columns ofY=       ˆO(k)   Ω are expected to be linearly independent, spanning the
+range of   ˆO(k)   .  The random matrix Ω can be chosen in various ways,  such
+as a Gaussian random matrix.  However, using a structured random matrix,
+such as a subsampled random Fourier transform (SRFT) defined in Section
+4.6 of [15], helps reduce the computational cost of the productY=           ˆO(k)   Ω to
+O(MNlog(r)).
+    With fixed-rank approximation, the rank-r approximation of            ˆO(k)    is ob-
+
+
+                                                     20
+tained by performing SVD on the reduced matrixB=Q      ⊤ ˆO(k) ∈R                                                           r×N  :
+                           ˆO(k) ≈U    (k)   Σ(k) V (k) ,   withU            (k)    =QU.                    (A.1)
+
+where
+
+                                           B=UΣ           (k) V (k) .
+
+This  procedure  is  computationally  efficient,  particularly  whenQhas  rela-
+tively  few  columns  (i.e.,  whenr +pis  small).   In  such  cases,  the  reduced
+matrixBis easily constructed, and its SVD can be computed quickly.
+    In this algorithm, the appropriate ofQby a structured random matrix
+takesO(MNlog(r) +Mr                                     2); the SVD calculation ofBwith row-extraction
+technique [15] costsO((M+N)r                                     2).  Compared with deterministic techniques
+of  SVD  calculation  requiringO(MNr),  the  randomized  algorithm  can  be
+several times faster and is well suited for parallel implementation [15].
+
+Appendix  B.  Wavefunction Architecture with ACE
+    In  this  section,  we  provide  a  brief  overview  of  the  parameterization  of
+wave functions using Atomic Cluster Expansion (ACE). For details, refer to
+[45].
+    To construct ACE wave function parameterization, we first construct one-
+body basis functions.  Letϕ   ν :R 3×Z    2→Rdenote one-body basis functions,
+whereνdenotes the index of the basis.  In this work, we focus on the atomic
+orbital [16].
+    With those one-body basis functions set,  we define anN-variable sym-
+metric function with indexνas
+
+                                                              NX
+                                 Aν(xxx1,···,xxxN) :=             ϕν(xxxi).
+                                                             i=1
+The ACE basis functions take the form of a product of these functions
+
+                                                       NY
+                                        AAAννν(xxx) :=    Aνt(xxx),
+                                                      t=1
+where the index setν ννbelongs to
+                    n                                                                          o
+          IN :=       ννν= (ν    1,···,ν N)∈(K×Z           2)N :ν 1≤ν    2≤···≤ν  N              .
+
+                                                     21
+To further reduce complexity, we truncate the expansion by considering only
+clusters of up toBparticles, which leads to the modified basis functions,
+
+                                                          BY
+                       AAAν1,...,νB(x  1,···,x N) :=          Aνt(x  1,···,x N).
+                                                         t=1
+N-particle  symmetric  function  Φ(x  xx)  can  then  be  approximated  by  ACE
+model as
+                                       Φ(x xx)≈  X      cννν AAAννν(xxx),
+                                                  ννν∈I B
+with coefficientsθ θθ:={c    ννν}ννν∈I B.
+    To construct antisymmetric wave functions, we further denote eAAAννν  as an
+ACE basis function in which the particlex    xxi  is treated as the “highlighted”
+particle.  Specifically, for an index tupleν   νν= (ν    0,ν1,...,νB−1  ), we define
+                                                        B−1Y  X                !
+                         eAAAννν(xxxi;xxx̸=i  ) :=ϕ  ν0(xxxi)        ϕνt(xxxj)    ,
+
+                                                        t=1      j̸=i
+so that the first indexν        0  acts on the highlighted particlex    xxi,  while eachν t
+(t≥1) corresponds to a symmetric sum of one-body basis functions over all
+other particlesx     xxj withj̸=i.
+    With  these  partially  symmetric  basis  functions eAAAννν,  we  define  backflow
+determinant as                                                                       
+                                       φ1(xxx1;xxx̸=1) ··· φ N(xxx1;xxx̸=1)         ,
+                  ΨBF(xxx) = det                 ...            ...             ...
+                                        φ1(xxxN;xxx̸=N  )··· φ N(xxxN;xxx̸=N  )
+whereφ     k takes the form
+                              φk xxxi;xxx̸=i ≈ X        ˜c kννν eAAAννν xxxi;xxx̸=i .
+
+                                                   ννν∈  eIB
+Finally, the full wave function used in this work takes the form
+                                   Ψ(x xx) = Ψ   BF(xxx) exp  γ(x xx) ,
+whereγ(x    xx) is a Jastrow factor that enforces the electronic cusp conditions,
+                                                                ( 1
+             γ(x xx) := X           −c  ij                         2,   opposite spins,
+                              1 +|r rri−r rrj|,   cij =            1
+                         i<j                                       4,   same spin,      .
+
+                                                    22
+Appendix  C.  Hyperparameters
+
+    We list all hyperparameters in section Appendix  C. Specifically, we em-
+ploy a decaying learning rate, defined asη  k =α/(1 +k/β) with fixed param-
+etersα= 0.015 andβ= 1000.0.  The maximum number of training steps is
+set to 100,000 to ensure robust convergence across all systems.  For SPRING,
+we adopt a Tikhonov regularization parameter ofϵ= 0.001, and a regular-
+ization parameterµ= 0.99.  In our numerical experiments, we typically set
+the maximum number of SSI iterations to be 3 perform orthonormalization
+every step.  At the first step for each level of the VMC optimization, we use
+the LMSVD method [28] to compute a more accurate SVD, ensuring a better
+initial guess for the subsequent steps.  Finally, we smooth the energy curves
+for each method by averaging over a sliding window of ten thousand itera-
+tions.  In all numerical experiments, we employed a multilevel wave function
+structure to ensure a robust initialization.
+
+                   Hyperparameters                                      Value
+   Standard deviations for local energy clipping                           5
+                    Number of walkers                                    2048
+                  MCMC burn-in steps                                     1000
+            MCMC steps between updates                                     10
+             MCMC Sampling distribution                        Gaussian distribution
+                SSI Maximum iterations                                     3
+
+
+
+References
+
+ [1]Amari, S.i., 1993.  Backpropagation and stochastic gradient descent method.
+     Neurocomputing 5, 185–196.
+
+ [2]Bathe, K.J., 2013.  The subspace iteration method–revisited.  Computers &
+     Structures 126, 177–183.
+
+ [3]Becca, F., Sorella, S., 2017. Quantum Monte Carlo approaches for correlated
+     systems.  Cambridge University Press.
+
+ [4]Born,  M.,  1927.   Born-Oppenheimer  approximation.   Annals  of  Physics  84,
+     457–484.
+
+
+
+                                              23
+ [5]Casula, M., Attaccalite, C., Sorella, S., 2004.  Correlated geminal wave func-
+      tion for molecules:  An efficient resonating valence bond approach. The Jour-
+      nal of Chemical Physics 121, 7110–7126.
+
+ [6]Casula,  M.,  Sorella,  S.,  2003.   Geminal  wave  functions  with  Jastrow  corre-
+      lation:  A first application to atoms.  The Journal of Chemical Physics 119,
+      6500–6511.
+
+ [7]Chen, A., Heyl, M., 2024.  Empowering deep neural quantum states through
+      efficient optimization.  Nature Physics , 1–6.
+
+ [8]Chen,  J.,  Cheng,  S.,  Xie,  H.,  Wang,  L.,  Xiang,  T.,  2018.   Equivalence  of
+      restricted Boltzmann machines and tensor network states.  Physical Review
+      B 97, 085104.
+
+ [9]Chen, Y., Xie, H., Wang, H., 2023.  Efficient numerical algorithm for large-
+      scale damped natural gradient descent.  arXiv preprint arXiv:2310.17556 .
+
+[10]Choo, K., Mezzacapo, A., Carleo, G., 2020.  Fermionic neural-network states
+      for ab-initio electronic structure.  Nature Communications 11, 2368.
+
+[11]Drautz,  R.,  Ortner,  C.,  2022.  Atomic cluster expansion and wave function
+      representations.arXiv:2206.11375.
+
+[12]Foulkes,  W.,  Mitas,  L.,  Needs,  R.,  Rajagopal,  G.,  2001.   Quantum  Monte
+      Carlo simulations of solids.  Reviews of Modern Physics 73, 33–83.
+
+[13]Giuseppe, C., Matthias, T., 2017.  Solving the quantum many-body problem
+      with artificial neural networks.  Science 355, 602–606.
+
+[14]Goldshlager,  G.,  Abrahamsen,  N.,  Lin,  L.,  2024.   A  Kaczmarz-inspired  ap-
+      proach to accelerate the optimization of neural network wavefunctions. Jour-
+      nal of Computational Physics 516, 113351.
+
+[15]Halko, N., Martinsson, P.G., Tropp, J.A., 2011.  Finding structure with ran-
+      domness:  Probabilistic  algorithms  for  constructing  approximate  matrix  de-
+      compositions.  SIAM Review 53, 217–288.
+
+[16]Helgaker,  T.,  Jorgensen,  P.,  Olsen,  J.,  2014.  Molecular electronic-structure
+      theory.  John Wiley & Sons.
+
+[17]Hermann, J., Sch¨atzle, Z., No´e, F., 2020. Deep-neural-network solution of the
+      electronic Schr¨odinger equation.  Nature Chemistry 12, 891–897.
+
+
+                                                  24
+[18]Hinze,  J.,  1973.    MC-SCF.  I.  The  multi-configuration  self-consistent-field
+      method.  The Journal of Chemical Physics 59, 6424–6432.
+
+[19]Hofmann, D., Fabiani, G., Mentink, J.H., Carleo, G., Sentef, M., 2022.  Role
+      of stochastic noise and generalization error in the time propagation of neural-
+      network quantum states.  SciPost Physics 12, 165.
+
+[20]Ketkar,  N.,  Ketkar,  N.,  2017.   Stochastic  gradient  descent.   Deep  Learning
+      with Python:  A Hands-on Introduction , 113–132.
+
+[21]Kingma,  D.P.,  2014.   Adam:  A  method  for  stochastic  optimization.   arXiv
+      preprint arXiv:1412.6980 .
+
+[22]Kochkov,  D.,  Pfaff,  T.,  Sanchez-Gonzalez,  A.,  Battaglia,  P.,  Clark,  B.K.,
+      2021. Learning ground states of quantum hamiltonians with graph networks.
+      arXiv preprint arXiv:2110.06390 .
+
+[23]Lange,  H.,  D¨oschl,  F.,  Carrasquilla,  J.,  Bohrdt,  A.,  2024a.  Neural network
+      approach to quasiparticle dispersions in doped antiferromagnets.  Communi-
+      cations Physics 7, 187.
+
+[24]Lange,  H.,  Van  de  Walle,  A.,  Abedinnia,  A.,  Bohrdt,  A.,  2024b.   From  ar-
+      chitectures  to  applications:  A  review  of  neural  quantum  states.   Quantum
+      Science and Technology .
+
+[25]Lehoucq,  R.B.,  2001.   Implicitly  restarted  Arnoldi  methods  and  subspace
+      iteration.  SIAM Journal on Matrix Analysis and Applications 23, 551–562.
+
+[26]Liang, X., Liu, W.Y., Lin, P.Z., Guo, G.C., Zhang, Y.S., He, L., 2018. Solving
+      frustrated quantum many-particle models with convolutional neural networks.
+      Physical Review B 98, 104426.
+
+[27]Lin, J., Goldshlager, G., Lin, L., 2023. Explicitly antisymmetrized neural net-
+      work layers for variational Monte Carlo simulation. Journal of Computational
+      Physics 474, 111765.
+
+[28]Liu, X., Wen, Z., Zhang, Y., 2013.  Limited memory block Krylov subspace
+      optimization for computing dominant singular value decompositions.  SIAM
+      Journal on Scientific Computing 35, A1641–A1668.
+
+[29]Loshchilov, I., Hutter, F., 2017. Decoupled weight decay regularization. arXiv
+      preprint arXiv:1711.05101 .
+
+
+
+                                                  25
+[30]Lykos,  P.,  Pratt,  G.,  1963.  Discussion on the Hartree-Fock approximation.
+      Reviews of Modern Physics 35, 496.
+
+[31]Martens,  J., Grosse, R.,  2015.  Optimizing neural networks with kronecker-
+      factored  approximate  curvature,  in:   International  conference  on  machine
+      learning, PMLR. pp. 2408–2417.
+
+[32]Martinsson, P.G., Tropp, J.A., 2020.  Randomized numerical linear algebra:
+      Foundations and algorithms.  Acta Numerica 29, 403–572.
+
+[33]Neuscamman,  E.,  Umrigar,  C.,  Chan,  G.K.L.,  2012.   Optimizing  large  pa-
+      rameter  sets  in  variational  quantum  Monte  Carlo.   Physical  Review  B  85,
+      045103.
+
+[34]Park, C.Y., Kastoryano, M.J., 2020.  Geometry of learning neural quantum
+      states.  Physical Review Research 2, 023232.
+
+[35]Pfau, D., Spencer, J.S., Matthews, A.G., Foulkes, W.M.C., 2020. Ab initio so-
+      lution of the many-electron Schr¨odinger equation with deep neural networks.
+      Physical Review Research 2, 033429.
+
+[36]Rende, R., Viteritti, L.L., Bardone, L., Becca, F., Goldt, S., 2024.  A simple
+      linear algebra identity to optimize large-scale neural network quantum states.
+      Communications Physics 7, 260.
+
+[37]Saad, Y., 2016.  Analysis of subspace iteration for eigenvalue problems with
+      evolving matrices.  SIAM Journal on Matrix Analysis and Applications 37,
+      103–122.
+
+[38]Schmitt, M., Heyl, M., 2020.  Quantum many-body dynamics in two dimen-
+      sions with artificial neural networks.  Physical Review Letters 125, 100503.
+
+[39]Shavitt,  I.,  1977.  The method of configuration interaction,  in:  Methods of
+      Electronic Structure Theory. Springer, pp. 189–275.
+
+[40]Sorella,  S.,  2001.    Generalized  lanczos  algorithm  for  variational  quantum
+      Monte Carlo.  Physical Review B 64, 024512.
+
+[41]Sorella,  S.,  Casula,  M.,  Rocca,  D.,  2007.   Weak  binding  between  two  aro-
+      matic rings:  Feeling the van der Waals attraction by quantum Monte Carlo
+      methods.  The Journal of Chemical Physics 127.
+
+
+
+
+                                                 26
+[42]Sorensen, D.C., 1997. Implicitly restarted Arnoldi/Lanczos methods for large
+      scale eigenvalue calculations, in: Parallel Numerical Algorithms. Springer, pp.
+      119–165.
+
+[43]Stathopoulos,  A.,  Fischer,  C.F.,  1994.   A  davidson  program  for  finding  a
+      few  selected  extreme  eigenpairs  of  a  large,  sparse,  real,  symmetric  matrix.
+      Computer Physics Communications 79, 268–290.
+
+[44]Zhou,  D.,  Chen,  H.,  Ho,  C.H.,  Ortner,  C.,  2024a.    ACEPsi.jl.    URL:
+      https://github.com/ACEsuit/ACEpsi.jl.
+
+[45]Zhou,  D.,  Chen,  H.,  Ho,  C.H.,  Ortner,  C.,  2024b.  A multilevel method for
+      many-electron Schr¨odinger equations based on the atomic cluster expansion.
+      SIAM Journal on Scientific Computing 46, A105–A129.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                  27

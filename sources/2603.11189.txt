@@ -1,0 +1,1581 @@
+              DysonNet:  Constant-Time Local Updates for Neural Quantum States
+
+                                                Lucas  Winter  and  Andreas  Nunnenkamp
+                        Faculty  of  Physics,  University  of  Vienna,  Boltzmanngasse  5,  1090  Vienna,  Austria
+                                                             (Dated:  March 13, 2026)
+                   Neural quantum states (NQS) provide a flexible variational framework for many-body wavefunctions,
+                but suffer from high computational cost and limited interpretability.  We introduce DysonNet, a broad
+                class of NQS that couples strictly local nonlinearities through global linear layers.  This structure is
+                analogous to a truncated Dyson series which gives an intuitive interpretation of local wavefunction
+                updates as scattering from static impurities.  By resumming the scattering series, single-spin-flip
+                updates can be computed inO(1) time, independent of system size, using an algorithm we call
+                ABACUS. Implementing DysonNet with the state-space model S4, we obtain up to 230× speedups
+                over Vision-Transformers for computing the local estimator.  This corresponds to an asymptotic
+                O(N2) improvement in training-time scaling, reachingO(Nlog    2N) total training complexity in
+                area-law phases.  Benchmarks on the 1D long-range Ising model and frustrated J1-J2 chains show
+                that DysonNet matches state-of-the-art NQS accuracy while removing the dominant local-update
+                overhead.  More broadly, our results suggest a route to scalable NQS architectures where physical
+                interpretability directly enables computational efficiency.
+
+
+                     I.    INTRODUCTION                                        Model                         Update      Train      Memory
+   Neural quantum states (NQS) have emerged as a flexible                      ViT [29,30]      O(N                   2) O(N        3τ)  O(N          3)
+                                                                               ResNet/CNN [31,32]  O(N                   2) O(N        3τ)  O(N          3)
+and potentially scalable class of variational wave-function                    RBM [1,33]      O(N)  O(N                           2τ)  O(N          2)
+ans¨atze   [1,  2].   Recently,  neural  quantum  states  have                 RNN (AR) [17,34]   O(N)  O(N                             2)  O(N        2)
+achieved state-of-the-art accuracy across a wide domain of                     PixelCNN (AR) [19,35] O(N)  O(N                             2)  O(N        2)
+challenging ground state problems like frustrated magnets                      DysonNet(Area law) O(1)O(Nlog                                              2N) O(N)
+[3–5], the Hubbard model   [6–8], long-ranged quantum                          DysonNet  O(1)O(NT(N)τ) O(N)
+systems [9, 10],  and fractional quantum Hall problems
+[11, 12].  Many architectures have been proposed including                     Table I.Asymptotic complexity of DysonNet versus
+restricted Boltzmann machines (RBM) [1, 13], convolu-                          standard NQS architectures with global receptive field.
+tional networks (CNN) [14–16], recurrent networks (RNN)                        Update:  Cost of a single spin flip given cached environment
+[17, 18], and Transformers (ViT) [4, 9, 19–21].  One of the                    tensors.Train:  Cost per gradient step,  including Markov-
+main promises of NQS is that their nonlinear structure                         chain sampling and local Hamiltonian evaluation.  Metropolis
+gives  them  higher  expressive  power  than  conventional                     approaches are sampling-dominated, while autoregressive (AR)
+Ans¨atze such as tensor network states (TNS)  [22–24].                         approaches are local-estimator-dominated. τ  represents au-
+   The  downside  of  this  nonlinear  structure  is  that  to                 tocorrelation time;T (N), defined in Eq. (13)     , is sublinear or
+update the state after a single spin flip forces a full evalu-                 logarithmic.Memory:  Peak memory under batched evalua-
+ation of the network.  For restricted Boltzmann machines                       tion strategy.  Uniquely among deep NQS, DysonNet enables
+(RBM), local update schemes exist, but their costs scale                       constant-timeO(1) local updates, allowing for log-linear train-
+with system size  [1, 25–28].  Autoregressive (AR) factor-                     ing costs in area-law regimes.  In critical phases, it improves
+ization of the wavefunction can make sampling more effi-                       upon prior Markov chain Monte Carlo NQS via subquadratic
+                                                                               sweep costs and is the only approach with strictly linear peak
+cient, but it leaves local update costs unchanged  [17, 19].                   memory.  Baseline classes are cited row-wise; DysonNet scaling
+There are specialized Ans¨atze like finite receptive field                     follows TheoremIand SectionE.
+CNNs or local graph neural networks that can trivially
+be updated inO(1) but this is achieved by neglecting                           rithm to DysonNet, a broad class of convolutional NQS.
+any long-range correlations.  To our knowledge, no cur-                        Each layer applies a convolution operator and then a lo-
+rent method endows deep NQS with constant time local                           cal nonlinearity.  DysonNet admits a particularly simple
+updates while retaining their broad expressivity.                              physical interpretation — it is functionally analogous to
+   This  paper  closes  that  gap.   We  present  a  constant-                 a truncated Dyson series.  Within DysonNet,  local up-
+time local-update algorithm ABACUS for neural network                          dates can be interpreted as scattering at static impurities
+architectures with linear token mixer and strictly local                       giving ABACUS a physically intuitive interpretation as
+nonlinearity.  The algorithm applies to many popular ar-                       resumming  the  scattering  series.   Furthermore,  Dyson-
+chitectures  such  as  convolutional  neural  networks  [31],                  Net allows for efficient calculation of the link tensors via
+linearized attention [9, 36], Fourier layers [37, 38], state                   convolutions.
+space models [39, 40] or graph neural networks [41, 42].                          We implement DysonNet using the state space model
+We prove that the change in the network output after a                        (SSM)  S4   [39]  as  a  mixer  which  is  particularly  inter-
+single spin flip can be computed in timeindependent of                         pretable  in  terms  of  a  physical  Green’s  function.   We
+N  using precontractedlink tensors.  We apply the algo-                        benchmark  our  model  on  long-range  spin  chains,  such
+                                                                                                                                                          2
+
+
+
+(a)                                                      (b)                                              (c)
+
+
+
+
+
+
+
+
+
+
+    Figure 1.  (a)DysonNet Neural network architecture.Layers alternate global Green’s-function convolutions    G(l)    with local
+    nonlinearityD(l)  (σ); the readout is the mean-pooling projectorPM.  A single spin flipσj→−σ j (red) modifiesD(l)   only within a
+    slice of widthw around sitej.  Subsequent convolutionsG(l)   propagate this local change globally building long-range correlations.
+    (b)ABACUS local update (Algorithm1).Slice-restricted activations are built recursively using the link tensors          L(l,m)       and T (l)  ;
+    see Eqs. (10)     –(11)     .  (c)Practical realization of a DysonNet block.An embedded spin sequence splits into two streams:    ϕ (CNN
+    path; local, nonlinear) andh (SSM path; nonlocal, kept linear inh).  Each of theL stacked blocks updatesϕ with a dense layer,
+    a small-kernel CNN layer, and a SiLU nonlinearity.  In theh stream we addϕ, apply the SSM kernel and apply multiplicative
+    gating via D(ϕ) = SiLu(ϕ).  After L blocks, mean pooling over positions yields the readout.  Color/shape key:  purple – dense
+    layers; green – token mixers (CNN/SSM); orange – normalization; blue – projector (mean pooling); circle – nonlinearity.
+
+
+    as the long-range transverse field Ising model (TFIM).                         It consists of
+    This  yields  up  to  two  orders  of  magnitude  wall-clock                      (1)Green’s  function  convolution,           G  is  a  linear,
+    speedups over Vision-Transformers [9] at N  = 1000 at                          translation–invariant operator along the chain that acts
+    matched accuracy.  We formalize the model class,  give                         independently  on  each  channel  (i.e.  it  is  diagonal  in
+    the algorithm and proof, describe an efficient implemen-                       the  channel  index c).   In  real  space  it  acts  as  a  lattice
+    tation, and benchmark accuracy, runtime, and validate                         Green’s–function convolution,
+    scaling to large system sizes.  Our work introduces the
+    widely-applicable algorithm ABACUS and the physically                                   (G  (l) h) j  = X    g(l)r,c hj−r,c  ,  c= 1,...,d.    (2)
+    interpretable architecture DysonNet that can significantly                                               r∈Z
+    reduce the computational cost of NQS simulations.                                 (2)Local nonlinearity   D(σ)is an input-conditioned
+
+                                                                                   matrix multiplication that acts position-wise on each em-
+        II. DysonNet:  PHYSICALLY MOTIVATED                                        bedding vector in the sequence
+           NEURAL NETWORK ARCHITECTURE                                                          (D  (l)  (σ)h)    j,c  =D    (l)  (σ j−w:j+w          )h j.           (3)
+
+       A key feature of many quantum many-body ground                             The receptive field of the local non-linearity is W  = 2w +1
+    states is a natural separation of scales:  long-wavelength                     wherewis the half-width.
+    behavior  is  often  universal  and  can  be  described  by  a                    Stacks are obtained by recursive application of(1).
+    few collective modes, the basis for effective field theories
+    and the renormalization group.  In contrast, short-range                          Here, G denotes any translationally invariant kernel
+    physics can be highly complex and non-universal, depend-                       convolution,  such  as  Fourier  layers  [37,  38],  linearized
+    ing sensitively on microscopic details of the Hamiltonian.                    (Toeplitz) attention   [9], state space models [39, 40], or
+       We will start by introducing DysonNet, a class of NQS                       analytical Green’s functions.  While limited by finite recep-
+    Ans¨atze that explicitly builds the separation of correla-                     tive fields, standard CNN kernels also apply [31].  Depend-
+    tion scales into their architecture.  Each block factorizes                    ing on the padding scheme, the convolution can support
+    the representation into (i) a linear, translation-invariant                    either open or periodic boundary conditions.
+    propagatorG that captures long-wavelength response and                            The network is composed of a stack of DysonNet blocks
+    (ii) a local nonlinearity D(σ) that captures short-range                       followed by a pooling operation, (multiple) densely con-
+    structure.  Stacking such blocks yields a representation                       nected layers, and a nonlinearity.  This means the network
+    that is both efficient and interpretable, rather than asking                   output is
+    a generic ansatz to discover this structure from scratch.                                                       LX   MY
+       Definition (DysonNet block).Let   σ∈{±  1}N  be                                 Ψ(σ) =f       APM      Gf             D(l)  (σ)G      (l)  Eσ,    (4)
+    a  spin  configuration, h(l) ∈R N×d       a  sequence  of  latent                                             M=0   l=1
+    vectors with d-channels and fix a half–window w∈N     .  A
+    singleDysonNetblock is the map                                                 where E∈R   d×1     is the per-site embedding layer (appliedP
+                                                                                   independently  at  each  position),  (PMh)c  =   1N                jhj,c
+                       h(l+1)    =D    (l)  (σ)G      (l) h(l) .                 (1)is a mean pooling operation.  The sum adds a residual
+                                                                                                                                                      3
+
+connection from the latent activations of each layer to                       update algorithm to handle these local changes exploiting
+the output. Gf  is the final Green’s function convolution.                    that the network is equivalent to a Dyson series.
+f  is  the  final  nonlinearity  often  chosen  to  be f(x)  =
+log cosh(x). A is the final matrix multiplication chosen to                   Algorithm1ABACUSlocal-update kernel
+be real valued A∈R   d×d      out  for stoquastic Hamiltonians                Require:Link tensors{T                                   (l) }Ll=1 ,{L   (l,m)  }1≤m≤l−2,2≤l≤L
+orA∈C    d×d      out  for complex wavefunctions.                             Ensure:Mean-pooled vectorΩ
+   While the network definition (4)     seems quite compli-                     1:  ˜h(1)←∆D        (1) M(1) ∆σ+      ˜h(1)
+cated at first glance it admits a very simple interpretation.                                                        0
+For simplicity, let us assume weight sharing between the                        2:forl= 2,...,Ldo
+different layersG(l)   =Gf :=G0 andD(l)  (σ) =D(σ) [43].                        3:       ˜h(l) ←∆D        (l)  ˜M(l)  ˜h(l−1)     +Pl−2)      ˜h(m)     + ˜h(l)
+                                                                                                                           m=1 L(l,m               0
+We can then interpret the product of layers in Eq.  (4)    (ex-
+pression inside round bracket) as an effective propagator                       4:Ω←A        PM ˜h(L)    +PLl=1 T (l)  ˜h(l)
+G.  Expanding this term yields                                                  5:return Ω
+
+
+               LX  MY
+  G=G       0          D(σ)G          0                               (5)
+             M=0   l=1                                                          III.    ABACUS: ASYMPTOTICALLY OPTIMAL
+     =G   0 +G   0D(σ)G          0 +G   0D(σ)G          0D(σ)G          0 +....                       LOCAL UPDATES
+
+We  see  the  network  can  be  interpreted  as  a truncated                     We will now derive the update algorithm for the am-
+Dyson series.  Specifically, we can identify G0  with the                     plitude Ψ(σ) after a single spin flip at position j relative
+free propagator, andD(σ) with the coupling vertex.  This                      to Ψ(σ0).  Importantly, the results of this section apply
+further justifies our decision to restrict D(σ) to be local.                  to any network with linear token mixers M(l)  , not only
+While this correspondence allows one to initialize the net-                   convolutional  token  mixers  such  as  in  DysonNet.   For
+work using analytic theory, we learn the weight matrices                      the DysonNet specialization, we identify M(l)   =G(l)   and
+via gradient descent.                                                         Mf  = Gf.   As  the  local  vertex D(σ)  only  changes  in
+   The functional equivalence of the network to a Dyson                       a narrow slice of width W  = 2w + 1 around the flip j
+series clarifies how its parameters control the correlations                  (with  half-width w;  see  Fig.1a),  we  can  interpret  the
+it can express.  With L layers, the network can represent                     update as a scattering process off a localized impurity
+any non-local power-law or exponentially decaying interac-                    (the perturbation).  This perspective allows us to derive
+tion up to coupling order L; long-ranged correlations are                     an efficient update algorithm by exactly resumming the
+therefore truncated in coupling order (see appendixA).                        Dyson series defined by the network.
+We stress that by parameterizing G as a power law, the                           We formalize this by decomposing every layer’s nonlin-
+network can naturally express correlations at criticality                     earity D(l)  (σ) into a static background D(l)
+making it more expressive than a fixed bond dimension                                                                                0   :=D(l)  (σ0)
+matrix product state.  By contrast, the local nonlinearity                    and a localized perturbation, ∆D(l)   =D(l)  (σ)−D    (l)  (σ0)
+can, in principle, generate correlations of arbitrarily high                  that is non-zero only on a narrow slice around j.  Substi-
+coupling order, but only within a finite widthW .  Varying                    tuting this decomposition into Eq. (4) yields
+the number of layers L and the nonlinear receptive field                                                    LX   MY                          !
+W  thus  provides  a  systematic  way  to  improve  the  ex-                     Ω(σ) =AP     M      Mf             (D  (l)                     Eσ,
+pressivity of the model.  Nevertheless, there exist ground                                                             0   + ∆D    (l)  )M  (l)
+states with genuinely non-local correlations of arbitrary                                                 M=0   l=1
+coupling range, such as phases with intrinsic topological                                                                                           (7)
+order characterized by non-local Wilson loop operators                        whereΩ(    σ) is the activation before the final nonlinearity
+in  2D   [44–46],  for  which  these  truncations  are  insuffi-              Ψ(σ) =f(Ω(  σ)).  Intuitively, D0 acts as the background
+cient.  Representing such exotic quantum states requires                      medium and ∆D as a local scatterer; M(l)   is the propa-
+additional techniques.                                                        gator spreading the local perturbations and the projector
+   Model  training  is  performed  via  Variational  Monte-                   PM  performs the measurement.
+Carlo and Stochastic Reconfiguration  [1].  We minimize                          We now need to resum the product in (7)   .  If we naively
+the variational energy by sampling configurationsσ and                        expand the ordered product in Eq. (7)    we formally obtain
+computing the local energy                                                    exponentially manymatrix words O(2L) in the network
+                                                                              depth L.  This would be prohibitive for deeper networks.
+                 Eloc(σ) =  X                                                 To circumvent this we propose ABACUS (Algorithm1)
+                                                Ψ(σ)   .                (6)   for computing matrix-vector products like (7)    in quadratic
+                               σ′⟨σ|H|σ   ′⟩Ψ(σ  ′)                           timeO(L2) in network depth.  The algorithm works by
+Since both the Metropolis sampling and the local energy                       (i)pre-contractingall background propagators      D(·)0 M(·)
+calculation involve configurationsσ′ that differ fromσ by                     intoenvironment (link) tensors, and (ii)dynamically re-
+only a single spin flip, recomputing the full wavefunction                    summingthe matrix words with a slice-local recurrence.
+is inefficient.  In the next section, we derive an optimized                     The  link  tensors  defined  for  a  spin  configuration σ0
+                                                                                                                                                         4
+
+propagate activations through the frozen background                             is not limited to convolutions.  In AppendixIwe describe
+                               LX       MY                !                     ABACUS in 2D beyond the case considered here.  The
+         T (l)   =P MMf                      D(n)            P⊤S,j,   (8)       runtime complexity remains unchanged and depends on
+                                                0 M(n)                          the number of tokens W  conditioning the nonlinearity.
+                               M=l    n=l+1                                     Note, however, that the structure of M  dictates the link-
+                                 l−1Y                  !                        tensor  precomputation  cost  (Eqs.  (8)     and  (9)   ):   while
+       L(l,m)      =P S,jM(l)             D(n)0 M(n)      P⊤S,j, ,    (9)       O(NlogN        ) for the DysonNet class M(l)    = G(l)  , it can
+                                 n=m+1                                          increase toO(N2) for dense, unstructured mixers.  We
+with 1≤m≤l−           2.  Note, the projector PS,j  restricts                   discuss this in detail in the runtime section.
+the activation on a narrow slice [j−w,...j     +w] around                          The  constant-time  complexity O(1)  in  TheoremI
+the update j.  The link tensor T (l)   : RW×d  →R  d (8)    lifts               strictly holds when the hyperparameters w and L are in-
+slice-restricted  activations  back  to  full  size  and  propa-                dependent of system size N.  Physically, this assumption
+gates them to the output. L(l,m)      : RW×d  →R  W×d       (9)                 relies on a separation of scales:  complex, non-universal
+propagates slice-restricted activations through the back-                       correlations are confined to a short range w, while long-
+ground between layersm andl.  Crucially, the link tensors                       wavelength behaviors are captured by the propagatorM(l)
+require only linear memory in N.  For the special case                          (G  (l)  ).
+of DysonNet they can be constructed in log-linear time                             A common intuition from perturbation theory is that re-
+O(NlogN        ) (see appendixG) for both periodic or open                      producing algebraic decay (criticality) from a short-range
+boundary conditions.  Physically, the link tensors repre-                       bare propagator requires resumming an infinite Dyson
+sent fully dressed Green’s function propagators relative                        series (L→∞  ).  However, in DysonNet, the propagators
+to some background.                                                             G(l)   are learnable, translation-invariant kernels capable
+   Using  the  link  tensors  (8)     and  (9)   ,  an  update  to              of representing power-law decays directly.  Consequently,
+the  wave  function  amplitudeΩ(    σ)  can  be  computed                       G(l)   should be interpreted not as a bare propagator, but
+by  summing  the  scattering  events.   Let  us  define  the                    as an effective dressed propagator.  We empirically observe
+slice-restricted activations ˜h(l)    = PS,jh(l) ∈R W×d       and               that even at criticality, small L is sufficient to preserve
+˜h(l)                                                                           theO(1) update cost.
+  0   =PS,jh(l)0 ∈R W×d     .  Furthermore, we define the slice-                   The  algorithm  extends  naturally  to  spin  clusters  of
+restricted  convolution   ˜M(l)    = PS,jM(l) P⊤S,j ∈R W×W      .               size n by increasing the effective slice width to wcluster =
+The slice-restricted activations can be computed using                          w +⌈n/  2⌉.  Regarding complexity, while the update step
+the following recurrence relation                                               is size-independent, the initial link-tensor construction
+                                                                                incurs  a  quasi-linearO(NlogN        )  cost.   For  estimators
+                                                 l−2X               !           requiringO(N) evaluations, this overhead amortizes to
+  ˜h(l)   = ∆D    (l) ˜h(l)                           L(l,m)     ˜h(m) ,        O(logN     ) per sample.  In the next section, we outline a
+                        0   +  ˜M(l)  ˜h(l−1)     +                             strategy to amortize the link tensor costs for the sampler.
+                                                m=1
+                                              !                       (10)
+                                LX                                                  IV.    SCREENED TYPEWRITER SAMPLER
+     Ω=A        PM ˜h(L)    +      T (l)   ˜h(l) .                       (11)
+                               l=1
+This recurrence defines the ABACUS algorithm.  Phys-                            Algorithm2ScreenedTypewriterSweep(σ,s,ϵ)
+ically,  ˜h(l)    represents the sum of all paths scattered at                  Require:Configurationσ                                             0, spacings, toleranceϵ
+layer l.  This amplitude sums three components:  the un-                        Ensure:  Updated configurationσ▷    LatentsΩ& Tensors  T
+scattered incident wave ˜h(l)                                                    1:Select spin flips ∆σ       1,...∆σ  K  with spacings
+                                   0  ;  all paths ˜h(l−1)      scattered        2:Sample random numbersu         1...K ∼U[0,1]
+at the previous layer l−  1; and the cumulative contribu-                        3:Ω,T ←LinkTensor(σ)
+tions from all prior defects m, propagated through the                           4:σ←σ           0
+background.                                                                      5:{   ∆Ω  k}←ABACUS    ({∆σk},σ   0,T  ) ▷ Get update vectors
+   In the appendixBwe prove the following statement                              6:fork= 1...Kdo
+Theorem I(ABACUS exactness and complexity).Given                                 7:        ˜R←|f(Ω+ ∆Ω       k)/f(Ω)|             2   ▷Fast activation ratio
+a  linear  token  mixer M(l)     and  a  local  non-linearity                    8:  P   acc←min(1,              ˜R)
+D(l)  (σ), the recurrence   (10)     –(11)       evaluatesΩ(      σ)exactly      9:    if|u   k−P   acc|≤ϵthen  ▷Ambiguous:Refresh
+for any local update σ =σ0 + ∆σ.  Given precomputed                             10:       Ω,T ←LinkTensor(σ)
+                                                                                11:  {∆Ω     k}←ABACUS({∆σ         k},σ   0,T)
+links of Eq. (8)     and  (9)   , the runtimeO(L2W 2d2)is con-                  12:             ˜R←|f(Ω+ ∆Ω       k)/f(Ω)|             2
+stant  in N  and  the  memoryO(NL2Wd2)is  linear  in                            13:    P     acc←min(1,              ˜R)
+N.                                                                              14:   ifu   k <Pacc then
+   We note ABACUS applies to any network architecture                           15:   σ←σ+ ∆σ        k
+with a linear token mixer and local nonlinearity, including                     16:       Ω←Ω+ ∆Ω         k            ▷Update latents
+linearized self-attention and graph neural networks, and                        17:returnσ
+                                                                                                                                                   5
+
+   We propose a Metropolis sampler that addresses two                            3. Correction:   Only  in  the  rare  window u∈    [ ˜R−
+bottlenecks:  standard Metropolis updates are inherently                            ϵ, ˜R +ϵ] do we evaluate the exact interference terms
+sequential and thus underuse GPUs, and our link-tensor                              (recomputing the full amplitude).
+construction must be amortized to achieve sublinear cost
+in system size.  The key idea is to treat a batch of spatially               This scheme allows parallel evaluation without statistical
+separated spin flips as a dilute gas of defects.  When the                   bias; proof see appendixC.
+defects are well separated, their scattering signatures do                      The  efficiency  depends  on  the  physical  correlation
+not interfere.  We can then evaluate the flips as indepen-                   length of the system.  The decay of correlations deter-
+dent proposals in parallel and reuse the same background                     mines the required spacings to keepϵ small.  In appendix
+link tensors across the batch solving both problems.  This                   E, we derive the amortized per proposal cost
+approximation introduces a small error in the acceptance                                   
+ratio, but a screened acceptance rule restores exact de-                                      O(log    2N)        Area-law (Gapped),
+tailed balance [47].                                                            T(N) =     O(N  γ logN)    Power-law (Critical),           .  (13)
+   Proposals are single-site flips, with occasional global                                    O(NlogN)     All-to-all.
+spin  inversions  to  aid  mixing.     A  proposal σ0 →
+σ  is  accepted  with Pacc   =   min{      1,R}   ,  where R   =             For gapped phases (area-law), the Green’s function decays
+|Ψ(σ)|2/|  Ψ(σ0)|2.  To amortize theO(NlogN        ) cost of                 exponentially, allowing dense packing of updates and poly-
+constructing  the  background  link  tensors,  we  evaluate                  logarithmic runtime.  For critical systems (power-law), the
+a batch of F  single-site proposals in parallel using the                    spacings must grow with system size, leading to sublinear
+static background of the referenceσ0.  This relies on the                    scalingNγ (whereγ < 1 depends on the critical exponent
+Independent  Scattering  Approximation:  we assume the                       α).  Only in the all-to-all limit does the speedup vanish.
+defects interact with the background but not with each                       In our numerics, we find the empirical error ϵ(σ,σ    0) to
+other.  Note we are using the term in analogy to scattering                  be small up to very large system sizesN≤    1000 and even
+theory in disordered media [48, 49], although here the de-                   on criticality.  For practical system sizes, adjusting the
+fects are not physical.  Detailed sampler settings are listed                spacings is unnecessary.  This means the method yields a
+in Appendix Sec.N. The error induced by neglecting the                       speedups ofO(N) significantly exceeding the worst case
+interaction (multiple scattering) between simultaneous                       analytical estimates (see appendixF). Another significant
+flips is                                                                     practical advantage is that the screened acceptance rule
+                              ΨISA(σ)−Ψ(σ)         .                (12) enables reduced precision sampling.  While neural quan-
+                  ϵ(σ) :=           Ψ(σ     0)                               tum states typically require high floating-point precision,
+                                                                             this rule permits lower-precision formats, which can yield
+This error is controlled by the decay of the Green’s func-                   additional constant speedups of 2×to 4×.
+tion, see appendixD. By enforcing a minimum separation                          TableIcontrasts  the  runtime  complexity  of  Dyson-
+s between defects, we ensure the propagator connecting                       Net against standard NQS architectures.  Among deep
+any two flips is negligible.                                                 networks, our approach uniquely enables constant-time,
+   To enforce a minimum spacing between flips, we use                        O(1) spin-flip updates given cached environment (link)
+a  typewriter  schedule  [50,  51]  (see  algorithm2).   We                  tensors.  In comparison, Restricted Boltzmann Machines
+partition  the  lattice  into  blocks  of  width s≥w     .   We              (RBM) scale linearly asO(N).  Autoregressive (AR) mod-
+sweep first over even blocks, then odd blocks.  In each                      els also face costs ofO(N) per local update.  While AR
+active block, we select one site uniformly.  This creates                    models can be sampled efficiently, the flip costs induce
+a superlattice of defects separated by the spacing s.  We                    O(N2) work for local observables which is their most sig-
+build the link tensors once per sweep (costingO(NlogN        ))              nificant bottleneck.  While matrix product states (MPS)
+and reuse them for all proposals in the batch.  Because                      and local CNNs also achieveO(1) updates, they occupy a
+the proposals are spatially separated,  the independent                      restricted expressivity class and fail to efficiently represent
+scattering approximation is highly accurate and the error                    long-range power-law correlations.
+ϵcan be bounded (see appendixD).                                                The fact that local updates can be evaluated in con-
+   Because ϵ is bounded, the Metropolis acceptance rule                      stant  time  gives  a  distinctive  advantage  to  DysonNet
+                                                                            +ABACUS  when  evaluating  the  Hamiltonian  (6)   .   Lo-
+can be enforced exactly even though the wave-function                        cal Hamiltonians generally haveO(N) connected matrix
+amplitude  is  approximate.   We  recover  exact  detailed                   elements, requiring an equivalent number of network eval-
+balance  using  a  screened  acceptance  rule  [47].   We  ac-               uations.   RBMs,  RNNs  and  PixelCNNs  face  a  cost  of
+cept  a  proposal  based  on  the  approximate  ratio   ˜R  =                O(N) for local updates resulting in a cost ofO(N2) in
+|ΨISA(σ)|2/|  Ψ(σ0)|2  and error bound ϵ.  For a random                      total.  The vision transformer (ViT) network evaluation
+numberu∼U[0,1]                                                               scales asO(N2) leading to a cubic costO(N3).  Dyson-
+                                                                             Net improves on all prior approaches by constructing link
+    1.Fast Accept:  Ifu<       ˜R−ϵ, accept immediately.                     tensors inO(NlogN        ) and using the ABACUS algorithm
+                                                                             for updates inO(1) given cached link tensors, achieving
+    2.Fast Reject:  Ifu>       ˜R+ϵ, reject immediately.                     a log-linear costO(NlogN).
+                                                                                                                                                6
+
+   Metropolis-Hastings approaches generally suffer from
+sampling  costs  of O(NτCnetwork),  leading  to  scaling
+ofO(N3τ)  for  ViTs  andO(N2τ)  for  RBMs.   Dyson-                                   N≳C       cacheWd(L−1) +C              ABACUSW 2.       (14)
+Net+ABACUS improves upon these by ensuring the per-
+sweep cost is strictly sub-quadratic,O(T (N)Nτ),  and                      whereC is an implementation-dependent constant; for our
+even log-linear,O(Nlog    2N), in area-law phases.  Autore-                code, C≈    1/6 (see Fig.3).  Efficiency depends quadrati-
+gressive architectures, however, retain the fastest asymp-                 cally on the non-linearity’s receptive fieldW , and linearly
+totic sampling capability with a cost ofO(N).                              on both the embedding dimension d and layer count L.
+   When considering total training time, Metropolis ap-                    Patching can minimize W  by allowing multiple spins to
+proaches remain dominated by the sampling cost, meaning                    contribute to a single embedding vector.  Although this
+our algorithmic improvements yield asymptotic speedups                     increases the embedding vector size, the trade-off is fa-
+independent of ground state correlations.  Autoregressive                  vorable.  While very deep networks are inefficient with
+models, by contrast, are computationally dominated by                      ABACUS, they are unnecessary with DysonNet because
+theO(N2) overhead required to evaluate the local Hamil-                    FFT-based convolutions provide a global receptive field.
+tonian.  As a result, in area-law phases where τ∝O  (1),                   Very wide networks also reduce efficiency.  For these, we
+DysonNet+ABACUS achieves a total training complexity                       recommend  giving D(σ)  a  block-diagonal  structure  in
+ofO(Nlog    2N), which is lower than that of autoregres-                   channel space creating a mixture-of-experts like structure.
+sive approaches.  Nevertheless, for systems with divergent                 Dividing into blocks of fixed size ∆d implies efficiency
+autocorrelation time autoregressive approaches remain                      when N≳CW        2∆d(L−   1) making ABACUS scalable to
+asymptotically faster.  While slower, using Markov chain                   arbitrary wide networks.
+sampling has the advantage of efficient enforcement of
+wavefunction symmetries that are difficult to implement                           V.    IMPLEMENTATION OFDysonNet
+in autoregressive architectures.
+   We noted in the algorithm section that ABACUS ap-                          So  far  we  have  treated  the  free  propagator G0  and
+plies to any NQS with global linear layers.  For dense,                    the coupling vertex D(σ) as abstract objects, since our
+unstructured linear mixers, a forward pass typically costs                 algorithms only require their general properties (linearity
+O(N2),  and  constructing/caching  the  link  tensors  has                 forG0, locality forD).  The reader is invited to instantiate
+the  same  scaling, O(N2),  rather  thanO(NlogN        )  for              G0  and D  with their favorite sequence model,  such as
+DysonNet.  In this regime, ABACUS reduces the cost of                      CNNs   [31], Fourier layers   [37, 38], or certain forms of
+a Metropolis sweep of local estimators (i.e., N  single-site               linearized self-attention  [9].  Here, we will parametrizeG0
+proposals) fromO(NCfwd) =O(N3) toO(Cfwd +N) =                              as a state space model and D(σ) as a short-range CNN
+O(N2) (for fixed depth and locality window).  The corre-                   (see Fig1c).
+sponding sampling speedups depend on the applicability                        Parameterizing the Green’s function G(l)  .State space
+of the independent-scattering approximation; in this work                  models  are  a  natural  choice  as  they  allow  to  interpret
+we only provide rigorous bounds for DysonNet, and we                       G(l)    as a free propagator.  This is consistent with view-
+leave a systematic study of sampling speedups for dense                    ing  the  network  as  a  truncated  Dyson  series.   A  state
+mixers to future work.                                                     space model is a sequence-to-sequence model where the
+   Finally, we compare asymptotic peak memory usage.                       output is obtained by computing the response of a linear
+For  standard  autoregressive  and  Markov  chain  Monte                   state-evolution equation to the input.  We implement a
+Carlo architectures, the local estimator introduces a sig-                 bidirectional state-space model mapping a sequence of
+nificant bottleneck; evaluating the wavefunction onO(N)                    hj→ ˜hj  by evolving the state vectorxj∈C s×d     via the
+connected configurations typically incurs anO(N2) mem-                     following discretized differential equation
+ory cost.  DysonNet avoids this quadratic scaling.  Because
+local updates require only slice-local activations and the                    xj,c  =A c (x j+1,c      +x j−1,c  −x j,c) +B chj,c,         (15)
+link tensors scale linearly, the total memory footprint is                    ˜hj,c  =C cxj,                                                         (16)
+reduced toO(N).  This scaling behavior allows for the
+simulation of large systems on commodity GPUs that lack                    where Ac∈C s×s  ,Bc∈C   1×s  ,Cc∈C s×1     are the learned
+the high memory capacity of data-center hardware.                          state matrices.  The first term in (16)      is the lattice Laplace
+   Beyond large system asymptotics, network hyperparam-                    operator spreading an excitation.  As the system is trans-
+eters determine when ABACUS outperforms DysonNet.                          lationally invariant, the response can be calculated using
+We illustrate this using the local estimator.  WithO(N)                    the Fast Fourier transform ˜h =F−1  G(k)⊙F(h) and
+forward passes, the cost of computing the local estima-                    the Green’s function
+tor  under  DysonNet  isO(NL(dNlogN           +d2N)).   For
+ABACUS, the dominant cost is computing the (L−   1)2 in-                                 Gc(k) =C   c (I−e   i2πk/N Ac)−1 Bc .           (17)
+terlayer link tensor, which scales asO(NlogNd         2W ).  Ap-
+plying the ABACUS recurrence costsO(Ld2W 2).  Thus,                        WhenAc = diag(λ1,...,λs) is diagonal, the resolvent and
+ABACUS is generally more efficient when.                                   G(k) reduce to a sum of Cauchy kernels (simple poles)
+                                                                                                                                                       7
+
+
+
+
+                                sX      Cc,jBc,j
+                 Gc(k)  =           1−e  i2πk/N λc,j .             (18)
+                              j=1
+
+Physically, these are damped/oscillatory modes with poles
+λc,j inside the unit disk (|λ c,j|≤ 1) on the complex plane.
+The Green’s function corresponds to the free propagation
+of  an  excitation  (for  example  domain  wall  or  magnon
+mode)  in  space.   Note  as  the  number  of  modes  grows,
+Gc(k) can also approximate power laws over finite range.
+   In our paper we use the S4 Ansatz for A = Λ +pqT
+consisting of a diagonal matrix Λ∈C s×s     and a rank one
+perturbation p,q∈C         1×s     [39].  We provide the analyt-
+ical Green’s function G(k) in appendixJ. Making this
+choice is physically analogous to considering the interact-
+ing Green’s function of an excitation scattered at a static
+impurity.                                                                      Figure 2.DysonNet outperforms ViT in ordered phases
+   Parameterizing  the  local  nonlinearity D(σ). For  pa-                     and  on  V-score.(a–d)  Performance  of  DysonNet  versus
+rameterizing the local vertex D(σ) we use a short-ranged                       RBM and ViT neural-quantum states (NQS) on the long-range
+CNN kernel, as this naturally enforces locality via a finite                   TFIM. (a,b) Energy differenceEDysonNet−E   ViT (squares) and
+receptive field.  From the input configuration we construct                    EDysonNet−E   RBM (triangles); (c,d) V-score.  Left:  sweep in
+a second data streamϕ(l)   (see Fig.1c).  Each layer applies                   coupling J  at fixed α = 4; right:  sweep in α at fixed J = 4.75.
+(i) a site-wise dense map, (ii) a short-range convolution,                     DysonNet attains substantially lower energies in the ordered
+and (iii) a nonlinearity.  The dense map Dj(σ) is then                        (FM/AFM) regimes by 10−2 −10−3  , while in the paramagnet
+conditioned on the data streamϕ             (l)                                ViT is slightly lower (< 10−4  , effectively equal).  DysonNet
+                                                                               consistently attains lower energies than RBM by at least two
+              Dj(σ) =U         (l)   diag χ(ϕ    (l−1)j      )V (l) .           (19)orders of magnitude.  DysonNet yields markedly smaller V-
+                                                                               scores, especially in the short-range AFM regime (by up to
+Here, χ is a nonlinearity that acts locally on each vector                     two orders of magnitude vs ViT and four orders of magnitude
+ϕ(l−1)                                                                         vs  RBM).  Points  are  means  over  three  training  runs  with
+  j      .  The matrices U(l) ,V (l) ∈R d×d     are layer-specific             identical sampler settings;  error bars denote one s.d.;  each
+and configuration-independent.  Thus Dj(σ)∈R d×d     has                       model is trained for 400 iterations.  System sizeN= 150.
+fixed eigenvectors but spin-configuration–dependent eigen-
+values  through ϕ(l−1)j      .   Besides  the  multiplicative  gat-
+ing D(σ)  (19)       we  also  inject  the ϕ(l)                                   The long-range TFIM spans a diverse set of ground-
+                                                j    stream  into  the         state behaviors with clean, controllable tuning via α:  (i)
+σ(l) →σ     (l)   +ϕ(l)    stream via addition before applying                 forα> 3 short-range Ising criticality with universal expo-
+the SSM (see Fig.1c).                                                          nents; (ii) for 5/3<α< 3 a genuinely long-range regime
+                                                                               with continuously varying, α-dependent exponents; and
+                   VI.    BENCHMARKING                                        (iii) for α< 5/3 a LR mean-field regime, including dan-
+                                                                               gerous irrelevant variables in finite-size scaling [58].  Away
+   We consider the one-dimensional long-range transverse-                      from criticality, long-range couplings generate algebraic
+field Ising model (TFIM) [52,53]                                              (“hybrid exponential–power-law”) correlation tails even
+                                                                               in gapped phases, offering a stringent test for variational
+                                 X    ˆσ zi ˆσ zj                              ans¨atze to capture both short- and long-distance structure
+             H=−     JNα(N)             rαij −h X       ˆσ xi.         (20)    within one architecture  [9,59].
+                                 i̸=j                i                            We train all models by minimizing the ground-state
+                                                                               energy  with  Variational  Monte-Carlo  using  stochastic
+where α> 0 controls the decay of the Ising interaction,                        reconfiguration (natural-gradient descent).  At each itera-
+rij = min(|i−j|, N−|i−j|                 ) is the periodic distance, and       tion we draw Metropolis samples of spin configurationsσ
+Nα(N) is a Kac factor that keeps the energy density well-                     (ABACUS provides O(1) per-flip amplitudes), estimate
+defined  across α  [53].   We  useNα(N)  =  2P⌊N/2⌋r=1  r−α  .                 the local energy Eloc(σ) := (HΨ)(σ)/Ψ(σ) and compute
+For J < 0 the low-field phase is ferromagnetic; for J > 0                      log-derivatives.  Parameters are updated asθ←θ      +η ∆θ.
+it is antiferromagnetic.  In the limit α→∞    the model                        Unless noted otherwise, sampler settings, iteration bud-
+reduces to the exactly solvable nearest-neighbor TFIM,                         gets,  and solver tolerances are matched across models;
+diagonalized via the Jordan–Wigner transformation [54–                         detailed training settings are summarized in Appendix
+56].   At α  =  0  it  becomes  the  fully  connected  Lipkin–                 Sec.N.
+Meshkov–Glick limit [57].                                                         We benchmark DysonNet versus ViT and RBM neural
+                                                                                                                                              8
+
+                                                                          small–system deviations from the exact energy, so the two
+                                                                          are effectively equal.  DysonNet consistently outperforms
+                                                                          the RBM by at least two orders of magnitude.  DysonNet
+                                                                          attains consistently smaller V–scores across all parameters,
+                                                                          with the largest gains in the short–range AFM regime
+                                                                          where the scores improve by up to two orders of magnitude
+                                                                          and four orders of magnitude versus the RBM.
+                                                                             We compare wall-clock costs for RBM, ViT, linearized
+                                                                          ViT  [9],  DysonNet,  and  DysonNet+ABACUS  on  the
+                                                                          TFIM  using  the  protocol  of  Fig.2.   Because  these  ar-
+                                                                          chitectures exhibit different accuracy–compute tradeoffs,
+                                                                          panel (a) reports end-to-end training time using the best-
+                                                                          performing hyperparameters for each method, i.e., the
+                                                                          practical cost of obtaining the best accuracy.  Panels (b)
+                                                                          and  (c)  isolate  the  runtime  of  the  local-estimator  and
+                                                                          sampler-proposal kernels; matched hyperparameters for
+                                                                          this comparison are provided in Appendix TableIII. For
+                                                                          fairness,  all compared methods are run in TF32 preci-
+Figure 3.ABACUS enables constant-time local updates                       sion and without custom CUDA kernels for ABACUS.
+and improves asymptotic scaling.(a) Total training time                   Regarding the RBM, Panel (a) displays the NetKet im-
+for 400 iterations with Monte-Carlo sweep length N/50, using              plementation; however, NetKet prioritizes flexibility and
+for each method the hyperparameters that give best overall                does not use specialized local updates for RBMs.  There-
+performance (same choices as in Fig.2);  at    N  = 500,  ViT             fore, to test DysonNet+ABACUS against the theoretical
+requires∼ 60 h while DysonNet+ABACUS finishes in∼ 2.5 h.                  limit of RBM performance, we compare the sampler and
+(b) Local-estimator runtime per connected matrix element with             estimator against custom RBM kernels (violet) that lever-
+matchedhyperparameters across models (TableIII); Dyson-                   age local updates.
+Net+ABACUS is approximately flat in N  and at N = 1000                       As shown in panel (a) of Fig.3, DysonNet+ABACUS is
+is 230× faster than ViT and 16× faster than DysonNet.  (c)                already strongly advantageous at moderate system sizes:
+Single-spin-flip proposal time under the same matched setting;
+only ABACUS remains approximately constant in N, giving                   atN = 500 spins it trains in 1.5 h, compared to 11.8 h for
+a 99× speedup vs ViT and 8.3× vs DysonNet at N  = 1000.                   the directly comparable DysonNet baseline (same model
+RBM baselines have smaller constants than ViT at moderate                 class without ABACUS) and 46.5 or 60.1 h for the ViT
+N  but scale worse than ABACUS-accelerated updates.  All                  variants.  It is also about 2× faster than the RBM baseline
+results use J =−5, α = 6, 1024 samples, TF32 precision, and               2.9 h at N = 500 .  We note that our RBM uses NetKet’s
+an NVIDIA Tesla P100.                                                     general purpose implementation and is not optimized for
+                                                                          the best possible constant factors.  AtN= 1000 the gap
+                                                                          to the NetKet RBM becomes substantially larger due to
+quantum states on the long–range TFIM with system size                    different asymptotic scaling, with DysonNet+ABACUS
+N = 150.  ViT represents a highly expressive but expen-                   finishing in 5.29 h versus 25.4 h for the RBM (about a
+sive Ansatz while RBMs are computationally cheap but                      5× difference), while DysonNet without ABACUS grows
+less expressive.  Training is matched:  identical sampler                 to 74.3 h.  Importantly, the RBM is not competitive in
+settings, the same system parameters, and an equal bud-                   accuracy.   In  our  setting—its  V-score  is  worse  by∼  4
+get of 400 iterations.  For ViT we adopt the architecture                 orders of magnitude—so it is both markedly less accurate
+and hyperparameters reported to yield the strongest prior                 and, at largerN, slower in wall-clock time.
+results [9]; for DysonNet we optimize architecture param-                    Panels  (b,c)  isolate  the  cost  of  the  two  kernels  that
+eters independently while keeping the training protocol                   dominate VMC wall time:  evaluating connected matrix
+identical.  We perform two sweeps, J  at fixed α = 4 and                  elements (local estimator) and proposing single-spin up-
+α at fixed J = 4.75.  Each configuration is trained three                 dates.  In both cases, DysonNet+ABACUS is the only
+times with independent initializations and sampler seeds;                 method withO(1) cost approximately independent of sys-
+we report the mean and one standard deviation across                      tem size N.  By contrast, DysonNet and RBM updates
+three training runs.  As a secondary accuracy metric we                   scale roughly as O(N), while ViT-style attention scales
+use the V–score.  The V-score, defined as NVar   (E)/E2,                  as O(N2) over the range shown.  At N = 1000, ABACUS
+is a system-size-independent measure of how close the                     yields a 16× (estimator) and 8× (sampler) speedup over
+learned state is to an eigenstate.  Additional architecture               the most direct baseline, DysonNet without ABACUS; rel-
+and sampler settings are listed in Appendix Sec.N.                        ative to ViT, the gains are 230× and∼ 100×, respectively.
+   DysonNet  achieves  substantially  lower  ground–state                 For small systems the RBM kernels are faster because
+energies in the ordered FM and AFM regimes, by 10−2    to                 their constants are excellent (one matvec plus a nonlin-
+10−3    against the ViT. In the paramagnet, ViT is slightly               earity per update), but the linear scaling is eventually
+lower, by less than 10−4  , a scale comparable to typical                 overtaken:  for sampling, DysonNet+ABACUS becomes
+                                                                                                                                                    9
+
+faster forN≳    340, and for the estimator it becomes more                   Table  II.  Critical  points  and  exponents  for  the  long-range
+efficient for N≳    1000.  Since the RBM is also∼ 4 orders                   TFIM.
+of  magnitude  worse  in  V-score  in  our  setting,  Dyson-                                                   FM
+Net+ABACUS can outperform this fast-but-inaccurate
+baseline in both speed and accuracy at larger N.  Abso-                         α    Method         J  c       ν       β
+lute speedup factors can shift with hyperparameters and                        1.5     ViT (Ref. [9])  −1.27(3)       1.6(5)       0.46(7)
+implementations, but the scaling advantage is robust and                       1.5     SSE (Ref. [58]) −1.2107       1.9911       0.4968
+translates into substantial gains in realistic regimes.                        1.5     Theory                        —               2.0             0.5
+   We  investigate  whether  the  DysonNet  Ansatz  accu-                      1.5 DysonNet -1.302(7)      2.04(6)      0.51(1)
+rately captures ground state correlations in large systems                     2.5     ViT (Ref. [9])  −2.09(1)      1.08(9)      0.19(3)
+where  comparison  to  ED  or  ViT  is  impossible.   Using                    2.5     SSE (Ref. [58]) −2.0878       1.1084       0.1880
+ABACUS, we trained DysonNet for α = 1.5, 2.5, and 6 in                         2.5 DysonNet -2.104(1)      1.10(4)     0.202(2)
+the ferromagnetic phase and extracted critical exponents
+from finite-size-scaling collapses with PyFSSA [60].  Table                    6.0     ViT (Ref. [9]) −2.963(1)     1.00(3)      0.12(3)
+IIlists the extracted critical exponents, and Appendix                         6.0     SSE (Ref. [58]) −2.9444       0.9849       0.1238
+Figure7displays the data collapses.  Uncertainties rep-                        6.0     Theory                        —               1.0           0.125
+resent the maximum values derived from bootstrap and                           6.0 DysonNet  -2.94(1)       1.01(7)      0.13(4)
+jackknife methods.  We achieve system sizes of N = 340
+(α = 6), N  = 500 (α = 2.5), and N  = 1000 (α = 1.5),
+surpassing the limit ofN = 150 accessible to ViT [9].  Full                                       VII.    CONCLUSION
+training protocol details are provided in Appendix Sec.N.
+   TableIIcompares  the  extracted  critical  points  and                       We introduce ABACUS, an efficient local update al-
+exponents with exact Stochastic Series Expansion (SSE)                       gorithm, and DysonNet, a physically interpretable archi-
+benchmarks  and  with  prior  Vision  Transformer  (ViT)                     tecture.  ABACUS updates the wavefunction amplitude
+results.  See also Fig.7in the appendix for the collapse                     for any NQS with global linear layers and strictly local
+plots.   DysonNet  reproduces  the  SSE  values  across  all                 non-linearities  inO(1)  time  given  cached  link  tensors.
+phases.  The only appreciable discrepancy is the critical                    Designed for ABACUS, the architecture DysonNet con-
+coupling Jc at α = 1.5, where our estimate agrees with                       structs wavefunction amplitudes from local non-linearities
+ViT rather than SSE. This difference likely arises from                      connected by global convolutions.  It is interpretable as
+either generic biases of Neural Quantum States or a minor                    a truncated Dyson series and allows efficient link tensor
+mismatch in Hamiltonian normalization.  In any case, it is                   construction.  To amortize caching costs,  we employ a
+not a concern: Jc is non-universal, whereas the universal                    screened typewriter sampler that preserves tensors over
+critical exponents remain correct.                                           multiple flips.  We derive worst-case runtime bounds and
+   We obtained these results without tuning the nonlinear-                   demonstrate a linear speedup.  Benchmarks against the
+ity width (W  = 5), network depth (L = 2), or proposal                       long-range transverse-field Ising and frustrated J1−J   2
+spacing (s = 10). Holding these parameters fixed indicates                   models show that DysonNet matches Vision Transformer
+that they do not need to scale with system size, even at                     accuracy while reducing runtime by two orders of magni-
+criticality.  As a result, ABACUS supports constant-time                     tude—anO(N2) asymptotic improvement.  Finally, criti-
+local updates for both the sampler and the local estimator.                  cal exponent calculations confirm that DysonNet captures
+Most importantly, DysonNet improves the ViT estimate                         correlations at criticality and scales to large systems.
+of the correlation-length exponent ν at α = 1.5, yielding                       The ABACUS update is straightforwardly compatible
+ν≈   2.04 instead of ν≈   1.6.  This gain in precision comes                 with advanced Monte-Carlo strategies, including cluster
+from our ability to study systems up to N = 1000, well                       moves and parallel tempering, opening the door to further
+beyond theN≈200 sizes accessible in earlier work [9].                        runtime improvements [64–66].  Because the link-tensor
+                                                                             construction is agnostic to lattice geometry, DysonNet
+   To demonstrate that DysonNet+ABACUS is not tai-                           and ABACUS extend naturally to 2D, inviting applica-
+lored to the long-range TFIM, we benchmark the same ar-                      tions to the 2D systems  [1, 2, 7, 67].  The same structure
+chitecture and local-update machinery in AppendixMon                         also accommodates dynamics:  DysonNet is compatible
+the frustrated antiferromagnetic J1–J2 Heisenberg chain,                     with different approaches to time evolution such as the
+a  standard  test  for  variational  wave-function  ans¨atze.                time dependent variational principle [1, 68–71] or explic-
+This model spans a critical Luttinger-liquid regime and                      itly time dependent NQS [72–74].  Developing efficient
+a gapped, spontaneously dimerized phase seperated by a                       algorithms for link tensor construction beyond the trans-
+Berezinskii–Kosterlitz–Thouless transition, continuously                     lationally invariant DysonNet case could yield significant
+connecting to the exactly dimerized Majumdar–Ghosh                           efficiency gains for linearized attention in frustrated or
+point  [61–63].   In  the  ED-accessible  setting N  =  20,                  disordered phases [75–77].
+DysonNet maintains high accuracy across the full sweep                          Beyond DysonNet, this work points to a general NQS
+achieving an energy error of 10−4    and a V-score of 10−3  .                design principle:  build long-range correlations by wiring
+                                                                                                                                                    10
+
+strictly local nonlinearities through global linear layers.                   cussions.  This research was funded in whole or in part
+This  might  preserve  the  expressivity  of  deep  networks                  by the Austrian Science Fund (FWF) [10.55776/COE1].
+while adding algebraic structure that ABACUS can ex-                          The computational results presented have been achieved
+ploit for efficient local updates, pushing variational Monte                  using the Austrian Scientific Computing (ASC) infrastruc-
+Carlo to larger system sizes.  At the same time, the re-                      ture (formerly Vienna Scientific Cluster, VSC). Our NQS
+sulting ans¨atze admit a diagrammatic interpretation as                       simulations were performed using NetKet [78, 79], which
+a scattering series, offering a route to theoretical under-                   is built on top of JAX [80],  Flax [81],  and Optax [82].
+standing and  characterization via  field theory  and  the                    For Open Access purposes, the authors have applied a
+renormalization  group.   We  believe  this  offers  a  path                  CC-BY public copyright license to any author accepted
+towards architectures where computational efficiency is                       manuscript version arising from this submission.
+enabled by physical interpretability.
+
+                                                                                                  CODE AVAILABILITY
+
+                  ACKNOWLEDGMENTS                                                We provide a reference implementation ofDysonNet
+                                                                              and ABACUS including the core model components and
+   We thank A. Bohrdt, N. Defenu, M. Heyl, J. Knolle,                         update algorithm used in this work at https://github.
+D. Malz, Y. Minoguchi, and C. Wanjura for fruitful dis-                       com/lucas-winter/DysonNet.git.
+
+
+
+
+ [1]  G. Carleo and M. Troyer, Solving the quantum many-body                  [13]  R. G. Melko, G. Carleo, J. Carrasquilla, and J. I. Cirac,
+     problem with artificial neural networks,Science355, 602                        Restricted Boltzmann machines in quantum physics,Na-
+     (2017).                                                                        ture Physics15, 887 (2019).
+ [2]  H. Lange, A. Van de Walle, A. Abedinnia, and A. Bohrdt,                 [14]  X. Liang, W.-Y. Liu, P.-Z. Lin, G.-C. Guo, Y.-S. Zhang,
+     From architectures to applications:  a review of neural                        and L. He, Solving frustrated quantum many-particle mod-
+     quantum  states,Quantum  Science  and  Technology9,                            els with convolutional neural networks,Physical Review
+     040501 (2024).                                                                 B98, 104426 (2018).
+ [3]  T. Westerhout, N. Astrakhantsev, K. S. Tikhonov, M. I.                  [15]  C. Fu, X. Zhang, H. Zhang, H. Ling, S. Xu, and S. Ji,
+     Katsnelson, and A. A. Bagrov, Generalization properties                        Lattice convolutional networks for learning ground states
+     of neural network approximations to frustrated magnet                          of  quantum  many-body  systems,  inProceedings  of  the
+     ground states,Nature Communications11, 1593 (2020).                           2024  SIAM  International  Conference  on  Data  Mining
+ [4]  L.  L.  Viteritti,  R.  Rende,  and  F.  Becca,  Transformer                 (SDM)(Society for Industrial and Applied Mathematics,
+     variational wave functions for frustrated quantum spin                        2024) pp. 490–498.
+     systems,Physical Review Letters130, 236401 (2023).                       [16]  Y. Levine, O. Sharir, N. Cohen, and A. Shashua, Quantum
+ [5]  A. Chen and M. Heyl, Empowering deep neural quantum                           entanglement  in  deep  learning  architectures,Physical
+     states through efficient optimization,Nature Physics20,                        Review Letters122, 065301 (2019).
+     1476 (2024).                                                             [17]  M. Hibat-Allah, M. Ganahl, L. E. Hayward, R. G. Melko,
+ [6]  C.  Roth,  A.  Chen,  A.  Sengupta,  and  A.  Georges,Su-                     and J. Carrasquilla, Recurrent neural network wave func-
+     perconductivity in the two-dimensional Hubbard model                           tions,Physical Review Research2, 023358 (2020).
+     revealed by neural quantum states(2025).                                 [18]  F.  D¨oschl,  F.  A.  Palm,  H.  Lange,  F.  Grusdt,  and
+ [7]  Y. Gu, W. Li, H. Lin, B. Zhan, R. Li, Y. Huang, D. He,                       A. Bohrdt, Neural network quantum states for the inter-
+     Y. Wu, T. Xiang, M. Qin, L. Wang, and D. Lv,Solving                            acting Hofstadter model with higher local occupations and
+     the Hubbard model with neural quantum states(2025).                            long-range interactions,Physical Review B111, 045408
+ [8]  E. Ibarra-Garc´ıa-Padilla, H. Lange, R. G. Melko, R. T.                      (2025).
+     Scalettar, J. Carrasquilla, A. Bohrdt, and E. Khatami,                   [19]  O. Sharir, Y. Levine, N. Wies, G. Carleo, and A. Shashua,
+     Autoregressive neural quantum states of Fermi Hubbard                          Deep autoregressive models for the efficient variational
+     models,Physical Review Research7, 013122 (2025).                               simulation of many-body quantum systems,Physical Re-
+ [9]  S.  Roca-Jerat,  M.  Gallego,  F.  Luis,  J.  Carrete,  and                  view Letters124, 020503 (2020).
+     D. Zueco, Transformer wave function for quantum long-                    [20]  K. Sprague and S. Czischek, Variational Monte Carlo with
+     range models,Physical Review B110, 205147 (2024).                              large patched transformers,Communications Physics7, 1
+[10]  F. B. Trigueros, T. Mendes-Santos, and M. Heyl, Sim-                         (2024).
+     plicity of mean-field theories in neural quantum states,                 [21]  A. Chen, V. D. Naik, and M. Heyl,Convolutional trans-
+     Physical Review Research6, 023261 (2024).                                      former wave functions(2025).
+[11]  I. Glasser, N. Pancotti, M. August, I. D. Rodriguez, and                [22]  D. Wu, R. Rossi, F. Vicentini, and G. Carleo, From tensor-
+     J. I. Cirac, Neural-network quantum states, string-bond                        network  quantum  states  to  tensorial  recurrent  neural
+     states, and chiral topological states,Physical Review X                        networks,Physical Review Research5, L032001 (2023).
+     8, 011006 (2018).                                                        [23]  D.-L. Deng, X. Li, and S. Das Sarma, Quantum entan-
+[12]  M.  Geier,  K.  Nazaryan,  T.  Zaklama,  and  L.  Fu,  Self-                  glement in neural network states,Physical Review X7,
+     attention neural network for solving correlated electron                       021021 (2017).
+     problems in solids,Physical Review B112, 045119 (2025).
+                                                                                                                                                           11
+
+[24]  N. Paul,Bound on entanglement in neural quantum states                     [44]  X. Chen, Z.-C. Gu, and X.-G. Wen, Local unitary transfor-
+     (2025).                                                                           mation, long-range quantum entanglement, wave function
+[25]  A. Nagy and V. Savona, Variational quantum Monte Carlo                           renormalization, and topological order,Physical Review
+     method with a neural-network ansatz for open quantum                              B82, 155138 (2010).
+     systems,Physical Review Letters122, 250501 (2019).                          [45]  X.-G.  Wen,  Colloquium:   Zoo  of  quantum-topological
+[26]  R.  Pan  and  C.  W.  Clark,  Efficiency of  neural-network                      phases of matter,Reviews of Modern Physics89, 041004
+     state representations of one-dimensional quantum spin                             (2017).
+     systems,Physical Review Research6, 023193 (2024).                           [46]  M.  A.  Levin  and  X.-G.  Wen,  String-net  condensation:
+[27]  H. Chen, D. Hendry, P. Weinberg, and A. E. Feiguin, Sys-                         A physical mechanism for topological phases,Physical
+     tematic improvement of neural network quantum states                              Review B71, 045110 (2005).
+     using Lanczos, Advances in Neural Information Processing                    [47]  P. S´emon, C.-H. Yee, K. Haule, and A.-M. S. Tremblay,
+     Systems 3510.48550/arXiv.2206.14307(2022).                                        Lazy skip lists, a new algorithm for fast hybridization-
+[28]  X. Gao and L.-M. Duan, Efficient representation of quan-                         expansion quantum Monte Carlo,Physical Review B90,
+     tum many-body states with deep neural networks,Nature                             075149 (2014).
+     Communications8, 662 (2017).                                                [48]  A. N. Norris and J.-M. Conoir, Multiple scattering by
+[29]  A. Vaswani, N. Shazeer, N. Parmar, J. Uszkoreit, L. Jones,                       cylinders immersed in fluid:  High order approximations
+     A. N. Gomez,  L. Kaiser, and I. Polosukhin, Attention is all                      for the effective wavenumbers,The Journal of the Acous-
+     you need, inAdvances in Neural Information Processing                             tical Society of America129, 104 (2011).
+     Systems, Vol. 30 (2017).                                                    [49]  M. I. Mishchenko, “independent” and “dependent” scat-
+[30]  A. Dosovitskiy, L. Beyer, A. Kolesnikov, D. Weissenborn,                         tering by particles in a multi-particle group,OSA Contin-
+     X.  Zhai,  T.  Unterthiner,  M.  Dehghani,  M.  Minderer,                         uum1, 243 (2018).
+     G. Heigold, S. Gelly, J. Uszkoreit, and N. Houlsby, An                      [50]  F. B¨ohm, T. Inagaki, K. Inaba, T. Honjo, K. Enbutsu,
+     image is worth 16x16 words: Transformers for image recog-                         T. Umeki, R. Kasahara, and H. Takesue, Understanding
+     nition at scale, inInternational Conference on Learning                           dynamics of coherent Ising machines through simulation
+     Representations(2021).                                                            of large-scale 2D Ising models,Nature Communications
+[31]  Y.  LeCun  and  Y.  Bengio,  Convolutional  networks  for                        9, 5020 (2018).
+     images, speech and time series,The handbook of brain                        [51]  M.  Hasenbusch  and  E.  Vicari,  Anisotropic  perturba-
+     theory and neural networks  (1998).                                               tions in three-dimensional O(N)-symmetric vector models,
+[32]  K.  He,  X.  Zhang,  S.  Ren,  and  J.  Sun,  Deep  residual                     Physical Review B84, 125136 (2011).
+     learning for image recognition, inProceedings of the IEEE                   [52]  T. Koffel, M. Lewenstein, and L. Tagliacozzo, Entangle-
+     Conference on Computer Vision and Pattern Recognition                             ment entropy for the long-range Ising chain in a transverse
+     (2016) pp. 770–778.                                                               field,Physical Review Letters109, 267203 (2012).
+[33]  G. E. Hinton, Training products of experts by minimiz-                     [53]  N. Defenu, T. Donner, T. Macr`ı, G. Pagano, S. Ruffo, and
+     ing contrastive divergence,Neural Computation14, 1771                             A. Trombettoni, Long-range interacting quantum systems,
+     (2002).                                                                           Reviews of Modern Physics95, 035002 (2023).
+[34]  S. Hochreiter and J. Schmidhuber, Long short-term mem-                     [54]  P. Jordan and E. Wigner,  ¨Uber das paulische  ¨Aquivalen-
+     ory,Neural Computation9, 1735 (1997).                                             zverbot,Zeitschrift f¨ur Physik47, 631 (1928).
+[35]  A.   van   den   Oord,   N.   Kalchbrenner,   L.   Espeholt,               [55]  E. Lieb, T. Schultz, and D. Mattis, Two soluble models
+     O. Vinyals, and A. Graves, Conditional image generation                           of an antiferromagnetic chain,Annals of Physics16, 407
+     with pixelcnn decoders, inAdvances in Neural Informa-                             (1961).
+     tion Processing Systems, Vol. 29 (2016).                                    [56]  P. Pfeuty, The one-dimensional Ising model with a trans-
+[36]  R. Rende and L. L. Viteritti, Are queries and keys always                        verse field,Annals of Physics57, 79 (1970).
+     relevant?  a case study on Transformer wave functions,                      [57]  H.  J.  Lipkin,  N.  Meshkov,  and  A.  J.  Glick,  Validity
+     Machine  Learning:  Science  and  Technology6,  010501                            of  many-body  approximation  methods  for  a  solvable
+     (2025).                                                                           model:  (i) exact solutions and perturbation theory,Nu-
+[37]Z. Li, N. Kovachki, K. Azizzadenesheli, B. Liu, K. Bhat-                           clear Physics62, 188 (1965).
+     tacharya, and A. Stuart,Fourier neural operator for para-                   [58]  J. A. Koziol, A. Langheld, S. C. Kapfer, and K. P. Schmidt,
+     metric partial differential equations(2021).                                      Quantum-critical properties of the long-range transverse-
+[38]  F. Shah, T. L. Patti, J. Berner, B. Tolooshams, J. Kossaifi,                     field Ising model from quantum Monte Carlo simulations,
+     and A. Anandkumar,Fourier neural operators for learning                           Physical Review B103, 245135 (2021).
+     dynamics in quantum spin systems(2024).                                     [59]  D. Vodola, L. Lepori, E. Ercolessi, and G. Pupillo, Long-
+[39]  A.  Gu,  K.  Goel,  and  C.  Re,Efficiently  modeling  long                      range Ising and Kitaev models:  Phases, correlations and
+     sequences with structured state spaces(2022).                                     edge modes,New Journal of Physics18, 015001 (2016).
+[40]  A. Gu and T. Dao,Mamba:  Linear-time sequence model-                       [60]A. Sorge,pyfssa 0.7.6(2015).
+     ing with selective state spaces(2024).                                      [61]  K. Okamoto and K. Nomura, Fluid-dimer critical point
+[41]  F. Scarselli, M. Gori, A. C. Tsoi, M. Hagenbuchner, and                          in s =  12  antiferromagnetic heisenberg chain with next
+     G. Monfardini, The graph neural network model,IEEE                                nearest neighbor interactions,Physics Letters A169, 433
+     Transactions on Neural Networks20, 61 (2009).                                     (1992).
+[42]  D. Kochkov, T. Pfaff, A. Sanchez-Gonzalez, P. Battaglia,                   [62]  S. Eggert, Numerical evidence for multiplicative logarith-
+     and  B.  K.  Clark,Learning  ground  states  of  quantum                          mic corrections from marginal operators,Physical Review
+     hamiltonians with graph networks(2021).                                           B54, R9612 (1996).
+[43]  K. Yamazaki, I. Sakata, T. Konishi, and Y. Kawahara,                       [63]  S. R. White and I. Affleck, Dimerization and incommen-
+     Physics-inspired transformer quantum states via latent                            surate spiral spin correlations in the zigzag spin chain:
+     imaginary-time evolution(2026).
+                                                                                                                                                         12
+
+     Analogies  to  the  kondo  lattice,Physical  Review  B54,                   [81]  J. Heek, A. Levskaya, A. Oliver, M. Ritter, B. Rondepierre,
+     9862 (1996).                                                                     B. Steiner, and M. van Zee, Flax: A neural network library
+[64]  R. H. Swendsen and J.-S.  Wang,  Nonuniversal critical                          and  ecosystem  for  JAX,  https://github.com/google/
+     dynamics in Monte Carlo simulations,Physical Review                              flax(2024), version 0.11.2.
+     Letters58, 86 (1987).                                                       [82]  DeepMind, I. Babuschkin, K. Baumli, A. Bell, S. Bhu-
+[65]  D. J. Earl and M. W. Deem, Parallel tempering:  Theory,                         patiraju,  J. Bruce,  P. Buchlovsky,  D. Budden,  T. Cai,
+     applications, and new perspectives,Physical Chemistry                            A. Clark, I. Danihelka, A. Dedieu, C. Fantacci, J. God-
+     Chemical Physics7, 3910 (2005).                                                  win, C. Jones, T. Hennigan, M. Hessel, S. Kapturowski,
+[66]  C. Smith and collaborators, Optimizing temperature dis-                         T.  Keck,  I.  Kemaev,  M.  King,  D.  Kochkov,  I.  Ktena,
+     tributions for training neural quantum states using paral-                       J. Quan, K. Murray, N. Nikolov, T. Norman, G. Papa-
+     lel tempering,Physical Review E111, 055306 (2025).                               makarios,  R. Ring,  F. Ruiz,  A. Sanchez,  R. Schneider,
+[67]  Y.  Qian,  Z.  Shi,  Y.  Zhang,  and  C.  Zhang,  Describing                    E. Sezener,  S. Spencer,  S. Srinivasan,  L. Wang,  F. Vi-
+     Landau level mixing in fractional quantum Hall states                            ola, D. Xu, F. Zenke, W. Tobin, and N. Heess, Optax:
+     with deep learning,Physical Review Letters134, 176503                            composable gradient transformation and optimization, in
+     (2025).                                                                          JAX!,https://github.com/deepmind/optax(2020).
+[68]  M. Schmitt and M. Heyl, Quantum many-body dynamics                         [83]  R. E. Barlow and F. Proschan,Statistical Theory of Re-
+     in two dimensions with artificial neural networks,Physical                       liability and Life Testing:  Probability Models(To Begin
+     Review Letters125, 100503 (2020).                                                With, Silver Spring, MD, 1981).
+[69]  M.   Schmitt   and   M.   Heyl,   Simulating   dynamics   of               [84]  J. D. Kalbfleisch and R. L. Prentice,The Statistical Anal-
+     correlated  matter  with  neural  quantum  states,  arXiv                        ysis of Failure Time Data, 2nd ed., Wiley Series in Prob-
+     10.48550/arXiv.2506.03124(2025).                                                 ability and Statistics (Wiley-Interscience, Hoboken, NJ,
+[70]  M. Reh, M. Schmitt, and M. G¨arttner, Time-dependent                            2002).
+     variational principle for open quantum systems with artifi-                 [85]  G. E. Blelloch,Synthesis of Parallel Algorithms, cmu-cs-
+     cial neural networks,Physical Review Letters127, 230501                          90-1903 ed. (Carnegie Mellon University, 1990).
+     (2021).                                                                     [86]  If a symmetric parameterization is desired, one may set
+[71]  J. Nys, G. Pescia, A. Sinibaldi, and G. Carleo, Ab-initio                       V (l)   =U    (l)⊤   .
+     variational wave functions for the time-dependent many-                     [87]  C.  K.  Majumdar  and  D.  K.  Ghosh,  On  next-nearest-
+     electron Schr¨odinger equation,Nature Communications                             neighbor interaction in linear chain. ii,Journal of Mathe-
+     15, 9404 (2024).                                                                 matical Physics10, 1399 (1969).
+[72]  A. Van de Walle, M. Schmitt, and A. Bohrdt, Many-body
+     dynamics with explicitly time-dependent neural quantum
+     states,Machine  Learning:   Science  and  Technology6,
+     045011 (2025).
+[73]  T. Vovk, A. Van de Walle, H. Pichler, and A. Bohrdt,
+     Neural quantum states for emitter dynamics in waveguide
+     QED, arXiv10.48550/arXiv.2508.08964(2025).
+[74]  A.  Romero-Ros,  J.  Rozal´en  Sarmiento,  and  A.  Rios,
+     Quantum  dynamics  with  time-dependent  neural  quan-
+     tum states, arXiv10.48550/arXiv.2509.24865(2025).
+[75]  N. Halko, P.-G. Martinsson, and J. A. Tropp, Finding
+     structure with randomness:  Probabilistic algorithms for
+     constructing approximate matrix decompositions,SIAM
+     Review53, 217 (2011).
+[76]  K. Batselier, N. Guy, and N. Wong, Computing low-rank
+     approximations of large-scale matrices with the tensor net-
+     work randomized SVD,SIAM Journal on Matrix Analysis
+     and Applications39, 1221 (2018).
+[77]  R.  Rende,  L.  L.  Viteritti,  L.  Bardone,  F.  Becca,  and
+     S. Goldt, Foundation neural-network quantum states as
+     a unified Ansatz for multiple hamiltonians,Nature Com-
+     munications16, 7213 (2025).
+[78]  F. Vicentini, J. Hofmann, K. Bjornson, M. Schmitt, and
+     G. Carleo, Netket 3:  Machine learning toolbox for many-
+     body quantum systems,SciPost Physics Codebases7, 1
+     (2022).
+[79]  G. Carleo, K. Choo, J. Hofmann, J. Stokes, S. Moroni,
+     M.  Bologna,  E.  Chung,  and  B.  Abeln,  Netket:  A  ma-
+     chine learning toolkit for many-body quantum systems,
+     SoftwareX10, 100311 (2019).
+[80]  J.  Bradbury,  R.  Frostig,  P.  Hawkins,  M.  J.  Johnson,
+     C. Leary, D. Maclaurin, G. Necula, A. Paszke, J. Van-
+     derPlas, S. Wanderman-Milne, and Q. Zhang, Jax:  com-
+     posable  transformations  of  Python+NumPy  programs,
+     https://github.com/jax-ml/jax(2018), version 0.6.2.
+                                                                                                                                                      13
+
+Appendix A: DysonNet can exactly represent power                               To  expose  the  long-distance  scaling  we  set h  =  0  (or,
+                              law decay                                        equivalently,  consider  the  connected  correlator),  write
+                                                                               Jℓm =λ ¯Jℓm, and expand aroundλ = 0, where the weight
+   For interpreting the DysonNet Ansatz and showing it                         becomes uniform.  Denote averages with respect to the
+can express power law decay we will consider the simpli-                       uniform  measure  by⟨·⟩0,  i.e. ⟨F⟩     0  :=  2−N PσF (σ).
+fying case of one layer, activation function f(x) =ex and                      Then
+embedding dimension d = 1.  The log amplitude of the                                          D
+network is                                                                                      σiσi+r     exp2λ Pℓ<m  ¯JℓmσℓσmE
+                                                                               ⟨σ iσi+r ⟩=         D                                       0       (A7)
+                              X                                                                      exp2λ Pℓ<m  ¯JℓmσℓσmE
+           log Ψ(σ) =    AN        D(σ  i−w:i+w          )G i−j  σj,      (A1)                D          E                       D    0           E
+                               i,j                                                              σiσi+r                             σiσi+r σℓσm
+                                                                                                          0 + 2λ Pℓ<m  ¯Jℓm                         0 +O(λ         2)
+To interpret the local vertex we will apply a Fourier-Walsh                                =                                   D        E                        .
+expansion.  Let the window beW  ={−w,...,w}         with                                                1 + 2λ Pℓ<m  ¯Jℓm        σℓσm     0 +O(λ         2)
+W  =  2w + 1.   Any  function D  :{±1}W →R     has  the                           where we expanded the exponential up to second order
+exact Walsh expansion                                                          in the second line.  Since under⟨·⟩0 spins are independent
+                                          Y                                    with⟨σ a⟩0  = 0 and⟨σ aσb⟩0  = δab.  For r̸  = 0 one also
+         D(σ  i−w:i+w          ) = XDS        σi+u                             has⟨σ iσi+r ⟩0  =  0.   Moreover,  the  only  non-vanishing
+                              S⊆W        u∈S                                   four-spin averages are those where the indices pair up; in
+                          =D   ∅ + X        D{u} σi+u                 (A2)     particular,⟨σ iσi+r σℓσm⟩0 = 1 iff{ℓ,m}      ={i,i   +r}   (and
+                                                                               vanishes otherwise).  Hence the sum in (A7)       collapses to
+                                      u∈W                                      the single edge (ℓ,m) = (i,i+r).
+                          +X      D{u,v}  σi+u σi+v    +···.                      ⟨σ iσi+r ⟩= 2λ     ¯Ji,i+r      +O(λ         2) = 2J i,i+r      +O(J         2).  (A8)
+                             u<v
+Inserting (A2) into (A1) gives                                                 Using the W  = 1 identification Jij∝G |i−j|       and a power-
+                    X     X                 Y                                  law kernel Gr =r−α    therefore yields the leading asymp-
+     log Ψ = A                 DSGI−j              σi+u    σj,     (A3)        totic behavior
+                N  S⊆W     I,j                u∈S                                      ⟨σ iσi+r ⟩= 2J  r +O(J         2)∼r −α   +O(J         2).        (A9)
+
+so a Walsh monomial of degree|S|    contributes an inter-                      Higher orders inλ correspond to multi-edge contributions
+action of degree|S|    + 1 in the exponent (coupling order).                   (paths  and  graphs)  and  dress  the  prefactor,  while  the
+We  first  consider  the  Jastrow  limit  for W  =  1.   For                   leading long-distance tail is set by the direct long-range
+W  = 1 (w = 0) only S = ∅ and S ={0} appear, hence                             coupling inherited fromG    r.
+D(σ  i) =D   0 +D   1σi.  Then (A1) reduces to                                    For W > 1, higher Walsh sectors DS  in (A2)       generate
+                          X                                                    controlled  multi-spin  vertices  of  order|S|+    1  via  (A3)      ,
+            log Ψ = A          (D  0 +D   1σi)X     Gi−j  σj                   adding non-Gaussian short-range dressing beyond a pure
+                       N    I                    j                             Jastrow factor.  StackingL DysonNet blocks increases the
+                   =h Xσi +X             Jijσiσj + const,       (A4)           effective coupling order through the Dyson-series structure
+                                                                               of repeated D(σ)G insertions, while preserving the sepa-
+                          i         i<j                                        ration of scales: G fixes the long-distance response (e.g.
+where (for evenGr and absorbingi =j into the constant)                         algebraic kernels suitable for criticality) andD learns non-
+                                                                               universal local structure.  Allowing complex parameters
+                   X                                                           further enables nontrivial sign/phase structure beyond
+      h= AD0N           Gr,   Jij = 2AD  1N  G|i−j|   .       (A5)             strictly positive Jastrow states.
+                     r
+
+   Configuration-sum  correlator  and  small-λ  expansion.                            Appendix B: Induction Proof of ABACUS
+For the W  = 1 Jastrow limit,  diagonal correlators are
+computed as explicit configuration sums with respect to                           In this section we prove TheoremIand the recursion
+the induced classical measurep(σ)∝|Ψ(σ)|                                    2, relations (10)      and (11)      via induction.  For a local update
+                  X                  h                                    i    σ=σ      0 + ∆σ, define
+⟨ˆσ  zi ˆσ zi+r ⟩=   1Zσiσi+r     exp  2h X     σℓ + 2X       Jℓmσℓσm      ,
+                    σ                        ℓ          ℓ<m                                                  LY D(l)
+                        h                                    i      (A6)                       M(σ) :=             0   + ∆D    (l) M(l) ,           (B1)
+         Z= X       exp   2h X     σℓ + 2X       Jℓmσℓσm      .                                             l=1
+                σ               ℓ          ℓ<m                                                  Ω(σ) =AP     MM(σ)σ.                        (B2)
+                                                                                                                                                        14
+
+   Amatrix  wordis one summand in the expansion of                              which is Eq. (11)     .  Hence ABACUS produces the desired
+M(σ).   Itspivotis  the  largest  layer  index      l  for  which               matrix-vector product exactly.
+∆D(l)   appears.  LetWl be the set of words with pivot l,                          Complexity.Using  only  the  principal  blocks  of  the
+and define                                                                      Toeplitz matrix, contracting a vector ˜h(l)   with G(l)   and
+               ˜h(l)   :=P  S,j X                                               then applying the slice projection PS,j  requiresO dW 2
+                                      Wσ ∈R    W×d  .          (B3)             operations,  where W  = 2w + 1≪N     denotes the slice
+                              W∈W  l                                            width andd is the hidden-state dimension.  IfW  becomes
+Invariant  1(after  line  3  of  Algorithm1). For  every                        large,  the  same  contraction  can  instead  be  performed
+l≤L    , the recursion (10)      equals the sum over all words                  with a state-space model (SSM) inO(Wds2) time, which
+with pivotl.                                                                    scales strictly linearly inW.
+                                      X                                            Multiplying ˜h(l)   by the sparse diagonal update ∆D(l)
+                      ˜h(l)   =P S,j         Wσ.                  (B4)          costsO Wd2, again linear in the slice width.  The link
+
+                                     W∈W  l                                     tensors at the final layer, T (l)  , incur the sameO Wd2
+                                                                                cost, while the most expensive step is contracting with
+Proof.We use strong induction overl.                                            the multi-layer link tensors, which scales asO W 2d2 yet
+   Base casel= 1.                                                               remains independent of the full system sizeN.
+   For pivot 1, the only scattering layer is the first one.                        Since  every  individual  contraction  is  free  of  any N-
+                                                                                dependence,  the  entire  update  can  be  carried  out  in
+               ˜h(1) =P S,j ∆D    (1)M(1)(σ  0 + ∆σ)                            constant  time  with  respect  to N.   For  a  network  of L
+                                                                                layers,  roughly L(L−   1)/2∼O(L2) such contractions
+                     = ∆D    (1) M(1)∆σ+      ˜h(1)0     ,            (B5)      are  required,  giving  the  overall  worst-case  complexity
+                                                                                O d2W 2L2,  which  is  constant  in N  and  quadratic  in
+which is exactly the initialization in Algorithm1.                              both the number of layers and the slice width.
+   Induction step.Assume         (B4)       holds for all k<l.  Any                By a strong-induction loop-invariant argument we have
+word with pivot l is obtained by applying ∆D(l) M(l)   to                       shown that Algorithm1constructs every matrix word
+either:  (i)  the  unscattered  incident  field  at  layer l,  or               exactly once, associates it with the correct pre-contracted
+(ii) a word with pivot m < l,  propagated from m to l                           linear environment, and thus evaluates the network output
+through background factorsD(n)0 M(n)   ,n =m+1,...,l− 1.                        Ω( σ) atO(d2W 2L2) constant in N  cost for a local spin
+Therefore,                                                                      flip.                    ■
+
+     X
+            Wσ= ∆D           (l) M(l)  h(l)0                                  (B6)Appendix C: Screened Metropolis sampler is exact
+   W∈W  l
+                     l−1X    l−1Y                  ! X
+                  +                   D(n)                     Wσ     .            Let π(σ) ∝ |Ψ(σ)|2  be  the  target  distribution  and
+                                         0 M(n)                                 consider a symmetric proposal q(σ→σ  ′) =q(σ′→σ    ).
+                     m=1     n=m+1                    W∈W  m                    Define the exact Metropolis–Hastings ratio
+
+Projecting to the slice and using the induction hypothesis
+gives                                                                           R(σ,σ   ′) :=|Ψ(σ  ′)|  2
+                                                                    !                            |Ψ(σ)|           2,   α(σ→σ   ′) := min{1,R(σ,σ     ′)}.
+                                        l−2X                                                                                                         (C1)
+   ˜h(l)   = ∆D    (l) ˜M(l)  ˜h(l−1)     +   L(l,m)     ˜h(m)     + ˜h(l)0,    Assume we can compute deterministic bounds L(σ,σ ′)
+
+                                        m=1                                     andU(σ,σ     ′) such that
+                                                                     (B7)
+whereL           (l,m)      is exactly the link tensor from Eq. (9).                L(σ,σ   ′)≤R(σ,σ    ′)≤U(σ,σ    ′)       for all (σ,σ  ′).
+                                                                                                                                                     (C2)
+                                l−1Y                  !                         Consider the screened acceptance rule:  draw u∼U  [0, 1]
+      L(l,m)      =P S,jM(l)             D(n)            P⊤S,j.      (B8)       and  (i)  accept  if u <min{         1,L}  ;   (ii)  reject  if u >
+                                            0 M(n)                              min{      1,U}  ; (iii) otherwise (the ambiguous window) com-
+                                n=m+1                                           pute R exactly and accept iff u<min{         1,R}   .  Then the
+This is Eq. (10), so the invariant is preserved.                                resulting accept/reject decision coincides with the stan-
+   Termination:After the loop (        l = L), (B4)       holds for             dard MH decision for every triple (σ,σ ′,u), hence the
+every pivot class.  Grouping the full expansion by pivot                        induced Markov chain satisfies detailed balance with re-
+and contracting each class with its output link tensor T (l)                    spect toπand is exact.
+yields                                                                             Proof.By      (C2)        we  have  min{      1,L}≤min{           1,R} ≤
+                                                          !                     min{      1,U}  .   If u <min{         1,L}    then u <min{         1,R}    and
+                                             LX                                 both  screened  MH  and  MH  accept.   If u >min{         1,U}
+             Ω(σ) =A         PM ˜h(L)    +      T (l)  ˜h(l) ,        (B9)      then u >min{      1,R}    and  both  reject.   Otherwise u∈
+                                            l=1                                 [min{      1,L},min{           1,U}  ]  and  the  screened  rule  evaluates
+                                                                                                                                                                   15
+
+R  and  applies  the  MH  test u <min{         1,R}   ,  which  is                    ∆z  j(σ), and usinge    |∆z  j|−1≤e   ∥∆z(σ)∥    ∞−1, yields
+exactly the MH decision.  Therefore the transition kernel
+is  identical  to  MH,  and  detailed  balance π(σ)q(σ→                                                            dX   e|∆z  j(σ)| −1  cosh zj(σ) 
+σ′)α(σ→σ    ′) =π(σ  ′)q(σ  ′→σ)α(σ    ′→σ) holds.                                            ϵ(σ)≤            1f(z    0)
+                                                                                                                  j=1
+                                                                                                     ≤     1      e∥∆z(σ)∥    ∞−1  dXcosh zj(σ) 
+      Appendix D: Upper bound error scaling for                                                          f(z    0)
+           independent scattering approximation                                                                                          j=1
+
+   In this section we will explicitly derive an upper bound                                          = e∥∆z(σ)∥    ∞−1 f(z(σ))f(z    0) .                     (D8)
+for the error in the Metropolis acceptance ratio under                                               ≤ e∥∆z(σ)∥              2−1 f(z(σ))
+theindependent scattering approximationintroduced in                                                                             f(z    0) .                      (D9)
+sectionIV. For a configuration      σ and a fixed reference
+configurationσ                         0, define                                         We note this exact result can be for small||∆z||   ap-
+                                 ΨISA(σ)−Ψ(σ)            .               (D1)     proximated as
+                    ϵ(σ) :=              Ψ(σ     0)
+                                                                                                           ϵ(σ)≲∥∆z(σ)∥                          2 f(z(σ))f(z    0) .             (D10)
+   Let the wavefunction be of the form
+    Ψ(σ) =f    z(σ)  ,                                                               The acceptance error (D1)       for the mean-field multi-flip
+                                                            !                         approximation is controlled by the feature-space deviation
+                                  LX   MY                                             ∆z:  the linearized estimate      (D10)         shows that bounding
+     z(σ) :=AP     M       Gf              D(l)  (σ)G      (l) Eσ,          (D2)      ∥∆z∥        2 suffices to boundϵ.
+                                M=0   l=1
+
+where PM  is  the  mean-pooling  projection  vector, A∈                                           Scaling of∥∆z∥            2 under separated flips
+Rd×d    , D(l) ∈R d×d×N          (block  diagonal  along  the  input
+sequence), and G(l) ∈R N×N×d          (Toeplitz, block diagonal                          We now derive the scaling of∥∆z∥        2.  Decompose the
+ind).  Fix the referenceσ                       0 and set                             update into spatially disjoint contributions
+
+z0 :=z(σ         0),   ∆z(σ) :=z                  ISA(σ)−z(σ), σ=σ                          0+∆σ.∆σ=  X∆σ  j,   F={sites flipped relative toσ            0},
+                                                                          (D3)
+with                                                                                             j∈F
+                                                                                                                                                               (D11)
+                                                                                      with the total number of flips M :=|F|   .  Assume flips are
+   zISA(σ) =z(σ            0) +XABACUS(∆σ      k,σ 0,T(σ     0)),                     separated by at least a windoww,
+
+                                k                                                                        |i−j|>w for alli̸=j∈F,           (D12)
+                                                                          (D4)
+with the link tensorsT (σ0) = LinkTensor(σ0) and the                                  so  that  the  layerwise  perturbations  admit  a  separable
+                                                                                      decomposition with disjoint spatial support,
+flips ∆σ  k.  Then (D1) can be written as
+                       f(z(σ) + ∆z(σ))−f(z(σ))                                              ∆D    (ℓ)   (σ,σ      0) =X  ∆D    (ℓ)j   (∆σ  j,σ 0).          (D13)
+            ϵ(σ) =                                                                                                      j∈F
+                                         f(z    0)        .      (D5)
+                                                                                      Writing
+   For  the  choice f(z)  =  Pdj=1  cosh(zj)  (with f(z  0) >                                                        (D(ℓ)
+0),   one  can  bound  the  numerator  of   (D5)        without                                           ˜D(ℓ)α   :=     0 ,   α= 0,
+any  linearization.    Using  the  identity  cosh(u + v)  =                                                            ∆D    (ℓ)j ,  α=j∈F,                      (D14)
+cosh(u) cosh(v) + sinh(u) sinh(v)  and  the  inequalities
+|sinh (u)|≤cosh   (u)  and  cosh(v) +|sinh (v)|  = e|v|  ,  we                        we may expand the exact and approximate features as
+obtain for allu,v∈R                                                                                                           LY                !
+ cosh(u+v)−cosh(u)          ≤cosh(u)       cosh(v)−1 +|sinh(v)|                                              X                  ˜D(ℓ)αℓG(ℓ)
+                                                                                            ∆z=AP    M                                             Eσ.     (D15)
+                                                                          (D6)                              α∈({0}∪F)        L ℓ=1
+                                                                                                             |{α ℓ∈F}|≥2
+                                  = e|v| −1  cosh(u).           (D7)
+                                                                                      In (D15)         we have dropped all “multi-flip within one word”
+Applying (D7)       componentwise with u =zj(σ) and v =                               terms with a single flip (|{α ℓ∈F}|      = 1), i.e. we retain
+                                                                                                                                                          16
+
+only cross-insertion words involving two or more distinct                        when flips are arranged with minimal allowed spacing w,
+flips.                                                                           so that
+   By submultiplicativity of the spectral norm,                                          X                         M−1X
+                       ∥AB∥         2≤∥A∥      2∥B∥      2,                 (D16)              κ(|i−j|)≤2                (M−m)κ(mw),      (D24)
+                                                                                        i,j∈F                      m=1
+and, for mean pooling                                                                    i̸=j
+
+               PM :=  1                                                          where m counts the (coarse-grained) separation in units
+                         N [I d Id···I d ]∈R  d×dN  ,        (D17)               of w  and the factor 2 accounts for ordered pairs (i,j),
+                                                                                 i̸=j.  Combining (D23) and (D24),
+                    ∥P M∥2 =    1√N, ∥σ∥      2 =√N,        (D18)
+                                                                                        ∆z (r=2)              M−1X
+we obtain the cancellation∥P           M∥2∥σ∥     2 = 1 and thus                                2  ≤2K      2           (M−m)κ(mw).       (D25)
+                                                                                                                   m=1
+                              X           LY    ˜D(ℓ)αℓG(ℓ)  2                   a.    Exponential decay.Ifκ(r)≤C                    expe−r/ξ   , then
+  ∥∆z∥        2≤∥A∥      2                                       ∥E∥     2.
+                         α∈({0}∪F)        Lℓ=1                                    M−1X                                M−1X                M−1X
+                          |{α ℓ∈F}|≥2                                                  (M−m)e    −mw/ξ    =M                e−mw/ξ −            me−mw/ξ
+                                                                    (D19)
+We absorb fixed-depth and fixed-channel constants into                            m=1                                 m=1                 m=1
+the following envelopes.  For each layer define                                                                ≤M   e−w/ξ
+                         2,  δℓ := sup∆D    (ℓ)    2,          (D20)                                             1−e  −w/ξ ,                   (D26)
+          dℓ :=D(ℓ)0                              j                            whence
+                                          j
+Treating each G(ℓ)    as a Toeplitz/convolution operator, a                        ∆z (r=2)
+Young–Schur envelope yields, forn<ℓandi̸=j,                                               2  ≲2K      2CexpM  e−w/ξ1−e  −w/ξ     =O  Me−w/ξ .
+∆D    (ℓ)                               2 ≤δ ℓδn C(n→ℓ)   κ(|i−j|),                                                                               (D27)
+       i G(ℓ)   (···)G     (n+1)    ∆D    (n)j                                   In particular, forw≫ξ       the pairwise error is exponentially
+                                                                    (D21)        small inwand only linear in the number of flipsM.
+                                                                                     b.    Power-law decay.If  κ(r)≤C αr−α   forr≥w     with
+whereκ is an effective two-point decay kernel in the same                        α>0, then from (D25)
+class as the gℓ  (exponential or power law), and C(n→ℓ)                                                                   M−1X
+collects  intermediate  operator  norms  between  the  two                           ∆z (r=2)                              (M−m)m    −α .  (D28)
+insertions.                                                                                 2  ≤2K      2Cαw−α
+   Absorb all layer bookkeeping into the finite constant                                                                  m=1
+(for fixed depthL)                                                               The sum admits the asymptotics (asM→∞) so that
+                                X                           Y                                            
+     K2 :=∥A∥          2∥E∥     2        C(n→ℓ)   δℓδn            dm.                                      2K  2Cαw−α M 2−α  ,      0<α<1,
+                             1≤n<ℓ≤L                     m/∈[n,ℓ]                    ∆z (r=2)
+                                                                    (D22)                   2  ≲         2K  2C1w−1 MlogM,  α= 1,
+Then  the  contribution  fromtwo-insertioncross  terms
+obeys                                                                                                      2K  2Cαζ(α)w  −α M,  α>1.
+                ∆z (r=2)             X                                                                                                            (D29)
+                       2  ≤K   2               κ |i−j|  .         (D23)         Thus, in the non-extensive regime 0<α< 1 the pairwise
+                                        i,j∈F                                    error  grows  superlinearly  with M  as M2−α    ,  while  for
+                                         i̸=j                                    α≥   1 it is at most quasi-linear inM (with a mildMlogM
+Higher-order insertions (r≥   3) are controlled by higher                        atα= 1), and suppressed byw    α.
+convolutions ofκ and extra small factorsδℓ; for summable                             c.    Remark on higher-order insertions.Words with
+kernels (e.g. exponential decay or power law with exponent                       r≥   3 distinct insertions are bounded by constants Kr
+> 1) or sufficiently large separationw they are subleading                       analogous to (D22)         and r-fold convolutions of κ, leading
+compared to (D23)        . We therefore focus on (D23)         to obtain         to
+scaling laws.                                                                                      LX
+                                                                                   ∥∆z∥        2 ≤    KrSr(M,w),  S        2(M,w) as in (D25).
+                                                                                                 r=2
+        Counting pairs under the separation assumption                                                                                                (D30)
+                                                                                 For exponentially decaying κ the r-fold envelopes remain
+   Let the flips be ordered along the 1D geometry, and                           O(e−w/ξ   ) and are suppressed by extra small factors δℓ,
+assume  (D12)        .   A  worst-case  upper  bound  is  obtained               rendering r≥   3 subleading.  For power laws with α> 1,
+                                                                                                                                                        17
+
+κ∈ℓ      1(Z)  and  higher  convolutions  are  summable;  the                      Hazard-limited( K≫ℓ       ):  the integral in (E5)       saturates,
+pairwise term dominates.  In the marginal/non-extensive                                                                                      
+case 0<α≤   1, pairwise still controls provided maxℓδℓ is                          E[M]∼C      γp−1/(γ+1)                               γ+1
+small enough or w is scaled with M  so that w−α    offsets                                            0     ,   Cγ =       Γ    1(γ+ 1)  γ/(γ+1)        (E7)
+the combinatorics ofr-tuples.
+                                                                                   Cap-limited( K≪ℓ       ):  freezing is negligible before the
+                                                                                cap,
+             Appendix E: Sampling Complexity
+We model premature freezing of an approximate Metropo-                                                   E[M]∼K=       Nw                        (E8)
+lis chain via a step–dependent stop (“hazard”) probability                      The crossover is conveniently expressed as
+(see also Ref.   [83, 84]).  The objective is to compute the
+expected  number  of  successful  moves  before  the  chain                                                 p0Kγ+1 ∼1,                          (E9)
+either freezes or reaches a deterministic cap.  At the k-th
+attempted local flip (k = 1, 2,... ) the chain freezes with                     equivalentlyK∼ℓby (E6).
+probability
+                      pk  =p   0kγ,   γ≥0,                  (E1)                   b.    Exponentially decaying correlations (area law).A
+                                                                                standard bound gives an error per window of the form
+otherwise it proceeds to k+  1.  Independently of freezing,                     ϵ≲Ce −w/ξ w−1  (k/K), suggesting alinearhazard   γ = 1
+the chain is capped after                                                       with
+
+                                                                                                   pk =p   0k,   p0∼Ce −w/ξ .             (E10)
+  K=  Nw   = N 1−βw0 ,   w(N) =w            0Nβ,  0≤β≤1,
+                                                                     (E2)          To keep the error in (E10)         controlled, we can rescale
+accepted moves.  We denote byM the number of accepted                           the minimum spacing logarithmically with N  by setting
+flips before the first offreezeorcapoccurs, and we seek                         w(N) =w            0 logN.  ComparingKandℓ,
+E[M].                                                                                                    K
+                                                                                                          ℓ ∼ N 1−w     0/(2ξ)logN     ,                   (E11)
+                     General hazard results                                     so one crosses from hazard- to cap-limited asw0 increases.
+   a.    Exact expression.Survival through step     k requires                  In particular, for sufficiently largew0 (e.g.w0 > 2ξ in our
+not freezing in any of the steps 1,...,k.  Thus                                 conservative criterion), the chain iscap-limitedand by
+                                                                                (E8)
+
+                             kY 1−p      0iγ,   k≤K,       (E3)
+       Pr(M≥k)  =                                                                                        E[M]∼       Nw0 logN   ,                   (E12)
+                            i=1
+and by the tail–sum formula                                                     yielding quasi-linear sampling per pass,O(NlogN).
+                                                                                   c.    Weak  long-range  power  law  (α > 1;  resummable
+                                KX    kY 1−p      0iγ.              (E4)       tail).The mean-field error bound gives alinearhazard
+                   E[M]  =                                                      (γ= 1) with a window–controlled prefactor
+                               k=1   i=1
+(If p0iγ≥ 1 for some i, the product—and thus all later                                                  p0∼ Cwα,   α>1.                   (E13)
+terms—vanishes.)
+   Whenp0iγ≪ 1 up to the relevanti, we use log(1−x   )≈                         The associated hazard length is ℓ∼p −1/20  ∼w  α/2    .  Let
+−xand  Pki=1 iγ≈k  γ+1 /(γ+1) to obtain                                         the window scale as w(N) = w0Nβ, and recall the cap
+                                                    Z K                         size
+                 KX
+   E[M]≈            exp    −  p0γ+ 1 kγ+1       ≈                                                         K∼  N
+                k=1                                   0  e−at γ+1 dt,                                             w ∼N    1−β  .                     (E14)
+                                                                     (E5)          When K≫ℓ       ,  the  process  freezes  from  the  hazard
+witha:=p                0/(γ+ 1).  Define thehazard length                      before hitting the cap, and
+                                         γ+ 1     1/(γ+1)                 (E6)
+               ℓ:=a  −1/(γ+1)          =                                                                                              αβ
+                                            p0                                                    E[M]∼ℓ∼p     −1/20  ∼N              2 .           (E15)
+
+at which the cumulative hazard is O(1).  Comparing ℓ to                         Thisincreasesmonotonically with           β (a larger window
+the capKin (E2) yields two regimes:                                             suppresses  the  hazard,  allowing  more  accepted  flips).
+                                                                                                                                                   18
+
+When K≪ℓ       , the chain almost never freezes early and                       If K≪ℓ       , the chain essentially always reaches the cap,
+runs to the cap,                                                             just as in (E16).
+
+                 E[M]∼K∼       Nw ∼N    1−β  .            (E16)                                E[M]∼K∼       Nw ∼N    1−β  .            (E21)
+
+Thisdecreasesmonotonically with           β (a larger window                 Thisdecreasesmonotonically with           β (a larger window
+lowers the cap).                                                             lowers the cap).
+   Since the hazard-limited value grows with β while the                        Because the hazard-limited value rises withβ while the
+cap-limited value shrinks withβ, the optimum is attained                     cap-limited value falls withβ, the optimum is achieved at
+precisely at thecrossoverwhere the two branches match.                       thecrossover, exactly as argued in                  (E17)       .  Equating the
+                                                                             two scalings gives
+                      α
+      N1−β  ∼N        2β         =⇒  β   c =     22 +α  .      (E17)
+                                                                                                          βc = 3−α3  .                         (E22)
+At this βc, the two expressions (E15)         and (E16)         coincide     At β =βc, the branches (E20)         and (E21)         coincide, yield-
+and yield
+                                                                             ing
+                                                   α
+                 E[M]        opt ∼N    1−β  c  =N 2+α  .           (E18)
+                                                                                               E[M]        opt ∼N     1−β  c  =N  α/3  .           (E23)
+
+                                                                                From the weak long-range regime (linear hazard) we
+                                                                             had βc =     22+α    ; at α = 1 this gives βc = 2/3.  Our non-
+                                                                             resummable result (E22)         also yields βc = 1−α/   3 = 2/3
+                                                                             at α = 1.  Thus the optimal window exponent matches
+                                                                             smoothly across the boundaryα= 1.
+                                                                                Plugging α = 0 into (E22)         gives βc  = 1, i.e. w∝N
+                                                                             so K∼N/w       is constant.  Correspondingly, (E23)         gives
+                                                                             E[M]opt∼N    0: there isno asymptotic sampling advantage
+                                                                             in the fully connected (α = 0) case, althoughconstant-
+                                                                             factorspeedups (from better constants in    p0 or reduced
+                                                                             autocorrelation) can still be realized in practice.
+
+Figure 4.Optimal window exponent for the screened
+typewriter  sampler.We  plot  1     −β c  versus  the  interac-                   Appendix F: Practical implementation of the
+tion–range exponent α, where the optimal spacing scales as                                    screened typewriter sampler
+w(N)∼N  βc  and the expected number of accepted flips per
+sweep scales as E[M]∼N    1−β  c.  The dashed line marks the                    Implementing the screened typewriter sampler on GPUs
+crossover  at α  =  1.   For  non–resummable  power–law  tails               requires modifying Algorithm 2 to maximize parallelism.
+0 < α < 1 one finds βc  = (3−α   )/3 (hence 1−β c  = α/3,
+left  annotation).   For  resummable  tails α >  1  one  obtains             We process proposals for an entire batch of chains simulta-
+βc  =  2/(2 +α)  (so  1−β c  = α/(2 +α),  right  annotation).                neously.  Because the Independent Scattering Approxima-
+These exponents imply the per–flip runtime scalings quoted                   tion (ISA) renders defects non-interacting, we parallelize
+in the text,T         per flip =O(N    βc logN).                             computationally intensive steps—such as link tensor con-
+                                                                             struction and ABACUS recurrence—both across chains
+   d.    Non-resummable  power  law  (0 < α <  1;  super-                    and  across  the  proposals  within  a  single  chain.   With
+linear hazard).Pairwise-dominated cross terms yield a                        amplitudes precomputed, a lightweight loop handles ac-
+superlinearhazard                                                            ceptance.  To accommodate the limited control flow of
+                                                                             GPUs,  we do not halt execution when a chain freezes;
+    pk =p   0kγ,   γ= 2−α>1,   p              0∼   ˜C                        instead, we use masking to prevent updates to the output
+                                                        wα,    (E19)         buffer, preserving batch synchronization.  Optimizing this
+                                                                             masking scheme could yield further speedups.
+so  that γ+  1  =  3−α     and  the  hazard  length  is ℓ∼                      The screened typewriter sampler requires exact error
+p−1/(3−α)0    ∼w  α/(3−α)          .   Let w(N)  = w0Nβ  and  recall         bounds to remain exact.  These bounds can be computed
+the cap (E14)       , K∼N        1−β    .  If K≫ℓ       , the process freezesby evaluating Eq. (D19)         and Eq. (D10)        , which guarantees
+before the cap, and by analogy with (E15) one has                            that the screened typewriter sampler is provably unbi-
+                                                                             ased.  Additionally, we provide a pragmatic strategy that
+                                                           αβ
+ E[M]∼ℓ∼p     −1/(3−α)0    ∼w  α/(3−α)   ∼N               3−α  . (E20)       is easier to implement than evaluating Eq. (D10)         at every
+                                                                             step.  We allocate a buffer ϵ(k) indexed by the number
+Thisincreasesmonotonically with           β (a larger window                 of accepted flips k.  We initialize ϵ(k) to a conservative
+suppresses the hazard more strongly).                                        value  (e.g.,  0.2)  to  ensure  it  exceeds  the  actual  error,
+                                                                                                                                                      19
+
+                                                                               withN, tracking the ideal line.  The curves diverge only at
+                                                                               the largest system size (N = 1000), signalingpremature
+                                                                               freezing.  Here, screening triggers early, forcing a cache
+                                                                               refresh before the cap is complete.  Even in this regime,
+                                                                               the sampler retains 80–90% of the ideal throughput.
+                                                                                  Consequently,  we keep W  constant.  The linear scal-
+                                                                               ing demonstrates that fixed spacing efficiently amortizes
+                                                                               cache  costs.   The  throughput  drop  at N  =  1000  does
+                                                                               not  justify  increasing W ;  adjusting  the  interval  width
+                                                                               becomes necessary only forN >1000.
+                                                                                  Finally, the figure reveals the sampler’s sensitivity to
+                                                                               ground-state correlations.  Throughput peaks in the fer-
+                                                                               romagnetic and paramagnetic regimes but falls near the
+Figure 5.  Scaling of average sampler throughput with sys-                     critical point, Jc≈−1.4.  There, long-range correlations
+tem size N  for interaction range α = 1.5.  The dashed black                   increase ISA interference, forcing proposals into the am-
+line indicates the theoretical maximum throughput N/2W  in                     biguous window and triggering early cache refreshes.
+the ideal limit of zero screening.  Colored symbols represent
+different coupling strengths J.  The throughput scales approx-                   Appendix G: Efficient construction of link tensors
+imately linearly, demonstrating efficient amortization of the
+O(NlogN        )  update  cost.   Deviations  from  the  ideal  line  at
+large N  signal the onset of premature freezing, an effect that                   Final-stage links T (l)  . The final-stage link tensors T (l)
+is most pronounced near the critical point (Jc≈−1.4) due to                    only have rank d.  They can therefore be computed using
+enhanced long-range correlations.                                              d reverse matrix vector products.  In all machine learning
+                                                                               libraries  this  can  be  computed  highly  efficiently  via d
+thereby forcing the chain to freeze prematurely.  During                       backwards passes.
+these  freeze  events,  we  obtain  the  empirical  error  ˜ϵ   at                Two-layer  links L(l,l−1)      .  The  two-layer  link  tensors
+no additional computational overhead by comparing the                          L(l,l−1)j,∆j        can be efficiently computed using convolutions.
+exact and approximate acceptance ratios.  If ϵ(k) retains                      Specifically, we have
+its initial default value, we overwrite it with ˜ϵ  ; otherwise,
+we update ϵ(k)←max{ϵ            (k),γ˜ϵ}      with γ > 1.  This heuris-                    L(l,l−1)           G(l)
+tic converges rapidly,  self-corrects as the wavefunction                                    j,∆j       =X      j+∆j−k    D(l−1)k  G(l−1)k−j   .       (G1)
+evolves, and avoids calibration parameters.  We note, how-                                                k
+ever,  that  it  is  still  a  heuristic  and  can  underestimate                 Let’s define the composite Green’s function  ˜G(l)
+ϵ(k) early in training, which may introduce bias.  For this                    Gj−k+∆j   ⊗G −(j−k)         .  This is another convolution kernelj−k,∆j        =
+reason, we discard the first few sweeps at the beginning                       meaning we can efficiently construct the link tensor via
+of each training run.  Empirically, after this burn-in, the                    the matrix valued FFT
+error bounds are accurate and the sampler satisfies the
+Metropolis–Hastings rule exactly.  All final observables we
+report (ground-state energy, observables, V-score, etc.)                               L(l,l−1)
+are obtained with a provably exact sampler.                                              j,∆j       =F −1  (F(     ˜G(l)∆j   )⊙F(D       (l−1)    ))| j .        (G2)
+   Figure S5plots theaverage sampler throughputof the                          We need this link tensor for all j∈{ 1,...,N}    but for
+screened typewriter scheme.  Throughput is defined as                          ∆j∈{−w,...,w       + 1}.  This means the link tensor can
+the average number of proposals per chain between cache                        be constructed inO(d         2WNlogN)⊂O(NlogN).
+refreshes.   Since  link-tensor  construction  is  the  expen-                    Multi-layer  links|l−m| ≥          3.  Direct  nested  FFTs
+siveO(NlogN        ) step, this metric quantifies how well the                 scale  as  badly  for  more  than  two  layers.   We  can  in-
+scheme amortizes that cost.                                                    stead use randomized SVDs to obtain the link tensors
+   A dashed line marks the ideal case, where screening                         L(l,m)  ≈U    (l,m)      ˜Σ(l,m)
+never triggers during a pass.  With block spacing W , a                        probes (linear-time in N  for fixed k) and a smallO(k3)k  V (l,m)       using k≪Wd       random
+pass contains                                                                  factorization on slice-shaped matrices.  In the worst case
+                        Mideal(N)  =   N                                       k  = Wd  this  incurs  a  total  cost  ofO(Wd2NlogN         +
+                                           2W .                      (F1)      Wd3N)⊂O(NlogN        ) matrix vector multiplication cost
+                                                                               andO(W 3d3) build cost.  Note using randomized SVDs
+proposals per chain, yielding the linear reference.                            the  error  can  be  made  arbitrarily  small.   Nevertheless,
+   We  examine  models  trained  at α  =  1.5.   This  set-                    in this paper we empirically only need two layers to ob-
+ting poses the greatest challenge:  long-range correlations                    tain accurate results.  Therefore, we do not require this
+reduce the accuracy of the independent-scattering approx-                      construction, meaning the ABACUS algorithm returns
+imation (ISA). Nevertheless, throughput scales linearly                        provably exact results without controlling for error.
+                                                                                                                                                     20
+
+    Appendix H: Exact algorithm to construct link                             For clarity we first treat real exponentials, then state the
+            tensors for arbitrary network depth                               extension.
+
+   In our benchmarks, two layers of DysonNet suffice for                      Proposition III(Sum of exponentials ⇒ exact low-rank
+high performance, allowing us to construct all link tensors                   off-diagonal blocks). Let
+efficiently  using  FFTs.   However,  because  nested  FFT                                                sX
+contraction scales poorly with depth, this strategy fails                                       g(t) =       αpλtp,  |λ p|<1.             (H4)
+for deeper networks.  To demonstrate that ABACUS is                                                      p=1
+mathematically exact and asymptotically efficient, we pro-
+vide an advanced algorithm for constructing link tensors,                     Let I  ={a,...,b}      and J  ={c,...,d}      be  two  disjoint
+even though our experiments do not require it.                                contiguous index intervals with b<c (i.e.I  lies strictly to
+   We leverage additional structure in the long-range to-                     the left of J).  Then the off-diagonal block GI,J  has rank
+ken mixer to compute link tensors efficiently.  Consistent                    at mostsand factors as
+with our assumption that long-wavelength propagation is
+controlled by only a few modes, we model each Green’s-                                     sX        v(p) ⊤,   u(p)
+function mixerG(ℓ) ∈R N×N      as a hierarchical off-diagonal                 GI,J  =          u(p)I  J               I   (i) =λ  −ip ,  v(p)J  (j) =α   pλjp.
+low-rank (HODLR) matrix.  HODLR matrix multplica-                                         p=1
+tion is highly efficient allowing us to build the link tensors                                                                                    (H5)
+at reasonable cost.  We show that SSM impulse-response                        The analogous statement holds for blocks strictly below the
+kernels (finite sums of exponentials) are exactly HODLR.                      diagonal.  In particular, for any recursive binary partition
+                                                                              into contiguous halves (DefinitionII), every off-diagonal
+                                                                              block  is  exactly  rank≤s   ,  hence G  is  an  exact  HODLR
+            1.    Definition of HODLR matrices                                matrix with rank boundr≤s.
+
+   Fix  an  ordering  of  token  indices{1,...,N}     along  a                Proof. If i∈I     and j∈J     with i<j, then|i−j|        =j−i
+1D chain (or along a chosen space-filling order in higher                     and
+dimensions),  so  that  contiguous  index  sets  correspond                                          sX                sX λ−ip  αpλjp,        (H6)
+to  local  spatial  neighborhoods.   For  simplicity  assume                               Gij =        αpλj−ip    =
+N  =  2p  and  define  a  recursive  binary  partition  of  the                                     p=1              p=1
+index interval into contiguous halves.  At the top level,                     which is precisely the separable expansion in Eq. (H5)      .
+
+   I1 :={1,...,N/2},   I                2 :={N/2 + 1,...,N}.  (H1)            RemarkIV (Damped oscillations / complex poles). Many
+Definition II(HODLR matrix). A matrix       A∈R   N×N                         SSM kernels are sums of damped oscillatory modes corre-
+isHODLR of rank ≤r    (with leaf size n0) if it can be                        sponding to complex poles inside the unit disk.  Writing
+represented as                                                                such modes as complex exponentials (or equivalently as
+         AI1,I1 AI1,I2                                                        real exp(−t/ξ   ) cos(ωt) and exp(−t/ξ   ) sin(ωt) pairs) pre-
+A=                           ,AI1,I2 =U   12V⊤12,  AI2,I1 =U   21V⊤21,        serves the same separability argument; the exact HODLR
+          AI2,I1 AI2,I2                                                       rank bound is proportional to the number of modes (count-
+                                                                   (H2)       ing complex-conjugate pairs appropriately).
+
+where rank(AI1,I2),rank (AI2,I1)≤r   , and where thediag-                                      3.    Link tensor construction
+onal blocks AI1,I1  and AI2,I2  are again HODLR of rank
+≤r    under the next binary split of I1 and I2, recursively,
+until  blocks  reach  size≤n   0  (stored  densely).   Impor-                    Let the network have depth L with layers indexed by
+tantly,  only thediagonal  blocks  are  refined  recursively;                 ℓ = 1,...,L.  Let D(ℓ)   (σ0) denote the frozen-background
+off-diagonal blocks are stored as low-rank factors at the                     diagonal (local) vertex at layer ℓ (see main text), and let
+level where they appear.                                                      G(ℓ)    be the corresponding Green’s-function token mixer.
+                                                                              Define the composite layer operator
+
+           2.    SSM kernels are exactly HODLR                                                       B(ℓ)    :=D     (ℓ)   (σ  0)G  (ℓ) .                   (H7)
+
+   Consider a 1D translation-invariant Green’s function                       For integers 1≤a≤b≤L            , define the consecutive product
+(Toeplitz kernel)                                                                  Xa,b :=B     (a) B(a+1) ···B (b) ,   Xa,a =B    (a) ,    (H8)
+
+           Gij  =g(|i−j|),   i,j∈{1,...,N}.      (H3)                         and use the convention
+
+We focus on SSM impulse responses, which in real space                                               Xa,b :=I      (a>b).                    (H9)
+are finite sums of (possibly damped/oscillatory) modes.
+                                                                                                                                                       21
+
+Let PS,j  be the projector onto the local patch Sj  (width                      Running all endpoint scans in parallel yields overall depth
+W )  centered  at  site j.   For  any  pair  of  layers ℓ > m,
+we  cache  the  local  interlayer  link  tensor  as  the  patch-                                  Tdepth = Θ(logL)T                mm(N,r).            (H15)
+restricted block
+                                                                                FormingB(ℓ)   in Eq. (H7)       by diagonal scaling is lower order
+  L(ℓ,m)              G(ℓ) Xm+1,ℓ−1        P⊤S,j∈R dW×dW   . (H10)              than Eq. (H14)        , and patch-block extraction in Eq. (H10)
+    j       :=P  S,j
+                                                                                is embarrassingly parallel over (ℓ,m,j).
+For ℓ =m + 1, the segment is empty and Eq. (H9)       gives                     This  scan-based  construction  therefore  computes  all
+Xm+1,ℓ−1            =I.                                                         cached link tensors with Θ(logL     ) depth and log-linear
+                                                                                HODLR  costs  in  the  system  size N.   This  shows  link
+                                                                                tensors for ABACUS can be efficiently constructed inde-
+             4.    Parallel construction via scans                              pendent of network depth.
+
+
+   The previous section outlined how to construct the link                              Appendix I: DysonNet in two dimensions
+tensors using HODLR multiplication.  This section targets
+construction of multiple link tensors in parallel on GPUs.                         We briefly extend the DysonNet block to a 2D lattice
+Naivly, one would needO(L3) HODLR multiplications to                            withN =LxLy sites. We index lattice sites byj = (jx,jy)
+form all link tensors.  However, since HOLDR multipica-                         and write translation-invariant kernels as functions of the
+tion is associative, one can reduce the cost to O(L2 logL     )                 displacementj−k.  The DysonNet block remains
+using a parallel prefix (Blelloch) scan [85].
+   Fix  an  endpoint b∈{  1,...,L}    and  consider  the  re-                                          Φ(σ)h=D(σ)Gh,                   (I1)
+versed list B(b) ,B(b−1)  ,...,B(1).  A parallel prefix-scan
+over this list yields all prefix products                                       with the same residual stacking and mean-pooling readout
+                                                                                PM  as in the main text.
+P (b)t    :=B     (b) ⊙B    (b−1)  ⊙···⊙B    (b−t+1)   ,   t= 1,...,b.             The 2D token mixer G is a translationally invariant
+                                                                   (H11)        convolution operator (Toeplitz/circulant under periodic
+                                                                                boundaries),
+These prefixes correspond exactly to consecutive products
+ending atbvia the index map                                                                         (Gh)   j,c  = X     Gj−r,c  hr,c,                 (I2)
+                                                                                                                    r
+                           Xa,b =P    (b)b−a+1  .                      (H12)    which is implemented with 2D FFTs channel-wise.
+
+Thus,  one  scan  computes  the  entire  family{X a,b}ba=1  .                                     Gh=F   −12      F2(G)⊙F       2(h) ,               (I3)
+Running the same scan independently for different end-
+points  is  precisely  “parallel  scans  starting  at  different                whereF2 denotes the discrete 2D Fourier transform over
+nodes” of the layer chain.                                                      theL   x×L y grid and⊙is pointwise multiplication.
+   To construct all link tensors, for each target layer ℓ we                       The local nonlinearity D(σ) acts position-wise on each
+run a scan with endpointb =ℓ−  1 to obtain all segments                         embedding vector, but may depend on a boundedpatch
+{X m+1,ℓ−1   }ℓ−1m=0    using Eq. (H12)        .  For each m, we then           around j.  Concretely, for a fixed patch radius w define
+form G(ℓ) Xm+1,ℓ−1            (HODLR multiply+recompress) and                   the square patch
+extract all local blocksL(ℓ,m)                       )        ; all patch
+                                 j       using Eq. (H10
+indicesjare independent and hence parallel.                                     Sj  :={k:∥k−j∥      ∞≤w},   W:=|S        j|= (2w+ 1)        2,
+                                                                                                                                                      (I4)
+                                                                                and parameterize the local vertex as
+                               5.    Cost                                                           (D(σ)h)      j  =D  σ| Sjhj,                  (I5)
+
+   Let one HODLR multiply+recompress cost                                       i.e. D(·) “attends” to the W  tokens in the patch (via a
+                Tmm(N,r) = Θ  Nr2 log(N/n  0).         (H13)                   small CNN/MLP over the patch) and outputs a d×d
+                                                                                matrix multiplying the center tokenh  j.
+A scan of length b uses Θ(b) HODLR multiplications (lin-                           For a single spin flip at positionj relative to a reference
+ear work) and has Θ(logb     ) scan stages (logarithmic depth)                  configurationσ                         0, we decompose each layer’s vertex as
+[85].  Summing the work over endpointsb = 1,...,L gives                             D(l)  (σ)  =D        (l)
+Θ(L     2) HODLR multiplications, hence                                                               0   + ∆D    (l) ,   D(l)0   :=D     (l)  (σ  0),   (I6)
+    Twork = Θ(L     2)T  mm(N,r) = Θ  L2Nr2 log(N/n  0).                       where  ∆D(l)    is  nonzero  only  on  a  bounded  region:  in
+                                                                   (H14)        2D it is supported on (a small union of) patches around
+                                                                                the flip, rather than on an interval.  Let PS,j  denote the
+                                                                                                                                                            22
+
+projector that restricts activations to the patch Sj  (so                         We discretize it with the bilinear transform
+PS,jh∈R  W×d     ).  Then the link tensors are defined exactly                                                           −1
+as before, withP    S,j  now projecting onto a patch.                                                A=      I−   ∆2  ¯A       I+   ∆2  ¯A  ,              (J2)
+                         LX                         !                                                                    −1  ∆ ¯B.                         (J3)
+                                  MY                                                                 B=      I−   ∆
+   T (l)    =P MGf                     D(n)0 G(n)      P⊤S,j,           (I7)                                       2  ¯A
+
+                          M=l   n=l+1                                             where  ∆  is  the  step  size.   For zk  = ei2πk/N   ,  Eq.  (17)
+                           l−1Y                   !
+L(l,m)       =P S,jG(l)              D(n)            P⊤S,j,   1≤m≤l−2.            becomes
+                                        0 G(n)
+                            n=m+1                                                             Gc(z k) =C c (I−z   kAc)−1 Bc                         (J4)
+                                                                        (I8)                            =C cc(z  k) g(z  k)I−∆       ¯Ac−1   ¯Bc.      (J5)
+
+Defining  patch-restricted  activations  ˜h(l)    = PS,jh(l) ∈                    with
+RW×d     ,  ˜h(l)0    = PS,jh(l)0  ,  and   ˜G(l)    := PS,jG(l) P⊤S,j,  the
+DysonNet/ABACUS recurrence is unchanged except for                                               c(z) =        2∆
+interpreting the restriction as a patch.                                                                   1 +z ,   g(z) =      2(1−z)1 +z  .          (J6)
+
+                                                    l−2X               !          For diagonal  ¯Ac  = Λc, define the scalar Cauchy-kernel
+      ˜h(l)   = ∆D    (l) ˜h(l)                          L(l,m)     ˜h(m) ,       contraction
+                           0   +  ˜G(l)  ˜h(l−1)     +
+                                                   m=1                                                                   sX       viui
+                                                                        (I9)                        bG0,c  (z;u,v) =        g(z)−∆Λ     c,i.            (J7)
+                                   LX           !                                                                      i=1
+        Ω=A        PM˜h(L)    +        T (l)  ˜h(l).                    (I10)     For the S4 parameterization  ¯Ac = Λc +pcq⊤c  (matching
+                                  l=1
+                                                                                  the main text), Woodbury gives [39]
+Here  ˜G(l)  ˜h(l−1)      denotes propagating a patch-supported                                      bG0,c  (z;     ¯Bc,Cc)
+input through the convolution and then restricting back to                        Gc(z) =c(z)
+the patch; operationally this is a contraction of the local
+(W×W       ) block of the Toeplitz operator (or an equivalent                                 − bG0,c  (z;p  c,Cc) [1 + bG0,c  (z;p  c,q∗c )]−1 bG0,c  (z;     ¯Bc,q∗c ).
+SSM restriction), exactly as in 1D.                                                                                                                       (J8)
+   Complexity statements carry over verbatim upon re-                             This is the Green’s function practically implemented in
+placing the slice width W  = 2w + 1 by the patch size                             our network.
+W  =  (2w + 1)2.   Given  precomputed  links,  the  local-                            For parameterizing the local vertexD(σ) we use a short-
+update  runtime  remains  independent  of N  and  scales                          ranged  CNN  kernel,  as  this  enforces  a  finite  receptive
+as O(L2W 2d2), Importantly, the link tensors depend on                            field Dj(σ)  = Dj(σj−w  ,...,σj+w    ).   In  our  model  we
+thenumber  of  tokens  in  the  restricted  region(     W ), not                  create a second data streamϕ(l)   (see Fig.1c) with vectors
+on  whether  that  region  is  a  1D  interval  or  a  2D  area.
+For  DysonNet,  link  construction  remains  log-linear  in                       ϕ(l)j ∈R d for sitesj = 1,...,N.  We computeϕ(1) =Eϕσ
+N  because all required background propagations reduce                            with embedding matrix Eϕ∈R d×1    .  Each layer applies
+to 2D convolutions, which are computed with 2D FFTs                               (i) a site-wise dense map, (ii) a short-range depth-wise
+(and multi-layer links can be handled by the same low-                            convolution, and (iii) an elementwise nonlinearity g (we
+rank  probing  strategy,  with  each  probe  dominated  by                        use SiLU).
+O(NlogN) FFT-based matvecs for fixedW,d.
+
+                                                                                               ˜ϕ(l)j   =W    (l)D ϕ(l)j   +w    (l) ,                                (J9)
+  Appendix J: Details on the implementation of the                                                          wX
+                           DysonNet block                                                   ϕ(l+1)j       =g        K(l)r ⊙ ˜ϕ(l)j+r    +k    (l)  .         (J10)
+                                                                                                            r=−w
+
+   Here we provide additional details on the implementa-                          Here, W (l)D ∈R d×d      and w(l) ∈R d  are  the  site-wise
+tion of S4 and the CNN.                                                           (dense) weight matrix and bias at layerl.  The convolution
+   Here  we  summarize  the  S4  parameterization  from                           has half-width w with offsets r∈   [−w,w   ]; indices j +r
+Ref. [39] in notation consistent with the main-text defini-                       are  taken  modulo N  (circular  padding).  K(l)r ∈R d
+tions in Eqs. (16)      and (17)     .  We start from the continuous-             is  the  kernel  at  offset r  and k(l) ∈R d  its  bias.   The
+time state equation                                                               nonlinearity is applied element-wise and chosen as SiLU:
+                    ∂xy(x) =        ¯Ay(x) +          ¯Bh(x).                (J1) g(x) = SiLU(x) =x/(1 +e         −x  ).
+                                                                                                                                                     23
+
+   To match Eq. (19), we define
+
+             χ(ϕ    (l−1)j      ) =g  A(l)Dϕ(l−1)j       +b   (l) ,              (J11)
+                 Dj(σ) =U         (l)   diag χ(ϕ    (l−1)j      )V (l) .      (J12)
+
+HereA(l)D∈R d×d     andb(l) ∈R d are trainable dense weights,
+and g is an elementwise nonlinearity (we use SiLU).  The
+vector χ(ϕ(l−1)j      )∈R d  parametrizes  the  configuration-
+dependent  spectrum,  while U(l) ,V (l) ∈R d×d      are  layer-
+specific, configuration-independent bases (fixed left/right
+“eigenvectors”).  ThusDj(σ)∈R d×d     has fixed eigenvectors
+but  spin-configuration–dependent  eigenvalues  through
+ϕ(l−1)j      .  As in the main text, we also inject theϕ(l)   stream
+additively into the mixer stream before applying the SSM.
+In this work we take the parameters to be real.  We note as
+this is inside the network this does not limit expressivity
+to real valued wavefunctions, as a complex vector can be
+embedded in a real-valued vector space.  The final layer
+determines the sign structure of the network [86].
+
+
+      Appendix K: Small system validation TFIM
+
+   We evaluate the neural quantum state (NQS) for the
+long-ranged transverse-field Ising model at N  = 20 on
+a  2D  parameter  grid—vertical  axis J∈    [−5, 5],  hori-
+zontal  axis α∈    [0, 6];  see  Fig.6.   At  each  grid  point
+we  report  the  overlap  error  (infidelity)  with  the  exact
+ground  state.    The  fidelity  is F   = |⟨Ψ0|ΨNQS⟩|2;  in
+the  presence  of  a  (near-)degenerate  ground-state  man-
+ifold we compute the overlap with the ground-state sub-
+space, F   = Pj|⟨Ψ0,j|ΨNQS⟩|2,  treating  states  as  de-                      Figure 6.Benchmark of DysonNet on the long-ranged
+generate  when  their  energy  splitting  is <  10−6  .   The                  transverse-field Ising model at N  = 20. We sweep the
+right panel of Fig.6shows the ground-state energy er-                          Hamiltonian  parameters  over  a  2D  grid—vertical  axis J∈
+ror, ∆E =|E 0−E   NQS|.  For each grid point we perform                        [−5, 5], horizontal axis α∈   [0, 6]—and report two metrics per
+three independent training runs and report the median;                         grid point.Left panel:the infidelity 1    −F   , where F  is the
+no training instabilities were observed.                                       overlap with the exact ground state; in degenerate regions we
+   Across the grid, the median infidelity is 2.99× 10−4  :                     take the overlap with the full ground-state manifold.  Values
+most points sit at≲ 10−3  , with a few localized pockets                       span from∼ 10−5    up to∼ 10−2  , with most of the diagram
+reaching∼ 10−2    near short-ranged (large-α) critical re-                     at≲ 10−3    (lower is better).Right panel:the ground-state
+gions where optimization is harder—still small in absolute                     energy error ∆E =|E NQS−E   0|, reported at the 10−4    scale
+terms. Ground-state energies are uniformly accurate: typi-                     and  typically  in  the  2−5× 10−4    range,  with  a  few  larger
+cal ∆E is 2–5×10−4  , spanning 8.83×10−5   to 9.54×10−4  .                     pockets.
+Overall,  energies  are  robust  across  the  phase  diagram,
+while fidelity remains tight almost everywhere and softens                     range of system sizes and couplings near criticality and
+only mildly near criticality.                                                  collapse the data using the scaling form
+
+                                                                                               N2β/ν⟨m  2⟩=f        (J−J   c)N  1/ν     ,           (L1)
+Appendix L: Critical exponents and finite-size scaling
+                                                                               with Jc, ν, and β treated as fit parameters.  The collapse
+   To test whether DysonNet captures not only ground-                          is obtained using the PyFSSA package [60], and the quoted
+state energies but also the long-distance structure of criti-                  uncertainties are estimated conservatively as the maxi-
+cal wavefunctions, we perform a finite-size-scaling analysis                   mum of two procedures:  a jackknife analysis in which
+of the long-range TFIM at representative interaction ex-                       one system size is omitted at a time,  and a bootstrap
+ponents spanning the distinct universality regimes.  Specif-                   resampling analysis over the full dataset.
+ically, we compute the squared magnetization⟨m  2⟩ for a                          The resulting collapses, shown in Fig.7, are of high
+                                                                                                                                                  24
+
+quality across all three representative values of α, demon-                  J2/J1≈ 0.24 [61, 62], suggesting that DysonNet captures
+strating that DysonNet reproduces the universal critical                     the ground-state correlations consistently across the tran-
+behavior of the model rather than merely fitting local                       sition.  The variational V-score mirrors this trend, ranging
+observables or variational energies.  The extracted critical                 from 1.91×10   −4    to 2.44×10   −3  .
+exponents listed in TableIIagree closely with stochastic-
+series-expansion benchmarks and known theoretical pre-
+dictions.  Together, these results show that the architec-
+ture remains accurate even at criticality and that access
+to larger system sizes substantially improves the reliability
+of exponent extraction.
+
+
+
+      Appendix M: Small system validationJ                   1–J   2
+
+   The  antiferromagnetic J1–J2  model  is  the  spin-1/2
+Heisenberg  chain  with  competing  nearest-  and  next-
+nearest-neighbor exchange,                                                   Figure  8.Benchmarks  of  DysonNet  applied  to  the
+
+                        NX                   NX                              1D  antiferromagnetic J1–J2  spin  chain  with N  =  20
+            H=J       1    ˆSi·ˆSi+1  +J   2     ˆSi·ˆSi+2 ,       (M1)      spins.The plot compares the relative error in the ground-
+                                                                             state  energy,  defined  as ε  =|E DysonNet−E   ED|/|E     ED|  (red
+                       i=1                  i=1                              circles, left logarithmic axis), and the variational V-score (blue
+                                                                             squares, right logarithmic axis) as a function of the frustration
+with periodic boundary conditions.  For 0<J2/J1≲ 0.24                        ratioJ2/J1.  Reference ground-state energiesEED are obtained
+the ground state remains critical and is well described by                   via exact diagonalization.  The results illustrate the ability of
+a Luttinger liquid with algebraically decaying spin cor-                     DysonNet to maintain high accuracy across the frustration
+relations, while increasingJ                   2 introduces frustration that regime, with the V-score serving as a reliable unsupervised
+reshapes short- and intermediate-range correlations [61–                     proxy for the true energy error.
+63].  At J2/J1≃ 0.24 the chain undergoes a Berezinskii–
+Kosterlitz–Thouless  transition  into  a  gapped,  sponta-
+neously  dimerized  phase,  which  continuously  connects                                 Appendix N: Network parameters
+to the Majumdar–Ghosh point at J2/J1 = 1/2 where the
+ground state is exactly a product of singlet dimers (up to                      Unless otherwise stated, optimization uses standard SR
+a twofold translation degeneracy) [61, 87].  This combi-                     and TF32 precision on NVIDIA GPUs.  Sweep counts are
+nation of (i) a well-established phase diagram containing                    scaled linearly with system sizeN in all phases, including
+both critical and gapped regimes, (ii) strong frustration                    area-law regimes.  Chains are randomly initialized, the
+and entanglement that stress variational expressivity, and                   burn-in length is five sweeps, and global spin inversion is
+(iii) exact-diagonalization access at smallN makes theJ1–                    attempted after every⌈N/(2w+ 1)⌉              proposals.  For the
+J2 chain a standard, stringent benchmark for many-body                       RBM  baseline  we  use  hidden-unit  density αRBM  =  10
+wavefunction ans¨atze [1,4,14].                                              (Nh  =  10Nv),  which  is  distinct  from  the  Hamiltonian
+   Building on this standard benchmark, we evaluate the                      decay exponent α.  Most training runs use NVIDIA Tesla
+DysonNet architecture on the antiferromagnetic J1–J2                         P100, T4, and L4 GPUs; the largest runs on criticality
+chain  with N  =  20  sites  across  the  frustration  range                 (N > 600) are executed on a single NVIDIA A40.  We note
+0≤J   2/J1≤ 0.5 (Fig.8).  DysonNet maintains high ac-                        or N < 500 DysonNet can be trained in google collab or
+curacy throughout, with the relative ground-state energy                     Kaggle notebooks, meaning DysonNet makes large system
+error ε remaining below 4× 10−4    for all couplings.  The                   sizes generally accessible without the need for high-end
+error reaches a minimum of 2.17×10   −5    atJ    2/J1≈0.08                  compute clusters.  For finite-size scaling we warm-start
+and then increases smoothly with frustration, attaining                      larger systems from converged smaller systems.  Critical
+a maximum of 3.71× 10−4    near the strongly frustrated                      exponents are extracted with PyFSSA [60].  Uncertainties
+regime.   Importantly,  we  observe  no  sharp  loss  of  pre-               for  the  critical  exponents  are  computed  by  taking  the
+cision  in  the  vicinity  of  the  quantum  critical  point  at             maximum over the bootstrapping and jacknife approach.
+                                                                                                                                                                          25
+
+
+
+   (a)                                                         (b)                                                        (c)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 7.Finite-size scaling analysis of the squared magnetization ⟨m  2⟩ obtained via the DysonNet Ansatz.The
+panels display data collapses for long-range decay exponents (a) α = 1.5, (b) α = 2.5, and (c) α = 6.0.  The data are rescaled
+according to the scaling ansatzN2β/ν⟨m  2⟩ versus (J−J   c)N1/ν  , using the critical parameters listed in TableII. The high quality
+of the collapse across system sizes ranging from N  = 50 to N  = 1000 (for α = 1.5) validates the accuracy of the extracted
+critical exponents and critical points.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+       Table III. Matched architecture hyperparameters for Fig.3(b,c).  ViT and linearized ViT are configured identically.
+                                           Hyperparameter         ViT / Linearized ViT DysonNet
+                                           Layers / Blocks                                   2                             2
+                                           Token size                                           2                             2
+                                           Embedding dimension                         2                             2
+                                           FFN layers per block                          1                             1
+                                           LogCosh hidden units                         2                             2
+                                           Attention heads                                   2                          N/A
+                                           S4 state-space dimension                  N/A                         12
+                                                                                                                                            26
+
+
+      Table IV. Hyperparameters for Network, Sampler, and Optimizer (Run 1).
+     Parameter                            Value / Scaling
+                                  Network Architecture (DysonNet)
+     Block Type                                 DysonNet(S4 kernels, bidirectional complex)
+     Number of Layers (N layers)        2
+     Embedding Dimension (d model)  14
+     S4 State Dimension (N s4  )          12
+     Token Size                                  2
+     LogCosh Hidden Units               2
+     Convolution Kernel Size             4
+     S4 initialization                          Hippo
+     Normalization                             ActNorm
+                                           Sampler (Metropolis)
+     Number of Chains (N chains)      512
+     Number of Samples (N samples)  2048
+     Chain Initialization                    Random spin configurations
+     Burn-in Length                           5 sweeps
+     Global Spin Inversion Interval⌈N/(2w+ 1)⌉proposals
+     ABACUS                                    Enabled ifN >50
+     Fast Sampler Strategy                Enabled ifN >100
+     Sweep Size (S sweep)     ≈1.4×S      base
+        Base Sweep Unit(S    base)   N·C   crit
+        Scaling with System Size   Linear inN(all phases)
+        Critical Factor(C     crit)            4·max(0.8−|J−J           c|,0) + 1
+                                 Optimizer (SR/SGD with Schedule)
+     SR Variant                                  Standard SR (no minSR)
+     Training Iterations                     400
+     Warmup Steps                            150
+     Peak Learning Rate (η)              max(3.5,5.0·            N340)
+     Diagonal Shift Schedule              Linear (10−2 →10 −4  )
+
+
+
+
+
+
+
+
+
+
+
+
+
+       Table V. Transformer (SpinViT) Architecture Hyperparameters (Run 1).
+Parameter                                        Value / Description
+                              Network Architecture (BatchedSpinViT)
+Model Type                                              BatchedSpinViT (Transformer / ViT-style)
+Linearized ViT Baseline                           Identical hyperparameters
+Token Size                                                5
+Embedding Dimension (d  model)                14
+Number of Attention Heads (N  heads)       2
+Number of Transformer Blocks (N  blocks)  2
+FFN Layers per Block (N  ffn)                    3
+Final Architecture                                    (5,)
+Complex-Valued Model                            False

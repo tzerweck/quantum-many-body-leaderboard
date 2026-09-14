@@ -153,15 +153,16 @@ That leaves **86 records from independent papers, of which 86 resolve to a count
 | BE | 1 | Ghent University |
 | *VarBench collaboration* | *96* | *33 authors, 8 countries — not attributed to one* |
 
-Since someone will ask: **US 24, China 4.** Two reasons not to read a trend into that.
+Two things the table does not say. **It is not a ranking of who is ahead**: a record set
+in 2017 and one taken last month weigh the same, and a country total says nothing about
+*which* instances are held — the four frontier records in the README are held by two
+groups, which is invisible in a column of totals. **And it is not a measure of output**:
+it counts records currently standing, so a group whose results have since been beaten
+disappears from it entirely.
 
-First, the counts are dominated by instances settled years ago; a record from 2017 and a
-record taken last month weigh the same here. Second, a country total says nothing about
-*which* records are held. The frontier instances in the README — 10×10, 16×16 and 20×20
-J1-J2, and 4×16 Hubbard — are currently held by groups at the Chinese Academy of Sciences
-and Peking University, and every one of those papers is a preprint that carries no
-affiliation in any bibliographic database. They are in the table above only because
-`scripts/affiliations_local.mjs` reads the affiliation off the paper itself.
+It is also only as good as the affiliation data. Every preprint holding a frontier record
+carries no affiliation in any bibliographic database; those rows are in the table only
+because `scripts/affiliations_local.mjs` reads the affiliation off the paper itself.
 
 ---
 
