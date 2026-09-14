@@ -11,7 +11,79 @@ Second pass on every paper: **harvest its bibliography**. Comparison tables cite
 they are beating, and reviews aggregate SOTA across models we have not touched. That is how the
 triangular/kagome/pyrochlore instances get found — nobody wrote a SOTA note for them.
 
-## The pipeline pass (2026-09-14, later) — the pool was never a census
+## The backwards sweep (2026-09-14, evening) — 161 candidates becomes 7940
+
+With paging, loud failure and `--since 2019` in place, the sweep was rerun through the
+arxiv.org search fallback, the API having been 429 for over three hours by then.
+
+**7940 unique candidates, 1927 peer reviewed**, against 161 before. Not a 49× improvement
+in the literature — a measurement of how much of it the old harvester could not see. The
+per-query audit in `sweep-queries.tsv` names the three queries that hit the page cap
+(`vscore`, `minsr-opt`, `nqs-any`) rather than letting them read as complete; they want a
+higher `--max-pages` on the next run.
+
+The year distribution is the answer to "is the backlog worth mining":
+
+| 2019 | 2020 | 2021 | 2022 | 2023 | 2024 | 2025 | 2026 |
+|---|---|---|---|---|---|---|---|
+| 389 | 520 | 600 | 674 | 746 | 854 | 1131 | 3026 |
+
+2019–2023 is 2929 candidates that no sweep has ever seen, against 4157 from 2025–26. And
+the zero-coverage families finally have a pool to triage: Impurity 84, TFIsing 32,
+shuriken 25, tV 23, pyrochlore 174, kagome 177.
+
+PDFs were fetched and layout-extracted for the whole prior pool: **214 committed source
+texts, up from 8**, which took the table harvest from 385 PDF cells to 2179.
+
+### TFIsing had no coverage because it could not be matched, not because nobody published
+
+The family showed 0 of 7 instances covered. Three independent defects made a match
+arithmetically impossible, each sufficient alone.
+
+**A factor of 4.** TFIsing sat in `SPIN_MODELS` and inherited the `4*N` divisor that
+Heisenberg and J1-J2 need for the Pauli→S·S conversion. Its Hamiltonian
+`-Σ sᶻsᶻ - h Σ sˣ` is already in Pauli operators with no S·S term to rescale, so per-site
+is `E/N`. Under `4*N`, `chain_32_P_1` read −0.3184 where the literature quotes −1.2738 —
+every cell missed by 4×.
+
+Not a judgment call: the chain is exactly solvable, and `validate.mjs` now asserts it every
+run. Summing `−2√(h² − 2h cos k + 1)` over `k = π(2n+1)/N` reproduces all three stored PBC
+exact rows, `chain_32_P_1` to 7e-15, and `E/N = −1.27375` sits just below `−4/π = −1.27324`
+as PBC at criticality must.
+
+**272 TFIsing cells had no size token.** Finite-size tables name sizes in the leftmost
+column and nowhere else. A bare integer alone in a row label is now read as a size. Chains
+needed the converse: on a chain the linear size *is* the site count, and 1D papers write L,
+not N — no chain instance in any family had an `L=` token before.
+
+**Nothing checked boundary conditions**, though §2 makes them part of the instance. An
+open-chain N=32 value matched the *periodic* `chain_32_P_1` on size alone, 0.92% away — a
+gap that is entirely the boundary condition.
+
+### arXiv:2605.13807 — a variational energy below its own exact column
+
+The first TFIsing candidate the sweep ever produced is a defect, not a record.
+
+Its exact column at N=10 is **−1.2381490**, reproducing `TFIsing/chain_10_O_1`'s stored
+exact row to seven digits — instance, unit convention and open boundary confirmed in one
+step, which is the convention check of §8 passing on a family that had never had one.
+
+But its `1D LRU` variational energy at N = 10, 24 and 32 sits **below** its own exact
+column, while sitting correctly above at N = 6, 8, 12, 16, 48, 64 and 96. At N=10 that is
+−1.2381549 against −1.2381490, about 8σ on the paper's own error bar.
+
+Suspicion fell on the harvester first, a column shift having just been fixed one commit
+earlier. It is not: these cells came through the HTML path, which has real cell boundaries,
+and an independent matrix-free Lanczos ED (`checks/tfim_obc_ed.mjs`) reproduces the paper's
+exact column at N = 6…16 to seven decimals. The columns are right and the inversion is real.
+
+**This is the second source reporting a sub-exact variational energy on this one 10-site
+instance.** VarBench's own `RBM (alpha = 1)` row is 2.3e-5 below exact, already resolved in
+`checks/` as an optimization-trace minimum rather than a converged measurement. Two
+unrelated groups making the same class of error on the smallest instance on the board is a
+pattern, and the cheapest argument QMBL has for requiring a variance next to an energy.
+
+## The pipeline pass (2026-09-14, earlier) — the pool was never a census
 
 Every number below the line was harvested by a pipeline that reported its own coverage
 incorrectly. Four defects, each of which made the result look complete when it was not.

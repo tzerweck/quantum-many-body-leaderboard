@@ -3,6 +3,36 @@
 Reruns that settle a specific claim about a row. Each one exists because
 `scripts/validate.mjs` flagged something that could not be resolved by reading.
 
+## `tfim_obc_ed.mjs` — is arXiv:2605.13807's variational column below its own exact column?
+
+**Question.** The first TFIsing candidate the sweep ever produced came from
+arXiv:2605.13807 (parallel-scan recurrent NQS), whose transverse-field Ising chain table
+reports a `1D LRU` variational energy and an `e exact (N)` reference at each size. At
+N = 10, 24 and 32 the variational value sits *below* the exact one; at N = 6, 8, 12, 16,
+48, 64 and 96 it sits correctly above. Is that a real inversion, or did the harvester
+misread the columns — a fair suspicion, since a column-shift bug had just been fixed.
+
+**Design.** Matrix-free Lanczos ground state of `H = -sum s^z s^z - h sum s^x` on an OPEN
+chain at h = 1, for N = 6…16, in the Pauli convention. Independent of the harvester and of
+VarBench. If our ED reproduces the paper's `e exact (N)` column, the columns are assigned
+correctly and the inversion is in the data.
+
+**Result.** ED reproduces the paper's exact column at all five sizes to seven decimals.
+The cells also came through the HTML path, which has real cell boundaries rather than the
+PDF position heuristic. So the column assignment is right and the inversion is real:
+−1.2381549 against an exact −1.2381490 at N = 10, about 8σ on the paper's own error bar.
+
+The same ED reproduces `TFIsing/chain_10_O_1`'s stored exact row to seven digits, which
+independently confirms the instance, the open boundary and the corrected E/N convention.
+
+**Note.** This is the *second* source reporting a sub-exact variational energy on this one
+10-site instance: VarBench's own `RBM (alpha = 1)` row is 2.3e-5 below exact, resolved
+below as an optimization-trace minimum rather than a converged measurement. Two unrelated
+groups making the same class of error on the same tiny instance is a pattern, not a
+coincidence, and it is an argument for reporting converged energies with their variance.
+
+**Reproduce.** `node checks/tfim_obc_ed.mjs` — seconds, no GPU.
+
 ## `tfising_rbm_check.py` — the three `RBM (alpha = 1)` rows below exact
 
 **Question.** VarBench's TFIsing `RBM (alpha = 1)` rows sit below the exact ground state
