@@ -11,6 +11,73 @@ Second pass on every paper: **harvest its bibliography**. Comparison tables cite
 they are beating, and reviews aggregate SOTA across models we have not touched. That is how the
 triangular/kagome/pyrochlore instances get found — nobody wrote a SOTA note for them.
 
+## The table pass (2026-09-14) — mine the comparison table, not the claim
+
+The 09-13 sweep read claim *sentences* ("state of the art", "we reach"). That only finds papers
+that brag in prose about one headline number, which is why it produced four J1-J2 rows and
+nothing at all for the frustrated magnets: those papers print a table of sizes and never write
+the sentence. `scripts/harvest_tables.mjs` now pulls every energy cell out of every data table
+in the cached sources (134 tables, 2611 cells) and `scripts/match_tables.mjs` maps them onto
+instances, ranking by position against the current record.
+
+**The highest-yield source is the table a paper prints of *other people's* numbers.** Several
+rows found this way are 2019–2023 results that had been beating a VarBench record since before
+VarBench froze. The dataset's problem is not only that it stopped; it is that it never mined
+the benchmark tables in the first place.
+
+Two ar5iv details cost most of the recall on the first attempt, and any future scraper needs
+both: energies are glued together with **zero-width characters**, which `\s` does not match,
+and a paper's **own results are rendered in mathematical bold digits** (U+1D7CE and up), which
+are not `[0-9]`. Fixing those two took the harvest from 2182 cells to 2611 and surfaced the
+triangular and square-Heisenberg candidates the first pass missed entirely.
+
+Instance discipline lives in the matcher, not in review: Hubbard filling and t′ must agree, or
+arXiv:2604.25775's t′=−0.2 column reads as a 0.4% "record" against the t′=0 16×16 instance.
+
+### Accepted — 30 rows, 6 records, 1 new instance
+
+| instance | row | source | via |
+|---|---|---|---|
+| `Heisenberg/triangular_36_P` | **−0.560313(3)** Group CNN — **new record**, was DMRG χ=2048 | arXiv:2211.07749 (2023) | 2505.20406 Tab. 5 |
+| `Heisenberg/triangular_36_P` | −0.5601(4) LCN; −0.55922 GCNN; −0.5562(2) RNN | 2206.07370, 2104.05085, 2505.20406 | 2505.20406 Tab. 5 |
+| `Heisenberg/square_36_P` | **−0.67887(2)** 2D RNN — **new record** | arXiv:2502.17144 | own Tab. 5 |
+| `Heisenberg/square_100_P` | **−0.67155260(3)** CNN+MinSR — **new record** | Chen & Heyl, Nat. Phys. 20, 1476 (2024) | 2502.17144 Tab. 5 |
+| `Heisenberg/square_100_O` | **−0.628656(9)** 2D TRNN — **new record**; plus first exact row | arXiv:2207.14314; QMC arXiv:2601.20189 | 2605.13807 Tab. 2 |
+| `Heisenberg/square_256_O` | **new instance** (16×16 OBC), 4 rows incl. exact QMC | arXiv:2605.13807 | own Tab. 2 |
+| `Hubbard/square_64_P_28_8` | **−0.7458(6)** JBf 8×8 torus — **new record**, +5 rows, all with Var(E) | *PRB* 113, 245104, arXiv:2510.11710 | own Tab. 1 |
+| `Hubbard/rectangular-4x8_32_PO_14_8` | −0.73342(8) HFDS, −0.7332(6) JBf, both with Var(E) | arXiv:2510.11710 | own Tab. 1 |
+
+The `2510.11710` rows matter out of proportion to their count: it reports six ansätze on one
+instance under identical conditions **with σ²/M for each**, so they arrive V-score-computable.
+Their V-scores order exactly with their energies (8.9e-3 at the record, 2.9e-2 at the worst),
+which is §9.3's internal-consistency check passing across a whole instance at once.
+
+### Pyrochlore — checked, records confirmed current (a result in itself)
+
+`arXiv:2604.11880` Table 9 is a careful literature comparison for the pyrochlore Heisenberg AFM
+that separates finite-size from thermodynamic values and variational from extrapolated ones.
+Two entries touch QMBL instances and **neither is a new row**:
+
+- `mVMC, Astrakhantsev et al., 4×4³, N=256, −0.4831(1)` is the same result as our existing
+  record −0.4830957 on `pyrochlore-4x4x4_256_P`, quoted to fewer digits. The stalest instance
+  in the table (V-score 1.1e-1) is stale because **nobody has beaten it**, not because we
+  stopped looking.
+- `mVMC-RBM/Lanczos, Pohle et al., L=2, N_s=128, −0.49229(7)` is a re-quote of the same Pohle
+  result that gives `pyrochlore-2x2x2_128_P` its record of −0.4922012. Importing the rounded
+  third-party value as a new record would have manufactured one out of a rounding difference.
+
+Everything else in that table is a thermodynamic-limit or extrapolated estimate.
+
+### Still blocked
+
+- **Kagome.** The cached HTML for the Comment `2605.28861` is the abstract stub only — 18 KB,
+  no energies. Needs the PDF. `2510.04907`'s kagome numbers stay rejected (iPEPS, ξ→∞).
+- **Triangular above L=6.** `2505.20406` reports L=6…30 finite-size energies in *figures*;
+  Tab. 2 carries only their V-scores and Tab. 6 only thermodynamic-limit values. Its −0.5497
+  (OBC) and −0.5517569(9) (PBC) are **E∞/N, not finite-size** — the earlier note below reads as
+  if they were rows, and importing them would have been a false record at every triangular size.
+- **Square J1-J2 at J2 ≠ 0.5.** Still nothing; the provisional read below stands.
+
 ## Harvest (2026-09-12)
 
 `scripts/sweep_search.mjs` -> **161 unique candidates since 2025, 39 peer reviewed**
