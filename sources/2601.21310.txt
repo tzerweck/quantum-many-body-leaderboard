@@ -1,0 +1,2962 @@
+A Deterministic Framework for Neural Network
+        Quantum States in Quantum Chemistry
+
+
+                                            Zheng Che∗
+
+Hefei National Research Center for Physical Sciences at the Microscale, University of
+
+                   Science and Technology of China, Hefei 230026, China
+
+
+                                    E-mail:  wsmxcz@gmail.com
+
+
+                                              Abstract
+
+        We present a deterministic optimization framework for Neural Network Quantum
+
+    States (NQS) designed to bypass the sampling variance and slow mixing issues inherent
+
+    in stochastic optimization. By projecting a neural backflow ansatz onto dynamically
+
+    evolving configuration subspaces and applying a post-hoc second-order perturbative
+
+    correction, ourmethodprovidesasystematicrouteforoptimizingtheselectedvariational
+
+    component of the wavefunction and estimating residual correlation through a post-hoc
+
+    perturbative correction. The implementation utilizes a hybrid CPU-GPU architecture
+
+    that shows empirical sub-linear wall-time scaling with respect to the subspace size
+
+    over the tested range, enabling the calculation of strongly correlated systems, such
+
+    as the chromium dimer, within Hilbert spaces of10    23 configurations. Benchmarks on
+
+    molecular bond dissociations demonstrate that this deterministic approach yields stable
+
+    convergence and accuracies comparable to selected reference methods in the tested
+
+    systems.
+
+
+
+
+
+
+                                                   1
+1  Introduction
+
+
+Solving the electronic Schrödinger equation remains a central challenge inab initioquantum
+
+chemistry. While Full Configuration Interaction (FCI) is exact, its exponential scaling neces-
+
+sitates approximations.1–3 Selected Configuration Interaction (sCI)4–7 iteratively constructs
+
+variational subspaces of dominant configurations, whereas Coupled Cluster (CC)8,9 and
+
+Matrix Product States (MPS)10,11 employ compact non-linear ansätze. Recently, Neural
+
+Network Quantum States (NQS) have emerged as a promising alternative, leveraging deep
+
+neural networks to parameterize many-body wavefunctions with polynomial scaling.12–18
+
+    Optimizing NQS in second-quantized chemistry, however, is hindered by sampling difficul-
+ties. Unlike continuous real-space formulations,18–20 molecular wavefunctions in discrete Fock
+
+space exhibit sparse and multimodal probability distributions. Consequently, conventional
+
+Markov Chain Monte Carlo (MCMC) sampling suffers from slow mixing and high vari-
+
+ance,14,21–23 often missing relevant tail configurations. Although autoregressive architectures
+
+permit direct sampling, they impose rigid orderings that structurally constrain the ansatz.
+
+Ultimately, the high variance of stochastic gradient estimators in large, sparse Hilbert spaces
+
+obscures the intrinsic representational capacity of the neural network.23–27
+
+    To circumvent these sampling limitations, recent deterministic or semi-deterministic
+
+strategies21,22,28,29 replace stochastic estimation with exact summation over selected target
+
+sets. Despite successes in small systems, different formulations of the deterministic energy
+
+objective and its gradient exhibit varying theoretical and computational properties. Directly
+adapting the VMC energy functional with subspace truncation often introduces a mathe-
+
+matical inconsistency between the objective and its gradient (i.e., “Asymmetric” estimators).
+
+Furthermore, while restricting optimization to a truncated subspace has been explored as a
+
+practical technique to reduce theO(N 4)computational overhead, 28 a comparative analysis of
+
+these disparate optimization modes is necessary to understand their convergence behaviors.
+
+    In this work, we present a deterministic framework for NQS optimization that evaluates
+
+these diverse objective formulations. Projecting the ansatz onto a dynamically evolving
+
+                                                       2
+configuration set reformulates the Schrödinger equation as a non-linear optimization problem.
+
+By comparing three distinct optimization modes—Asymmetric, Proxy, and Variational—we
+
+analyze their theoretical consistency, gradient properties, and optimization dynamics. Based
+
+on this analysis, we find that a protocol combining strictly Variational optimization within a
+
+compact subspace and a post-hoc second-order Epstein–Nesbet perturbation (PT2) correction
+
+provides a stable and computationally practical strategy in the present implementation.
+
+This approach decouples the optimization of the selected variational component from the
+
+post-hoc estimation of residual perturbative contributions, reducing training complexity while
+
+eliminating theoretical inconsistencies.
+
+    To scalethis framework, we address the computational disparity between thecombinatorial
+
+logic of sparse Hamiltonian generation and the high arithmetic intensity of neural tensor
+contractions. We develop a hybrid architecture integrating a combinatorial kernel with a
+
+differentiable core. Combined with heat-bath screening to prune the Hamiltonian graph, this
+
+architecture shows empirical sub-linear wall-time scaling with respect to subspace size over
+
+the tested range.
+
+    We validate the framework on the bond dissociation of H2O and N2, and the strongly
+
+correlated chromium dimer (Cr2). The Variational+PT2 protocol yields energies comparable
+
+to selected multi-reference benchmarks in the tested systems in Hilbert spaces exceeding10                     23
+
+dimensions.
+
+    The paper is organized as follows: Section 2 establishes the theoretical foundation and
+
+optimization modes. Section 3 details the hybrid algorithmic architecture and screening
+
+techniques. Section 4 presents numerical benchmarks, and Section 5 concludes the work.
+
+
+2  Theory
+
+
+We present the deterministic optimization framework for the time-independent electronic
+Schrödinger equation. We first define the Fock space notation and the geometry of the
+
+
+
+                                                       3
+configuration sets (section 2.1), followed by the formulation of the Neural Network Quantum
+
+States (section 2.2). Subsequently, we define the deterministic energy objectives (section 2.3)
+
+and outline the self-consistent optimization procedure (section 2.4).
+
+
+2.1  Framework and Notation
+
+We consider the fermionic Fock space restricted to the sector with fixed total electron number
+
+Ne and spin projection Sz. The space is spanned by the orthonormal Fock basisB ={|x⟩}   ,
+
+where each basis vector is identified by an occupation bitstringx    ∈{0, 1}No. To avoid
+
+ambiguity with the configurational structure of the ansatz described in section 2.2, we refer
+
+to the basis elements|x⟩  strictly asconfigurations. The many-body variational wavefunction
+
+is parameterized as a linear expansion|Ψ θ⟩  = ∑x∈B ψθ(x) |x⟩  , where ψθ(x)denotes the
+
+real-valued amplitude computed by the neural network with trainable parametersθ.
+
+    The optimization proceeds iteratively. At each outer iteration k, the wavefunction is
+
+supported on a variational setVk⊂B. We define the connected setCk as the subset of all
+configurations coupled toV k via the Hamiltonian  ˆH:
+
+
+                             Ck ={|x  ′⟩∈B|∃|x⟩∈V  k,⟨x ′|  ˆH|x⟩̸= 0}.                  (1)
+
+
+Equation 1 defines the Hamiltonian-connected search space used for deterministic subspace
+
+expansion. The external configurations are isolated in the perturbative setPk =Ck\Vk. The
+
+unionT     k =V  k∪Pk forms the target set for deterministic evaluation.
+
+    During the inner optimization loop,Tk remains fixed. The parameters θ are updated
+to minimize an energy objective defined over this target set. Upon convergence, a scoring
+
+functionw(x) = |ψ θ(x) | is evaluated for all|x⟩∈T  k to select the updated variational setVk+1
+
+for the subsequent iteration. Table 1 summarizes the notation used throughout this work.
+
+
+
+
+
+
+                                                       4
+             Table 1: Nomenclature and symbols used in this work.
+
+Symbol      Description
+
+ System and Wavefunction
+No,Ne        Number of spin-orbitals and electrons.
+x∈{0,1}     No   Occupation bitstring representing a configuration.
+|x⟩          Orthonormal Fock basis vector.
+θ            Trainable parameters of the ansatz.
+ψθ(x)        Amplitude mappingx↦→R.
+|Ψ θ⟩         Global variational wavefunction.
+ Subset
+Vk            Variational set at iterationk.
+Ck            Connected set coupled toV  k.
+Pk            Perturbative set, defined asC  k\Vk.
+Tk            Target set for deterministic evaluation,V        k∪Pk.
+
+ Hamiltonians and Objectives
+HXY          Hamiltonian matrix block with rows inXand columns inY.
+˜Hk           Proxy Hamiltonian defined onT  k.
+Evar/asym/proxy        Variational, Asymmetric, and Proxy energy objectives.
+∆E    PT2        Second-order perturbative correction.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                              5
+2.2  Neural Network Quantum States
+
+We parameterize the wavefunction amplitude ψθ(x)using a NQS. A defining characteristic of
+
+NQS in fermionic systems is the enforcement of antisymmetry. Current architectures can be
+
+categorized into three classes based on their treatment of the sign structure:
+
+   1. Unconstrained Architectures: General-purpose function approximators, such as
+
+       RBMs or MLPs, map configurations directly to amplitudes, ψθ(x) ≈NN   (x).    14,21,23,25
+       Lacking an intrinsic antisymmetry mechanism, these models typically require complex-
+
+       valued outputs or separate amplitude-phase networks to learn the sign structure. The
+
+       resulting optimization landscape is highly non-convex, often necessitating pre-training
+
+       or geometry-aware optimizers like Stochastic Reconfiguration.30–32
+
+   2. Slater–Jastrow Architectures: These ansätze decompose the amplitude into a
+       multiplicative Jastrow factor Jθ(x)and a fixed reference determinant:    ψθ(x)  =
+
+       eJθ(x)   det(Φ HF[x]).  While this strictly enforces the sign structure of the reference
+
+       state (e.g., Hartree–Fock), the fixed nodal surface limits accuracy in strongly cor-
+
+       related regimes where the ground-state sign structure deviates from the mean-field
+
+       reference.33,34
+
+   3. Neural Network Backflow Architectures: Backflow transformations generalize
+
+       the Slater determinant by making the single-particle orbitals dependent on the many-
+
+       body configurationx. By learning a configuration-dependent orbital basis          ˜ϕi(x), these
+
+       architectures allow continuous deformation of the sign structure while preserving the
+
+       determinant antisymmetry.22,35
+
+    In this work, we employ a single-determinant neural network backflow ansatz. Assuming
+
+a time-reversal symmetric Hamiltonian, the ground-state wavefunction can be taken as
+
+real-valued; thus, we utilize a real-valued neural network.
+
+    The ansatz is constructed from a static reference orbital matrixΦ               0∈R No×N e associated
+with the Hartree–Fock reference.  The backflow transformation introduces configuration
+
+                                                       6
+dependence via a neural network∆Φ     θ  :{0, 1}No→R  No×N e. The effective orbital matrix
+
+Φθ(x)is defined as:
+
+                                           Φθ(x) =Φ         0 + ∆Φ  θ(x),                           (2)
+
+where∆Φ       θ(x)is a non-linear additive correction. Eq. 2 incorporates configuration-dependent
+
+many-body correlations into the single-particle orbital representation.
+
+    For a configurationx, let    I(x) = {i|x  i = 1} denote the set of occupied orbital indices.
+
+The occupied submatrixA          θ(x) ∈R Ne×N e is constructed by selecting the rows ofΦ  θ(x)
+
+indexed byI(x):
+                               [A θ(x)]  jk = [Φ θ(x)]  ij,k,  wherei      j∈I(x).                   (3)
+
+The wavefunction amplitude is the determinant of this submatrix:
+
+
+                                             ψθ(x) = det (A   θ(x)).                            (4)
+
+
+Eqs. 3 and 4 define the determinant-valued neural backflow amplitude used in this work.
+
+    The network is implemented as a residual mapping. Its output layer is initialized with a
+
+small scale so that∆Φ      θ(x) ≈ 0at the start of optimization. Consequently, the initial ansatz
+
+remains close to the Hartree–Fock reference while allowing the orbital representation to relax
+
+during training.
+
+
+2.3  Deterministic Energy Objectives
+
+We formulate the optimization problem by replacing stochastic expectation values with
+
+deterministic summations.  The energy objective is defined as a functional E(θ; Ω,  ˆHeff),
+
+specified by a normalization domainΩand an effective Hamiltonian                ˆHeff. The general form
+
+is given by the Rayleigh quotient:
+
+                                                               ∑
+                     E(θ; Ω,          ˆHeff) =⟨Ψ  Ω|  ˆHeff|ΨT⟩   x∈Ω  ψθ(x)⟨x|          ˆHeff|ΨT⟩∑
+                                            ⟨Ψ  Ω|Ψ Ω⟩      =           x∈Ω |ψ θ(x)|       2    ,            (5)
+
+
+                                                         7
+whereΨ    T denotes the wavefunction restricted to the target setTk. The three optimization
+
+modes analyzed below are obtained from Eq. 5 by choosing different normalization domains
+
+and effective Hamiltonians.
+
+
+2.3.1  Asymmetric Mode
+
+This mode corresponds to deterministic schemes used in recent non-stochastic or semi-
+stochastic approaches.21,22,36 The normalization is restricted to the variational set (Ω = Vk),
+
+while the Hamiltonian expectation value includes contributions from the full target set
+
+( ˆHeff  =  ˆPT  ˆH ˆPT).  The energy is computed as the expectation value of the local energy
+
+Eloc(x):
+
+                    Easym(θ) =    ∑      pV(x)E       loc(x),  E       loc(x) =    ∑Hxx′ψθ(x ′)ψθ(x)  ,           (6)
+                                   x∈V k                                 x′∈Tk
+
+with pV(x)  = |ψ θ(x) |2/∑y∈V k|ψ θ(y) |2. A gradient estimator analogous to the VMC log-
+
+derivative trick is typically employed:
+
+                         gasym = 2    ∑    pV(x) (E       loc(x)−E           asym)∇ θ ln|ψ  θ(x)|.               (7)
+
+                                      x∈V k
+
+Note thatg         asym in Eq. 7 is not the exact gradient of Easym(θ)in Eq. 6, as it neglects terms
+
+arising from the dependence ofEloc(x)on the parameters via amplitudes in  Pk. Consequently,
+
+the resulting vector field is non-conservative. The derivation of the exact full gradient is
+
+provided in the Supporting Information.
+
+
+2.3.2  Proxy Mode
+
+The Proxy mode restores consistency between the energy functional and its gradient by
+
+extending the normalization domain to the full target set (Ω = Tk) and employing a sparse
+
+effective Hamiltonian  ˜Hk. The Proxy Hamiltonian  ˜Hk retains exact off-diagonal elements
+
+
+
+
+
+
+                                                         8
+involvingV      k but approximates theP   k-P k block diagonally:
+
+                                             
+                                ( ˜Hk)xy =     Hxy     ifx∈V   k ory∈V   k,                                      (8)
+                                             
+                                               Hxxδxy  ifx,y∈P    k.
+
+
+This approximation in Eq. 8 avoids the O(|P|2)cost of evaluating the full Hamiltonian on
+
+the perturbative set. The objective function, defined in Eq. 9, is the exact Rayleigh quotient
+
+of  ˜Hk:
+
+                                         Eproxy(θ) = ⟨Ψ T| ˜Hk|ΨT⟩⟨Ψ T|ΨT⟩  .                          (9)
+
+Since  ˜Hk is Hermitian andΩmatches the operator’s domain, the gradient is well-defined:
+
+                                                                                        
+                                         ∑     ∑                                        ∇θψθ(x).     (10)
+             ∇θEproxy =       2⟨Ψ T|ΨT⟩               ( ˜Hk)xx′ψθ(x ′)−E      proxyψθ(x)
+                                         x∈T k  x′∈Tk
+
+The gradient in Eq. 10 provides explicit feedback from amplitudes inPk, stabilizing optimiza-
+
+tion in systems with strong coupling to the perturbative set.
+
+
+2.3.3  Variational Mode
+
+The Variational mode restricts the optimization to the variational subspaceVk (Ω = Vk),
+
+with the effective Hamiltonian defined as the projection  ˆHeff =  ˆPV ˆH ˆPV. The objective is the
+
+standard variational energy withinV      k:
+
+
+                                           Evar(θ) = ⟨Ψ V|  ˆH|Ψ  V⟩⟨Ψ V|ΨV⟩ .                          (11)
+
+
+The gradient corresponds to the projection of the residual vector onto the ansatz tangent
+
+space withinV      k:
+
+                                                                                    
+                                           ∑     ∑                                  ∇θψθ(x).        (12)
+                 ∇θEvar =       2⟨Ψ V|ΨV⟩               Hxx′ψθ(x ′)−E      varψθ(x)
+                                          x∈V k  x′∈Vk
+
+
+
+                                                         9
+    This mode learns a non-linear compression of the ground state wavefunction withinVk.
+
+Since contributions fromPk are neglected during optimization, the variational objective
+
+in Eq. 11 and its gradient in Eq. 12 are designed to be coupled with post-optimization
+
+perturbative corrections (e.g., PT2) to estimate residual perturbative contributions.
+
+    The projected variational objective in Eqs. 11 and 12 is closely related to the constrained-
+
+optimization strategy of Li et al., where an exact truncated NQS energy and its gradient
+
+are evaluated within a selected configuration sample.28 In the present work, we use this
+
+objective as one component of a unified deterministic framework, enabling a direct comparison
+
+with the Asymmetric and Proxy target-space formulations in terms of gradient consistency,
+
+computational cost, subspace evolution, and residual error sources.
+
+
+2.4  Self-Consistent Optimization and Subspace Evolution
+
+We adopt a self-consistent optimization procedure that interleaves parameter updates with
+
+adaptive refinement of the configuration set. This approach decomposes the problem into
+two alternating steps: minimizing the energy with respect to the ansatz parameters and
+
+discretely updating the wavefunction support. The algorithm creates a feedback loop between
+
+the effective Hamiltonian, projected onto the current variational subspace, and the neural
+
+wavefunction, whose amplitudes determine the set for the subsequent iteration.
+
+
+2.4.1  Inner Loop: Parameter Optimization
+
+In the inner loop, the target setTk and the corresponding effective Hamiltonian (e.g.,  ˜Hk or
+ˆPV ˆH ˆPV) are fixed. The objective is to minimize the deterministic energy functional E(θ;Tk)
+
+with respect toθ.
+
+    Unlike stochastic VMC, the energy and gradients are computed via exact summation over
+
+Tk, resulting in a deterministic optimization landscape without sampling noise. Since the
+
+effective Hamiltonian and the supportTk evolve across outer iterations, the network optimizes
+
+against a dynamic dataset. This requires the ansatz to learn generalized correlation rules
+
+
+                                                      10
+to estimate amplitudes for new configurations entering the set, effectively regularizing the
+
+network against overfitting to a static set of configurations.
+
+
+2.4.2  Outer Loop: Subspace Evolution
+
+The outer loop updates the variational basisVk→Vk+1  to capture the relevant sector of the
+
+Hilbert space. This step functions as a selection operatorS :Tk→Vk+1 , constructing the
+new variational set based on the amplitude distribution|ψ θ(x) | of the current wavefunction.
+
+This evolution relies on the neural network’s ability to model wavefunction sparsity, assigning
+
+large amplitudes to significant configurations even if they currently reside in the perturbative
+
+setP   k.
+
+    We consider three protocols for subspace selection:
+
+   1. Fixed-Size (Top-K) Selection: The variational set retains the        Nv configurations
+
+      with the largest amplitudes. This imposes an explicit upper bound on memory usage
+
+       and computational cost, ensuring consistent performance on hardware resources.29
+
+   2. Cumulative Mass Selection: The set expands to include the minimal set of con-
+
+       figurations accounting for a target fraction γ∈   (0, 1]of the total probability mass
+       normalized overT  k.
+
+   3. Absolute Threshold Selection: All configurations with a normalized probability
+
+       p(x)>ϵare retained. This criterion ensures a uniform resolution of the wavefunction
+
+       but does not bound the subspace dimension.21,28
+
+    In this work, we primarily use the Top-K protocol. This choice decouples the memory
+
+footprint from the Hilbert space dimension, providing control over the computational budget
+
+and GPU memory utilization.
+
+
+
+
+
+
+
+                                                      11
+2.4.3  Post-Optimization Analysis
+
+Upon convergence, post-hoc evaluations refine the energy estimate.  For the Proxy and
+
+Asymmetric modes, the bias from approximate Hamiltonians is removed by evaluating the
+
+exact Rayleigh quotient over the final target setT  =V∪P. Since the ansatzΨ      θ is defined
+
+globally, the variational energy can also be estimated via standard VMC sampling.29
+
+    In the Variational mode, optimization is confined toV.  We estimate the remaining
+
+perturbative contribution from the perturbative set using Epstein–Nesbet PT2.  A key
+
+distinction from linear sCI methods is that the optimized NQS is parameterized by a non-
+linear network and optimized via gradient descent. Consequently, the final wavefunction may
+
+not fully saturate the exact diagonalization limit of the projected Hamiltonian  ˆPV ˆH ˆPV.
+
+    To quantify this internal optimization residual, we define a diagnostic post-hoc diago-
+
+nalization energy Ediag  = λmin(H VV), evaluated on the final selected configurations. The
+
+difference∆                    opt =Evar−E    diag measures the deviation of the optimized NQS coefficients from
+
+the optimal linear CI coefficients within the fixed supportV. Detailed diagnostic results are
+
+provided in the Supporting Information.
+
+    The subsequent perturbative correction estimates contributions associated with this
+
+internal residual and with the external coupling toP.28,37 The total corrected energy is
+
+Etot =E    var + ∆E    PT2, with:
+
+
+                                 ∑    |⟨x|(      ˆH−E        var)|Ψ V⟩|2∑ |⟨x|     ˆH|Ψ  V⟩|2
+                     ∆E    PT2 =             Evar−H    xx          +       Evar−H    xx .           (13)
+                                 x∈V                                 x∈P
+
+The first term in Eq. 13 provides a second-order estimate associated with the non-vanishing
+
+residual of the optimized NQS withinV, while the second term estimates the perturbative
+
+contribution from the external setP.
+
+    We also emphasize that minimizing Evar within a selected support does not necessarily
+
+minimize the final corrected energy Evar + ∆EPT2.  This mismatch is also observed in
+
+selected-CI/PT2 protocols and appears in the present calculations. Therefore, the current
+
+
+                                                       12
+Variational+PT2 scheme should be regarded as a two-stage approximation rather than a
+
+direct minimization of the corrected total energy. A possible NQS-specific route to reduce this
+
+mismatch is to optimize a differentiable surrogate of the corrected energy, or to incorporate
+
+PT2-awarescoresintothesubspaceevolution. Suchtotal-energy-drivenoptimizationstrategies
+
+are left for future work.
+
+
+3  Computational Implementation and Acceleration
+
+
+Implementing a deterministic NQS framework requires managing two distinct workloads: the
+
+combinatorial generation of sparse Hamiltonian graphs and the continuous optimization of
+
+neural networks via automatic differentiation (AD). To address these differing requirements,
+
+we designed a hybrid architecture that separates discrete combinatorial logic (suited for
+
+CPUs) from differentiable numerical computation (suited for GPUs).
+
+
+3.1  Hybrid Architecture and Memory Management
+
+To optimize computational efficiency and memory usage, the framework is structured into
+
+three functional layers:
+
+
+   1. Discrete Combinatorial Kernel: Evaluates Slater–Condon rules on integer represen-
+      tations of configurations to construct the Hamiltonian connectivity graphs (H VV,HVP).
+
+      This branching-heavy logic is executed on the CPU, exporting sparse operators in
+
+      Compressed Sparse Row (CSR) format to serve as static constants for the optimization
+
+      loop.
+
+   2. Dynamic Subspace Management: Acts as a topological filter between the discrete
+
+      and continuous domains. It applies screening criteria (Section 3.2) to determine the
+
+      active subspace and transfers only essential topological data (sparse indices and non-zero
+
+      values) to the optimization engine.
+
+
+                                                    13
+   3. Differentiable Optimization Core: Performs the numerical minimization on the
+
+       GPU. Using Just-In-Time (JIT) compilation, wavefunction inference and gradient
+
+       backpropagation are fused into a single computational graph to maximize memory
+
+       bandwidth utilization.
+
+
+    Deterministic evaluation over large target setsTk introduces memory bottlenecks for both
+
+sparsematricesandADactivationtensors. Wedecouplememorystoragefromhigh-throughput
+
+computation to address this. The sparse HamiltonianH       TT, which is memory-bound, is stored
+
+and processed exclusively in host RAM. The matrix-vector productv=H     ψ is evaluated on
+
+the CPU, and the data transfer latency is algorithmically masked by concurrent GPU tensor
+
+operations. Furthermore, to compute gradients without exceeding GPU memory, the target
+setTk is partitioned into fixed-size micro-batches. Gradients are accumulated sequentially,
+
+bounding the peak memory requirement toO(N      batch)rather thanO(|T        k|).
+
+
+3.2  Acceleration via Heat-Bath Screening
+
+The size of the connected subsetCk scales as O(N 2eN 2o )relative to the variational set Vk.
+
+Evaluating the neural ansatz over an unpruned target set Tk  = Vk∪Pk becomes the
+
+primary computational bottleneck as the active space grows. We mitigate this by applying a
+
+deterministic screening strategy adapted from the Heat-Bath Configuration Interaction (HCI)
+
+algorithm5,38 to prune the perturbative setP   k.
+
+    A candidate configuration|x′⟩ is included inTk only if its perturbative coupling to the
+
+variational set satisfies:
+
+                                         max|x⟩∈V  k|H x′xψθ(x)|≥ϵ           HB,                          (14)
+
+whereψ     θ(x)is the amplitude of the reference state andϵ          HB is a numerical threshold.
+
+    Evaluating Eq. 14 naively incurs an O(N 4)cost per configuration. To accelerate this, we
+
+precompute a lookup table during initialization: for each pair of occupied spin-orbitals(        i,j),
+
+the corresponding pairs of virtual orbitals(     a,b)are sorted in descending order of the integral
+
+
+                                                      14
+magnitude|⟨ij||ab⟩|.
+
+    During subspace expansion for a configuration|x⟩  , we define a dynamic cutoff τ  =
+
+ϵHB/|ψ  θ(x) |. The algorithm iterates through the pre-sorted virtual pairs, enabling an “early
+
+exit” once|⟨ij||ab⟩|<τ      . Configurations with negligible coupling are thus never generated.
+
+This strategy shifts the complexity of the expansion step from scaling with the total number
+
+of orbitals to scaling with the number of significant Hamiltonian entries, ensuring the overall
+
+framework remains tractable for large Hilbert spaces.
+
+
+3.3  Overview and Optimization Details
+
+The deterministic optimization workflow is summarized in Algorithm 1. Unless otherwise
+
+noted, molecular Hamiltonians are constructed using one- and two-body integrals obtained
+
+from Restricted Hartree–Fock (RHF) calculations via the PySCF package.39–41 The initial
+
+variational setV      0 consists solely of the Hartree–Fock reference configuration.
+
+    The backflow correction∆Φ     θ is parameterized by a Multi-Layer Perceptron (MLP)
+with two hidden layers of 256 units. No pre-training is used. The reference matrixΦ               0 is
+
+initialized from the Hartree–Fock occupation matrix, with a small Gaussian perturbation of
+
+standard deviation10      −3  added for symmetry breaking. In the JAX/Flax implementation,
+
+the embedding and hidden layers use standard random initializers with zero biases. The
+
+final output projection uses a small variance-scaling initialization with zero bias, keeping
+
+∆Φ  θ(x) ≈ 0at initialization. Thus, the starting wavefunction is close to the Hartree–Fock
+
+reference, while all parameters of the backflow correction remain trainable. The numerical
+
+optimization is implemented using the JAX library42 with double-precision (fp64) arithmetic.
+
+    To realize the hybrid architecture described in Section 3.1, the discrete combinatorial
+
+kernel is implemented in C++ and interfaced with Python via nanobind43 to ensure efficient
+
+integer operations. The differentiable inner loop is Just-In-Time (JIT) compiled into a unified
+execution graph. Within this compiled loop, sparse matrix-vector products are routed to the
+
+host CPU utilizing optimized SciPy44 routines, while memory-efficient gradient accumulation
+
+
+                                                       15
+over large target sets is managed sequentially via JAX control flow primitives.
+
+    Optimization employs the AdamW algorithm with weight decay. The learning rate follows
+
+a cosine decay schedule, decreasing from10  −3  to5 × 10−5  over 800 steps. Calculations involve
+
+Nouter  =  30outer iterations for subspace evolution. In each outer iteration, we perform
+
+Ninner = 1000gradient descent steps. Large target set evaluations use a micro-batch size of
+
+8192 to manage GPU memory. The heat-bath screening threshold for the perturbative set is
+
+set to ϵHB = 10−6 . All benchmarks were performed on a single NVIDIA A100 (80GB) GPU
+
+with 8 Intel Xeon Gold 8358 CPU cores and 128GB RAM.
+
+
+4  Results and Discussion
+
+
+We present numerical results to validate the accuracy and efficiency of the deterministic
+
+framework. The analysis begins with an evaluation of the optimization modes and convergence
+
+properties on the water molecule.  We then benchmark ground-state energies for small
+
+molecules against FCI and stochastic NQS methods, followed by an investigation of bond
+dissociation curves for H2O and N2. Finally, we apply the framework to the strongly correlated
+
+chromium dimer (Cr2) and analyze the wall-time scaling of the hybrid implementation.
+
+
+4.1  Evaluation of Optimization Modes and Dynamics
+
+We first evaluate the convergence characteristics of the Variational, Asymmetric, and Proxy
+
+modes using H2O in the 6-31G basis set. Figure 1 displays the energy error relative to the
+
+FCI limit as a function of wall time and variational set size|V|.
+
+    The wall-time trajectories in Figure 1(a) distinguish the computational costs of the three
+
+approaches. The Variational mode achieves the lowest cost per inner-loop iteration because
+
+wavefunction evaluation and gradient backpropagation are strictly confined to the variational
+
+setV, avoiding repeated target-set evaluations over the connected configurations during
+
+gradient optimization. While the pure Variational energy is bounded by the representational
+
+
+                                                     16
+Algorithm 1Deterministic Optimization of Neural Network Quantum States (Variational
+Mode)
+ 1: Input:Hamiltonian integrals (FCIDUMP), AnsatzΨ             θ, Hyperparameters (Nouter, Ninner,
+    ϵHB,K)
+ 2:Output:Optimized parametersθ             ∗, final energyE        total
+
+
+ 3:Initialize parametersθand variational setV                                    0←{|Φ  HF⟩}
+ 4:fork= 1toN           outer do               ▷Outer Loop: Subspace Evolution
+
+
+ 5:  1. Subspace Expansion (Layer 0)
+ 6:     Transfer amplitudesψ            θ(V k−1    )to host
+ 7:     Generate screened perturbative setP    k via heat-bath criteria:
+ 8:   P k←{|x ′⟩/∈V  k−1 |max x∈V k−1 |H x′xψθ(x)|≥ϵ      HB}
+ 9:     Construct sparse Hamiltonian blockH  VV
+
+
+10:  2. Differentiable Parameter Optimization (Layer 2)
+11:    Transfer configurationsV               k−1   to device memory
+12:   Compileoptimization step (fused forward/backward pass):
+13:  fort= 1toN            inner do                              ▷Inner Loop
+14:         Compute amplitudesψ   θ(V k−1    )via serialized inference
+15:         Compute matrix-vector productv=H      VVψ(Host-Resident)
+16:    L(θ)←E           var = ⟨ΨV| ˆH|Ψ V⟩⟨ΨV|ΨV⟩
+17:         Compute gradients∇    θLvia AD
+18:         Updateθ←Optimizer(θ,∇                 θL)
+19:  end for
+
+
+20:  3. Subspace Pruning (Layer 1)
+21:    Evaluate wavefunction amplitudes on full target setT     k
+22:  V  k←Selector(T          k,K,key=|ψ     θ|)
+23:end for
+
+
+24:4. Post-Optimization Correction
+25:ComputeE           var on final setV   Nouter
+26:Compute perturbative correction∆E                 PT2
+27:returnθ      ∗,Etotal =E  var + ∆E  PT2
+
+
+
+                                                      17
+Figure 1: Convergence of deterministic objectives for H2O (6-31G). (a) Energy error|∆E|
+relative to FCI versus wall time for a fixed variational set|V| = 4096. (b) Final energy error
+versus variational set size|V|.
+
+
+capacity ofV (solid blue line), the addition of the second-order Epstein–Nesbet perturbation
+
+correction (Variational+PT2, dashed blue line) accounts for the majority of the remaining
+
+perturbative-space contribution in this test without increasing the inner-loop optimization
+cost.
+
+    Regarding the target-space formulations (T  =V∪P), the Proxy mode (orange line)
+
+yields significantly lower errors than the Asymmetric mode (green line). The stagnation
+
+of the Asymmetric mode near the uncorrected Variational result indicates that evaluating
+
+Hamiltonian connections intoP is ineffective without a consistent gradient signal. The
+
+gradient estimator in the Asymmetric mode neglects the parameter dependence of amplitudes
+
+in the perturbative set (∇θψ(x)forx   ∈P), resulting in a non-conservative vector field. In
+
+contrast, the Proxy mode minimizes the exact Rayleigh quotient of a Hermitian effective
+
+Hamiltonian  ˜H defined onT . This ensures mathematical consistency between the energy
+
+functional and its gradient, allowing the optimization to effectively incorporate contributions
+from the perturbative set.
+
+
+                                                      18
+    The error scaling with respect to subspace size|V| (Figure 1(b)) demonstrates that the
+
+Proxy mode and the Variational+PT2 strategy yield comparable accuracy. This agreement
+
+indicates that, for this test case, the post-hoc PT2 correction accounts for a similar portion of
+
+the perturbative-space energy contribution as the Proxy formulation, although the corrected
+
+energy remains non-variational. However, the Proxy mode requires evaluating gradients
+
+over the full target setT at every step, whereas the PT2 correction is a non-iterative
+
+calculation performed only upon convergence. Given its theoretical consistency and superior
+
+computational efficiency, we adopt the Variational+PT2 protocol as the default protocol for
+
+the subsequent benchmarks.
+
+    Having established the Variational+PT2 objective, we briefly address the algorithmic
+
+choices for the self-consistent procedure (detailed in the Supporting Information). Analysis
+of the inner-loop convergence reveals a system dependence: weakly correlated systems (H2O)
+
+plateau rapidly after subspace updates, whereas strongly correlated systems (Cr2) benefit
+
+from sustained optimization to navigate complex energy landscapes (Figures S1 and S2).
+
+To provide a conservative and uniform protocol across diverse benchmarks withouta priori
+
+tuning, we adopted a fixed schedule of 30 outer loops and 1000 inner steps. Diagnostic
+
+ablation studies (Figure S3 and Table S1) demonstrate that the final total energy of the
+
+Variational+PT2 scheme is largely insensitive to this inner/outer allocation in the tested
+
+regime, supporting the use of a relatively infrequent outer-loop update schedule to amortize
+
+the CPU overhead of combinatorial graph generation. Furthermore, while various subspace
+
+selection criteria yield comparable accuracy when compared at similar subspace sizes (Figure
+
+S4), the Top-K strategy is exclusively employed as it strictly bounds the memory footprint,
+ensuring predictable GPU performance for large-scale systems.
+
+
+4.2  Benchmarks on Molecular Systems
+
+We evaluate the scalability and accuracy of the deterministic framework by computing the
+
+ground-state energies of Li2O, C2H4O, and C3H8. These systems encompass Hilbert spaces
+
+
+                                                     19
+ranging from10          7 to10    12 configurations. Table 2 summarizes the calculated energies alongside
+
+results from FCI, CCSD(T), and existing NQS benchmarks.
+
+    A key difference between this work and previous deterministic or semi-deterministic NQS
+
+approaches (e.g., SC-RBM,21,28 NNBF22,29) lies in the optimization domain. Some previous
+
+deterministic or semi-deterministic NQS approaches incorporate the connected setC or a
+
+target setT into the gradient estimator to capture dynamic correlation during training.
+
+Depending on the precise objective-gradient pairing, such target-space formulations may
+
+introduceadditionalcomputationalcostorgradient-consistencyissues. Incontrast, thepresent
+
+Variational Mode restricts both wavefunction evaluation and gradient backpropagation strictly
+
+to the variational setV. This makes the dominant inner-loop cost scale with the selected
+
+variational support rather than the larger target set, and defines a Hermitian variational
+objective for the projected Hamiltonian  ˆPV ˆH ˆPV. This approach effectively decouples the
+
+problem: the neural ansatz optimizes the static correlation within a compactV, while the
+
+residual perturbative contribution is estimated via the post-hoc PT2 correction.
+
+    For Li2O, strictly variational minimization within a compact set proves efficient. Using
+
+|V| = 2 048, thevariationalenergy( −87.891 996Ha)islowerthantheSC-RBMresultobtained
+
+with a similar approach (−87.891 8Ha).  21 This suggests that a closed, mathematically
+
+consistent variational objective provides an efficient optimization route, although direct
+
+comparisons also depend on the ansatz, optimizer, and implementation details.  As|V|
+
+expands to131 072, the total energy (Variational+PT2) converges to the FCI limit within
+
+micro-Hartree accuracy.
+
+    For C2H4O, where the Hilbert space exceeds10                 9, we compare our results against the
+autoregressive MADE45 and NAQS25 architecture.  Our variational energy using 2048
+
+configurations (−151.104 900Ha) is lower than the MADE benchmark ( −151.092 983Ha).
+
+While autoregressive models rely on unbiased sampling, the deterministic Top-K selection
+
+imposes a strong inductive bias that prioritizes configurations based on amplitude magnitude.
+
+This allows the ansatz to identify dominant configurations in highly sparse wavefunctions
+
+
+                                                      20
+without the variance associated with stochastic sampling.
+
+    The C3H8 molecule represents a regime (10  12 configurations) where exact enumeration
+
+is intractable. Comparison with recent distributed FCI benchmarks46 shows systematic
+
+convergence. Expanding|V| from131 072to524 288reduces the total energy error relative
+
+to FCI from0   .96mHa to0   .47mHa. The results demonstrate that while the variational
+
+optimization captures the multi-configurational nature of the reference state, the perturbative
+
+correction is essential for accounting for the remaining perturbative contribution in large
+
+basis sets.
+
+
+4.3  Dissociation of H2O and N2
+
+We computed potential energy surfaces (PES) for the symmetric dissociation of H2O and
+
+the bond breaking of N2 using the cc-pVDZ basis set. Reference ground-state energies were
+
+obtained from FCI data by Olsen et al.47 for H2O, and DMRG (M = 4000)      48 and CDFCI49
+
+benchmarks for N2.
+    Figure 2 presents the absolute energy errors relative to the benchmarks. For H2O (left
+
+panel), the single-reference UCCSDT method diverges from the FCI limit as the O–H bonds
+
+stretch, with errors increasing by approximately two orders of magnitude at3 .0R/Re. This
+
+reflects the inadequacy of the single-configuration reference in the bond-breaking regime. The
+
+present neural backflow ansatz, optimized via the Variational mode and augmented with
+
+second-order perturbation theory (Variational+PT2), maintains consistent accuracy across
+
+the dissociation coordinate. With a variational set of|V| = 217, the Variational+PT2 energies
+
+remain within10    −4  Ha of the FCI reference, yielding lower errors than both UCCSDT and
+
+MRCISD at large bond distances.
+
+    The dissociation of N2 (right panel) involves breaking a triple bond, introducing strong
+
+static correlation. The UCCSDT baseline exhibits a non-monotonic error distribution with a
+maximum deviation around 3.0 Bohr. This behavior arises from the symmetry-broken UHF
+
+reference, where spin contamination and the multireference character of the wavefunction
+
+
+                                                     21
+Table 2: Ground-state energies (in Hartree) calculated by our deterministic framework
+compared with previous NQS benchmarks and FCI/CCSD(T) references.|V| denotes the size
+of the variational set. For our method, ‘Variational Energy’ refers to the exact expectation
+value E =⟨Ψ V|  ˆH|Ψ  V⟩/⟨Ψ  V|ΨV⟩, and ‘Total Energy’ includes the post-optimization PT2
+correction. Methods are sorted by variational energy (descending) within each system.
+
+                 Method   |V|      Variational Energy  Total Energy
+                 Li2O (STO-3G, 14e, 15o,|H|≈4.14×10                               7)
+                 FCI           -               -87.892693             -
+                 CCSD(T)      -                        -    -87.893089
+                 MADE45       -               -87.885637             -
+                 This work 512             -87.887889    -87.892584
+                 SC-RBM21     -                 -87.8918             -
+                 This work 2 048           -87.891996    -87.892680
+                 NAQS25       -               -87.892433             -
+                 This work 8 192           -87.892541    -87.892689
+                 Transformer23  -                 -87.8926             -
+                 This work 32 768          -87.892646    -87.892691
+                 NNBF22       -               -87.892662             -
+                 This work 131 072         -87.892662    -87.892692
+                 C2H4O (STO-3G, 24e, 19o,|H|≈2.54×10                               9)
+                 FCI           -              -151.123570             -
+                 CCSD(T)      -                        -   -151.122748
+                 This work 512            -151.047686   -151.115556
+                 MADE45       -              -151.092983             -
+                 This work 2 048          -151.104900   -151.121939
+                 This work 8 192          -151.114672   -151.122729
+                 This work 32 768         -151.119006   -151.123226
+                 NAQS25       -              -151.120486             -
+                 This work 131 072        -151.121237   -151.123361
+                 This work 524 288        -151.122393   -151.123470
+                 Transformer23  -                -151.1228             -
+                 NNBF22       -              -151.123357             -
+                 C3H8 (STO-3G, 26e, 23o,|H|≈1.31×10                               12)
+                 FCI46         -              -117.100123             -
+                 CCSD(T)      -                        -   -117.099709
+                 This work 512            -116.967731   -117.088963
+                 This work 2 048          -117.068360   -117.095751
+                 This work 8 192          -117.082970   -117.097458
+                 This work 32 768         -117.087785   -117.098339
+                 This work 131 072        -117.092824   -117.099158
+                 This work 524 288        -117.096772   -117.099649
+
+                                                   22
+Figure 2: Absolute energy errors|∆E|  relative to FCI/CDFCI benchmarks for the symmetric
+dissociation of H2O (left) and N2 (right) in the cc-pVDZ basis set. Results are shown for
+the Variational mode (circles) and the Variational+PT2 scheme (stars). The color gradient
+indicates the size of the variational set|V|, ranging from2          11 (yellow) to2     17 (dark purple).
+Baselines including UHF, MRCISD, UCCSDT, and DMRG are plotted for comparison.
+
+
+compromise accuracy in the intermediate coupling regime.
+
+    As shown in Figure 2 (right), increasing|V| from2          13 to2     17 systematically reduces the
+
+variational energy error. The inclusion of the PT2 correction accounts for a large portion of
+
+the remaining perturbative contribution, particularly near the equilibrium geometry where it
+
+reduces errors to below the MRCISD baseline. However, at the dissociation limit (e.g., 4.2
+Bohr), the total energy error increases to approximately 2.2 mHa. Post-hoc diagonalization
+
+diagnostics (see Supporting Information) reveal that the internal optimization residual∆                 opt
+
+grows noticeably in this strongly correlated regime, reaching∼ 0.62mHa for |V| = 131 072.
+
+This diagnostic gap accounts for only part of the total deviation. The remaining deviation is
+
+likely associated with a combination of finite selected support, limitations of amplitude-based
+
+selection for resolving many near-degenerate configurations, and the reduced reliability of
+
+a post-hoc second-order correction when the external space contains important statically
+
+correlated configurations.
+
+
+
+                                                        23
+4.4  Chromium Dimer
+
+The chromium dimer (Cr2) serves as a benchmark for balancing strong static and dynamic
+
+correlation. We computedthe ground-state energy at abond length of1 .5Å usingthe Ahlrichs
+
+SV basis set. To ensure comparability with Selected CI (HCI),50 DMRG,51 and stochastic
+
+NQS methods (SC-RBM,28 Transformer36), all calculations utilize identical molecular orbitals
+
+derived from CASSCF(12e, 12o). Results for the CAS(24e, 30o) and CAS(48e, 42o) active
+
+spaces are summarized in Table 3 and Figure 3.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 3: Convergence of variational (circles) and PT2-corrected total energies (stars) for
+Cr2 as a function of the variational set size|V|. (a) CAS(24e, 30o) and (b) CAS(48e, 42o).
+Reference data include HCI (orange squares), SC-RBM (green triangles), Transformer (pink
+dashed line), and CCSDTQ (gray dotted line).
+
+
+    In the CAS(24e, 30o) system (System I, Hilbert space∼ 7.5× 1015), the deterministic
+
+framework achieves lower variational energies with smaller subspace sizes compared to
+
+stochastic baselines. As shown in Figure 3(a), at|V| = 8, 192, the PT2-corrected total energy
+
+(−0.418002Ha) is lower than the CCSDTQ reference (   −0.406696Ha). This indicates that
+
+single-reference CCSDTQ is not a sufficiently stringent multireference benchmark for Cr2;
+
+a more appropriate assessment relies on deviations from HCI and DMRG. Comparing the
+variational energy at similar subspace sizes, our result at|V|≈ 1.31× 105 (−0.392029Ha)
+
+                                                     24
+is approximately8mHa lower than the SC-RBM result (    −0.38396Ha), which employs a
+
+support of∼ 1.75× 105. Upon expanding|V| to10    6, the total energy converges to−0.420278
+
+Ha, consistent with DMRG and FCIQMC limits.
+
+    For the larger CAS(48e, 42o) active space (System II, Hilbert space >  1023), single-
+
+reference CCSDTQ overestimates the energy by∼ 14mHa relative to DMRG. Figure 3(b)
+
+showsthatthedeterministicansatzyieldsvariationalenergieslowerthanreportedTransformer
+
+results. The final total energy of−0.442491Ha is within about2mHa of the best available
+
+many-reference benchmarks from HCI and DMRG (≈−0.4445Ha).
+
+    The variational energy trajectory generally follows the HCI curve, suggesting that
+
+amplitude-based selection captures a physically relevant subset of configurations.  How-
+
+ever, the slope of the NQS curve becomes shallower than that of HCI as the subspace size
+increases. This divergence reflects the methodological difference between the two approaches:
+
+HCI performs an exact diagonalization within the selected subspace, whereas NQS relies on
+
+non-linear parameter optimization.
+
+    Post-hoc subspace diagonalization diagnostics (detailed in the Supporting Information)
+
+confirm this behavior. At the largest subspace size (|V|≈ 106), the internal optimization
+
+residual∆                 opt reaches approximately 1.7 mHa and 1.9 mHa for System I and System II,
+
+respectively. This residual is of the same order as the remaining energy deviation from the
+
+selected-CI references, suggesting that coefficient optimization within the selected support
+
+is a non-negligible error source in massive Hilbert spaces. While the internal PT2 term in
+
+Eq. 13 perturbatively estimates a correction for this residual, the final accuracy remains
+
+bounded by the combined effects of the non-linear optimization limits and the perturbative
+screening threshold.
+
+
+4.5  Computational Efficiency and Complexity Analysis
+
+We analyze the scaling performance of the deterministic framework by decomposing the total
+
+wall-time into three computational phases: (1)Compilation(Orange): Construction of the
+
+
+                                                     25
+Table 3: Ground-state energies of the Cr2 dimer in different active spaces. All energies are
+reported asE+ 2086Ha.
+
+             Method     |V|         Variational Energy  Total Energy
+             System I: CAS(24e, 30o),|H|≈7.48×10                                  15
+             CCSDTQ51        -                            -     -0.406696
+             This work    8 192                -0.339793     -0.418002
+             This work    32 768               -0.372492     -0.417737
+             SC-RBM28        174 963               -0.38396     -0.416920
+             SC-RBM28        385 554               -0.38752     -0.416310
+             HCI50            123 144              -0.387661     -0.420094
+             This work    131 072              -0.392029     -0.419212
+             This work    524 288              -0.402847     -0.419550
+             HCI50            480 138              -0.402856     -0.420541
+             This work    1 048 576            -0.406173     -0.420278
+             HCI50            66 679 956           -0.420114     -0.421375
+             DMRG52          -                    -0.420525     -0.421156
+             FCIQMC53        -                            -     -0.421200
+             System II: CAS(48e, 42o),|H|≈1.25×10                                  23
+             CCSDTQ51        -                            -     -0.430244
+             This work    8 192                -0.330898     -0.437190
+             This work    32 768               -0.381646     -0.440195
+             SC-RBM28        156 594               -0.38978     -0.437530
+             SC-RBM28        331 397               -0.39203     -0.434520
+             SC-Transformer36  -                     -0.40043             -
+             HCI50            190 937              -0.405000     -0.442899
+             This work    131 072              -0.405377     -0.441221
+             This work    524 288              -0.418717     -0.442491
+             HCI50            787 919              -0.422163     -0.443463
+             This work    1 048 576            -0.422971     -0.442491
+             HCI50            2 237 828            -0.430093     -0.443908
+             HCI50            148 589 206          -0.442773     -0.444560
+             DMRG51          -                    -0.443334     -0.444478
+
+
+
+
+
+
+
+
+                                                   26
+sparse Hamiltonian graph and connected setC via the C++ kernel; (2)Inner Loop(Blue):
+
+JAX-compiled optimization steps, performing wavefunction evaluation and gradient accumu-
+
+lation on the GPU; (3)Overhead(Green): Subspace management tasks, including candidate
+
+scoring, sorting, and host-device data transfer. Figure 4 details the time decomposition for
+
+H2O, N2, and Cr2 active spaces as a function of the variational set size|V|.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 4: Wall-time decomposition of a single outer-loop iteration versus the variational set
+size|V| for (a) H2O, (b) N2, (c) Cr2 (24e, 30o), and (d) Cr2 (48e, 42o). The stacked bars
+(left axis) represent the relative percentage of each computational phase, while the diamond
+markers (right axis) track the total wall-time in seconds. The total scaling follows a power
+lawT∝|V|   α, with fitted exponentsαprovided in the insets.
+
+
+    The total wall-time follows a power law scaling T∝|V| α across all benchmarked systems,
+
+
+                                                       27
+with exponents ranging fromα = 0.75to  α = 0.88. This empirical sub-linear scaling indicates
+
+that the marginal computational cost per configuration decreases as the subspace expands,
+
+reflecting the efficiency of batched operations on large datasets. However, the distribution of
+
+computational effort depends heavily on the electronic structure complexity.
+
+    For the H2O and N2 systems (Figure 4(a,b)), the workflow is compute-bound.  The
+
+Inner Loopdominates the total runtime (50–80%), as the sparse Hamiltonian graph remains
+
+relatively compact.  In this regime, performance is limited primarily by the arithmetic
+
+intensity of the neural network inference and the GPU memory bandwidth during gradient
+
+accumulation.
+
+    In contrast, the strongly correlated Cr2 system (Figure 4(c,d)) exhibits a different profile
+
+due to the dense connectivity of the active space. For the large CAS(48e, 42o), theOverhead
+andCompilationphases constitute the majority of the wall-time at small subspace sizes
+
+(> 60%at  |V| = 213). This behavior occurs because the size of the connected set|C| scales
+
+rapidly with the number of open shells, making the CPU-based integer logic for graph
+
+generation and screening the primary bottleneck.
+
+    As|V| increases, however, the relative contribution of theInner Looprises (e.g., to   ∼ 40%
+
+in Figure 4(d)). This trend suggests that the algorithmic overhead for subspace management
+
+effectively saturates, shifting the workload back towards the highly parallelizable GPU
+
+operations in the large-scale limit. Additionally, theCompilationtime remains controlled
+
+despite the massive Hilbert space, confirming that the heat-bath screening efficiently prunes
+
+the Hamiltonian connectivity graph. The observed scaling exponents (α< 0.9) demonstrate
+
+that the hybrid architecture successfully balances discrete combinatorial logic on the host
+with differentiable linear algebra on the device, maintaining tractability for variational sets
+
+exceeding10                     5 configurations.
+
+
+
+
+
+
+
+
+                                                       28
+5  Conclusion and Outlook
+
+
+We have presented a deterministic optimization framework for NQS, reformulating the
+
+electronic Schrödinger equation as a non-linear optimization problem over dynamically
+
+adaptive configuration subspaces. By replacing stochastic gradient estimation with exact
+
+summation, this approach eliminates the sampling noise and slow mixing associated with
+
+MCMC in discrete Fock spaces. Through a comparison of the Asymmetric, Proxy, and
+
+Variational modes, we analyzed the gradient consistency and computational costs of different
+
+deterministic objectives. Our results indicate that restricting the neural ansatz optimization
+
+to a compact variational set (V), combined with a post-hoc PT2 correction, provides an
+efficient and internally consistent approach for optimizing the selected variational component
+
+while estimating residual correlation through a post-hoc PT2 correction.
+
+    Benchmarks on small molecules and bond dissociations show that the method optimizes
+
+important static-correlation components within the selected support and estimates residual
+
+perturbative contributions, alleviating some limitations of single-reference coupled-cluster
+
+descriptions in bond-breaking regimes. For the strongly correlated Cr2 in large active spaces
+
+[CAS(48e, 42o)], the framework maintains accuracy comparable to the sCI references while
+
+exhibiting empirical sub-linear wall-time scaling with respect to the set size over the tested
+
+range (T∝|V| α,α< 1). These findings indicate that neural backflow ansätze can efficiently
+
+approximate complex wavefunctions in Hilbert spaces exceeding10                     23, provided the dominant
+
+amplitudes are localized within a treatable subspace. Furthermore, post-hoc diagonalization
+diagnostics show that in large, strongly correlated subspaces, the gradient-optimized NQS may
+
+not fully reach the exact subspace diagonalization limit, leaving millihartree-scale internal
+
+relaxation errors.
+
+    However, the current time-to-solution remains higher than mature sCI and DMRG
+
+solvers.  The primary bottleneck lies in the high arithmetic intensity of neural network
+
+tensor contractions compared to the optimized sparse matrix-vector products used in linear
+
+CI methods. Additionally, the efficiency of deterministic subspace expansion relies on the
+
+                                                      29
+sparsity of the ground state in the chosen orbital basis. For systems with dense entanglement
+
+or significant delocalization, the rapid growth of the required variational support|V| may
+
+diminish the computational advantages of this formulation.
+
+    Future work will address these limitations through the following extensions:
+
+   • Orbital Optimization:As sparsity is basis-dependent, integrating orbital optimiza-
+
+      tion (e.g., via simultaneous gradient updates) is necessary to minimize the variational
+
+      set size|V| required for target accuracy, thereby compacting the wavefunction represen-
+
+      tation.54,55
+
+   • Symmetry Adaptation:The current ansatz implies but does not strictly enforce
+
+      total spin (S2) or point-group symmetries. Explicitly incorporating these constraints
+
+      via symmetry-projected networks or penalty functions will reduce spin contamination,
+
+      particularly in open-shell transition metals.26,56
+
+   • Advanced Ansatz Architectures:While the MLP backflow provides a generic
+
+      baseline, future work can explore architectures with stronger physical priors or higher
+
+      expressivity.  This includes incorporating explicit physical constraints via Pfaffian
+
+      and Jastrow structures, or hybrid Neuro-Tensor Network states to improve data ef-
+
+      ficiency.57–60 Furthermore, integrating geometry-aware architectures, such as Graph
+
+      Neural Networks, or leveraging the long-range dependency modeling of Transformers,
+
+      could enhance the capture of non-local correlations in larger basis sets.23,61
+
+   • Optimization Algorithms and Strategies:The availability of noise-free gradients
+
+      within the deterministic framework facilitates the application of advanced optimization
+
+      techniques to address ill-conditioned curvature. This includes curvature-aware algo-
+
+      rithms such as exact SR and its low-rank variants (e.g., minSR).31,62,63 Additionally,
+
+      the absence of sampling variance allows for precise gradient-based convergence control
+
+      and dynamic optimization strategies, such as adaptive learning rate scheduling and
+      automated hyperparameter stepping.
+
+                                                      30
+   • HybridDeterministic–StochasticSchemes:Toestimateperturbativecontributions
+
+      from the vast external space without excessive memory costs, a hybrid approach may be
+
+      employed.29,64 This would combine deterministic optimization of the strongly correlated
+
+      core with stochastic sampling of the perturbative tail, balancing variational rigor with
+
+      the scalability of Monte Carlo integration.
+
+
+    In summary, this framework formulates NQS optimization within a rigorous linear algebra
+
+context, treating the network as a differentiable function approximator rather than a prob-
+
+ability sampler. By decoupling ansatz design from sampling challenges, it offers a distinct
+
+pathway for applying deep learning to high-precision ab initio quantum chemistry.
+
+
+Supporting Information
+
+
+Supporting Information. Exact gradient derivation for the asymmetric objective; inner-loop
+
+convergence traces for H2O and Cr2; inner/outer-loop allocation benchmarks; subspace
+
+selector comparison; post-hoc subspace diagonalization diagnostics for N2 and Cr2; detailed
+numerical data and wall-time decomposition.
+
+
+Acknowledgement
+
+The author thanks the Supercomputing Center of the University of Science and Technology of
+
+China for providing the computational resources used in this work. The author is also grateful
+
+to Qiang Fu for helpful discussions and support. The NetKet codebase is acknowledged as
+
+a learning and inspiration resource for the development of the software framework used in
+
+this study.65,66 Additionally, the author acknowledges the use of generative AI for language
+
+polishing and text refinement to improve the clarity and readability of the manuscript. No
+
+specific funding sources are declared for this manuscript.
+
+
+
+
+                                                     31
+Data Availability
+
+
+The data that support the findings of this study, including molecular geometries and detailed
+
+energy results, are available within the article and its Supporting Information. Any additional
+
+raw data are available from the corresponding author upon reasonable request.
+
+
+Code Availability
+
+
+The source code for the deterministic NQS framework, including the hybrid CPU-GPU imple-
+
+mentationandexamplescripts,ispubliclyavailableonGitHubathttps://github.com/wsmxcz/DetNQS.
+
+This repository also contains the molecular Hamiltonian integrals (in FCIDUMP format)
+
+used for the benchmarks presented in this study.
+
+
+References
+
+ (1) Sherrill, C. D.; Schaefer, H. F., III The Configuration Interaction Method: Advances in
+
+      Highly Correlated Approaches.Advances in Quantum Chemistry1999,34, 143–269.
+
+ (2) Helgaker, T.; Jørgensen, P.; Olsen, J.Molecular Electronic-Structure Theory; John
+
+      Wiley & Sons: Chichester, U.K., 2013.
+
+ (3) Szabo, A.; Ostlund, N. S.Modern Quantum Chemistry: Introduction to Advanced
+
+      Electronic Structure Theory; Dover Publications: Mineola, NY, 2012.
+
+ (4) Huron, B.; Malrieu, J.-P.; Rancurel, P. Iterative Perturbation Calculations of Ground
+
+      and Excited State Energies from Multiconfigurational Zeroth-Order Wavefunctions.The
+
+      Journal of Chemical Physics1973,58, 5745–5759.
+
+ (5) Holmes, A. A.; Tubman, N. M.; Umrigar, C. J. Heat-Bath Configuration Interaction: An
+
+      Efficient Selected Configuration Interaction Algorithm Inspired by Heat-Bath Sampling.
+      Journal of Chemical Theory and Computation2016,12, 3674–3680.
+
+                                                     32
+ (6) Tubman,N.M.; Freeman,C.D.; Levine,D.S.; Hait,D.; Head-Gordon,M.; Whaley,K.B.
+
+      Modern Approaches to Exact Diagonalization and Selected Configuration Interaction
+
+      with the Adaptive Sampling CI Method.Journal of Chemical Theory and Computation
+
+      2020,16, 2139–2159.
+
+ (7) Zhang, N.; Liu, W.; Hoffmann, M. R. Iterative Configuration Interaction with Selection.
+
+      Journal of Chemical Theory and Computation2020,16, 2296–2316.
+
+ (8) Raghavachari, K.; Trucks, G. W.; Pople, J. A.; Head-Gordon, M. A Fifth-Order Pertur-
+
+      bation Comparison of Electron Correlation Theories.Chemical Physics Letters1989,
+
+      157, 479–483.
+
+ (9) Bartlett, R. J.; Musiał, M. Coupled-Cluster Theory in Quantum Chemistry.Reviews of
+      Modern Physics2007,79, 291–352.
+
+(10) White, S. R.; Martin, R. L.Ab initioQuantum Chemistry Using the Density Matrix
+
+      Renormalization Group.The Journal of Chemical Physics1999,110, 4127–4130.
+
+(11) Chan, G. K.-L.; Sharma, S. The Density Matrix Renormalization Group in Quantum
+
+      Chemistry.Annual Review of Physical Chemistry2011,62, 465–481.
+
+(12) Carleo, G.; Troyer, M. Solving the Quantum Many-Body Problem with Artificial Neural
+
+      Networks.Science2017,355, 602–606.
+
+(13) Deng, D.-L.; Li, X.; Das Sarma, S. Quantum Entanglement in Neural Network States.
+
+      Physical Review X2017,7, 021021.
+
+(14) Choo, K.; Mezzacapo, A.; Carleo, G. Fermionic Neural-Network States forab-initio
+
+      Electronic Structure.Nature Communications2020,11, 2368.
+
+(15) Sharir, O.; Shashua, A.; Carleo, G. Neural Tensor Contractions and the Expressive
+
+      Power of Deep Neural Quantum States.Physical Review B2022,106, 205136.
+
+
+
+                                                       33
+(16) Medvidović, M.; Moreno, J. R. Neural-network Quantum States for Many-Body Physics.
+
+      The European Physical Journal Plus2024,139, 638.
+
+(17) Lange, H.; Van de Walle, A.; Abedinnia, A.; Bohrdt, A. From Architectures to Applica-
+
+      tions: A Review of Neural Quantum States.Quantum Science and Technology2024,9,
+
+      032001.
+
+(18) Hermann, J.; Spencer, J.; Choo, K.; Mezzacapo, A.; Foulkes, W. M. C.; Pfau, D.;
+
+      Carleo, G.; Noé, F.Ab InitioQuantum Chemistry with Neural-Network Wavefunctions.
+
+      Nature Reviews Chemistry2023,7, 692–709.
+
+(19) Hermann, J.; Schätzle, Z.; Noé, F. Deep-Neural-Network Solution of the Electronic
+
+      Schrödinger Equation.Nature Chemistry2020,12, 891–897.
+
+(20) Pfau, D.; Spencer, J. S.; Matthews, A. G. D. G.; Foulkes, W. M. C.Ab initioSolution of
+
+      the Many-Electron Schrödinger Equation with Deep Neural Networks.Physical Review
+
+      Research2020,2, 033429.
+
+(21) Li, X.; Huang, J.-C.; Zhang, G.-Z.; Li, H.-E.; Cao, C.-S.; Lv, D.; Hu, H.-S. A Non-
+
+      stochastic Optimization Algorithm for Neural-Network Quantum States.Journal of
+
+      Chemical Theory and Computation2023,19, 8156–8165.
+
+(22) Liu, A.-J.; Clark, B. K. Neural Network Backflow forab initioQuantum Chemistry.
+
+      Physical Review B2024,110, 115137.
+
+(23) Shang, H.; Guo, C.; Wu, Y.; Li, Z.; Yang, J. Solving the Many-Electron Schrödinger
+      Equation with a Transformer-Based Framework.Nature Communications2025,16,
+
+      8464.
+
+(24) Sharir, O.; Levine, Y.; Wies, N.; Carleo, G.; Shashua, A. Deep Autoregressive Models for
+
+      the Efficient Variational Simulation of Many-Body Quantum Systems.Physical Review
+
+      Letters2020,124, 020503.
+
+
+                                                        34
+(25) Barrett, T. D.; Malyshev, A.; Lvovsky, A. I. Autoregressive Neural-Network Wavefunc-
+
+      tions forab initioQuantum Chemistry.Nature Machine Intelligence2022,4, 351–358.
+
+(26) Luo, D.; Chen, Z.; Hu, K.; Zhao, Z.; Hur, V. M.; Clark, B. K. Gauge-Invariant
+
+      and Anyonic-Symmetric Autoregressive Neural Network for Quantum Lattice Models.
+
+      Physical Review Research2023,5, 013216.
+
+(27) Ibarra-García-Padilla, E.; Lange, H.; Melko, R. G.; Scalettar, R. T.; Carrasquilla, J.;
+
+      Bohrdt, A.; Khatami, E. Autoregressive Neural Quantum States of Fermi-Hubbard
+
+      Models.Physical Review Research2025,7, 013122.
+
+(28) Li, X.; Huang, J.-C.; Zhang, G.-Z.; Li, H.-E.; Shen, Z.-P.; Zhao, C.; Li, J.; Hu, H.-S.
+
+      Improved Optimization for the Neural-Network Quantum States and Tests on the
+      Chromium Dimer.The Journal of Chemical Physics2024,160, 234102.
+
+(29) Liu, A.-J.; Clark, B. K. Efficient Optimization of Neural Network Backflow forab initio
+
+      Quantum Chemistry.Physical Review B2025,112, 155162.
+
+(30) Wang, J.-Q.; Wu, H.-Q.; He, R.-Q.; Lu, Z.-Y. Variational Optimization of the Amplitude
+
+      of Neural-Network Quantum Many-Body Ground States.Physical Review B2024,109,
+
+      245120.
+
+(31) Sorella, S. Green Function Monte Carlo with Stochastic Reconfiguration.Physical Review
+
+      Letters1998,80, 4558–4561.
+
+(32) Park, C.-Y.; Kastoryano, M. J. Geometry of Learning Neural Quantum States.Physical
+      Review Research2020,2, 023232.
+
+(33) Nomura, Y.; Darmawan, A. S.; Yamaji, Y.; Imada, M. Restricted Boltzmann Machine
+
+      Learning for Solving Strongly Correlated Quantum Systems.Physical Review B2017,
+
+      96, 205152.
+
+
+
+
+                                                       35
+(34) Humeniuk, S.; Wan, Y.; Wang, L. Autoregressive Neural Slater-Jastrow Ansatz for
+
+      Variational Monte Carlo Simulation.SciPost Physics2023,14, 171.
+
+(35) Luo, D.; Clark, B. K. Backflow Transformations via Neural Networks for Quantum
+
+      Many-Body Wave Functions.Physical Review Letters2019,122, 226401.
+
+(36) Kan, B.; Zhou, Y.; Xie, D.; Zhou, P.; Zhang, Y.; Shang, H. NNQS-SCI: Tackling Trillion-
+
+      Dimensional Hilbert Space with Adaptive Neural Network Quantum States. Proceedings
+
+      of the International Conference for High Performance Computing, Networking, Storage
+
+      and Analysis. New York, NY, USA, 2025; pp 1646–1660.
+
+(37) Sharma, S. Stochastic Perturbation Theory to Correct Non-linearly Parametrized Wave-
+
+      functions.arXiv(cond-mat.str-el), March12, 2018, https://doi.org/10.48550/arXiv.
+      1803.04341(accessed 2026-04-29).
+
+(38) Holmes, A. A.; Changlani, H. J.; Umrigar, C. J. Efficient Heat-Bath Sampling in Fock
+
+      Space.Journal of Chemical Theory and Computation2016,12, 1561–1571.
+
+(39) Sun, Q.; Berkelbach, T. C.; Blunt, N. S.; Booth, G. H.; Guo, S.; Li, Z.; Liu, J.;
+
+      McClain,J.D.; Sayfutyarova,E.R.; Sharma,S.; Wouters,S.; Chan,G.K.-L.PySCF:The
+
+      Python-Based Simulations of Chemistry Framework.Wiley Interdisciplinary Reviews:
+
+      Computational Molecular Science2018,8, e1340.
+
+(40) Sun, Q. et al. Recent Developments in the PySCF Program Package.The Journal of
+
+      Chemical Physics2020,153, 024109.
+
+(41) Sun, Q. Libcint: An Efficient General Integral Library for Gaussian Basis Functions.
+
+      Journal of Computational Chemistry2015,36, 1664–1671.
+
+(42) Bradbury, J.; Frostig, R.; Hawkins, P.; Johnson, M. J.; Leary, C.; Maclaurin, D.;
+
+      Necula, G.; Paszke, A.; VanderPlas, J.; Wanderman-Milne, S.; Zhang, Q. JAX: Compos-
+
+
+
+
+                                                      36
+      able Transformations of Python+NumPy Programs. https://github.com/google/jax,
+
+      2018; Version 0.8.2. (accessed 2026-04-29).
+
+(43) Jakob, W. nanobind: Tiny and Efficient C++/Python Bindings. https://github.com/
+
+      wjakob/nanobind, 2022; (accessed 2026-04-29).
+
+(44) Virtanen, P. et al. SciPy 1.0: Fundamental Algorithms for Scientific Computing in
+
+      Python.Nature Methods2020,17, 261–272.
+
+(45) Zhao, T.; Stokes, J.; Veerapaneni, S. Scalable Neural Quantum States Architecture for
+
+      Quantum Chemistry.Machine Learning: Science and Technology2023,4, 025034.
+
+(46) Gao, H.; Imamura, S.; Kasagi, A.; Yoshida, E. Distributed Implementation of Full
+      Configuration Interaction for One Trillion Determinants.Journal of Chemical Theory
+
+      and Computation2024,20, 1185–1192.
+
+(47) Olsen, J.; Jørgensen, P.; Koch, H.; Balkova, A.; Bartlett, R. J. Full Configuration–
+
+      Interaction and State of the Art Correlation Calculations on Water in a Valence
+
+      Double-Zeta Basis with Polarization Functions.The Journal of Chemical Physics1996,
+
+      104, 8007–8015.
+
+(48) Chan, G. K.-L.; Kállay, M.; Gauss, J. State-of-the-art Density Matrix Renormalization
+
+      Group and Coupled Cluster Theory Studies of the Nitrogen Binding Curve.The Journal
+
+      of Chemical Physics2004,121, 6110–6116.
+
+(49) Wang, Z.; Li, Y.; Lu, J. Coordinate Descent Full Configuration Interaction.Journal of
+      Chemical Theory and Computation2019,15, 3558–3569.
+
+(50) Li, J.; Yao, Y.; Holmes, A. A.; Otten, M.; Sun, Q.; Sharma, S.; Umrigar, C. J. Accurate
+
+      Many-Body Electronic Structure Near the Basis Set Limit: Application to the Chromium
+
+      Dimer.Physical Review Research2020,2, 012015.
+
+
+
+
+                                                       37
+(51) Olivares-Amaya, R.; Hu, W.; Nakatani, N.; Sharma, S.; Yang, J.; Chan, G. K.-L. The
+
+      ab initioDensity Matrix Renormalization Group in Practice.The Journal of Chemical
+
+      Physics2015,142, 034102.
+
+(52) Sharma, S.; Chan, G. K.-L. Spin-Adapted Density Matrix Renormalization Group
+
+      Algorithms for Quantum Chemistry.The Journal of Chemical Physics2012,136,
+
+      124121.
+
+(53)Booth, G. H.; Smart, S. D.; Alavi, A. Linear-Scaling and Parallelisable Algorithms for
+
+      Stochastic Quantum Chemistry.Molecular Physics2014,112, 1855–1869.
+
+(54) Smith, J. E. T.; Mussard, B.; Holmes, A. A.; Sharma, S. Cheap and Near Exact CASSCF
+
+      with Large Active Spaces.Journal of Chemical Theory and Computation2017,13,
+      5468–5478.
+
+(55) Yao, Y.; Umrigar, C. J. Orbital Optimization in Selected Configuration Interaction
+
+      Methods.Journal of Chemical Theory and Computation2021,17, 4183–4194.
+
+(56) Jiménez-Hoyos, C. A.; Henderson, T. M.; Tsuchimochi, T.; Scuseria, G. E. Projected
+
+      Hartree–Fock Theory.The Journal of Chemical Physics2012,136, 164109.
+
+(57) Chen, A.; Wan, Z.-Q.; Sengupta, A.; Georges, A.; Roth, C. Neural Network-Augmented
+
+      Pfaffian Wave-Functions for Scalable Simulations of Interacting Fermions. arXiv (cond-
+
+      mat.str-el), July 14, 2025, https://doi.org/10.48550/arXiv.2507.10705 (accessed
+
+      2026-04-29).
+
+(58) Wu, Z.; Zhang, B.; Fang, W.-H.; Li, Z. Hybrid Tensor Network and Neural Network
+
+      Quantum States for Quantum Chemistry.Journal of Chemical Theory and Computation
+
+      2025,21, 10252–10262.
+
+(59) Du, S.-J.; Chen, A.; Chan, G. K.-L. Neuralized Fermionic Tensor Networks for Quantum
+
+      Many-Body Systems.Physical Review B2026,113, 085134.
+
+
+                                                      38
+(60) Li, Z.; Zhao, T.; Zhang, B. Representational Power of Selected Neural Network Quantum
+
+      States in Second Quantization.The Journal of Chemical Physics2026,164, 084105.
+
+(61) Liang, X.; Dong, S.-J.; He, L. Hybrid Convolutional Neural Network and Projected
+
+      Entangled Pair States Wave Functions for Quantum Many-Particle States.Physical
+
+      Review B2021,103, 035138.
+
+(62) Sorella, S. Generalized Lanczos Algorithm for Variational Quantum Monte Carlo.Phys-
+
+      ical Review B2001,64, 024512.
+
+(63) Chen, A.; Heyl, M. Empowering Deep Neural Quantum States through Efficient Opti-
+
+      mization.Nature Physics2024,20, 1476–1481.
+
+(64) Sharma, S.; Holmes, A. A.; Jeanmairet, G.; Alavi, A.; Umrigar, C. J. Semistochastic
+
+      Heat-Bath Configuration Interaction Method: Selected Configuration Interaction with
+
+      Semistochastic Perturbation Theory.Journal of Chemical Theory and Computation
+
+      2017,13, 1595–1604.
+
+(65) Vicentini, F.; Hofmann, D.; Szabó, A.; Wu, D.; Roth, C.; Giuliani, C.; Pescia, G.; Nys, J.;
+
+      Vargas-Calderón,V.; Astrakhantsev,N.; Carleo,G.NetKet3: MachineLearningToolbox
+
+      for Many-Body Quantum Systems.SciPost Physics Codebases2022, 7.
+
+(66) Carleo,G.; Choo,K.; Hofmann,D.; Smith,J.E.T.; Westerhout,T.; Alet,F.; Davis,E.J.;
+
+      Efthymiou,S.; Glasser,I.; Lin,S.-H.; Mauri,M.; Mazzola,G.; Pereira,C.B.; Vicentini,F.
+
+      NetKet: A Machine Learning Toolkit for Many-Body Quantum Systems.SoftwareX
+      2019,10, 100311.
+
+
+
+
+
+
+
+
+
+
+
+                                                      39
+                             Supporting Information
+
+A Deterministic Framework for Neural Network Quantum States in Quantum
+
+                                            Chemistry
+
+
+                                             Zheng Che
+
+           Hefei National Research Center for Physical Sciences at the Microscale,
+
+             University of Science and Technology of China, Hefei 230026, China
+
+                                   Email: wsmxcz@gmail.com
+
+
+
+
+Contents
+
+S1. Exact Gradient of the Asymmetric Energy Functional ..............................S2
+
+S2. Optimization Dynamics and Algorithmic Choices ..................................S4
+
+S3. Post-Hoc Subspace Diagonalization Diagnostics ...................................S11
+
+S4. Detailed Numerical Data .........................................................S14
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                 S1
+S1  Exact Gradient of the Asymmetric Energy Func-
+
+         tional
+
+The Asymmetric energy functional corresponds to a deterministic evaluation of a VMC-like
+
+local-energy average, normalized over the variational setV while retaining Hamiltonian
+
+couplings fromVinto the target setT=V∪P:
+
+                                                               ∑
+                    Easym(θ) =  N(θ)                             x∈V ψθ(x)     2Eloc(x)∑
+                                  D(θ)        =⟨Ψ V|  ˆH|Ψ  T⟩⟨Ψ V|ΨV⟩    =x∈V ψθ(x)     2   ,           (S1)
+
+
+where
+
+                                       Eloc(x) =    ∑  Hxyψθ(y)ψθ(x)  .                         (S2)
+                                                   y∈T
+    LetψV andψP denote the vectors of amplitudes onV andP, respectively. The numerator
+
+and denominator can be written as
+
+
+                                  N(θ) =ψ     TVHVVψV +ψ  TVHVPψP,                      (S3)
+
+                                  D(θ) =ψ     TVψV.                                     (S4)
+
+
+HereH   VP denotes the Hamiltonian block with rows inV and columns inP, andH  PV =H  TVP
+
+for a real symmetric Hamiltonian. Products involving∇θψV and∇θψP should be understood
+
+as contractions with the corresponding Jacobians with respect to the network parameters.
+
+    Differentiating the quotient gives
+
+
+                                ∇θEasym =∇θN(θ)−E              asym∇θD(θ)D(θ)         .                    (S5)
+
+
+Using the symmetry ofH VV, the numerator derivative is
+
+
+                    ∇θN= (2H  VVψV +H VPψP)T∇θψV + (H PVψV)T∇θψP,           (S6)
+
+
+
+                                                    S2
+whereas
+
+                                            ∇θD= 2ψ   TV∇θψV.                            (S7)
+
+Substitution into Eq. S5 yields the exact gradient
+
+
+                       [(2H VVψV +H VPψP−2E      asymψV)T∇θψV + (H PVψV)T∇θψP].   (S8)
+     ∇θEasym =  1D
+
+
+    The commonly used VMC-like gradient estimator for this asymmetric objective is
+
+
+                                     ∑
+                         gasym = 2       ρV(x) [E      loc(x)−E           asym]∇ θ ln|ψ  θ(x)|,              (S9)
+                                     x∈V
+
+where
+
+                                          ρV(x) =    ψθ(x)     2∑
+                                                       z∈V ψθ(z)    2.                          (S10)
+
+In matrix form, Eq. S9 is
+
+
+                         gasym =  2D (H VVψV +H VPψP−E    asymψV)T∇θψV.             (S11)
+
+
+    Comparing Eq. S8 with Eq. S11, the difference between the exact gradient and the
+
+truncated VMC-like estimator is
+
+
+                                             [(H PVψV)T∇θψP−(H  VPψP)T∇θψV].        (S12)
+                 ∇θEasym−g    asym =  1D
+
+
+Therefore, the truncated estimator is not the exact gradient of Easym unless the coupling to
+
+Pvanishes or the omitted target-space derivative terms cancel accidentally. This mismatch
+
+is the origin of the gradient inconsistency discussed in the main text.
+
+
+
+
+
+
+
+
+
+                                                      S3
+S2  Optimization Dynamics and Algorithmic Choices
+
+
+TheoptimizationdynamicsofNeuralNetworkQuantumStates(NQS)withinthedeterministic
+
+framework are influenced by the electronic structure of the target system and the allocation of
+
+computational resources during the self-consistent procedure. In this section, we analyze these
+
+effects by examining the inner-loop convergence traces, the computational budget allocation,
+
+and the subspace selection criteria.
+
+
+S2.1  System-Dependent Convergence Behavior
+
+The convergence behavior during the inner-loop parameter optimization varies depending
+
+on the correlation strength of the molecule.  To illustrate this, we track the variational
+
+energy evaluated at each inner-loop gradient step for a weakly correlated system (H2O near
+
+equilibrium) and a strongly correlated system (Cr2).
+
+    As shown in Figure S1, for the H2O molecule, the variational energy exhibits a charac-
+teristic pattern where outer-loop updates induce discontinuities or transient energy spikes,
+
+followed by rapid relaxation. In this weakly correlated regime, executing a large number of
+
+inner-loop steps (e.g., 1000 steps) quickly leads to a plateau, yielding diminishing returns in
+
+energy minimization.
+
+    Conversely, Figure S2 demonstrates the dynamics for the Cr2 dimer in a massive active
+
+space. Due to the strong multireference character and the high dimensionality of the selected
+
+subspace (> 106 configurations), the optimization landscape is highly complex. The energy
+
+continues to decrease steadily throughout the 1000 inner steps, showing no clear saturation
+
+within the chosen inner-loop window. This observation motivates the use of a uniform,
+
+conservative inner-loop budget for benchmarking diverse chemical systems: while automated
+early-stopping mechanisms would accelerate computations for simpler molecules, a sustained
+
+inner-loop budget benefits the optimization of network parameters in strongly correlated
+
+regimes.
+
+
+
+                                                     S4
+Figure S1: Inner-loop optimization history for H2O (6-31G) with a variational set size of
+|V| = 4096. The energy exhibits transient spikes upon outer-loop subspace updates, followed
+by rapid relaxation and a subsequent plateau.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                       S5
+Figure S2: Inner-loop optimization history for the strongly correlated Cr2 dimer (48e, 42o)
+with|V|  =  1 048 576. The energy exhibits a continuous descent over thousands of steps
+without clear saturation.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                       S6
+S2.2  Inner- and Outer-Loop Allocation
+
+Given a fixed total budget of gradient updates, the allocation between outer loops (subspace
+
+evolution) and inner loops (parameter optimization) affects both the wall-time efficiency and
+
+the final accuracy. We performed an ablation study on H2O (6-31G) with a fixed total budget
+
+of 10,000 gradient steps and a subspace size of|V| = 4096. The results are summarized in
+
+Figure S3 and Table S1.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure S3: Energy error∆   E relative to FCI for different inner/outer loop allocations under a
+fixed budget of 10,000 total gradient steps for H2O (6-31G).
+
+
+    The data in Table S1 show that reducing the frequency of outer loops (e.g., 10 outer
+
+× 1000 inner) significantly decreases the total wall time. This reduction occurs because
+
+subspace expansion and Hamiltonian graph generation involve combinatorial logic that acts
+as a substantial CPU overhead. Despite the different optimization trajectories shown in
+
+Figure S3, the Variational+PT2 scheme yields final total energies that are largely insensitive
+
+to the allocation strategy under this specific setup (varying by only∼ 4.5× 10−5  Ha). We
+
+note that while the 50 outer× 200 inner allocation achieved the lowest energy, the 10
+
+outer× 1000 inner allocation was the fastest. Therefore, fixing a relatively large inner-
+
+
+                                                     S7
+Table S1: Computational cost and final energies for different outer/inner-loop allocations
+and optimization modes. The total gradient budget is fixed at 10,000 steps for H2O (6-31G)
+with|V|= 4096.
+
+           Mode              Allocation            Wall Time / s E  total / Ha
+                                     100 outer×100 inner          133.9  -76.121664
+           Variational + PT2         50 outer×200 inner            80.5  -76.121707
+                                     20 outer×500 inner            50.1  -76.121683
+                                     10 outer×1000 inner           39.5  -76.121662
+                                     100 outer×100 inner         1044.6  -76.122174
+           Proxy                     50 outer×200 inner           915.6  -76.122224
+                                     20 outer×500 inner           810.6  -76.122211
+                                     10 outer×1000 inner          717.1  -76.122238
+                                     100 outer×100 inner         1013.1  -76.121809
+           Asymmetric                50 outer×200 inner           899.9  -76.121805
+                                     20 outer×500 inner           795.7  -76.121876
+                                     10 outer×1000 inner          706.0  -76.121905
+
+
+loop budget is a practical choice aimed at balancing wall-time efficiency and benchmark
+
+consistency, rather than a universally optimal strategy. Furthermore, under this common
+
+update budget, the target-space modes (Proxy and Asymmetric) remain substantially more
+expensive computationally.
+
+
+S2.3  Subspace Selection Criteria
+
+The outer loop updates the variational basisVk based on the amplitude distribution of
+
+the current wavefunction. We analyze three distinct selection criteria: Top-K, Cumulative
+
+Mass, and Absolute Threshold. The Cumulative Mass selector retains the minimal set of
+
+determinants satisfying ∑Nvi=1 pi≥γ  , where pi  =|ψ θ(x i)|2/∑x∈T |ψ θ(x) |2. The Absolute
+
+Threshold selector retains all configurations where the normalized probabilityp i >ϵ.
+
+    As illustrated in Figure S4 and Table S2, the variational energy decreases systematically
+
+with the retained subspace size|V|. Notably, the energy reduction closely follows this trend
+
+regardless of the specific selection rule applied. In this test, the final accuracy is more strongly
+
+correlated with the retained subspace size than with the specific selector identity.
+
+
+                                                       S8
+Figure S4: Final variational energy error|E var−E    FCI| versus the resulting variational set
+size|V|for different subspace selection criteria (H     2O 6-31G).
+
+
+
+
+
+Table S2: Performance and final subspace dimensions for different selection criteria on H2O
+(6-31G). Calculations were performed using 30 outer loops and 1000 inner steps.
+
+         Selector            Parameter    Final|V|  E             var / Ha  Wall Time / s
+                                    K= 1024    1 024  -76.118919          107.6
+         Top-K                      K= 2048    2 048  -76.120748          120.5
+                                    K= 4096    4 096  -76.121645          164.4
+                                    K= 8192    8 192  -76.122105          253.8
+                                    γ= 0.999       271  -76.106198           73.3
+         Cumulative Mass            γ= 0.9999   2 822  -76.121230          152.4
+                                    γ= 0.99999 9 230  -76.122137          445.9
+                                    γ= 0.99999920 540  -76.122250          679.4
+                                    ϵ= 10 −4            128  -76.070147           44.3
+         Absolute Threshold         ϵ= 10 −6            400  -76.113778           87.8
+                                    ϵ= 10 −8          5 454  -76.121919          225.9
+                                    ϵ= 10 −10         22 609  -76.122255          681.5
+
+
+
+
+                                                      S9
+    The choice among these criteria represents a practical engineering trade-off between
+
+physical adaptability and computational predictability. From a physical perspective, the
+
+Cumulative Mass and Absolute Threshold criteria are more natural: they dynamically adapt
+
+to the intrinsic sparsity of different molecular wavefunctions without requiringa priori
+
+knowledge of the optimal subspace size. In contrast, the Top-K approach generally requires
+
+trial-and-error tuning, as the appropriate K needed to reach a specific accuracy varies across
+
+different chemical systems.
+
+    However, the dynamic subspace sizes generated by the Mass and Threshold criteria are
+
+difficult to predict. For instance, tightening the threshold ϵ from10   −8  to10 −10  leads to a
+
+more than fourfold increase in|V| (from 5,454 to 22,609). In large-scale calculations, such
+
+unpredictable growth can cause sudden memory spikes and out-of-memory errors on GPU
+devices. By strictly bounding the memory footprint and the computational cost per iteration,
+
+the Top-Kcriterion ensures stable and predictable hardware execution.
+
+    We note that the current fixed-budget and Top-K settings serve as a diagnostic baseline
+
+for consistent benchmarking. Implementing hybrid dynamic strategies—such as combining
+
+an adaptive threshold with a hard memory cap, or using PT2-based scoring for configuration
+
+selection—represents a valuable direction for balancing physical adaptability and optimization
+
+efficiency in the future.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                     S10
+S3  Post-Hoc Subspace Diagonalization Diagnostics
+
+
+As discussed in Section 2.4.3 of the main text, the non-linear gradient optimization of the
+
+NQS ansatz may not fully saturate the exact diagonalization limit of the selected subspace
+
+V, particularly in massive Hilbert spaces with strong multireference character. To isolate
+
+the internal relaxation error within a fixed selected support, we perform post-hoc exact
+
+diagonalizations on the final selected configurations.
+
+    Here, we denote the optimized NQS variational energy on the selected support as Eopt
+
+(corresponding to Evar in the main text) for the diagnostic comparison.  We define the
+
+diagnostic diagonalization energy as Ediag =λmin(H VV). The optimization residual is then
+given by:
+
+                                           ∆opt =E    opt−E    diag.                          (S13)
+
+This metric quantifies the deviation of the NQS coefficients from the optimal linear CI
+
+coefficients within the fixed supportV. Note that this procedure serves exclusively as a
+
+diagnostic tool for error attribution; it does not replace the self-consistent Variational+PT2
+
+protocol used for production calculations. The diagonalized coefficients are not used to
+
+update the neural-network parameters or to define the reported production energies.
+
+    Table S3 presents the diagnostics for the N2 molecule at both the equilibrium (2.118 Bohr)
+and stretched (4.200 Bohr) geometries. The data reveal that∆         opt generally increases with
+
+the subspace dimension|V|, especially beyond|V| = 32 768. Furthermore, at the stretched
+
+geometry, where static correlation dominates, the residual is notably larger (e.g., 2.76 mHa
+
+at|V| = 524 288) compared to the equilibrium geometry (1.22 mHa). This indicates that,
+
+under the present ansatz and optimization protocol, coefficient optimization becomes more
+
+difficult in the stretched multireference regime.
+
+    Table S4 presents the corresponding diagnostics for the Cr2 dimer in two active spaces.
+
+For the massive CAS(48e, 42o) space, the optimization residual reaches 1.93 mHa at|V|≈ 106.
+
+This magnitude is consistent with the observed gap between the NQS variational energy
+
+
+                                                     S11
+Table S3: Post-hoc subspace diagonalization diagnostics for N2 (cc-pVDZ) at equilibrium
+(2.118 Bohr) and stretched (4.200 Bohr) geometries.∆         opt is reported in mHa for clarity.
+
+              Geometry |V|  E                       opt / Ha E      diag / Ha∆      opt / mHa
+                                      8 192  -109.260943  -109.260943        0.001
+                                     16 384  -109.266361  -109.266362        0.001
+                                     32 768  -109.270646  -109.270655        0.009
+              d= 2.118Bohr           65 536  -109.273813  -109.273892        0.079
+                                    131 072  -109.276065  -109.276345        0.280
+                                    262 144  -109.277462  -109.278137        0.675
+                                    524 288  -109.278217  -109.279435        1.218
+                                      8 192  -108.925608  -108.925610        0.002
+                                     16 384  -108.943700  -108.943702        0.002
+                                     32 768  -108.951043  -108.951135        0.092
+              d= 4.200Bohr           65 536  -108.955324  -108.955541        0.217
+                                    131 072  -108.958120  -108.958741        0.621
+                                    262 144  -108.959330  -108.960824        1.493
+                                    524 288  -108.960053  -108.962815        2.762
+
+
+curve and the HCI variational curve presented in the main text.  It implies that while
+
+amplitude-based selection captures a physically relevant subset of configurations, saturating
+
+the exact diagonalization limit within these massive strongly correlated subspaces remains an
+
+ongoing challenge for non-linear NQS optimization.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                     S12
+Table S4: Post-hoc subspace diagonalization diagnostics for the Cr2 dimer. Energies are
+reported asE+ 2086Ha.∆                          opt is reported in mHa.
+
+                Active Space  |V| E              opt / HaE      diag / Ha∆      opt / mHa
+                                         8 192  -0.339793   -0.339794        0.000
+                                        32 768  -0.372492   -0.372499        0.006
+                CAS(24e, 30o)          131 072  -0.392029   -0.392188        0.159
+                                       524 288  -0.402847   -0.403853        1.006
+                                    1 048 576  -0.406173   -0.407888        1.715
+                                         8 192  -0.330898   -0.330971        0.073
+                                        32 768  -0.381646   -0.381673        0.028
+                CAS(48e, 42o)          131 072  -0.405377   -0.405707        0.330
+                                       524 288  -0.418717   -0.419859        1.142
+                                    1 048 576  -0.422971   -0.424901        1.930
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                     S13
+S4  Detailed Numerical Data
+
+
+The following tables provide the numerical data used to generate the dissociation and timing
+
+figures in the main text.
+
+Table S5: Detailed ground-state energies for the symmetric dissociation of H2O in the
+cc-pVDZ basis set. |V| denotes the size of the variational subspace (Top-K). Evar is the
+NQS variational energy, and Etotal includes the second-order Epstein-Nesbet perturbative
+correction (E var + ∆E  PT2). All values are reported in Hartrees (E h).
+
+
+             Subspace size   E    var (E h)           E total (E h)
+
+             R= 1.0R    e
+
+             O(0.000000, 0.000000, 0.000000); H(±1.010000, 0.758000, 0.000000)
+
+             |V|= 1024  −76.207 599     −76.241 762
+
+             |V|= 2048  −76.228 652     −76.241 878
+
+             |V|= 4096  −76.233 468     −76.241 836
+
+             |V|= 8192  −76.235 706     −76.241 809
+
+             |V|= 16384 −76.237 406     −76.241 805
+
+             |V|= 32768 −76.238 839     −76.241 819
+
+             |V|= 65536 −76.239 927     −76.241 831
+
+             |V|= 131072−76.240 633     −76.241 834
+
+             Benchmarks:     UHF: -76.024039        MRCISD: -76.240434
+                                UCCSDT: -76.241367        FCI: -76.241860
+
+             R= 1.5R    e
+
+             O(0.000000, 0.000000, -0.009000); H(0.000000,±1.515263, -1.058898)
+
+             |V|= 1024  −76.021 217     −76.071 316
+
+             |V|= 2048  −76.049 151     −76.071 181
+
+             |V|= 4096  −76.058 468     −76.071 696
+
+                                                                Continued on next page...
+
+
+                                                    S14
+                           Table S5 (Continued)
+
+Subspace size   E    var (E h)           E total (E h)
+
+|V|= 8192  −76.063 649     −76.072 036
+
+|V|= 16384 −76.066 736     −76.072 174
+
+|V|= 32768 −76.068 747     −76.072 260
+
+|V|= 65536 −76.069 903     −76.072 271
+
+|V|= 131072−76.070 621     −76.072 275
+
+Benchmarks:     UHF: -75.829813        MRCISD: -76.071151
+
+                  UCCSDT: -76.070281        FCI: -76.072348
+
+R= 2.0R    e
+O(0.000000, 0.000000, -0.013500); H(0.000000,±2.272895, -1.588347)
+
+|V|= 1024  −75.905 673     −75.949 154
+
+|V|= 2048  −75.925 819     −75.950 111
+
+|V|= 4096  −75.938 465     −75.950 860
+
+|V|= 8192  −75.943 786     −75.951 242
+
+|V|= 16384 −75.947 021     −75.951 467
+
+|V|= 32768 −75.948 855     −75.951 566
+
+|V|= 65536 −75.949 988     −75.951 610
+
+|V|= 131072−75.950 464     −75.951 622
+
+Benchmarks:     UHF: -75.793668        MRCISD: -75.950722
+
+                  UCCSDT: -75.946153        FCI: -75.951665
+
+R= 2.5R    e
+
+O(0.000000, 0.000000, -0.018000); H(0.000000,±3.030526, -2.117796)
+
+|V|= 1024  −75.873 290     −75.914 477
+
+                                                  Continued on next page...
+
+
+                                     S15
+                           Table S5 (Continued)
+
+Subspace size   E    var (E h)           E total (E h)
+
+|V|= 2048  −75.899 047     −75.915 713
+
+|V|= 4096  −75.907 279     −75.916 919
+
+|V|= 8192  −75.911 828     −75.917 529
+
+|V|= 16384 −75.914 525     −75.917 758
+
+|V|= 32768 −75.916 052     −75.917 851
+
+|V|= 65536 −75.916 768     −75.917 909
+
+|V|= 131072−75.917 140     −75.917 931
+
+Benchmarks:     UHF: -75.791198        MRCISD: -75.917147
+                  UCCSDT: -75.916217        FCI: -75.917991
+
+R= 3.0R    e
+
+O(0.000000, 0.000000, -0.022500); H(0.000000,±3.788158, -2.647245)
+
+|V|= 1024  −75.905 255     −75.910 913
+
+|V|= 2048  −75.898 731     −75.909 550
+
+|V|= 4096  −75.909 467     −75.911 011
+
+|V|= 8192  −75.910 387     −75.911 030
+
+|V|= 16384 −75.910 780     −75.911 060
+
+|V|= 32768 −75.910 915     −75.911 088
+
+|V|= 65536 −75.910 986     −75.911 130
+|V|= 131072−75.911 020     −75.911 144
+
+Benchmarks:     UHF: -75.790955        MRCISD: -75.911121
+
+                  UCCSDT: -75.911407        FCI: -75.911946
+
+
+
+
+
+
+
+                                     S16
+Table S6: Detailed ground-state energies for the bond breaking of N2 in the cc-pVDZ basis set.
+|V| denotes the size of the variational subspace (Top-K). Evar is the NQS variational energy,
+and Etotal includes the second-order Epstein-Nesbet perturbative correction (Evar + ∆EPT2).
+All values are reported in Hartrees (E h).
+
+                  Subspace size    E    var (E h)         E total (E h)
+
+                  d= 2.118Bohr
+
+                  |V|= 1024  −109.195 580    −109.281 924
+
+                  |V|= 2048  −109.232 688    −109.281 728
+                  |V|= 4096  −109.252 369    −109.282 155
+
+                  |V|= 8192  −109.260 943    −109.282 143
+
+                  |V|= 16384 −109.266 361    −109.282 030
+
+                  |V|= 32768 −109.270 646    −109.281 990
+
+                  |V|= 65536 −109.273 813    −109.281 976
+
+                  |V|= 131072−109.276 065    −109.282 082
+
+                  |V|= 262144−109.277 462    −109.282 036
+
+                  |V|= 524288−109.278 217    −109.282 096
+
+                  Benchmarks:     UHF: -108.949378    MRCISD: -109.275356
+
+                                      UCCSDT: -109.280323   DMRG: -109.282157
+                                        CDFCI: -109.282173
+
+                  d= 2.4Bohr
+
+                  |V|= 1024  −109.152 881    −109.240 336
+
+                  |V|= 2048  −109.188 582    −109.240 568
+
+                  |V|= 4096  −109.209 565    −109.241 353
+
+                  |V|= 8192  −109.218 955    −109.241 157
+
+                  |V|= 16384 −109.225 309    −109.241 461
+
+                                                                 Continued on next page...
+
+
+                                                        S17
+                         Table S6 (Continued)
+
+Subspace size    E    var (E h)         E total (E h)
+
+|V|= 32768 −109.229 865    −109.241 542
+
+|V|= 65536 −109.233 145    −109.241 726
+
+|V|= 131072−109.235 447    −109.241 712
+
+|V|= 262144−109.236 950    −109.241 755
+
+|V|= 524288−109.237 776    −109.241 755
+
+Benchmarks:     UHF: -108.891623    MRCISD: -109.234925
+
+                   UCCSDT: -109.238030   DMRG: -109.241886
+
+                     CDFCI: -109.241908
+
+d= 2.7Bohr
+
+|V|= 1024  −109.060 701    −109.161 485
+
+|V|= 2048  −109.096 580    −109.161 369
+
+|V|= 4096  −109.122 858    −109.162 392
+
+|V|= 8192  −109.134 548    −109.162 687
+
+|V|= 16384 −109.142 673    −109.162 677
+
+|V|= 32768 −109.148 413    −109.162 932
+
+|V|= 65536 −109.152 122    −109.162 961
+
+|V|= 131072−109.154 866    −109.163 218
+
+|V|= 262144−109.156 426    −109.163 357
+|V|= 524288−109.157 566    −109.163 305
+
+Benchmarks:     UHF: -108.833687    MRCISD: -109.156473
+
+                   UCCSDT: -109.156703   DMRG: -109.163572
+
+                     CDFCI: -109.163600
+
+                                              Continued on next page...
+
+
+                                    S18
+                          Table S6 (Continued)
+
+Subspace size    E    var (E h)         E total (E h)
+
+d= 3.0Bohr
+
+|V|= 1024  −108.971 587    −109.084 199
+|V|= 2048  −109.015 137    −109.084 913
+
+|V|= 4096  −109.041 489    −109.086 501
+
+|V|= 8192  −109.056 459    −109.087 600
+
+|V|= 16384 −109.066 061    −109.087 913
+
+|V|= 32768 −109.072 945    −109.088 328
+
+|V|= 65536 −109.077 329    −109.089 105
+
+|V|= 131072−109.080 326    −109.088 924
+
+|V|= 262144−109.082 139    −109.088 994
+
+|V|= 524288−109.083 133    −109.089 032
+
+Benchmarks:     UHF: -108.790272    MRCISD: -109.082149
+
+                   UCCSDT: -109.079437   DMRG: -109.089380
+
+                     CDFCI: -109.089405
+
+d= 3.6Bohr
+
+|V|= 1024  −108.854 881    −108.983 581
+
+|V|= 2048  −108.888 278    −108.985 648
+
+|V|= 4096  −108.922 916    −108.988 277
+
+|V|= 8192  −108.948 063    −108.991 807
+
+|V|= 16384 −108.964 993    −108.994 206
+
+|V|= 32768 −108.976 022    −108.995 841
+
+|V|= 65536 −108.982 483    −108.996 639
+
+                                              Continued on next page...
+
+
+                                     S19
+                         Table S6 (Continued)
+
+Subspace size    E    var (E h)         E total (E h)
+
+|V|= 131072−108.985 929    −108.997 008
+
+|V|= 262144−108.987 791    −108.997 119
+
+|V|= 524288−108.988 951    −108.997 068
+
+Benchmarks:     UHF: -108.767549    MRCISD: -108.990759
+
+                   UCCSDT: -108.990518   DMRG: -108.998052
+
+                    CDFCI: -108.998083
+
+d= 4.2Bohr
+
+|V|= 1024  −108.818 182    −108.944 537
+|V|= 2048  −108.859 307    −108.949 226
+
+|V|= 4096  −108.893 786    −108.955 348
+
+|V|= 8192  −108.925 608    −108.963 166
+
+|V|= 16384 −108.943 700    −108.965 669
+
+|V|= 32768 −108.951 043    −108.966 821
+
+|V|= 65536 −108.955 324    −108.967 338
+
+|V|= 131072−108.958 120    −108.967 493
+
+|V|= 262144−108.959 330    −108.967 648
+
+|V|= 524288−108.960 053    −108.967 866
+
+Benchmarks:     UHF: -108.775057    MRCISD: -108.963070
+
+                   UCCSDT: -108.966852   DMRG: -108.970090
+
+                    CDFCI: -108.970132
+
+
+
+
+
+
+
+
+
+                                    S20
+Table S7: Detailed wall-time breakdown of 30 outer-loop iterations for various systems.|V|
+denotes the size of the variational subspace (Top-K). All times are reported in seconds (s).
+
+            System   |V| Compilation    Inner    Overhead  Total Wall-time
+
+            H2O 1.0R   e       2048     12.24            82.37          44.89              140.98
+
+            (cc-pVDZ)       8192     40.86          204.28          46.45              293.10
+
+                                           32768 153.38          806.72          66.23            1027.91
+
+                                         131072601.36         3376.98          89.91            4070.34
+
+            N2 2.118 Bohr    2048     28.18            83.82          77.01              190.93
+            (cc-pVDZ)       8192     96.44          228.64        128.01              455.01
+
+                                           32768 346.50          834.70        231.87            1415.08
+
+                                         1310721224.77         3020.84        363.99            4612.43
+
+            Cr2              8192   166.40          267.19        307.48              744.18
+
+            (24e, 30o)       32768 614.99         1047.20        721.66            2387.10
+
+                                         1310722312.76         3996.06      1463.95            7776.67
+
+                                         5242889608.18      17 684.18      2245.62         29 544.14
+
+            Cr2              8192   739.81          541.39      2440.75            3728.74
+
+            (48e, 42o)       327682680.34         2345.80      5794.15         10 827.40
+
+                                         1310729711.81         9091.87    11 468.47         30 279.84
+                                         52428832 118.66      38 870.37    15 284.47         86 283.72
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                               S21
+TOC Graphic
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                             S22

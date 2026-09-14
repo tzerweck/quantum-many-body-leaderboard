@@ -51,7 +51,24 @@ const COUNTRIES = [
   ["PL", /\bpoland\b|warsaw|krakow|kraków/i],
   ["BR", /\bbrazil\b|são paulo|sao paulo|rio de janeiro/i],
 ];
-const countryOf = text => COUNTRIES.find(([, re]) => re.test(text || ""))?.[0] ?? null;
+// Email domains settle cases the institution name cannot. "Northeastern University"
+// is in Boston and also in Shenyang; "@northeastern.edu" is decisively the former,
+// since a Chinese university would be .edu.cn. Checked before the name patterns.
+const TLDS = [
+  [/@[\w.-]+\.edu\.cn\b|@[\w.-]+\.ac\.cn\b|@[\w.-]+\.cn\b/i, "CN"],
+  [/@[\w.-]+\.ac\.uk\b|@[\w.-]+\.uk\b/i, "GB"],
+  [/@[\w.-]+\.edu\b/i, "US"],
+  [/@[\w.-]+\.ac\.jp\b|@[\w.-]+\.jp\b/i, "JP"],
+  [/@[\w.-]+\.ch\b/i, "CH"], [/@[\w.-]+\.de\b/i, "DE"], [/@[\w.-]+\.fr\b/i, "FR"],
+  [/@[\w.-]+\.it\b/i, "IT"], [/@[\w.-]+\.ca\b/i, "CA"], [/@[\w.-]+\.nl\b/i, "NL"],
+  [/@[\w.-]+\.at\b/i, "AT"], [/@[\w.-]+\.be\b/i, "BE"], [/@[\w.-]+\.es\b/i, "ES"],
+];
+const countryOf = text => {
+  const t = text || "";
+  return TLDS.find(([re]) => re.test(t))?.[1]
+    ?? COUNTRIES.find(([, re]) => re.test(t))?.[0]
+    ?? null;
+};
 
 const strip = s => s.replace(/<[^>]+>/g, " ").replace(/&[a-z]+;/gi, " ").replace(/\s+/g, " ").trim();
 
@@ -93,7 +110,11 @@ function fromHtml(html) {
   // test them joined - they are all the same author's affiliations either way.
   const withCountry = affs.find(a => countryOf(a));
   const institution = withCountry || affs[0];
-  const country_hint = withCountry ? null : countryOf(affs.join(", "));
+  // Fall back through progressively weaker evidence: a single affiliation naming a
+  // country, then all of them joined (a line is sometimes split mid-address), then the
+  // header text before the first affiliation, which is where contact emails live.
+  const header = strip(block[1]).split(/Affiliation:/i)[0];
+  const country_hint = withCountry ? null : (countryOf(affs.join(", ")) ?? countryOf(header));
   return institution ? { first_author: firstName, institution, country_hint } : null;
 }
 

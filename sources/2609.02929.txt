@@ -1,0 +1,1300 @@
+              Scaling Neural Network Quantum States for
+                            Ab InitioQuantum Chemistry
+
+
+                   Chenxi Yu1,2,:, Hanlin Kong1,2,:, Jianan Wei1,2,:, Lizhong Fu3,:,
+                         Honghui Shang3,˚, Wenguan Wang1,2,˚, Jinlong Yang3
+
+                       1State Key Lab of Brain-Machine Intelligence, Zhejiang University
+                               2College of Artificial Intelligence, Zhejiang University
+  3State Key Laboratory of Precision and Intelligent Chemistry, University of Science and Technology of
+                                                         China
+
+
+                                                *Corresponding authors
+                                                  :Equal contribution
+
+
+
+                                                        Abstract
+           Neural-network quantum states (NNQSs) can represent many-electron wave functions with-
+       out explicitly enumerating the determinant space, but their accuracy depends jointly on model
+       size and variational-optimization effort.  Here we characterize this dependence for a physics-
+       conditioned autoregressive NNQS trained separately on two six-molecule source benchmarks.
+       Across eight model sizes and five optimization milestones, we find that model size and opti-
+       mization steps jointly shape the energy error. The capacity advantage of larger models becomes
+       more apparent with sufficient optimization, while the returns from additional optimization vary
+       with model size. We capture this coupling using an interaction scaling law and quantify the
+       cumulative compute of each evaluated configuration. The resulting error–compute Pareto fron-
+       tiers provide a practical decision rule for jointly selecting model size and optimization steps
+       under a given compute budget within the evaluated range.  Furthermore, we find that this
+       beneficial scaling trend persists during fine-tuning on held-out N2.  Pretrained models show
+       decreasing error with increasing model size, with a steeper reduction following pretraining on
+       the Hard benchmark. Together, these results place autoregressive neural quantum states within
+       the broader landscape of empirical neural scaling and open a quantitative route toward the
+       systematic scaling of neural quantum solvers forab  initioquantum chemistry.
+
+    Keywords:Neural-network Quantum States, Variational Monte Carlo, Scaling Laws
+
+
+1   Introduction
+
+    Large language models (LLMs) based on autoregressive Transformers have demonstrated re-
+markable capabilities across a wide range of natural language tasks [1–3]. Their rapid development
+has been driven by the continued growth of model parameters, training data, and computational
+resources, together with an improved understanding of the predictable relationships between these
+factors and model performance [4,5]. Previous studies have shown that language-model loss ap-
+proximately follows power-law relationships as model size, dataset size, and computational budget
+increase; these empirical relationships are commonly referred to as scaling laws [5–9]. Scaling laws
+
+                                                             1
+allow researchers to predict the potential gains from further scaling and to allocate resources among
+model size, data volume and computational cost in a principled manner. As the core architecture of
+modern language models, the autoregressive Transformer decomposes a complex joint distribution
+into a sequence of conditional distributions, providing a unified framework for large-scale sequence
+modeling. Understanding the scaling behavior of autoregressive Transformers is therefore impor-
+tant for revealing how their capabilities grow, identifying performance bottlenecks and guiding the
+efficient development of models [10].
+    Beyond language modeling, the combination of expressive neural representations and stochastic
+optimization has also opened new directions for solving quantum many-body problems. For molecu-
+lar systems, the computational objective is determined by first-principles quantum mechanics rather
+than by fitting externally provided labels [11]. Within the Born–Oppenheimer approximation and a
+finite orbital basis, the nuclear charges and coordinates define the electronic Hamiltonian, while the
+electron number specifies the corresponding many-electron Hilbert space [12]. The electronic wave
+function can be represented as a superposition of occupation-number configurations, whose number
+increases combinatorially with the number of orbitals and electrons, making direct enumeration of
+the full Hilbert space rapidly infeasible [13]. Variational Monte Carlo (VMC) overcomes this limi-
+tation by optimizing parameterized wave functions using stochastic estimates of the energy and its
+gradients [14]. Neural-network quantum states (NNQSs) further extend VMC by introducing neural
+networks as expressive and differentiable wave-function ansatzes, enabling flexible representations of
+complex many-body states and high-accuracy electronic-structure calculations [15–18]. Unlike con-
+ventional supervised learning models that minimize prediction errors against labeled data, NNQSs
+are optimized by minimizing the variational energy of the underlying Hamiltonian. Their achiev-
+able accuracy is therefore governed by the interplay among neural-network expressivity, stochastic
+sampling efficiency and optimization dynamics, raising a fundamental question of how these factors
+determine performance scaling as NNQS models and computational resources grow.
+    Autoregressive NNQSs provide a natural framework for studying such scaling behavior by con-
+necting neural quantum states with modern generative modeling. By decomposing the probability
+distribution of many-electron configurations into a sequence of normalized conditional probabili-
+ties, autoregressive models enable direct sampling of electronic configurations without the burn-in,
+accept–reject steps and autocorrelation effects associated with Markov-chain Monte Carlo meth-
+ods [19–21]. This property is particularly valuable for molecular electronic structure calculations,
+where the determinant distribution can be highly non-uniform and the evaluation of Hamiltonian-
+connectedconfigurationsconstitutesamajorcomputationalcost[21,22]. RecentTransformer-based
+quantum states further improve the representation of long-range dependencies between orbital oc-
+cupations through causal self-attention mechanisms [23–25]. These advances have enabled highly
+accurate molecular ground-state calculations using autoregressive neural quantum states, includ-
+ing unified architectures that jointly model wave-function amplitudes and phases [26].  Existing
+studies [27–30] have investigated model-size and compute scaling in molecule-specific neural wave
+functions, while the coupled scaling of model size and optimization in a shared, physics-conditioned
+autoregressive NNQS jointly optimized across multiple molecules remains largely unexplored. A
+systematic understanding of how model size and optimization progress jointly determine accuracy
+under a fixed computational budget remains an open challenge.
+    Against this background, we investigate scaling in a unified molecular setting, where a single
+physics-conditioned autoregressive NNQS is optimized jointly across multiple molecules. Our pri-
+mary question is whether model size and optimization progress exert separable effects on energy
+accuracy, or whether the benefit of increasing one depends on the level of the other. A larger model
+may provide greater expressive capacity, yet this capacity advantage may not be fully realized at
+early stages of optimization. Conversely, the marginal benefit of additional optimization may vary
+
+                                                            2
+across model sizes.  Characterizing this model-size–optimization interaction can therefore reveal
+how representational capacity and optimization progress jointly shape wave-function accuracy, dis-
+tinguish capacity-limited from optimization-limited regimes, and determine when additional model
+capacity becomes effective. We further ask whether such scale-dependent behavior persists when
+the learned representation is adapted to a Hamiltonian not encountered during source training.
+    We study this question using QiankunNet [26], an autoregressive Transformer-based NNQS,
+for multi-moleculeab initioquantum chemistry.  The physics-conditioned autoregressive NNQS
+comprises a geometry encoder and a Hamiltonian encoder that integrate molecular geometry and
+Hamiltonian information into a molecule-specific condition, allowing one model to be optimized
+across multiple molecular systems. Building on this conditional architecture, we construct a family
+of eight model sizes and train separate instances of each size on the Easy and Hard multi-molecule
+benchmarks. We evaluate the per-molecule mean absolute energy error at predefined optimization
+milestones and characterize its joint dependence on model size and optimization steps using an
+interaction power law. Separately, to translate this accuracy landscape into a resource-allocation
+criterion, we estimate the cumulative computational cost of each evaluated configuration and con-
+struct empirical error–compute Pareto frontiers. These frontiers identify the model size and op-
+timization steps that achieve the lowest measured error under a given compute budget. Finally,
+we test whether the model-size advantage established during pretraining transfers to a held-out N2
+Hamiltonian. Fine-tuning on N2 shows that pretrained models retain a favorable model-size trend,
+whereas randomly initialized models do not exhibit a comparable trend under the same fine-tuning
+budget.
+
+2   Results
+
+2.1  Coupled scaling with model size and optimization steps
+    We first examine how model size and optimization steps jointly shape energy accuracy during
+multi-molecule pretraining. Based on the size of the full configuration interaction (FCI) space, we
+construct two molecular benchmarks of increasing complexity, denoted Easy and Hard (Table1;
+Methods Section4.5; Supplementary SectionS1). We consider eight model sizes by varying the
+hidden dimension and the number of Transformer blocks, spanning approximately 0.1M to 13.8M
+trainable parameters. Each model is optimized for up to 50K steps, with energy errors evaluated
+at 10K-step milestones.
+    Across both benchmarks, the mean absolute energy error (MAE) generally decreases with con-
+tinued optimization at a fixed model size, although individual checkpoints exhibit non-monotonic
+fluctuations associated with stochastic VMC optimization (Fig.1). The marginal improvement from
+additional optimization tends to diminish as training proceeds, but the onset of this saturation de-
+pends on benchmark complexity.  Models on the Easy benchmark approach a plateau at earlier
+stages, whereas those on the Hard benchmark continue to benefit from additional optimization over
+a longer range of steps. Within the evaluated range, the Hard benchmark therefore requires a larger
+optimization budget before the gains begin to saturate.
+    The dependence on model size shows a complementary pattern. At fixed optimization steps, the
+benchmark-leveltrendgenerallyfavorslargermodels,althoughsubstantialtransientnon-monotonicity
+is observed, particularly at early optimization stages (Supplementary Fig.S1). Molecule-resolved
+results nevertheless exhibit substantial heterogeneity and transient non-monotonic behavior, partic-
+ularly on the Easy benchmark (Supplementary Fig.S2). On the Easy benchmark, for example, the
+3.5M-parameter model achieves the lowest error at 10K steps, while the larger 5.8M- and 13.8M-
+parameter models have not yet realized their capacity advantage.  This delayed benefit remains
+
+                                                           3
+Figure1: Energyerroracrossmodelsizesandoptimizationmilestones.Meanabsoluteenergyerror(MAE),
+reported in millihartrees (mHa), is evaluated across eight model sizes and five cumulative optimization milestones
+for the Easy (left) and Hard (right) benchmarks. Rows denote the number of trainable parameters in millions, and
+columns denote cumulative optimization steps. Each cell reports the equally weighted mean MAE over molecules,
+taken over the 1,000-update window ending at the corresponding milestone, with the error magnitude indicated by
+both color and annotated values.
+
+
+evident at 20K–30K steps, where the 5.8M-parameter model is still outperformed by several smaller
+configurations. With continued optimization, these ranking inversions are progressively reduced,
+and by 50K steps the benchmark-level dependence becomes much more consistently aligned with
+model size. These results indicate that the accuracy advantage of increased capacity emerges most
+clearly when accompanied by sufficient optimization.
+    These observations suggest that a separable description of model size and optimization steps
+may be insufficient. We therefore fit the complete model-size–optimization grid using separable and
+interaction power laws, together with a more flexible quadratic log-response surface (Supplementary
+SectionS4). The interaction power law is preferred by AICc on both benchmarks. Relative to the
+separable model, its AICc is lower on both Easy (´49.70versus´35.09) and Hard (´102.36versus
+´96.14), and it is also favored over the quadratic response surface by AICc despite using fewer
+coefficients (Supplementary TableS3). The resulting joint scaling relation is:
+         „LpP,Sq     ȷ         „ L0       ȷ          ˆ P     ˙           ˆ S     ˙           ˆ P     ˙      ˆ S     ˙
+     log    1 mHa       “log     1 mHa      ´alog       Pref    ´blog       Sref    ´ηlog       Pref    log    Sref   ,   (1)
+
+wherePis the number of trainable parameters,Sis the cumulative number of optimization steps,
+L0 is the fitted reference error, andP       ref“10    6 andS       ref“10    4 are fixed reference scales. The coeffi-
+cientηquantifies the coupling between model size and optimization steps. The fitted interactions
+are positive on both benchmarks, withη“0.378for Easy andη“0.133for Hard (Supplementary
+TableS4). Within the evaluated range, a positive interaction indicates that the error reduction asso-
+ciated with increasing model size becomes stronger as more optimization is provided, quantitatively
+capturing the delayed emergence of the large-model advantage observed above.
+
+
+                                                               4
+Figure 2: Effective scaling exponents as functions of optimization steps and model size.For the Easy
+and Hard benchmarks,rα        PpSqis fitted across eight model sizes at each fixed optimization milestone (left), whereas
+rαSpPqis fitted across five optimization milestones at each fixed model size (right).  The bars indicate the range
+of fitted exponents across individual molecules within each benchmark. Larger positive exponents indicate a faster
+reduction in MAE as the corresponding resource increases.
+
+
+    To examine the same behavior independently of the joint interaction fit, we further perform
+separate one-axis power-law fits along fixed slices of the model-size–optimization grid (Fig.2; Sup-
+plementary SectionS4). At each optimization milestone, the model-size exponentrα          PpSqis fitted
+across the eight model sizes, whereas at each model size, the optimization-step exponentrα  SpPq
+is fitted across the five milestones. As optimization increases from 10K to 50K steps, rαPpSqrises
+from 0.079 to 0.703 on Easy and from 0.349 to 0.580 on Hard. This progressively steeper model-size
+dependence provides consistent empirical evidence that additional capacity becomes more effec-
+tive with continued optimization. By contrast, rαSpPqvaries non-monotonically across model sizes,
+reaching 2.859 on Easy and 1.131 on Hard at the largest model size. Thus, the clearest and most
+consistent manifestation of the coupling is the strengthening of the model-size advantage with opti-
+mization, whereasthemarginalreturnfromadditionaloptimizationexhibitsgreaterscale-dependent
+variability.
+
+2.2  Empirical compute-optimal allocation of model size and optimization steps
+    The observed coupling between model size and optimization steps raises a practical question:
+howshouldthesetworesourcesbeallocatedunderafinitecomputebudget? Weaddressthisquestion
+by estimating the cumulative computational cost of each evaluated model–milestone configuration
+and examining the resulting error–compute trade-off. We define the empirical Pareto frontier as
+the set of non-dominated configurations for which no other evaluated configuration achieves both
+lower computational cost and lower energy error. The compute accounting and frontier construction
+procedures are described in Methods Sections4.6and4.7and Supplementary SectionS5.
+    Across both benchmarks, larger compute budgets allow progressively lower minimum errors
+within the evaluated configuration grid, but the corresponding Pareto-optimal allocation between
+model size and optimization steps is not fixed. At relatively low compute, the frontier is primarily
+composed of smaller models evaluated at earlier optimization milestones. As the compute budget
+increases, additional optimization of an existing model can remain more efficient than immedi-
+ately increasing model size. Larger models therefore become Pareto-optimal only after sufficient
+compute is available to optimize them effectively. This progression is consistent with the model
+
+
+                                                            5
+Figure 3: Error–compute Pareto frontiers over the evaluated grid of model sizes and optimization
+milestones.MAE (mHa) is plotted against cumulative compute (EFLOP) for the Easy (top) and Hard (bottom)
+benchmarks. Each point represents one evaluated combination of model size and optimization milestone, with color
+indicating the number of trainable parameters. Dashed lines connect milestones from the same model size, while solid
+black lines trace the empirical Pareto frontiers formed by non-dominated configurations.
+
+
+size–optimization coupling observed above: additional capacity provides an accuracy advantage
+only when accompanied by an adequate optimization budget.
+    The detailed frontier structure depends on benchmark complexity. On the Easy benchmark, the
+Pareto-optimal points are well described, over the evaluated compute range, by a single power-law
+relationship with a fitted exponent of 0.512.  The Hard benchmark instead shows two empirical
+compute regimes, with fitted exponents of 1.062 and 0.367, accompanied by shifts in the Pareto-
+optimal model size–optimization-step combinations (Figs.3and4; Supplementary SectionS6).
+Thus, the configuration that uses compute most efficiently depends on both the available budget
+and the complexity of the molecular benchmark.  Within the regime studied here, these results
+support joint selection of model size and optimization steps rather than a fixed allocation rule
+across compute budgets.
+
+2.3  Transfer of model-size scaling to a held-out N2 Hamiltonian
+    Having established the joint dependence of pretraining accuracy on model size and optimization
+steps, wenextexaminewhetherthemodel-sizeadvantageextendstofine-tuningonanunseenHamil-
+
+
+                                                            6
+Figure 4:  Pareto-optimal configurations over the evaluated grid of model sizes and optimization
+milestones.Each panel shows a grid of model size versus optimization milestone for the Easy (left) and Hard
+(right) benchmarks. Rows denote the number of trainable parameters in millions, and columns denote cumulative
+optimizationsteps. Greycirclesindicatedominatedconfigurations, whereascoloredcircleswithblackoutlinesindicate
+the non-dominated configurations. Color encodes cumulative compute (EFLOP) on a logarithmic scale.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 5: N2 fine-tuning error across model sizes and initialization strategies.Energy MAE (mHa)
+after fine-tuning on N2 is shown across eight model sizes for models initialized from Easy pretraining (blue), Hard
+pretraining (orange), and random weights (grey). Solid lines denote descriptive power-law fits in log–log space.
+
+
+tonian. We fine-tune the same eight model sizes on N2, using Easy-pretrained, Hard-pretrained, or
+randomly initialized weights for the same number of fine-tuning steps, and evaluate the resulting
+energy errors as a function of model size.
+    The two pretrained series retain a clear model-size dependence during fine-tuning, whereas the
+randomly initialized series does not (Fig.5). For both Easy and Hard pretraining, the energy error
+decreases approximately as a power law with increasing model size, with fitted exponents of 0.259
+
+
+                                                                7
+and 0.447, respectively. By contrast, randomly initialized models show no clear decrease in error
+with increasing model size under the fixed fine-tuning budget, with a fitted exponent of -0.272.
+    The absence of a favorable model-size trend under random initialization is consistent with the
+scale-dependent optimization behavior observed during pretraining.  Under a fixed and limited
+fine-tuning budget, larger randomly initialized models require more optimization to make effective
+use of their additional capacity and can therefore remain underoptimized as model size increases.
+Pretrainedmodelsstartfromparametersalreadyadaptedtomolecularelectronicstructure, reducing
+this optimization burden and allowing the advantage of larger models to emerge within the same
+number of fine-tuning steps. Thus, pretraining not only improves the absolute fine-tuning accuracy
+but also preserves the favorable dependence of accuracy on model size.
+    Among the two pretrained initializations, Hard pretraining yields the stronger size-dependent
+reduction in error and achieves the lowest error across all evaluated model sizes. At the largest
+model size, the errors are 0.363 mHa for Easy pretraining and 0.159 mHa for Hard pretraining,
+compared with 19.67 mHa for random initialization. The fitted scaling parameters and descriptive
+fit statistics are reported in Supplementary SectionS7.
+
+3   Discussion
+
+    In this study, we investigate the scaling behavior of autoregressive NNQSs for molecular elec-
+tronic structure using a scalable model family, multi-molecule benchmarks of different complexities,
+and a unified evaluation protocol. Across eight model sizes and five optimization milestones, we
+characterize the joint dependence of energy accuracy on model size and optimization steps, con-
+struct empirical error–compute Pareto frontiers, and examine whether the model-size trend persists
+during fine-tuning to N2.
+    We find that model size and optimization steps exhibit coupled empirical scaling. Across both
+benchmarks, the model-size scaling exponent increases with continued optimization, indicating that
+the advantage of larger models becomes progressively clearer as more optimization is provided. We
+capture this dependence using a power-law model with an interaction term (Eq. (1); Supplementary
+Table S4). The slice-wise fits in Fig. 2 provide an independent empirical view of the same coupling.
+Similar to the resource-allocation perspective of Chinchilla-style scaling [8], these results suggest
+that the two scaling variables should be considered jointly rather than independently.
+    One possible explanation is that the models operate in an optimization-limited regime, partic-
+ularly at early training stages. The transient ranking inversions are consistent with larger models
+requiring more optimization to realize their capacity advantage. However, the present experiments
+do not distinguish slower convergence from optimization instability, stochastic VMC fluctuations,
+or sampling noise. The fitted interaction should therefore be interpreted as a finite-range empirical
+description rather than an asymptotic law.
+    Thisjointscalingisparticularlyrelevanttoab initioVMC.Unlikelanguage-modelscaling, which
+is commonly organized around model size and data volume [5,8], the molecular solution in VMC is
+obtainedthroughiterativeoptimization. Thecomputationalcostthereforedependsjointlyonmodel
+size, optimization steps, and the sampling-dependent workload incurred at each step. Our compute
+proxy captures this accumulated neural and optimizer workload, while remaining an approximation
+to the full end-to-end VMC cost.
+    Under this compute proxy, the Pareto-optimal configuration varies with the available budget
+and differs between the Easy and Hard benchmarks (Figs.3and4).  Smaller models are more
+competitive at low budgets, whereas larger models enter the Pareto frontier only when sufficient
+optimization becomes affordable. These frontiers therefore provide an empirical criterion for jointly
+
+
+                                                           8
+selecting model size and optimization steps under finite computational resources. Their different
+compositions across the two benchmarks further suggest that the fitted scaling behavior is system
+dependent.
+    The transfer experiments further show that the favorable model-size trend established during
+pretraining can persist during downstream fine-tuning. For models initialized from Easy or Hard
+pretraining, theN2 errordecreaseswithincreasingmodelsize, whereasthesametrendisnotresolved
+for training from scratch within the evaluated budget. This contrast is consistent with pretraining
+allowing larger models to exploit their additional capacity more effectively during limited-budget
+fine-tuning.  The lower errors after Hard pretraining may also reflect differences in benchmark
+composition or complexity. Because the transfer analysis is restricted to one held-out molecule,
+these results should not be interpreted as a general transfer scaling law.
+    Several limitations define the scope of this study. First, our analysis is restricted to autoregres-
+sive Transformer-based NNQSs, and whether similar scaling extends to other neural wave-function
+architectures remains to be established [20,21]. Second, we consider molecular systems at fixed
+geometries and do not address geometry-dependent tasks such as potential energy surface model-
+ing [31,32]. Third, the Easy and Hard benchmarks are primarily defined by FCI determinant-space
+size, so the effects of electronic complexity cannot be fully separated from differences in elemen-
+tal composition and chemical structure. Broader molecular families, architectures, and geometry-
+dependent problems will be needed to assess the generality of the observed scaling behavior.
+
+4   Methods
+
+4.1  Preliminaries
+    Anab initioelectronic-structure calculation determines molecular properties from the nuclear
+charges, nuclear coordinates and electron number by solving the electronic Schrödinger equation
+within explicit approximations, rather than employing an empirical potential fitted to the molecule
+of interest. Under the Born–Oppenheimer approximation and in a chosen finite orbital basis, these
+physical inputs determine the molecular integrals and hence the electronic HamiltonianH           m for
+moleculem.
+    Following the standard second-quantization formalism employed in NNQS calculations [33], a
+many-electron configuration inN  m spin orbitals is represented by an ordered occupation-number
+bitstringx“px                      1,x2,...,xNmq, where each entryx   i denotes the occupation of a specific spin orbital.
+The total electron number and spin-projection sector dictate the allowed bitstrings. LetX   m denote
+this fixed-electron-number and fixed-spin-projection sector. The wave function assigns a complex
+coefficient to each valid configuration:
+                       |Ψ θ,my“  ÿ        Ψθ,mpxq|xy,       Ψ      θ,mpxq“|Ψ   θ,mpxq|e        iϕθ,mpxq .             (2)
+                                   xPX  m
+Here, for a normalized state,|Ψ     θ,mpxq|     2 is the Born probability of configurationx, whereasϕ            θ,mpxq
+represents its sign or phase structure. In the NNQS framework, a neural network parameterizes
+both the magnitude and phase of the wave function. Specifically, it maps the discrete input bitstring
+xto its corresponding complex coefficient. The network weightsθrepresent variational degrees of
+freedom that are optimized to minimize the energy of the HamiltonianH      m. By the Rayleigh–Ritz
+principle [14], the corresponding variational energy satisfies:
+
+                                        Empθq“  xΨ θ,m|H m|Ψ θ,myxΨ θ,m|Ψ θ,my  ěE    0,m ,                         (3)
+
+whereE            0,m  is the ground-state energy ofH  m in the target sector and chosen orbital basis.
+
+                                                             9
+4.2  Autoregressive wave-function ansatz
+    To parameterize the configuration coefficients in Eq. (2), we employ QiankunNet, an autoregres-
+sive Transformer-based NNQS with separate amplitude and phase networks [26]. For a moleculem
+withT    m spatial orbitals, the alpha- and beta-spin occupations associated with spatial orbitaliare
+paired into a four-state tokenv  iPt00,10,01,11u. This converts the spin-orbital bitstringxinto the
+token sequencev“pv                      1,...,vTmq. A decoder-only causal Transformer parameterizes the probability
+of the occupation sequence through the autoregressive factorization:
+
+                                                          Tmź
+                                             pθ,mpvq“         pθ,mpv i|văi q,                            (4)
+                                                          i“1
+whereas a separate multilayer perceptron (MLP) parameterizes the phaseϕ    θ,mpvqfrom the complete
+occupation sequence. The resulting complex wave-function coefficient is:
+                                                     b
+                                       Ψθ,mpvq“         pθ,mpvqexpriϕ       θ,mpvqs,                        (5)
+
+wherei“    ?´1denotes the imaginary unit. Together, Eqs. (4) and (5) separate the two roles of
+the ansatz: the Transformer represents the Born probabilityp θ,mpvq“|Ψ  θ,mpvq|    2, while the phase
+networkϕ   θ,mpvqrepresents the sign or phase relations among configurations.
+
+4.3  Variational Monte Carlo
+    The variational parameters are optimized by minimizing the energy of each molecular Hamilto-
+nian using variational Monte Carlo (VMC) [14]. Based on the Born distribution defined in Eq. (4),
+VMC formulates the molecular energy as the expectation value of the local energy,
+
+                                           Empθq“E       v„p  θ,mrE  loc,m pvqs.                           (6)
+
+For a given sampled configurationv, the local energy is defined as:
+
+                            Eloc,m pvq“  ÿ       vv1 Ψθ,mpv 1qΨθ,mpvq  ,   Hpmqvv1 “xv|H  m|v 1y.                (7)
+                                            v1 Hpmq
+
+Since only configurationsv          1 connected tovvia non-zero Hamiltonian matrix elements contribute
+to this summation, averaging the local energies over sampled configurations yields an estimate
+ofE  mpθqwithout requiring the full enumeration of the configuration space.  The corresponding
+stochastic energy gradients are evaluated from these same samples using automatic differentiation
+and are then used to update the network parameters in each optimization step.
+    To evaluate the expectation value in Eq. (6), independent configurations must be sampled from
+the Born distribution. For this purpose, the sampling is performed using a layer-wise Monte Carlo
+tree search (MCTS), implemented as batched autoregressive sampling (BAS) [19,21,26]. By treat-
+ing the generation of a configurationvas a sequential process, this approach maps each level of the
+sampling tree to one spatial orbital. Unlike Markov-chain sampling, BAS generates these orbital oc-
+cupationssequentiallybydrawingeachtokendirectlyfromtheconditionalprobabilityp θ,mpv i|văi q.
+During this process, BAS groups identical partial configurations using integer multiplicities. At each
+step, these multiplicities are distributed according to the predicted conditional probabilities, while
+invalid branches are masked to enforce the target alpha- and beta-electron numbers.
+
+
+
+                                                            10
+4.4  Physics-conditioned autoregressive NNQS
+    The ansatz in Eqs. (4) and (5) is sufficient for a single fixed Hamiltonian, but an occupation
+sequence alone does not identify the molecular problem in a shared multi-molecule model. In par-
+ticular, the same occupation sequencevcan correspond to different wave-function amplitudes and
+phases under different molecular geometries and Hamiltonians. We therefore augment the autore-
+gressive ansatz with a molecule-specific conditionc     m, while sharing the neural-network parameters
+across all molecular systems. As illustrated in Fig.6a,b, within the physics-conditioned autore-
+gressive NNQS, a geometry encoder and a Hamiltonian encoder construct the molecule-specific
+condition from molecular geometry and Hamiltonian information, respectively. This condition is
+injected into both the autoregressive amplitude network and the phase network through feature-wise
+linear modulation (FiLM) [34].
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                                                                    Eq. (12)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 6: Physics-conditioned autoregressive NNQS [26] for multi-molecule optimization. a, Overview
+of the shared NNQS architecture. Molecular geometry and Hamiltonian information are encoded into a molecule-
+specific conditionc        m, which modulates both the autoregressive amplitude network and the phase network. Given an
+occupation sequencev, the amplitude network parameterizes the Born probabilityp         θ,mpvq, while the phase network
+predictsϕ      θ,mpvq; together they define the complex wave-function coefficientΨ   θ,mpvq “   apθ,mpvqexpriϕ      θ,mpvqs.
+b, FiLM conditioning in the amplitude and phase pathways. The molecular conditionc         m modulates the hidden
+representationsaftereachTransformerblockintheamplitudenetworkandthroughouttheMLP-basedphasenetwork.
+c, Geometry encoder. Pairwise nuclear distances are expanded using Gaussian radial basis functions, transformed by
+an MLP, and aggregated into a fixed-width geometry representationz     R,m. d, Hamiltonian encoder. The real and
+imaginary parts of the Hamiltonian coefficients are projected into coefficient tokens, which are pooled by multi-head
+attention using a learned queryq     H to produce the fixed-width Hamiltonian representationz     H,m. The geometry and
+Hamiltonian representations are subsequently fused to formc    m.
+
+    The molecule-specific conditionc   m is constructed from two complementary sources of molecular
+
+                                                               11
+information: molecular geometry and the electronic Hamiltonian. The two sources of molecular
+information are separately mapped to fixed-width representations, which are then fused to form the
+molecular condition. The geometry encoder, illustrated in Fig.6c, represents moleculemusing the
+pairwise distances between distinct nuclei:
+                                          rab“∥R   a´R  b∥2,   aăb,                          (8)
+whereR     a PR  3 denotes the Cartesian position of nucleusa.  The distances are expanded in 32
+Gaussian radial basis functions with centers spanning 0–5 Å. A two-layer multilayer perceptron
+transforms these features, which are then aggregated into a fixed-width geometry vectorz    R,m.
+Because this vector depends only on pairwise distances and symmetric aggregation, it is unchanged
+by molecular translation, rotation, or the ordering of the nuclei.
+    The Hamiltonian encoder, illustrated in Fig.6d, encodes the electronic Hamiltonian coefficient
+hm,k used in the VMC calculation. The real and imaginary parts of each Hamiltonian coefficient
+are encoded as:
+                                     em,k“W  HrReph    m,kq; Imph    m,kqs`b  H,                       (9)
+whereW     H andb   H are the learned projection matrix and bias vector, respectively.  Given the
+resulting variable-length sequence of coefficient tokensE   m “ te m,kuk, we employ a multi-head
+attention (MHA) [1] pooling mechanism. Specifically, a learned queryq      H attends to the coefficient
+tokens, which serve as both keys and values:
+                                 zH,m“MHApQ“q          H, K“E   m, V“E   mq.                    (10)
+This attention pooling compresses the variable-length set of Hamiltonian coefficient tokens into a
+fixed-size representationz     H,m.
+    The geometry and Hamiltonian representations are then concatenated and fused through a two-
+layer MLP to obtain the molecule-specific condition:
+                                            cm“f    physprz R,m;z H,msq.                            (11)
+    Rather than appendingc      m as an additional occupation token, we inject the molecular condition
+directly into the hidden representations through FiLM:
+                                      rhpℓq “r1`γ   ℓpc mqsdh pℓq `β  ℓpc mq,                       (12)
+
+whereγ     ℓ andβ   ℓ denote learnable projections ofc  m, andddenotes element-wise multiplication.
+The FiLM conditioning mechanism is used in both the amplitude and phase pathways to modulate
+their hidden representations.
+
+4.5  Molecular benchmarks and model training
+    We construct two molecular benchmarks of varying difficulty using 12 molecules in the STO-3G
+basis set. The molecules are ranked according to the size of their spin-resolved full configuration
+interaction (FCI) determinant spaces: the six smallest constitute the Easy benchmark, while the six
+largest form the Hard benchmark (Table1; Supplementary SectionS1). Thus, the two benchmarks
+contain the same number of molecular Hamiltonians but differ in the scale of their determinant
+spaces.
+    For either benchmark, letDdenote its set of molecules. The molecule-specific condition allows
+a single set of network parameters to be shared across allmPD.  The VMC energyE           mpθqis
+estimated for each molecule, and the model is optimized using their uniformly weighted average:
+                                              JDpθq“      1   ÿ    Empθq.                             (13)
+                                                         |D| mPD
+
+                                                           12
+                            Table 1: Molecular benchmarks used for pretraining.
+
+                         Benchmark   Molecules
+
+                         Easy         H2O, O2, NH3, CH4, NOH, C2
+                         Hard         H2O2, HCN, H2CO, N2H2, NOH3, C2H2
+
+
+Thus, every molecule contributes equally to the pretraining objective, regardless of the size of
+its determinant space.  Notably, models for the Easy and Hard benchmarks are independently
+pretrained from scratch, with no weight transfer between them.
+
+4.6  Evaluated configurations and compute estimation
+    We evaluate a grid defined by trainable parameter countPand cumulative optimization steps
+S, comprising eight model sizes with approximately 0.1M, 0.2M, 0.4M, 0.9M, 1.5M, 3.5M, 5.8M and
+13.8Mparameters,andfiveoptimizationmilestonesat10K,20K,30K,40Kand50Ksteps. Following
+a compound-scaling strategy [35], the model sizes are constructed by varying network width and
+depth while retaining the same overall ansatz design (Table2; Supplementary SectionS2).
+
+Table 2: Model family used in the scaling experiments.Here, amplitude width denotes the hidden dimension
+of the amplitude Transformer, and phase width denotes the hidden dimension of each layer in the phase MLP. Full
+architectural and conditioning details are provided in Supplementary SectionS2.
+
+              Scale  Amplitude width  Transformer blocks  Phase width  Parameters
+                1          32                 4              32           97,763
+                2          32                 8              64          226,611
+                3          64                 4              64          375,747
+                4          64                 8              128         880,227
+                5          128                4              128        1,472,387
+                6          128                8              256        3,468,483
+                7          256                4              256        5,828,355
+                8          256                8              512       13,769,091
+
+    Estimatingcomputationalcostisessentialfortranslatingscalingbehaviorintopracticalresource-
+allocation decisions. Although model size (P) and optimization step (S) define a training configu-
+ration, they serve only as indirect descriptors and fail to capture the true cumulative computational
+demand. Therefore, we mapped eachpP,Sqpair to a unified computational metric. A basic approx-
+imation is the product of parameter count and update count,PˆS. However, this approximation
+treats every update as having the same sampling workload.  In our VMC implementation, this
+workload was not constant: MCTS sampling retained different numbers of distinct configurations
+at different steps after repeated samples were combined, and configuration lengths differed across
+molecules. To address this, we utilized logged configuration counts and sequence lengths to establish
+a cumulative, token-weighted sampling workload.
+    For moleculem, letU           mpP,Sqdenote the cumulative count of sampled configurations, obtained
+by summing the counts of distinct configurations retained at each update while training a model of
+sizePthrough milestoneS. LetT                m denote the length of the input occupation sequence for molecule
+m. The productU      mpP,SqT   m hence estimates the cumulative sampled-token workload for molecule
+
+
+                                                         13
+mthrough milestoneS. The total cumulative workload across the benchmark setDis:
+
+                                             ΩpP,Sq“    ÿ       UmpP,SqT   m.                           (14)
+                                                          mPD
+    Finally, we estimated cumulative compute by combining the cost of processing the sampled
+configurations,ΩpP,Sq, with the cost of updating the model parameters during training,PˆS:
+
+                                         CpP,Sq“Pˆpλ                1ΩpP,Sq`λ            2Sq.                        (15)
+
+Here, we adoptλ  1“8andλ             2“12in this work (see Supplementary SectionS5for details). Notably,
+this hardware-independent proxy is derived from logged workload statistics rather than hardware
+counters and does not represent a complete end-to-end FLOP count.
+
+4.7  Error metrics and compute-efficient configuration selection
+    For moleculem, the error at milestoneSis defined as the mean absolute deviation from the
+reference energy over the finalW“1,000updates:
+
+                                                          Wÿ  ˇˇˇpEm,tpP,Sq´E         refmˇˇˇ,                      (16)
+                                      ϵmpP,Sq“      1W
+                                                          t“1
+wheretdenotes the update index within the evaluation window ending atS. The overall benchmark
+error is then calculated by taking an unweighted average across all constituent molecules:
+                                            LDpP,Sq“       1     ÿ    ϵmpP,Sq.                          (17)
+                                                           |D|  mPD
+
+    To identify compute-efficient choices, we compare all evaluatedpP,Sqpairs by their error and
+cumulative compute. A pair is Pareto efficient if no other evaluated pair achieves both lower error
+and lower compute. For a compute budgetC              max, we select:
+
+                                         pP ˚,S˚q“  arg min             LDpP,Sq.                        (18)
+                                                       CpP,Sq ďC            max
+
+Thus, the decision rule selects the lowest-error configuration within the measured grid that satisfies
+the compute budget.
+
+4.8  Implementation details
+    The models are implemented in PyTorch and optimized in FP32 precision using the AdamW op-
+timizer. For the pretraining and fine-tuning runs, we use a learning rate of3ˆ10   ´4 ,β“p0.9,0.99q,
+ϵ“10  ´9 , and zero weight decay. Local energies are evaluated using a compiled C++/CUDA back-
+end. Pauli strings sharing the same occupation-flip pattern are grouped together, while electronic
+configurations and flip patterns are encoded as 64-bit blocks to facilitate parallel lookup and eval-
+uation. Further sampling, optimization and reproducibility details are provided in Supplementary
+SectionS3.
+
+
+
+
+
+
+                                                             14
+References
+
+ [1]Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez,
+     LukaszKaiser, andIlliaPolosukhin. AttentionIsAllYouNeed.Advances in Neural Information
+     Processing Systems, 30:5998–6008, 2017.
+
+ [2]Tom B. Brown, Benjamin Mann, Nick Ryder, Melanie Subbiah, Jared Kaplan, Prafulla Dhari-
+     wal, Arvind Neelakantan, Pranav Shyam, Girish Sastry, Amanda Askell, Sandhini Agarwal,
+     ArielHerbert-Voss,GretchenKrueger,TomHenighan,RewonChild,AdityaRamesh,DanielM.
+     Ziegler, Jeffrey Wu, Clemens Winter, Christopher Hesse, Mark Chen, Eric Sigler, Mateusz
+     Litwin, Scott Gray, Benjamin Chess, Jack Clark, Christopher Berner, Sam McCandlish, Alec
+     Radford, Ilya Sutskever, and Dario Amodei.  Language Models Are Few-Shot Learners.  In
+     Advances in Neural Information Processing Systems, volume 33, pages 1877–1901, 2020.
+
+ [3]Romal Thoppilan, Daniel De Freitas, Jamie Hall, Noam Shazeer, Apoorv Kulshreshtha, Heng-
+     Tze Cheng, Alicia Jin, Taylor Bos, Leslie Baker, Yu Du, et al. LaMDA: Language Models for
+     Dialog Applications.arXiv preprint arXiv:2201.08239, 2022.
+
+ [4]Joel Hestness, Sharan Narang, Newsha Ardalani, Gregory Diamos, Heewoo Jun, Hassan Kia-
+     ninejad, Md. Mostofa Ali Patwary, Yang Yang, and Yanqi Zhou. Deep Learning Scaling Is
+     Predictable, Empirically.arXiv preprint arXiv:1712.00409, 2017.
+
+ [5]Jared Kaplan, Sam McCandlish, Tom Henighan, Tom B. Brown, Benjamin Chess, Rewon
+     Child, Scott Gray, Alec Radford, Jeffrey Wu, and Dario Amodei.  Scaling Laws for Neural
+     Language Models.arXiv preprint arXiv:2001.08361, 2020.
+
+ [6]Tom Henighan, Jared Kaplan, Mor Katz, Mark Chen, Christopher Hesse, Jacob Jackson,
+     Heewoo Jun, Tom B. Brown, Prafulla Dhariwal, Scott Gray, Chris Hallacy, Benjamin Mann,
+     Alec Radford, Aditya Ramesh, Nick Ryder, Daniel M. Ziegler, John Schulman, Dario Amodei,
+     and Sam McCandlish. Scaling Laws for Autoregressive Generative Modeling.arXiv preprint
+     arXiv:2010.14701, 2020.
+
+ [7]Jack W Rae, Sebastian Borgeaud, Trevor Cai, Katie Millican, Jordan Hoffmann, Francis Song,
+     John Aslanides, Sarah Henderson, Roman Ring, Susannah Young, et al.  Scaling Language
+     Models: Methods, Analysis&InsightsfromTrainingGopher.arXiv preprint arXiv:2112.11446,
+     2021.
+
+ [8]Jordan Hoffmann, Sebastian Borgeaud, Arthur Mensch, Elena Buchatskaya, Trevor Cai, Eliza
+     Rutherford, Diego de Las Casas, Lisa Anne Hendricks, Johannes Welbl, Aidan Clark, Tom
+     Hennigan, Eric Noland, Katie Millican, George van den Driessche, Bogdan Damoc, Aurelia
+     Guy, Simon Osindero, Karen Simonyan, Erich Elsen, Jack W. Rae, Oriol Vinyals, and Laurent
+     Sifre. Training Compute-Optimal Large Language Models.Advances in Neural Information
+     Processing Systems, 35:30016–30030, 2022.
+
+ [9]Ibrahim M. Alabdulmohsin, Behnam Neyshabur, and Xiaohua Zhai. Revisiting Neural Scaling
+     Laws in Language and Vision.Advances in Neural Information Processing Systems, 35:22300–
+     22312, 2022.
+
+[10]Yasaman Bahri, Ethan Dyer, Jared Kaplan, Jaehoon Lee, and Utkarsh Sharma. Explaining
+     Neural Scaling Laws.Proceedings of the National Academy of Sciences, 121(27):e2311878121,
+     2024.
+
+
+                                                        15
+[11]Jan Hermann, James Spencer, Kenny Choo, Antonio Mezzacapo, W. M. C. Foulkes, David
+     Pfau, Giuseppe Carleo, and Frank Noé. Ab Initio Quantum Chemistry with Neural-Network
+     Wavefunctions.Nature Reviews Chemistry, 7(10):692–709, 2023.
+
+[12]Sam McArdle, Suguru Endo, Alán Aspuru-Guzik, Simon C. Benjamin, and Xiao Yuan. Quan-
+     tum Computational Chemistry.Reviews of Modern Physics, 92(1):015003, 2020.
+
+[13]Taewon D. Kim, Ramón Alain Miranda-Quintana, Michael Richer, and Paul W. Ayers. Flex-
+     ible Ansatz for N-Body Configuration Interaction.Computational and Theoretical Chemistry,
+     1202:113187, 2021.
+
+[14]W. M. C. Foulkes, Lubos Mitas, R. J. Needs, and G. Rajagopal.  Quantum Monte Carlo
+     Simulations of Solids.Reviews of Modern Physics, 73(1):33–83, 2001.
+
+[15]Giuseppe Carleo and Matthias Troyer. Solving the Quantum Many-Body Problem with Arti-
+     ficial Neural Networks.Science, 355(6325):602–606, 2017.
+
+[16]Kenny Choo, Antonio Mezzacapo, and Giuseppe Carleo. Fermionic Neural-Network States for
+     Ab-Initio Electronic Structure.Nature Communications, 11(1):2368, 2020.
+
+[17]Jan Hermann, Zeno Schätzle, and Frank Noé. Deep-Neural-Network Solution of the Electronic
+     Schrödinger Equation.Nature Chemistry, 12(10):891–897, 2020.
+
+[18]Hannah Lange, Anka Van de Walle, Atiye Abedinnia, and Annabelle Bohrdt. From Architec-
+     tures to Applications: A Review of Neural Quantum States.Quantum Science and Technology,
+     9(4):040501, 2024.
+
+[19]Or Sharir, Yoav Levine, Noam Wies, Giuseppe Carleo, and Amnon Shashua. Deep Autoregres-
+     sive Models for the Efficient Variational Simulation of Many-Body Quantum Systems.Physical
+     Review Letters, 124(2):020503, 2020.
+
+[20]Mohamed Hibat-Allah, Martin Ganahl, Lauren E. Hayward, Roger G. Melko, and Juan Car-
+     rasquilla. Recurrent Neural Network Wave Functions.Physical Review Research, 2(2):023358,
+     2020.
+
+[21]Thomas D. Barrett, Aleksei Malyshev, and A. I. Lvovsky.  Autoregressive Neural-Network
+     Wavefunctions for Ab Initio Quantum Chemistry.Nature Machine Intelligence, 4:351–358,
+     2022.
+
+[22]Tianchen Zhao, James Stokes, and Shravan Veerapaneni.  Scalable Neural Quantum States
+     ArchitectureforQuantumChemistry.Machine Learning: Science and Technology, 4(2):025034,
+     2023.
+
+[23]Yuan-Hang Zhang and Massimiliano Di Ventra. Transformer Quantum State: A Multipurpose
+     Model for Quantum Many-Body Problems.Physical Review B, 107(7):075147, 2023.
+
+[24]Luciano Loris Viteritti, Riccardo Rende, and Federico Becca. Transformer Variational Wave
+     Functions for Frustrated Quantum Spin Systems.Physical Review Letters, 130(23):236401,
+     2023.
+
+[25]Kyle Sprague and Stefanie Czischek. Variational Monte Carlo with Large Patched Transform-
+     ers.Communications Physics, 7(1):90, 2024.
+
+
+                                                         16
+[26]Honghui Shang, Chu Guo, Yangjun Wu, Zhenyu Li, and Jinlong Yang. Solving the Many-
+     ElectronSchrödingerEquationwithaTransformer-BasedFramework.Nature Communications,
+     16(1):8464, 2025.
+
+[27]DuJiang, XuelanWen, YixiaoChen, RuichenLi, WeizhongFu, HungQ.Pham, JiChen, DiHe,
+     William A. Goddard, Liwei Wang, and Weiluo Ren. Neural Scaling Laws Surpass Chemical
+     Accuracy for the Many-Electron Schrödinger Equation.arXiv preprint arXiv:2508.02570, 2025.
+
+[28]Oliver Knitter, Dan Zhao, Stefan Leichenauer, and Shravan Veerapaneni.  Large Language
+     Model Scaling Laws for Neural Quantum States in Quantum Chemistry.Machine Learning:
+     Science and Technology, 7(2):025033, 2026.
+
+[29]Riccardo Rende, Alessandro Sinibaldi, Luciano Loris Viteritti, Roeland Wiersema, Antoine
+     Georges, and Giuseppe Carleo.  Scaling Laws for Neural-Network Quantum States.arXiv
+     preprint arXiv:2606.02794, 2026.
+
+[30]Yiming Lu, Sriram Bharadwaj, Dikshant Rathore, and Di Luo. Information-Theoretic Scaling
+     Laws of Neural Quantum States.arXiv preprint arXiv:2603.23468, 2026.
+
+[31]Nicholas Gao and Stephan Günnemann. Ab-Initio Potential Energy Surfaces by Pairing GNNs
+     with Neural Wave Functions. InInternational Conference on Learning Representations, 2022.
+
+[32]Michael Scherbela, Rafael Reisenhofer, Leon Gerard, Philipp Marquetand, and Philipp Grohs.
+     Solving the Electronic Schrödinger Equation for Multiple Nuclear Geometries with Weight-
+     Sharing Deep Neural Networks.Nature Computational Science, 2(5):331–341, 2022.
+
+[33]Yangjun Wu, Chu Guo, Yi Fan, Pengyu Zhou, and Honghui Shang.  NNQS-Transformer:
+     An Efficient and Scalable Neural Network Quantum States Approach for Ab Initio Quantum
+     Chemistry. InProceedings of the International Conference for High Performance Computing,
+     Networking, Storage and Analysis, 2023.
+
+[34]Ethan Perez, Florian Strub, Harm de Vries, Vincent Dumoulin, and Aaron C. Courville. FiLM:
+     VisualReasoningwithaGeneralConditioningLayer. InProceedings of the Thirty-Second AAAI
+     Conference on Artificial Intelligence, pages 3942–3951. AAAI Press, 2018.
+
+[35]XiaohuaZhai, AlexanderKolesnikov, NeilHoulsby, andLucasBeyer. ScalingVisionTransform-
+     ers. InProceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition,
+     pages 12104–12113, 2022.
+
+[36]Qiming Sun, Timothy C. Berkelbach, Nick S. Blunt, George H. Booth, Sheng Guo, Zhendong
+     Li, Junzi Liu, James D. McClain, Elvira R. Sayfutyarova, Sandeep Sharma, Sebastian Wouters,
+     and Garnet Kin-Lic Chan. PySCF: The Python-Based Simulations of Chemistry Framework.
+     WIREs Computational Molecular Science, 8(1):e1340, 2018.
+
+[37]JarrodR.McClean,NicholasC.Rubin,KevinJ.Sung,IanD.Kivlichan,XavierBonet-Monroig,
+     Yudong Cao, Chengyu Dai, E. Schuyler Fried, Craig Gidney, Brendan Gimby, Pranav Gokhale,
+     Thomas Häner, Tarini Hardikar, Vojtěch Havlíček, Oscar Higgott, Cupjin Huang, Josh Izaac,
+     Zhang Jiang, Xinle Liu, Sam McArdle, Matthew Neeley, Thomas O’Brien, Bryan O’Gorman,
+     Isil Ozfidan, Maxwell D. Radin, Jhonathan Romero, Nicolas P. D. Sawaya, Bruno Senjean,
+     Kanav Setia, Sukin Sim, Damian S. Steiger, Mark Steudtner, Qiming Sun, Wei Sun, Daochen
+     Wang, Fang Zhang, and Ryan Babbush. OpenFermion: The Electronic Structure Package for
+     Quantum Computers.Quantum Science and Technology, 5(3):034014, 2020.
+
+                                                        17
+[38]W. J. Hehre, R. F. Stewart, and J. A. Pople. Self-Consistent Molecular-Orbital Methods. I.
+     Use of Gaussian Expansions of Slater-Type Atomic Orbitals.The Journal of Chemical Physics,
+     51(6):2657–2664, 1969.
+
+[39]M. Stone. Cross-Validatory Choice and Assessment of Statistical Predictions.Journal of the
+     Royal Statistical Society: Series B (Methodological), 36(2):111–133, 1974.
+
+[40]David R. Roberts, Volker Bahn, Simone Ciuti, Mark S. Boyce, Jane Elith, Gurutzeta Guillera-
+     Arroita, Severin Hauenstein, José J. Lahoz-Monfort, Boris Schröder, Wilfried Thuiller, David I.
+     Warton, BrendanA.Wintle, FlorianHartig, andCarstenF.Dormann. Cross-ValidationStrate-
+     gies for Data with Temporal, Spatial, Hierarchical, or Phylogenetic Structure.Ecography,
+     40(8):913–929, 2017.
+
+
+
+Author contributions
+
+    W.W. and H.S. conceived the research idea and designed the study. C.Y., H.K., J.W., and L.F.
+developed the neural network, conducted the experiments, and prepared the initial draft. W.W.,
+H.S. and J.Y. provided critical revisions and refined the technical presentation of the manuscript.
+W.W. and H.S. supervised the project. All authors reviewed and approved the final manuscript.
+
+Corresponding authors
+
+    Honghui Shang (shanghui.ustc@gmail.com) and Wenguan Wang (wenguanwang@zju.edu.cn).
+
+Competing interests
+
+    The authors declare no competing interests.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                         18
+               Supplementary Information
+
+               S1  Molecular Hamiltonians and benchmark construction
+                    MolecularHamiltoniansaregeneratedwithintheBorn–OppenheimerapproximationusingPySCF
+               2.1.1[36]andOpenFermion1.5.1[37]. AllsourcemoleculesareneutralanddescribedintheSTO-3G
+               basis [38]. All electrons are retained, with no frozen-core approximation or active-space truncation.
+               Except for O2, the molecules are treated in closed-shell sectors withN    α “N  β. O2 is treated in
+               the tripletM     S“1sector, corresponding topN     α,Nβq“p9,7q. Canonical Hartree–Fock orbitals are
+               retained in PySCF order, and the resulting second-quantized Hamiltonians are mapped to qubits
+               by the Jordan–Wigner transformation. Reference energies are computed in the same orbital spaces.
+               Reference values and their sources are listed in Supplementary TableS1.
+                    The FCI determinant-space size is used to define the reported benchmarks. For a molecule with
+               Mspatial orbitals and spin-resolved electron countspN    α,Nβq, the determinant count is:
+                                                                       ˆM    ˙ˆM     ˙
+                                                              Ndet“      Nα      Nβ    .                              (S1)
+
+               The molecules used in the reported analyses are ordered byN   det and assigned to two contiguous
+               groups of six molecules, denoted Easy and Hard.
+                    The source Hamiltonians are generated once and reused across all model sizes and seeds. The
+               held-out N2 target uses a bond length of 1.0784 Å, with the two nuclei placed symmetrically about
+               the origin, and is absent from all source-pretraining inputs and model-selection runs.
+
+               Supplementary Table S1: Molecular Hamiltonians and reference energies.All energies are in Hartree and
+               the reference energies are obtained from FCI.N det denotes the size of the spin-resolved FCI determinant space in the
+               STO-3G basis. Cartesian coordinates are provided in Supplementary Data 1.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+               S2  Conditional network architecture
+                    The autoregressive amplitude–phase factorization and the integration of the molecular condition
+Benchmark  MoleculepN        α,Nβq Orbitals  QubitsN           det      Eref (Ha)are detailed in Methods Sections4.2and4.4. In this section, we describe the implementation details
+               common to all models evaluated in this study.H2O    p5,5q         7      14      441   -75.0063982800
+                O2      p9,7q        10      20    1,200  -147.7216652678
+Easy            NH3     p5,5q         8      16    3,136   -55.515142568519
+                CH4     p5,5q         9      18   15,876   -39.8045269353
+                NOH  p8,8q        11      22   27,225  -128.2169318028
+                C2      p6,6q        10      20   44,100   -74.6907819191
+                H2O2    p9,9q        12      24   48,400  -148.8551873571
+                HCN  p7,7q        11      22  108,900   -91.8335485935
+Hard            H2CO  p8,8q        12      24  245,025  -112.3877360240
+                N2H2    p8,8q        12      24  245,025  -108.6987774392
+                NOH3    p9,9q        13      26  511,225  -129.3602760342
+                C2H2    p7,7q        12      24  627,264   -76.0247473113
+TransferN               2      p7,7q        10      20   14,400  -107.6402331522
+    The amplitude network employs a decoder-only causal Transformer architecture with pre-layer
+normalization. Each Transformer block consists of a four-head self-attention mechanism followed
+by a GELU feed-forward network of width4d, utilizing residual connections around both sublayers
+without dropout. The phase network is implemented as a multilayer perceptron (MLP) featuring
+four hidden layers with ReLU activations, which processes the entire occupation sequence.  To
+strictly preserve the targetN     α andN   β sectors during autoregressive sampling, invalid occupation
+tokens are explicitly masked prior to normalization.
+    TheamplitudeandphasepathwaysshareacommongeometryencoderandHamiltonianencoder,
+whose parameters are jointly used by both pathways.  Within the amplitude network, FiLM is
+applied after each Transformer block. In the phase network, FiLM is applied after each hidden
+linear layer of the MLP.
+
+S3  VMC sampling and optimization
+    Here, we provide additional details of the gradient estimator and adaptive sampling procedure.
+For each molecule, the energy gradient is estimated with the standard VMC estimator:
+
+                          ∇θEm“2 ReE        v„p  θ,mrpE   loc,m pvq´E   mq∇ θ log Ψ˚θ,mpvqs,              (S2)
+
+whereθdenotes the variational parameters,vis an occupation configuration sampled from the Born
+distributionp          θ,mpvq“|Ψ  θ,mpvq|    2, andE   m is the corresponding variational energy for moleculem.
+The local energyE             loc,m pvqis defined in Eq. (7), the superscript    ˚ denotes complex conjugation, and
+Retakes the real part. For multi-molecule pretraining, the per-molecule gradients are combined
+with equal weight, consistent with the objectiveJ  D defined in Eq. (13).
+    Both the pretraining and fine-tuning stages employ the optimizer, learning rate, and numeri-
+cal precision detailed in TableS2, utilizing a constant learning-rate schedule. Furthermore, these
+optimization configurations are maintained consistently across the entire evaluated model grid.
+
+Supplementary Table S2: NNQS optimization settings for source pretraining and N2 fine-tuning.Both
+stages use AdamW with a constant learning-rate schedule and FP32 precision. The two stages differ primarily in the
+target number of unique sampled configurations and the total number of optimization steps.
+
+            Setting                  Source pretraining            N2 fine-tuning
+            Optimizer               AdamW                     AdamW
+            Learning rate               3ˆ10     ´4                                       3ˆ10  ´4
+            β1,β2            p0.9,0.99q            p0.9,0.99q
+            Epsilon                   10     ´9                                             10´9
+            Schedule                Constant                    Constant
+            Precision                fp32                        fp32
+            Sampling target        10            2–10  4 unique                10             4 unique
+            Optimization steps       50,000                       10,000
+
+    Whenevaluatingtheenergyandgradientestimators, repeatedterminalconfigurationsarestored
+and evaluated only once, with their integer multiplicities retained as Monte Carlo weights. This
+avoids redundant computation while preserving the same energy and gradient estimates as explicitly
+retaining every sampled copy.
+    During source pretraining, the nominal number of sampling draws is adapted according to the
+number of unique terminal configurations obtained in the preceding sampling call. If this number
+falls below the target range, the draw count is multiplied by 1.3; if it exceeds the target range, the
+
+                                                            20
+draw count is divided by 1.3. The adjusted value is then used to initialize the next sampling call.
+For N2 fine-tuning, the nominal draw count is adjusted analogously using a factor of 1.2.
+
+S4  Power-law formulation and evaluation
+    In this section, we formalize the separable and interaction power laws and evaluate them against
+a more flexible quadratic log-response surface. The Easy and Hard benchmarks are fitted indepen-
+dently. Each fit uses the complete grid of eight model sizes and five optimization milestones, giving
+n“40observations per benchmark. For observationi, we define the dimensionless log-error and
+the two normalized log-resources as:
+
+                        yi“logp       LDpP i,Siq1 mHa q,   x i“logp    PiPrefq,   z i“logp    SiSrefq,             (S3)
+
+whereP            ref “10    6 parameters andS       ref “10    4 optimization steps.  We compare three candidate
+models:
+                          separable:py          i“c    0´ax  i´bz  i,
+                         interaction:py         i“c    0´ax  i´bz  i´ηx  izi,
+                          quadratic:    py i“c    0`c    1xi`c    2zi`c    3x2i `c    4xizi`c    5z2i.             (S4)
+The separable model assumes additive effects of model size and optimization steps in log space. The
+interaction model adds the single cross termx    izi, allowing the effect of one resource to depend on
+the other. The quadratic model is more flexible because it additionally allows curvature along both
+resource axes; no sign constraints are imposed on its coefficients.
+    Having specified the three candidate response surfaces, we estimate their coefficients separately
+for each benchmark by ordinary least squares in log space. For a candidate modelM, the fitted
+coefficients minimize the residual sum of squares (RSS):
+
+                                                            nÿ
+                                               RSSM “          py i´py   i,Mq2.                            (S5)
+                                                           i“1
+Here,y     i´pyi,M is the log-space residual for observationi, namely the difference between the observed
+and predicted log-errors. Equivalently, it is the logarithm of the ratio between the observed and
+predicted energy errors. A smaller RSS therefore indicates closer agreement with the measured grid.
+    To assess and compare the adequacy of these three candidate response surfaces, we use three
+complementary criteria: log-spaceR                 2 for in-sample agreement, AICc for the trade-off between fit
+quality and model complexity, and grouped cross-validation for held-out predictive performance.
+    The in-sample goodness-of-fit, measured relative to a mean-only baseline, is captured by the
+log-space coefficient of determination:
+                                                                                      nÿ
+                                  R2log,M  “1´            RSSMřn yq  2,     y“   1n      yi.                   (S6)
+                                                      i“1 py i´                      i“1
+A largerR            2log indicates closer in-sample agreement. However, adding coefficients cannot reduce the
+best attainableR                    2log, so this statistic alone may favor an unnecessarily flexible model.
+    We therefore next use the small-sample corrected Akaike information criterion (AICc) to balance
+fit quality against model complexity. Under the Gaussian log-residual model used with ordinary
+least squares, and omitting an additive constant common to all candidates:
+
+                                AICcM “nlogp          RSSMn  q`2k   M` 2k Mpk M`1qn´k   M´1  ,                  (S7)
+
+
+                                                             21
+wherek     M denotes the total number of estimated parameters, comprising both the regression coeffi-
+cients and the fitted residual variance. Accordingly,k M “4,5, and7for the separable, interaction,
+and quadratic models, respectively. A lower AICc value indicates a better trade-off between in-
+sample fit and model complexity. Note that AICc differences are only meaningful when comparing
+models fitted to the same benchmark.
+    Although AICc penalizes additional parameters, it is still calculated from the same observations
+used to fit each model. As a complementary test of predictive robustness, we therefore use grouped
+cross-validation along the two resource axes [39,40]. CV-P evaluates prediction at an excluded
+model size, whereas CV-S evaluates prediction at an excluded optimization milestone. Both are
+reported as root-mean-square errors in natural-log units, with lower values indicating better held-
+out prediction. Specifically, for candidate modelM,
+                                                             nÿ
+                                         CV-P    M “r 1n       py i´ py p´P  iqi,M q2s1{2 ,
+                                                           i“1                                                            (S8)
+                                                             nÿ
+                                          CV-S    M “r 1n      py i´ pyp´S  iqi,M q2s1{2 .
+                                                           i“1
+Here, pyp´P  iqi,M  is the prediction for observationifrom a model fitted after excluding all observations
+at model sizeP   i; pyp´S  iqi,M  is defined analogously by excluding optimization milestoneS        i.
+    As shown in TableS3, the interaction power law is preferred by AICc for both benchmarks.
+Relative to the separable model, it also improves held-out prediction along both the model-size
+and optimization-step axes. The more flexible quadratic response surface achieves slightly higher
+in-sampleR                   2log, but is disfavored by AICc and shows substantially larger CV-P errors. The fitted
+interaction is stronger for Easy than for Hard, withη“0.3777and0.1325, respectively (Supple-
+mentary TableS4). Because multiple milestones are obtained from the same training trajectory,
+these comparisons are interpreted descriptively.
+
+Supplementary Table S3: Comparison of candidate joint scaling models for the Easy and Hard bench-
+marks.The separable power law, interaction power law, and quadratic log-response surface are evaluated using
+the log-space coefficient of determinationR                            2log, the small-sample corrected Akaike information criterion (AICc), and
+grouped cross-validation. HigherR             2log indicates better in-sample agreement, whereas lower AICc indicates a better
+trade-off between fit quality and model complexity. CV-P and CV-S report root-mean-square prediction errors in
+natural-log units when each model size or optimization milestone, respectively, is held out in turn; lower values indi-
+cate better held-out predictive performance.
+
+                   Benchmark  Model           R      2log    AICc  CV-P  CV-S
+                   Easy        Separable power law   0.737   -35.09   0.709  0.636
+                   Easy        Interaction power law  0.829   -49.70   0.629  0.478
+                   Easy        Quadratic log surface  0.837   -45.82   0.762  0.484
+                   Hard        Separable power law   0.912   -96.14   0.351  0.287
+                   Hard        Interaction power law  0.930  -102.36   0.325  0.250
+                   Hard        Quadratic log surface  0.935   -99.82   0.485  0.245
+
+    Finally, the one-axis exponents shown in Fig.2are obtained from separate regressions at fixed
+values of the complementary resource:
+                    y“c   j´ rα PpS jqx at fixedS      j,   y“d   k´ rα SpP kqz at fixedP      k.         (S9)
+These slice-wise exponents are descriptive estimates obtained independently of the joint interaction
+fit and should not be interpreted as coefficients of the interaction model.
+
+                                                              22
+Supplementary Table S4: Fitted coefficients of the interaction scaling model for the Easy and Hard
+benchmarks.Coefficients correspond to Eq. (1), with reference scalesP                                  ref “10    6 parameters andS       ref “10    4
+optimization steps.L           0 denotes the fitted energy error at the reference scales,aandbquantify the model-size
+and optimization-step dependences, respectively, andηmeasures their coupling.R                            2log reports the coefficient of
+determination in log space.
+
+                          BenchmarkL             0 (mHa) a     b     η  R             2log
+                          Easy            17.56  0.0618   1.164  0.3777  0.829
+                          Hard            13.66  0.3367  0.7826  0.1325  0.930
+
+
+S5  Compute-proxy decomposition
+    In this section, we explain how the compute proxy in Eq. (15) of Methods Section4.6is con-
+structed and converted to EFLOP-proxy units. By combining the cost of processing the sampled
+configurations, denoted byΩpP,Sq, with the cost of updatingPmodel parameters acrossSopti-
+mization steps, we obtain the total compute:
+
+                    CpP,Sq“ 6PˆΩpP,Sq looooooomooooooon  `  2PˆΩpP,Sqlooooooomooooooon  ` 12PˆSlooomooon    .        (S10)
+                                  forward and backward      autoregressive sampling        AdamW updates
+
+The coefficients follow a simple operation-counting convention,i.e., one multiplication and one accu-
+mulation. A forward evaluation is approximated as2Poperations per token, and the backward pass
+adds approximately4P, giving the coefficient6for a gradient-bearing evaluation. Autoregressive
+sampling requires a separate forward pass without gradient tracking to generate the conditional to-
+ken probabilities, contributing the coefficient2. The first-moment update, second-moment update,
+and parameter update in AdamW are approximated together as12Poperations per training step.
+
+S6  Pareto-frontier fitting
+    In this section, we explain how the empirical error-compute Pareto frontier is constructed and
+fitted. For each benchmark, we compare the compute and error of all evaluated model-milestone
+configurations. A configuration is excluded if another evaluated configuration uses no more compute
+and achieves no larger error, with at least one of these quantities being strictly smaller.  The
+remaining non-dominated configurations form the empirical Pareto frontier.
+    To quantify how quickly the frontier error decreases with compute, we fit the Pareto points in
+log–log space. For Pareto pointi, we define the log compute and dimensionless log error as:
+
+                                          yi“logp          Li1 mHaq,   u i“logC    i.                       (S11)
+
+whereC     i is the compute proxy andL   i is the measured benchmark error. To this end, we compare
+three candidate curves:
+
+                                single power:    py i“a´bu    i,
+                               quadratic log: py    i“a`bu    i`du    2i,#
+                              broken power:  py   i“            a´b  ăpu i´u  cq,  u iďu  c,
+                                                                a´b  ąpu i´u  cq,  u iąu  c,                (S12)
+
+where py i is the fitted value ofy  i, anda,b, anddare estimated coefficients. The parameteru                   c is the
+change point, withb   ă andb   ą denoting the slopes below and above it.
+
+                                                               23
+    Each candidate curve is fitted to the measured Pareto points by least squares in log space. We
+compare the three curves using AICc, defined in Eq. (S7); a lower AICc indicates a better balance
+betweenfittingthedataandavoidingunnecessaryparameters. UnliketheanalysisinSupplementary
+SectionS4,whichusesthecompleteP–Sgridtostudythejointeffectsofmodelsizeandoptimization
+step, this analysis uses only the Pareto points and asks how the lowest measured error changes with
+total compute. The fitted frontier curves serve solely to summarize the observed trend. As shown
+in TableS5, the single-power curve is preferred by AICc for the Easy benchmark, whereas the Hard
+benchmark is best characterized by the broken-power curve.
+
+Supplementary Table S5: Pareto-frontier model comparison by AICc.Lower values indicate the preferred
+model for each benchmark, with the best-performing model highlighted in bold.
+
+              Benchmark  Pareto Points              Single Power  Quadratic Log  Broken Power
+                  Easy          18                      ´27.03   ´24.12    ´21.25
+                  Hard          21                      ´42.17    ´60.61    ´69.74
+
+    Let rCdenote the estimated computational cost, measured in EFLOP, and let  pL˚prCqdenote the
+fitted error along the Pareto frontier. For the Easy benchmark, the single-power model is expressed
+as:
+                                          pL˚EasyprCq“3.44p        rC0.01 q´0.512     mHa.                       (S13)
+
+For the Hard benchmark, the corresponding broken-power model is formulated as:
+                                                       $’’&
+                            pL˚HardprCq“6.84 mHa          p   rC0.00886 q´1.062  ,  rCď0.00886,                        (S14)
+                                                       ’’%p   rC
+                                                           0.00886 q´0.367  ,  rCą0.00886.
+
+S7  Transfer initialization and evaluation
+    In this section, we first specify the initialization for fine-tuning. We retain all pretrained weights
+with matching names and shapes, except for the phase network and amplitude output head, which
+are reinitialized.  If the sequence lengths differ, the shared prefix of the position embeddings is
+copied. All optimization and training states are reset prior to the target runs.
+    We then provide a more detailed analysis of the experiments presented in Section2.3, further
+assessing whether the favorable model-size trend observed during source pretraining persists after
+fine-tuning on the held-out target. For each initialization, we fit:
+
+                                                   pLpPq“Ap      P106q´α ,                              (S15)
+
+wherePis the number of trainable parameters,Ais the fitted error at one million parameters and
+αdescribes the model-size trend. A positiveαindicates decreasing error with model size, whereas
+a negativeαindicates the opposite fitted direction.
+    The Easy- and Hard-pretrained runs yieldα“0.259and0.447, respectively, showing decreasing
+target error with model size; the larger Hard-pretrained exponent indicates a steeper decrease. The
+scratch fit yieldsα“ ´0.272, but its low fit quality (R                       2log “0.294) does not support a stable
+reverse-scaling trend. Instead, the scratch results show no clear decrease in error with model size
+under the fixed fine-tuning budget. These fits are based on independently selected runs drawn from
+equal candidate pools.
+
+                                                             24
+Supplementary Table S6: Descriptive N2 parameter-scaling fits.Parameters correspond to Eq. (S15), with
+Areported in mHa.
+
+                                  InitializationA(mHa)  α  R                                     2log
+                                  Easy pretrained      0.726   0.259  0.607
+                                  Hard pretrained      0.457   0.447  0.868
+                                  Scratch              8.23  -0.272  0.294
+
+
+S8  Conditional parameter scaling across optimization milestones
+    Supplementary Fig.S1summarizes the benchmark-level dependence of MAE on model size at
+each optimization milestone. The fitted decrease becomes steeper with continued optimization on
+both benchmarks, whereas Easy retains greater variation among individual model scales.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Supplementary Figure S1: Benchmark-level parameter scaling across optimization milestones.The
+equally weighted mean absolute energy error (MAE, mHa) across molecules is plotted against the number of trainable
+model parameters for the Easy (left) and Hard (right) benchmarks. Colors denote cumulative optimization milestones
+from10Kto50Koptimizationsteps. Pointsshowtheevaluatedmodelsizes,anddashedlinesshowseparatedescriptive
+power-law fits at each fixed milestone. Both axes are logarithmic, and the fitted lines summarize only the measured
+parameter range.
+
+    At 10K and 20K steps, Hard already shows decreasing fitted trends across its constituent
+molecules (Supplementary Fig.S2).  Easy is more heterogeneous, with weak or non-monotonic
+molecule-level responses superimposed on the benchmark-level trend.
+    By 30K steps, decreasing fitted trends are visible for most molecules in both benchmarks, al-
+though isolated departures from monotonicity remain. The aggregate capacity trend therefore does
+not require identical checkpoint ordering for every molecule.
+    The 40K- and 50K-update profiles show the clearest molecule-level capacity trends within the
+evaluated range. Residual scatter remains molecule dependent, so these lines are descriptive finite-
+range fits rather than universal scaling laws.
+
+
+
+
+
+
+
+
+
+                                                             25
+Supplementary Figure S2: Molecule-resolved parameter scaling across pretraining stages.Molecule-
+level MAE is plotted against the number of trainable model parameters for the six molecules in the Easy (left) and
+Hard (right) benchmarks at different pretraining stages. From top to bottom, the rows correspond to 10K, 20K,
+30K, 40K, and 50K optimization steps. Symbols and colors identify individual molecules. Dashed lines show separate
+descriptive power-law fits for each molecule at each pretraining stage over the evaluated model sizes.
+
+
+
+                                                                   26
+S9  Ablation of the physics-conditioned autoregressive NNQS
+
+
+Supplementary Table S7:Ablation of conditioning in the physics-conditioned autoregressive NNQS on the Easy
+benchmark. Values are mean absolute energy errors (mHa) over six molecules, averaged over the 1,000-update window
+ending at each optimization milestone. The last column reports the absolute error increase and degradation factor
+after removing conditioning at 50K steps. The ablation uses the four-block models with amplitude widths of 32, 64,
+128, and 256.
+
+
+Width     Encoding                       MAE (mHa)Ó                             50K degradation
+                                  10K       20K       30K       40K       50K
+
+  32      with        21.406       15.796       13.488       12.211       10.908     –without       75.815     74.940     74.948     74.713     74.498     +63.590 (6.83ˆ)
+
+  64      with        24.606       14.757       12.499         7.735         6.943       –without       75.572     74.420     74.050     73.796     73.709     +66.766 (10.62ˆ)
+
+ 128      with        19.826         5.969         3.216         2.917         2.425       –without       73.837     73.507     73.299     73.232     73.182     +70.757 (30.18ˆ)
+
+ 256      with        16.285       10.225         7.832         1.896         1.645       –without       73.271     72.795     72.533     72.488     72.452     +70.807 (44.04ˆ)
+
+
+Mean     with        20.531       11.687         9.259         6.190         5.480       –without       74.624     73.915     73.708     73.557     73.460     +67.980 (13.41ˆ)
+
+
+    As shown in TableS7, removing conditioning from the physics-conditioned autoregressive NNQS
+consistently increases the mean absolute energy error across all model widths and optimization
+checkpoints. At 50K steps, the error increases from 10.908 to 74.498 mHa for the width-32 model
+and from 1.645 to 72.452 mHa for the width-256 model, corresponding to degradation factors of
+6.83ˆand44.04ˆ, respectively. Averaged across the four model widths, the final error increases
+from 5.480 to 73.460 mHa, representing a13.41ˆdegradation. Notably, the ablated models remain
+at approximately 72–75 mHa throughout optimization, whereas the physics-conditioned autore-
+gressive NNQSs exhibit substantial and sustained error reduction.  This contrast highlights the
+importance of the combined physics-conditioning pathway in the shared multi-molecule setting. By
+encoding molecular geometry and Hamiltonian information into a molecule-specific condition and
+injecting it into the neural ansatz, the model can adapt its predicted wave-function amplitudes
+and phases to different molecular Hamiltonians while retaining shared network parameters. With-
+out this conditioning, the occupation sequence alone is insufficient to distinguish the molecular
+problem, substantially limiting effective optimization across multiple molecules.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                             27

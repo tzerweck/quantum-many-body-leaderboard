@@ -37,18 +37,21 @@ Does enforcing the Hamiltonian's own symmetries on the ansatz — momentum, poin
 spin parity, SU(2), the Marshall sign — actually win records? The table can answer that
 for itself, which beats any single paper's ablation.
 
-| ansatz | records (all) | records (contested) | head-to-head |
+| ansatz | records (all) | records (contested) | records where both kinds were tried |
 |---|---:|---:|---:|
 | explicit symmetry projection | 39 | 7 | 7 |
 | no explicit projection | 143 | 28 | 7 |
 
-**Head-to-head is the column that means something**: 14 instances have both kinds of ansatz
-competing, so the record there was won against the other kind rather than by default.
-It is currently **7–7** — a dead heat.
+**The last column is the one that means anything**: on 14 instances both a symmetrised and an
+unsymmetrised ansatz have been published, so the record was taken with the alternative
+already on the table. It stands at **7–7**.
 
-Read it as a hint rather than a result. Symmetrised ansätze are also, on average, the
-newer and more heavily optimised ones, so this does not isolate the projection itself.
-It does say that symmetrising is not the free win it is sometimes assumed to be.
+It is deliberately *not* called a head-to-head, because nothing here is a controlled
+comparison: the two kinds were run at different times, by different groups, at wildly
+different levels of effort, and often on different hardware. Symmetrised ansätze also
+tend to be the newer and more heavily optimised ones. So read an even split as evidence
+that symmetrising is not the free win it is sometimes assumed to be — not as a measured
+effect size for the projection itself.
 
 ## The records that have stood longest
 
@@ -126,30 +129,39 @@ first family that matches, in the order listed above.
 nationality** — a Chinese researcher at ETH counts here as Switzerland, and a paper
 with twelve authors across four countries counts once, for the first author.
 
-Computed over **68 of 182 records**. Of the rest, 96 cite a run script rather than a
-paper and have no author at all, and 18 name a paper whose affiliation we could not resolve.
+Of the 182 records, **96 are VarBench's own baseline runs** — their only reference is a
+run script in `varbench/methods`, so the number came from the benchmark collaboration
+rather than from an independent paper. Those are excluded below and counted separately:
+the [VarBench paper](https://doi.org/10.1126/science.adg9774) has 33 authors across 8 countries, and filing all of them under
+its first author's institution would put half this table in one country on the strength
+of an author-list ordering.
+
+That leaves **86 records from independent papers, of which 86 resolve to a country** and
+0 do not.
 
 | country | records | first-author institutions |
 |---|---:|---|
+| US | 24 | Department of Physics and Astronomy; The University of Texas at Austin… |
 | IT | 22 | Scuola Internazionale Superiore di Studi Avanzati |
-| US | 16 | Department of Physics and Astronomy; The University of Texas at Austin… |
 | AT | 12 | Graz University of Technology |
-| CH | 6 | University of Zurich |
+| CH | 10 | University of Zurich; Institute of Physics |
+| JP | 5 | Waseda Research Institute for Science and Engineering; RIKEN Center fo… |
+| CA | 5 | Vector Institute; University of Waterloo |
 | CN | 4 | State Key Laboratory of General Artificial Intelligence; Beijing Natio… |
 | FR | 2 | CPHT |
-| CA | 2 | University of Waterloo |
-| JP | 2 | RIKEN Center for Emergent Matter Science |
 | DE | 1 | University of Augsburg |
 | BE | 1 | Ghent University |
+| *VarBench collaboration* | *96* | *33 authors, 8 countries — not attributed to one* |
 
-For the record, since someone will ask: **US 16, China 4.** Resist reading a trend
-into it. The counts are dominated by instances settled years ago, and the coverage gap
-above is not random — the unresolved sources skew heavily towards recent preprints,
-which is exactly where the newest groups publish first. What the table does show is
-that the current frontier records on 10×10, 16×16 and 20×20 J1-J2, and on 4×16 Hubbard,
-are held by groups at the Chinese Academy of Sciences and Peking University — and that
-none of those four appear in a by-country view built from bibliographic metadata alone,
-because none of those preprints carries an affiliation in it.
+Since someone will ask: **US 24, China 4.** Two reasons not to read a trend into that.
+
+First, the counts are dominated by instances settled years ago; a record from 2017 and a
+record taken last month weigh the same here. Second, a country total says nothing about
+*which* records are held. The frontier instances in the README — 10×10, 16×16 and 20×20
+J1-J2, and 4×16 Hubbard — are currently held by groups at the Chinese Academy of Sciences
+and Peking University, and every one of those papers is a preprint that carries no
+affiliation in any bibliographic database. They are in the table above only because
+`scripts/affiliations_local.mjs` reads the affiliation off the paper itself.
 
 ---
 

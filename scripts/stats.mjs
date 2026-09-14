@@ -62,8 +62,10 @@ for (const i of instances) {
   symTable.all[isSym ? "sym" : "plain"]++;
   if (i.rows.length < CONTESTED) continue;
   symTable.contested[isSym ? "sym" : "plain"]++;
-  // Head-to-head is the only column that isolates anything: both kinds of ansatz are
-  // present on the instance, so the record was actually won against the other kind.
+  // The only column that isolates anything: both kinds of ansatz have been published on
+  // this instance, so the record was taken with the alternative on the table. Not a
+  // head-to-head - nobody ran a controlled comparison, the two kinds simply both exist
+  // here, at different times, by different groups, at different levels of effort.
   const rows = variationalRows(i);
   if (rows.some(r => SYMM.test(r.method)) && rows.some(r => !SYMM.test(r.method)))
     symTable.headToHead[isSym ? "sym" : "plain"]++;
@@ -73,17 +75,20 @@ const h2h = symTable.headToHead.sym + symTable.headToHead.plain;
 p("Does enforcing the Hamiltonian's own symmetries on the ansatz — momentum, point group,");
 p("spin parity, SU(2), the Marshall sign — actually win records? The table can answer that");
 p("for itself, which beats any single paper's ablation.", "");
-p("| ansatz | records (all) | records (contested) | head-to-head |");
+p("| ansatz | records (all) | records (contested) | records where both kinds were tried |");
 p("|---|---:|---:|---:|");
 p(`| explicit symmetry projection | ${symTable.all.sym} | ${symTable.contested.sym} | ${symTable.headToHead.sym} |`);
 p(`| no explicit projection | ${symTable.all.plain} | ${symTable.contested.plain} | ${symTable.headToHead.plain} |`);
 p("");
-p(`**Head-to-head is the column that means something**: ${h2h} instances have both kinds of ansatz`);
-p("competing, so the record there was won against the other kind rather than by default.");
-p(`It is currently **${symTable.headToHead.sym}–${symTable.headToHead.plain}** — a dead heat.`, "");
-p("Read it as a hint rather than a result. Symmetrised ansätze are also, on average, the");
-p("newer and more heavily optimised ones, so this does not isolate the projection itself.");
-p("It does say that symmetrising is not the free win it is sometimes assumed to be.", "");
+p(`**The last column is the one that means anything**: on ${h2h} instances both a symmetrised and an`);
+p("unsymmetrised ansatz have been published, so the record was taken with the alternative");
+p(`already on the table. It stands at **${symTable.headToHead.sym}–${symTable.headToHead.plain}**.`, "");
+p("It is deliberately *not* called a head-to-head, because nothing here is a controlled");
+p("comparison: the two kinds were run at different times, by different groups, at wildly");
+p("different levels of effort, and often on different hardware. Symmetrised ansätze also");
+p("tend to be the newer and more heavily optimised ones. So read an even split as evidence");
+p("that symmetrising is not the free win it is sometimes assumed to be — not as a measured");
+p("effect size for the projection itself.", "");
 
 // --------------------------------------------------------------- oldest records
 p("## The records that have stood longest", "");
@@ -196,13 +201,19 @@ p("## Records held by country", "");
 p("**This is the country of the first author's institution, which is not anyone's");
 p("nationality** — a Chinese researcher at ETH counts here as Switzerland, and a paper");
 p("with twelve authors across four countries counts once, for the first author.", "");
+// Rows whose only reference is a varbench/methods run script are not unattributed: the
+// number was produced by the VarBench collaboration and its citable source is the
+// Science paper. But that paper has 33 authors across 8 countries, so filing all of
+// them under its first author's institution would put ~half the table in one country
+// on the strength of an author-list ordering. They get their own line instead.
+const isVarbenchBaseline = r => /github\.com\/varbench\/methods/.test(r.reference || "");
 const cc = {}, byCountryInst = {};
-let ccKnown = 0, ccNoPaper = 0, ccNoAffil = 0;
+let ccKnown = 0, ccBaseline = 0, ccNoAffil = 0;
 for (const i of instances) {
   const rec = recordOf(i);
   if (!rec) continue;
   const s = sourceOf(rec, cache);
-  if (!s) { ccNoPaper++; continue; }
+  if (!s) { if (isVarbenchBaseline(rec)) ccBaseline++; else ccNoAffil++; continue; }
   const country = s.first_author_institution_country;
   if (!country) { ccNoAffil++; continue; }
   ccKnown++;
@@ -210,23 +221,32 @@ for (const i of instances) {
   if (s.first_author_institution)
     (byCountryInst[country] ||= new Set()).add(s.first_author_institution.split(",")[0].trim());
 }
-p(`Computed over **${ccKnown} of ${nRec} records**. Of the rest, ${ccNoPaper} cite a run script rather than a`);
-p(`paper and have no author at all, and ${ccNoAffil} name a paper whose affiliation we could not resolve.`, "");
+const independent = ccKnown + ccNoAffil;
+p(`Of the ${nRec} records, **${ccBaseline} are VarBench's own baseline runs** — their only reference is a`);
+p("run script in `varbench/methods`, so the number came from the benchmark collaboration");
+p("rather than from an independent paper. Those are excluded below and counted separately:");
+p("the [VarBench paper](https://doi.org/10.1126/science.adg9774) has 33 authors across 8 countries, and filing all of them under");
+p("its first author's institution would put half this table in one country on the strength");
+p("of an author-list ordering.", "");
+p(`That leaves **${independent} records from independent papers, of which ${ccKnown} resolve to a country** and`);
+p(`${ccNoAffil} do not.`, "");
 p("| country | records | first-author institutions |");
 p("|---|---:|---|");
 for (const [k, v] of Object.entries(cc).sort((a, b) => b[1] - a[1])) {
   const names = [...(byCountryInst[k] || [])].slice(0, 3).join("; ");
   p(`| ${k} | ${v} | ${names.slice(0, 70)}${names.length > 70 ? "…" : ""} |`);
 }
+// Same table, no blank line: a gap here ends the table and leaves this row as stray text.
+p(`| *VarBench collaboration* | *${ccBaseline}* | *33 authors, 8 countries — not attributed to one* |`);
 p("");
-p(`For the record, since someone will ask: **US ${cc.US || 0}, China ${cc.CN || 0}.** Resist reading a trend`);
-p("into it. The counts are dominated by instances settled years ago, and the coverage gap");
-p("above is not random — the unresolved sources skew heavily towards recent preprints,");
-p("which is exactly where the newest groups publish first. What the table does show is");
-p("that the current frontier records on 10×10, 16×16 and 20×20 J1-J2, and on 4×16 Hubbard,");
-p("are held by groups at the Chinese Academy of Sciences and Peking University — and that");
-p("none of those four appear in a by-country view built from bibliographic metadata alone,");
-p("because none of those preprints carries an affiliation in it.", "");
+p(`Since someone will ask: **US ${cc.US || 0}, China ${cc.CN || 0}.** Two reasons not to read a trend into that.`, "");
+p("First, the counts are dominated by instances settled years ago; a record from 2017 and a");
+p("record taken last month weigh the same here. Second, a country total says nothing about");
+p("*which* records are held. The frontier instances in the README — 10×10, 16×16 and 20×20");
+p("J1-J2, and 4×16 Hubbard — are currently held by groups at the Chinese Academy of Sciences");
+p("and Peking University, and every one of those papers is a preprint that carries no");
+p("affiliation in any bibliographic database. They are in the table above only because");
+p("`scripts/affiliations_local.mjs` reads the affiliation off the paper itself.", "");
 
 p("---", "");
 p("Affiliations come from OpenAlex where it has them, and otherwise from the author block");
