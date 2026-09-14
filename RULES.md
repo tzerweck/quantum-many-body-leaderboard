@@ -125,10 +125,11 @@ the energy. Rows therefore record the venue, and a physics-numerics venue outran
 when the two disagree.
 
 Case: arXiv:2607.00398 (conference proceedings) claims -0.49782(3) on 10x10 J1-J2, described in
-its own abstract as "statistically consistent with the variational state of the art". It is
-1.05e-4 *below* the zero-variance extrapolated ground state and 1.3e-4 below the best
-variational energy - impossible for a variational method - and the same paper is 1.1e-3 below
-the field on 8x8. Both rows are listed and flagged `below-established-ground-state`.
+its own abstract as "statistically consistent with the variational state of the art". It is 1.3e-4
+below the best variational energy, i.e. an unclaimed record, and on 8x8 it beats the field by
+1.1e-3 while reporting a variance 6x-14x worse - the contradiction in 9.3. Both rows are listed
+and flagged `energy-variance-inconsistent`. Note what is *not* claimed: there is no exact
+reference at either size, so nothing here is proof of error, only grounds for objection.
 
 ## 9. Validation
 
@@ -136,10 +137,13 @@ the field on 8x8. Both rows are listed and flagged `below-established-ground-sta
 
 1. `dof` and `einf` against the instance definition (§5).
 2. The V-score recomputed from the row's own energy, variance, dof and einf.
-3. **Comparison against the best published value.** A row far below the field on a
-   well-studied instance is flagged even where no exact reference exists. The check above
-   cannot fire at 10x10 J1-J2, because there is no ED row to compare against - which is
-   exactly where a wrong number does the most damage.
+3. **Energy against the row's own variance.** Where a row reports both, the V-score must be
+   consistent with the energy: a state further from an eigenstate cannot also be lower in
+   energy. This is the check that works where **no exact reference exists at all** - ED for
+   frustrated 2D models reaches roughly 6x6, so 8x8 and 10x10 J1-J2 have no exact row and
+   never will. Being lower than an *extrapolated* ground state proves nothing on its own,
+   since the extrapolation may carry systematic error; being lower than the field while
+   reporting a worse variance is an internal contradiction.
 4. **The variational principle**: no `variational` row may sit below an `exact` row in the
    same instance. Sector-resolved ED rows are excluded, since an unconstrained state may
    legitimately sit below the lowest state of one sector. A violation counts only past

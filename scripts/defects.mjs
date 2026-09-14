@@ -28,18 +28,18 @@ export const DEFECTS = [
 
 DEFECTS.push(
   { match:{instance:"J1J2/square_100_P_0.5", method:"Holographic Quantum Transformer (HQT), zero-shot 8x8->10x10 transfer"},
-    flag:"below-established-ground-state",
-    finding:"-0.49782(3) is 1.05e-4 below the best zero-variance extrapolated ground state, -0.497715(9), and 1.3e-4 below the best variational energy. The paper calls it 'statistically consistent with the variational state of the art'; it is lower by ~4 sigma of its own error bar." },
+    flag:"energy-variance-inconsistent",
+    finding:"Claimed 1.3e-4 below the best variational energy (CNN-MPS) while the paper itself calls the number 'statistically consistent with the variational state of the art' - it is lower by ~4x its own stated error bar, so if real it is an unclaimed record. There is NO exact reference at 10x10 (ED reaches ~6x6 for this model), so this is a contested record claim, not a proven error." },
   { match:{instance:"J1J2/square_64_P_0.5", method:"Holographic Quantum Transformer (HQT)"},
-    flag:"below-established-ground-state",
-    finding:"-0.5001(1) is 1.1e-3 below the best known variational energy for 8x8 J2=0.5 (RBM+PP, -0.4989635), on a well-studied instance. Same direction as the same paper's 10x10 claim, so a systematic error rather than a fluctuation." },
+    flag:"energy-variance-inconsistent",
+    finding:"Claims E/N = -0.5001, below RBM+PP's -0.4989635, while reporting a variance that gives a V-score of 5.6e-3 to 1.4e-2 against RBM+PP's 9.81e-4 - 6x to 14x worse. A state further from an eigenstate cannot also be lower in energy: by the V-score calibration (rel. err ~ V/63) this energy should sit ~1.2e-3 ABOVE where it is reported. The inconsistency is internal to the paper's own E and Var and needs no external reference." },
 );
 
 export const SHARED = {
-  "below-established-ground-state": {
-    diagnosis: "Below the established ground state on two independent instances, in the same direction. Not auto-detectable by scripts/validate.mjs: neither 8x8 nor 10x10 J1-J2 has an exact reference row, so the variational-principle check has nothing to fire against. Caught by comparing against the best published values instead.",
-    ruled_out: "Not a convention mismatch: the paper compares its number directly against Chen & Heyl's -0.4976921(4), so it intends the same units.",
-    evidence: "arXiv:2607.00398 abstract and Sec. 1; comparison rows in this instance.",
+  "energy-variance-inconsistent": {
+    diagnosis: "The reported energy is inconsistent with the paper's OWN reported variance. At 8x8 the claimed E/N = -0.5001 beats RBM+PP's -0.4989635 while the reported variance gives a V-score 6x-14x worse (5.6e-3 to 1.4e-2 vs 9.81e-4). Energy and variance move together - a state further from an eigenstate cannot be lower in energy - so by the V-score calibration this energy should be ~1.2e-3 higher than claimed.",
+    ruled_out: "NOT 'below the exact ground state'. There is no exact reference at 8x8 or 10x10: ED for this model reaches about 6x6, and the paper correctly uses 6x6 ED (-0.5038) as its only exact anchor. Chen & Heyl's -0.497715(9) is a zero-variance extrapolation, not a bound, so a lower variational energy would only mean the extrapolation carries systematic error. Robust to the ambiguity in how the paper defines sigma^2: both readings leave the variance far worse than the field's.",
+    evidence: "arXiv:2607.00398 Tables 1-3; V-scores recomputed from this instance's own rows.",
   },
   "below-exact": {
     diagnosis:
