@@ -99,7 +99,7 @@ located in the paper that produced them, with the quoted passage now on the row:
 arXiv:2211.07749, 2206.07370, 2104.05085 (triangular 36) and 2206.14307 (square 36 and 100).
 This matters most for `triangular_36_P`, whose record no longer rests on a quote of a quote.
 
-### Kagome — the dispute is real, the numbers are not usable
+### Kagome — RESOLVED 2026-09-14: the instance is open, with no record
 
 `arXiv:2605.28861` (Kamal, Kufel, Vu, Laumann & Yao) is a Comment on Ðurić et al.,
 *Phys. Rev. X* 15, 011047 (2025), which reported a G-CNN energy **1.78% below the best DMRG
@@ -110,18 +110,28 @@ iterations — and with ergodic exchange updates the same ansatz converges **≈
 Re-evaluating the spin-flip-optimised parameters under ergodic sampling raises the energy from
 ≈−46.2 to ≈−42.6 against a DMRG value of ≈−47.3.
 
-This is the same failure mode as the TFIsing RBM case in RULES.md §9 — a published record-low
-energy that is an artifact of the sampler — and it is the best available argument for why the
-`bound_type` and objection machinery exists. **But no row can be written from it:** the
-Comment quotes energies only as figure-read approximations with no error bars, and QMBL has no
-N=108 kagome instance. Opening one needs the precise numbers from the PRX paper and from the
-DMRG benchmark, not from the Comment. Flagged as a watch item: if an N=108 instance is ever
-added, the Ðurić row carries a defect from the start.
+The Comment itself only quotes figure-read approximations, so the precise numbers were taken
+from the two primary sources instead, both fetched as PDF: **arXiv:2401.02866** (the PRX paper)
+gives `E0 = -48.18(0)` against the DMRG benchmark `-47.33964` it compares to, and
+**arXiv:1205.4858** (Depenbrock, McCulloch & Schollwöck, *PRL* 109, 067201) gives that DMRG
+value in its own Table I as the 108-site torus, `-0.4383(3)`.
+
+`Heisenberg/kagome-6x6_108_P` is now open, with both rows and the defect flag. **It ends with no
+eligible record**, and that is the right answer: its only `variational` row is flagged, and the
+DMRG row is `extrapolated` because Depenbrock et al. state their energies are "extrapolated in
+the truncation error of single-site DMRG". Worked case now in RULES.md §9, new objection ground
+in §10.
+
+The 48-site cluster is a separate story and **gains a legitimate new record**: -0.4304323 →
+-0.4375 (Ðurić GCNN). The Comment does not reach it — Ðurić et al. use the ergodic exchange
+update below 108 sites — and the instance's existing exact row -0.4387039 equals that paper's
+own ED value -21.057787063/48 to eight digits, which confirms cluster and convention.
 
 ### Still blocked
 
-- **Kagome.** PDF now fetched and read (see above): a real dispute, but no row-quality numbers.
-  `2510.04907`'s kagome values stay rejected (iPEPS, ξ→∞). Next: the Ðurić PRX paper itself.
+- **Kagome.** RESOLVED — instance open, dispute recorded, 48-site record taken (see above).
+  `2510.04907`'s kagome values stay rejected (iPEPS, ξ→∞). Open: the precise DMRG benchmark at
+  N=48, where the Comment reports ~0.09% relative error but quotes no number.
 - **Triangular above L=6.** `2505.20406` reports L=6…30 finite-size energies in *figures*;
   Tab. 2 carries only their V-scores and Tab. 6 only thermodynamic-limit values. Its −0.5497
   (OBC) and −0.5517569(9) (PBC) are **E∞/N, not finite-size** — the earlier note below reads as
