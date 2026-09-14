@@ -1,0 +1,1279 @@
+                  Enhanced Neural Quantum State via Annealed Gradient Descent
+
+                          Shiwei  Zhou,1,∗   Yiming  Huang,1, 2, 3,∗   Xiao  Yuan,3,†   and  Xiaoxia  Cai1,‡
+                     1Institute  of  High  Energy  Physics,  Chinese  Academy  of  Sciences,  Beijing  100049,  China
+                            2China  Center  of  Advanced  Science  and  Technology,  Beijing  100190,  China
+     3Center on Frontiers of Computing Studies, School of Computer Science, Peking University, Beijing 100871, China
+                                                             (Dated:  July 23, 2026)
+                  Neural quantum states offer expressive representations of quantum many-body wave functions,
+                yet their practical accuracy can be limited by stochastic optimization rather than representational
+                capacity.  Here we identify a finite-sample instability, termed subspace trapping, in which physically
+                important configurations become strongly underestimated, remain absent from successive sampling
+                batches and receive insufficient gradient feedback.  This self-reinforcing loss of sampled support can
+                confine optimization to an effective subspace and produce apparently stationary states above the
+                true ground state energy.  To address this problem, we introduce annealed gradient descent (AGD),
+                a sampling-aware update with annealing factor that temporarily increases the relative contribution
+                of sampled low-probability configurations while limiting the dominance of high-probability ones.  We
+                establish the connection between finite-sample support loss and effective subspace optimization, and
+                then evaluate the method across molecular systems,  one and two-dimensionalJ              1-J  2  models.  An-
+                nealed gradient descent suppresses metastable trapping, preserves physically relevant configurations
+                and enables compact neural quantum states to attain chemical accuracy and competitive state-of-
+                the-art performance.  These results establish AGD as a lightweight complement to expressive neural
+                architectures, improved sampling strategies for scalable quantum many-body optimization.
+
+
+
+
+                                                           I.    INTRODUCTION
+
+  Simulating quantum many-body systems is a central challenge in computational physics and chemistry.  Exact wave-
+function representations are limited by the exponential growth of Hilbert space,  motivating variational approaches
+that restrict the search to a parameterized family of states and optimize its free parameters [1,2].  The success of
+such methods therefore depends not only on the expressive capacity of the variational ansatz, but also on whether
+the optimization procedure can reliably navigate the resulting high-dimensional landscape.  Neural quantum states
+(NQS) have emerged as a powerful variational framework in this setting [2].  By using neural networks to parameter-
+ize quantum amplitudes, NQS provide flexible representations that can extend beyond conventional tensor-network
+descriptions and, in favourable settings, encode strongly correlated states with high-dimensional or volume-law entan-
+glement [3,4].  This flexibility has motivated a broad range of architectures, including restricted Boltzmann machines,
+autoregressive models, recurrent neural networks and Transformer-based wave functions [2,5–15], and has enabled
+applications to quantum many-body physics and electronic-structure problems [16–20].
+  However, the practical accuracy of NQS is determined not only by what the network can represent, but also by
+which regions of configuration space remain visible to the stochastic optimization process.  In variational Monte Carlo,
+observables and gradients are estimated from configurations sampled from the current model distribution.  Near crit-
+ical  points  and  in  strongly  correlated  regimes,  Markov-chain  sampling  can  exhibit  long  autocorrelation  times  and
+incomplete mixing, leading to noisy or biased finite-sample estimates.  At the same time, the neural parameterization
+maps the ground-state problem onto a highly non-convex optimization landscape, in which standard first-order meth-
+ods may converge to metastable states that are numerically stable but remain above the true ground-state energy
+[16, 17].   Existing  methods  address  different  parts  of  this  computational  pipeline.   Stochastic  reconfiguration  and
+natural-gradient methods improve the geometry of parameter updates by approximating imaginary-time evolution on
+the variational manifold [21,22],  while scalable formulations such as MinSR, related linear-algebra reformulations,
+KFAC and SPRING reduce the computational cost of curvature-aware optimization for large neural wave functions
+[23–26].  Complementary sampling-oriented approaches use importance sampling, neural importance resampling, sam-
+pling  without  replacement  or  deterministic  configuration  selection  to  reduce  estimator  variance  and  improve  the
+representation of peaked or multimodal distributions [27–30].
+  Despite  these  advances,  a  central  question  remains  unresolved:why  can  an  expressive  NQS  converge  to  an  ap-
+parently  stationary  solution  without  recovering  the  true  ground  state,  and  why  does  escaping  such  a  solution  often
+
+
+
+
+∗ These authors contributed equally to this work.
+† xiaoyuan@pku.edu.cn
+‡ xxcai@ihep.ac.cn
+                                                                                                                                                  2
+
+require prohibitively large sample sizes?One possible explanation is the difficulty of learning nontrivial sign or phase
+structures, particularly in frustrated systems, where optimization may converge to a low-energy state with an incor-
+rect sign pattern [31].  Rugged optimization landscapes and mode-collapse-like behaviour have also been identified
+as potential failure mechanisms [32,33].  These effects are closely coupled to amplitude optimization, because incor-
+rect phase relations modify the energy gradient and can indirectly suppress the amplitudes of physically important
+configurations.  Several strategies have been developed to mitigate such failures, including temperature or variational
+annealing [34,35], symmetry restoration and neural cluster updates [36], and collective-variable penalties that prevent
+unphysical concentration of probability mass [37].  However, these approaches may still recover only a subset of de-
+generate modes, while neural samplers can remain difficult to train for intrinsically multimodal distributions [38,39].
+More fundamentally, existing explanations do not fully clarify how finite-sample optimization dynamics are altered
+once physically important configurations become strongly suppressed and therefore rarely, if ever, sampled.
+  In  this  work,  we  firstly  identify  a  self-reinforcing  finite-sample  instability  in  NQS  optimization,  which  we  term
+subspace trapping.  The instability emerges when physically important configurations are assigned probabilities below
+the effective resolution of the sampling budget.  Such configurations may then remain absent from many consecutive
+batches and contribute no direct statistical weight to either the empirical energy or covariance based gradient.  Al-
+though its amplitude may still enter local-energy evaluations indirectly through sampled configurations connected to
+it by the Hamiltonian, the optimizer receives little direct information with which to restore its probability.  Because
+every parameter update reshapes the distribution from which subsequent samples are drawn, configurations that are
+initially underestimated receive progressively weaker corrective feedback, whereas those that produce an immediate
+reduction in the estimated energy are preferentially reinforced.  This coupling between sampling and optimization can
+confine the dynamics to an effectively accessible subspace of Hilbert space, yielding apparent convergence at an energy
+above  the  true  ground-state  energy.   Increasing  the  batch  size  lowers  the  probability  scale  at  which  configurations
+become unresolved, but does not remove the instability, because the evolving model can subsequently suppress other
+relevant configurations below the new sampling threshold.  To address this issue, we then introduce annealed gradient
+descent (AGD), a sampling-aware update rule that applies a temperature-dependent reweighting to configuration-level
+gradient contributions.  Early in the optimization, AGD enhances the relative influence of sampled low-probability
+configurations  while  limiting  the  premature  dominance  of  high-probability  ones,  thereby  maintaining  broader  sup-
+port before relevant configurations become statistically inaccessible.  The correction is then gradually annealed away,
+recovering the standard variational gradient for final energy refinement.  AGD is conceptually distinct from natural-
+gradient methods, MinSR and SPRING, because it neither constructs nor approximates a parameter-space metric.  It
+also differs from importance-sampling and resampling strategies, as it leaves the sampling distribution unchanged and
+instead reweights the information already contained in each batch.  Consequently, AGD requires neither architectural
+modifications nor additional curvature estimates, while preserving the leading-order computational complexity of the
+underlying first-order optimizer.
+  We combine AGD with a theoretical analysis of the relationship between finite-sample support loss and effective
+subspace  optimization.   We  show  how  the  persistent  suppression  of  a  small  set  of  configurations  can  produce  an
+optimization trajectory that is nearly stationary within the accessible sampling subspace while remaining inconsistent
+with the ground state of the full Hamiltonian.  We then validate the method across molecular systems and one and
+two-dimensionalJ    1-J  2  lattice  models,  covering  qualitatively  distinct  Hamiltonians,  correlation  regimes  and  wave-
+function  structures.   Across  these  benchmarks,  AGD  prevents  physically  important  configurations  from  becoming
+persistently undersampled, avoids convergence to metastable solutions such as the Hartree-Fock state, and enables
+comparatively  simple  NQS  models  to  attain  chemical  accuracy  in  molecular  calculations.   These  results  establish
+finite-sample support loss as a distinct source of failure in self-sampled NQS optimization and show that gradient-
+level annealing provides a lightweight complement to expressive neural architectures,  improved sampling strategies
+and geometry-aware optimizers.
+
+
+                                                               II.    RESULTS
+
+  In this section, we first provide a theoretical analysis of the optimization difficulties that arise in NQS training, then
+introduce AGD as a training strategy to mitigate these issues, and finally evaluate its effectiveness through numerical
+results on both molecular and many-body systems.
+
+
+                                               A.    The analysis of NQS training issue
+
+  Here, we first recall that given a HamiltonianH, within the framework of variational Monte Carlo (VMC), estimating
+the energy gradientg=∇⟨H⟩with respect to the variational parametersθ∈R                   Np  requires a setS={σ               (k) }NSk=1   of
+                                                                                                                                                        3
+
+NS samples drawn from the probability distributionp                       θ(σ) =|ψ         θ(σ)|      2, whereψ            θ(σ) denotes the neural network wave
+function associated with the configurationσ.  In particular, theg               i is given by
+                                                            h       h                                    ii
+                                              gi =E σ∼p      θ2 Re   ∂θi logψ  ∗θ(σ) (E      loc(σ)−E)                                                (1)
+                                                              "X                                        #
+                                                 ≈   2NS Re          ∂θi logψ  ∗θ(σ) (E      loc(σ)−E)    ,                                                  (2)
+                                                               σ∈S
+whereE            loc(σ) =  Pσ′Hσσ′ψθ(σ ′)/ψ  θ(σ) refers to local energy andE=E        σ∈S  [E loc(σ)] denotes the variational energy.
+Accordingly, under the gradient descent scheme, the parameter update takes the formθ←θ−ηg, whereηis the
+step size.
+   However, this framework may suffers from a severe sampling bias problem, sometimes referred to as mode collapse.
+As the system size grows, the Hilbert space expands exponentially, while the NQS ansatz estimates energy gradients
+gfrom a limited number of configurationsSsampled according to the model distributionp                                                        θ,  which is induced by
+the neural network wave functionψ                θ(σ).  This gives rise to a self-consistent sampling dilemma.  When the current
+parametersθassign insufficient probability to configurations that make essential contributions to the ground state,
+those configurations are rarely sampled.  As a result, their contributions to the gradient are statistically suppressed,
+preventing the optimization from steering the parameters toward the physically correct region of the Hilbert space.
+Such  problem  is  especially  pronounced  in  strongly  correlated  complex  systems,  where  the  ground  state  typically
+involves  a  superposition  of  many  configurations  with  comparable  amplitudes.   As  the  system  size  increases,  the
+number of relevant configurations can grow rapidly,  and their support may become broadly distributed across the
+Hilbert space, making them difficult to cover with a finite sampling budget.  The following theorem formalizes the
+mechanism underlying this problem and the proof are deferred to Appendix.E.
+Theorem 1.Assuming the stateσ              0  is never sampled, that is over the∆toptimization steps andp                   θ(σ  0)≪ϵ, where
+ϵ= 1/∆tN    s  so thatp        θ(σ  0)can be effectively treated as zero throughout these steps.  The gradient-based optimization
+process  is  mathematically  equivalent  to  finding  the  exact  eigenstate  of  a  subspace  Hamiltonian   ˆH,  which  inevitably
+leads to the change ofp    θ(σ  0)close to 0, that is∆p         θ(σ  0) = 0, during the optimization within this subspace.
+   The results suggest that,  during the optimization process,  if a critical configurationσ                           0  becomes incorrectly sup-
+pressed to the extent thatp        θ(σ  0)≪ϵ, its contribution to the local energy and gradient becomes statistically invisible,
+and the sampling-based approach consequently fails to capture this essential component.  By Theorem1, this causes
+the probabilityp  θ(σ  0) to remain nearly fixed and insensitive to subsequent gradient updates,  which can no longer
+reliably  restore  the  missing  component.   Consequently,  the  optimization  no  longer  targets  the  true  ground  state,
+instead, it converges to the ground state of an effective Hamiltonian projected onto the restricted subspaceH       S  that
+excludesσ                 0, trapping the NQS as illustrated in Fig.1.  This explains how an NQS can satisfy apparent convergence
+criteria while retaining an energy above the true ground-state energy, and also clarifies and why brute-force increases
+in sample size can partially help by enlarging the accessible subspace and recovering configurations that were pre-
+viously  invisible.   Within  the  VMC  framework,  the  optimization  only  evluate  the  local  energy  in  Eq.(14),  rather
+than as a dynamical generator acting on the full many-body state.  For each sampled configurationσ, Hamiltonian
+Hprovides the information inE        loc(σ), determined by the configurations locally connected toσthrough its sparse
+structure.  As a result, the algorithm has no direct access to the global spectrum ofH, information about the ground
+state is inferred only indirectly from pointwise local-energy queries over the configurations visited by the sampler.  By
+the zero-variance principle,E                   loc(σ) becomes constant overσif and only ifψ      θ  is an eigenstate ofH, so local-energy
+evaluations serve as an efficient verifier of a candidate eigenstate.  However,  they do not reveal where such a state
+lies within the high-dimensional variational manifold where ground state lived in.  NQS optimization therefore can
+naturally be viewed as a search problem equipped with a local verifier but guided only by sampled queries of the
+objective.  This perspective explains how subspace restriction can arise during training, if an important configuration
+σ0 is assigned an anomalously small probability, it is rarely sampled, and the information it carries is correspondingly
+suppressed in the local-energy estimates.  The optimization can then effectively collapse onto the currently explored
+subspace, making the missing components of the true ground-state wave function increasingly difficult to recover.
+   To access whether the mechanism predicted by Theorem1accounts for the local minima observed in NQS optimiza-
+tion, we consider the N2 molecule as a representative case, with the NQS built by a complex recurrent neural network
+(cRNN). In Fig.2, it illustrates how an NQS can approximate to ground state with high fidelity while still failing
+to reach chemical accuracy.  In Fig.2(a), although the NQS reproduces the dominant configurations and achieves a
+high fidelity, several low-weight but non-negligible configurations are strongly suppressed or missing in the learned
+wave function.  Moreover,  as shown in Fig.2(b),  the suppressed configurations exhibit incorrect phases relative to
+the exact ground state, which further prevents the NQS from reaching chemical accuracy.  Furthermore, we exam-
+ined whether the trapped NQS|ψ           θ⟩is optimized within the subspaceH        S.  Given HamiltonianH, letσ                                  0 denote the
+                                                                                                                                                          4
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+FIG. 1.  The illustration of subspace trapping in NQS optimization.  (Left) Loss landscape in the variational parameter space.
+(Right) The red and blue regions denote the full Hilbert spaceHand a restricted subspaceH             S, respectively.  The optimization
+prematurely  converges  withinH     S  (blue  curve)  when  the  network  underestimates  the  probability  of  a  critical  configuration,
+pθ(σ  0)≪ϵ, whereϵ= 1/∆tN            s.  Sampling is then restricted toH  S, so the apparent convergence criterion ∆E→0 is satisfied
+even though the energy remains above the true ground-state energy.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+FIG. 2.  Subspace trapping in NQS optimization.  Comparison between the exact ground state (Full Configuration Interaction,
+FCI)  and  the  optimized  NQS  state  in  the  computational  basis,  where  configurations  are  sorted  by  the  magnitude  of  the
+amplitudes.   (a)  Probability  distribution|ψ|                            2  of  the  ground  state  and  the  NQS  state.   The  red  dashed  box  highlights  the
+low-weight but non-negligible configurations.  (b) Phase comparison between the FCI and NQS states.  The red circles mark
+unsampled or suppressed configurations for which the phase of NQS deviates from the phase of ground state.
+
+
+unsampled configuration and define the projected effective Hamiltonian as  ˆH=PHP, whereP=I−|σ                                0⟩⟨σ    0|is the
+projector ontoH  S.  We find that the variational energy evaluated with theHis extremely close to the ground-state
+energy of the projected Hamiltonian  ˆH, with|⟨H⟩−⟨                ˆH⟩|= 3.69×10     −8    Ha.  This agreement indicates that the NQS
+is effectively trapped withinH     S, and provides direct numerical evidence for subspace trapping and explains how a
+model can appear converged with high fidelity while still failing to reach chemical accuracy, precisely as predicted by
+Theorem1.
+   Having established that the optimized NQS is effectively confined to a projected subspace, we next ask whether this
+optimization issue can be overcome by increasing the sampling budget, and why such a remedy becomes insufficient at
+scale.  Increasing the sample sizeN   S provides a direct way to mitigate sampling-induced mode-exploration problems,
+because  a  larger  sample  budget  improves  the  chance  of  observing  configurations  that  are  rare  under  the  current
+model distribution but remain physically important for the ground state.  In this sense, increasingN S  can enlarge
+the effective sampled subspace and help recover update directions that are invisible at smaller sampling resolution.
+However, this strategy does not directly solve the underlying problem.  As the system size grows, the Hilbert-space
+dimension increases exponentially, and the number of relevant configurations may also grow rapidly.  Therefore, the
+sample size required to reliably cover these configurations can become computationally prohibitive, making brute-force
+sampling an inefficient and ultimately unscalable remedy.
+   Advanced optimization methods partially is designed to improve trainability, but they also face a related bottleneck.
+For example, the minSR algorithm [40] improves the scalability of stochastic reconfiguration by exploiting the fact
+that the sampled quantum geometric tensor has rank at mostN    S.  Instead of solving the natural-gradient equation
+                                                                                                                                                        5
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+FIG. 3.  The illustration of an AGD-enhanced NQS for a molecular Hamiltonian as an example, showing that vanilla gradient
+descent (GD) is prone to be trapped in Hartree-Fock local minima, whereas AGD-enhanced approach enables more effective
+exploration of the energy landscape.  The two colored curves depict the optimization trajectories, the yellow curve corresponds
+to the NQS optimized with GD, while the blue curve represents the NQS optimized using AGD. The histograms along each
+trajectory show the corresponding sampled distributions during optimization.  Along the GD (red) path, it indicates that GD
+hard to handle the explore-exploit tradeoff and trends to collapse toward Hartree-Fock like regions with vanishing gradients.
+In contrast, AGD samples from a tempered distribution controlled by an annealing parameterT, which is gradually reduced
+fromT= 4.0 toT= 1.0 according to the schedule ofT(t) =T                                        0−(T     0−1.0)·min (1.0,t/T                    d).  Along the AGD (blue) trajectory,
+AGD forces the model to explore and accept more configurations, which leads to a sustained effective descent toward the state
+with near-optimal energy (≤1 mHa).
+
+
+in the fullN   p dimensional parameter space, minSR reformulates the update in theN   S dimensional sample subspace,
+reducing the per-step cost fromO(N      SN 2p +N    3p ) toO(N          3S +N    2SNp), which makes highly expressive NQS models with
+largeN    p  more  tractable  whenN    S  remains  moderate.   Nevertheless,  the  update  directions  available  to  minSR  are
+still  restricted  to  the  span  of  the  sampled  log-derivatives.   If  escaping  a  sampling-induced  local  minimum  requires
+directions associated with configurations outside the current sample set, then one must increaseN       S.  In precisely this
+regime, theO(N            3S) cost becomes the dominant bottleneck, and minSR gradually loses the computational advantage.
+   Therefore,  existing  approaches  face  a  fundamental  tension  between  expressivity  and  sampling  coverage.   High-
+accuracy NQS optimization requires a large number of parametersN         p  to represent complex many-body states, but
+it also requires a sufficiently large sample sizeN   S  to cover the relevant configurations and span the critical update
+directions needed to escape sampling-induced local minima.  Conventional SR becomes impractical asN  p grows, while
+minSR removes the leadingN      p bottleneck only by shifting the difficulty to the sampling side.  When the requiredN       S
+becomes large, its superlinear scalingO(N                    3S +N    2SNp) again becomes unaffordable.  These limitations indicate that
+simply increasing the sample budget or relying on sample-subspace optimization is insufficient, and point to the need
+for a more principled and scalable mechanism that can recover missing physically relevant modes without requiring
+prohibitively large sampling overhead.
+
+
+
+                                                          B.    AGD-enhanced NQS
+
+   To mitigate the computational trade-off between the parameter space dimensionN        p and the sample sizeN   s, and
+to suppress the occurrence of mode collapse, we propose an NQS optimization scheme based on annealed enhanced
+gradient descent (AGD). AGD is motivated by the need to guide the neural network toward a broader set of physically
+important configurations during the optimization. This prevents the learned probability distribution from prematurely
+concentrating on a narrow subset of configurations, a behavior that can drive the model toward a spurious ground
+state.  By smoothing such probability distributions, AGD enhances mode exploration and helps maintain access to
+relevant regions of the Hilbert space.  It lies in modifying the optimization dynamics through the introduction of an
+annealing parameterT, which effectively reshapes the gradient landscape during training.  Concretely, the gradients
+are not evaluated according to the original distributionp             θ but over a tempered distributionq             θ.
+
+
+                                                                                     2
+                                                                                     T
+                                                             qθ(σ) =   |ψ θ(σ)|P         2
+                                                                           σ′|ψ θ(σ ′)|  T ,                                                                    (3)
+                                                                                                                                                           6
+
+whereTserves as a tuneable temperature parameter during training to encourage exploration of previously under-
+sampled regions.  WhenT >1,q                   θ  provides a flattened version of the original distribution,  thereby enhancing the
+visibility of low-probability configurations and weakening the over-representation of dominant configurations in the
+gradient estimate.  In practice,  the annealing parameterTfollows a linear decay schedule,  starting from an initial
+temperatureT              0 and decreasing toT(t) = 1.0 overT       d optimization steps,
+
+                                                   T(t) =T          0−(T     0−1.0)·min     1.0,   tTd  ,                                                       (4)
+
+wheretdenotes the current optimization step.  Thus, the annealed probability distributionq                                     θ att-step are computed
+via
+                                                                             h                   i
+                                                                        exp     1
+                                                                               T(t)     logp      θ(σ i)hi.                                                        (5)
+                                                    qθ(t,σ i) =    PNS
+                                                                       j=1  exp     1
+                                                                                   T(t)     logp      θ(σ j)
+
+which effectively implements theT-modified distributionq                                θ through numerically stable log-softmax computation.  The
+complete AGD optimization procedure is summarized in Algorithm1of AppendixC. Furthermore, we now consider
+the first-order Taylor expansion of new annealed gradient  ˆgoverq      θ  with annealing factorT= 1 +ϵ,ϵ→0.  It can
+also be considered as a modified gradient  ˆgwritten as
+
+                                                                   ˆg←g+∂             θSϵ(θ),                                                                         (6)
+
+where∂            θSϵ(θ) is the first-order term,
+                                                                   h                                        i
+                                              ∂θSϵ(θ) = 2 Re        ϵXw(p     θ(σ))∆E(σ)∂                     θψ∗θ(σ),                                                 (7)
+                                                                        σ
+wherew(p                 θ) =−p       θ logp      θ and∂       θSϵ(θ) serves to mitigate mode collapse.  This property arises because, in the regime
+where  probabilities  are  small,  the  gradient  update  from∂        θSϵ(θ)  imparts  a  logarithmic  enhancement  (scaling  with
+logp) to these components.  When considering then-th order approximation, this yields an enhancement scaling as
+(logp)    n relative to the original gradient∂ θL(θ).  A more detailed analysis is provided in AppendixD.
+   Fig.3(a) shows AGD-enhanced NQS for a molecular Hamiltonian. Under standard gradient descent, the vanilla NQS
+collapses toward the Hartree-Fock region and converges prematurely.  In contrast, AGD first encourages exploration
+over a broader set of configurations and then anneals toward accurate energy minimization, enabling the variational
+search to escape subspace trapping and approach the true ground-state structure.
+   Moreover, beyond its motivation, AGD offers several practical advantages: it requires no modification to the neural-
+network architecture, introduces negligible computational overhead, and maintains a per-step complexity essentially
+equivalent to that of standard gradient descent.  Moreover, since AGD operates directly at the sampling and gradient-
+estimation level, it integrates naturally with large-scale autoregressive sampling, which can further enhance sampling
+coverage and variational accuracy.  As the temperature is gradually annealed, the optimization transitions smoothly
+from broad configuration-space exploration to fine-grained energy minimization,  progressively steering the network
+toward the true ground state.
+
+
+                                                    C.    Molecular systems experiments
+
+   In this section, we benchmark AGD-enhanced NQS, parametrized by a cRNN ansatz, for molecular ground-state
+energy estimation.  Molecular systems provide a stringent benchmark since NQS optimization can easily be trapped
+near  Hartree-Fock  like  local  minima,  resulting  in  premature  convergence  above  chemical  accuracy.   We  therefore
+evaluate  whether  AGD  helps  the  NQS  escape  these  well-known  local  minima  and  compare  its  performance  with
+standard quantum chemistry references, including Hartree-Fock (HF), coupled-cluster singles and doubles (CCSD)[41],
+and full configuration interaction (FCI) energies.
+   We  first  evaluate  the  proposed  method  on  potential  energy  surface  calculations  for  LiH,  HCl  and  N2  as  shown
+in  Fig.4(a).   Across  the  scanned  internuclear  separations,  the  optimized  energies  of  NQS-cRNN  reach  chemical
+accuracy  across  the  entire  range  of  bond  lengths  considered,  including  the  equilibrium  region  highlighted  by  the
+shaded  boxes.   In  contrast,  the  Hartree-Fock  curve  shows  a  clear  systematic  deviation,  especially  away  from  the
+equilibrium geometry, while CCSD improves the accuracy but still leaves visible residual errors in several bond-length
+regimes.  The logarithmic error insets further show that the AGD-enhanced NQS maintains a small deviation from
+                                                                                                                                                       7
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+FIG. 4.  Performance of AGD-enhanced NQS on molecular systems.  (a) Potential energy surfaces for LiH, HCl, and N2  as a
+function of internuclear separation.  The AGD-enhanced cRNN-NQS results are compared with Hartree-Fock (HF), coupled-
+cluster  singles  and  doubles  (CCSD),  and  full  configuration  interaction  (FCI)  references.   The  zoomed  insets  highlight  the
+equilibrium  region,  while  the  error  insets  show  ∆  =  log(|E−E          FCI|),  demonstrating  that  the  AGD-enhanced  NQS  closely
+follows  the  FCI  energy  across  different  molecular  geometries.   (b)  Training  dynamics  of  AGD-enhanced  NQS  for  molecular
+ground-state search.  The left panels show the average convergence curves for LiH, H2O, NH3, CH4, HCl and H2S, with shaded
+area presents the spread of results across multiple runs.  The right panel shows the optimization trajectory for the larger H10
+chain, with the shaded region denoting chemical accuracy.  The inset magnifies the late-stage convergence and reports a final
+energy error of ∆E= 0.685 mHa.  (c) Comparison of the number of variational parameters used by AGD-enhanced NQS and
+a transformer-based NQS across different molecular systems.  AGD enables compact cRNN-based models to achieve chemical
+accuracy with substantially fewer parameters.  Parameter counts for the transformer-based NQS are taken from Ref. [11].
+
+
+FCI over a broad range of geometries, indicating that the learned wave function is not restricted to a single equilibrium
+configuration but remains accurate along the molecular dissociation coordinate.
+  In Fig.4(b), we next examine the optimization dynamics for a set of representative molecules, including LiH, H          2O,
+NH3, CH4, HCl and H2S.  For all tested systems, the AGD-enhanced NQS rapidly decreases the variational energy
+from  the  Hartree-Fock  level  toward  the  FCI  reference  and  enters  the  chemical-accuracy  region  within  a  moderate
+number of training steps.  The convergence curves show that AGD is able to stabilize the training process even for
+molecules with different bonding structures and numbers of electrons.  Although transient fluctuations appear during
+optimization, especially for the more challenging molecules, the final energies remain close to the FCI baseline, which
+suggests that the AGD strategy improves the exploration of the variational landscape while still allowing accurate
+                                                                                                                                                                    8
+
+        MoleculeN                  o   Ne        HF Energy           CCSD                FCI                                 NQS-cRNN
+                                                                                                               Ours                        Settings
+        H2                   4          2            -0.9109              -0.9981             -0.9981        -0.9981Hiddens=10,T                                          0=4.0
+        F2                  20         18         -195.6380-195.6611-195.6611                               -195.6610Hiddens=43,T                                             0=4.0
+        HCl                20         18         -455.1360          -455.1562         -455.1562            -455.1562Hiddens=50,T                                           0=4.0
+        LiH                12          4            -7.7674              -7.7845             -7.7845         -7.7845Hiddens=50,T                                          0=4.0
+        H2O               14         10          -74.9644            -75.0154           -75.0155            -75.0155Hiddens=50,T                                             0=4.0
+        H2S                22         18         -394.3114-394.3546-394.3546                                -394.3541Hiddens=50,T                                             0=4.0
+        NH3               16         10          -55.4548-55.5209-55.5211                                    -55.5206Hiddens=100,T                                             0=4.0
+        N2                  20         14         -107.4990          -107.6560         -107.6602           -107.6596Hiddens=200,T                                                  0=4.0
+        CH4               18         10          -39.7266            -39.8060           -39.8063            -39.8062Hiddens=200,T                                               0=4.0
+        C2                  20         12          -74.4209            -74.6745           -74.6908          -74.6901Hiddens=250,T                                               0=4.0
+        LiCl               28         20         -460.8273          -460.8476         -460.8496            -460.8491Hiddens=200,T                                                  0=5.0
+
+              TABLE I. Comparison of molecular ground-state energies obtained by HF, CCSD, FCI and NQS-cRNN.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+FIG. 5.  Annealing from a higher initial temperature enables convergence to the ground state forN      2.  (a) Optimization curve
+of vanilla NQS and AGD-enhanced NQS. (b) Number of unique sampled configurations during optimization for vanilla NQS
+and AGD-enhanced NQS, together with the annealing temperature schedule shown on the upper axis.
+
+
+energy minimization at later stages.  The complementary results are shown in Tab.I. The right panel of Fig.4(b)
+further  tests  the  method  on  the  larger  H10  chain,  which  presents  a  more  demanding  optimization  problem  due  to
+the  enlarged  Hilbert  space  and  stronger  correlation  effects.   After  a  long  training  trajectory,  the  energy  converges
+into the shaded chemical-accuracy window around the FCI value.  The inset shows that the final energy error reaches
+∆E= 0.685 mHa, below the standard chemical-accuracy threshold.  This result demonstrates that the AGD-enhanced
+NQS can remain effective beyond small molecular benchmarks and can achieve chemically accurate energies in a more
+extended molecular system.
+   Finally,  we  compares  the  number  of  trainable  parameters  required  by  the  AGD-enhanced  NQS  and  a  vanilla
+transformer-based NQS across different molecular Hamiltonians shown in Fig.4(c).  The vanilla transformer based
+model utilizes large parameter budget, whereas the AGD-enhanced NQS requires substantially fewer parameters for
+all tested molecules.  The reduction is especially pronounced for small and medium-sized systems such as H2, F2, HCl,
+LiH, H2O, H2S and NH3, where the AGD-enhanced model achieves accurate results with orders-of-magnitude fewer
+parameters.  Even for more complex systems such as N2, CH4, C2 and LiCl, the parameter count remains below that
+of the transformer-based NQS. Together, these results indicate that AGD improves both the optimization efficiency
+and parameter efficiency of neural quantum-state calculations, enabling chemically accurate molecular ground-state
+estimation with a compact variational ansatz.
+   Moreover, we examine whether AGD-enhanced NQS avoids the sample collapse.  As shown in Fig.5(a), the vanilla
+NQS rapidly lowers the variational energy during the early stage of optimization, but soon becomes trapped near the
+Hartree-Fock state, which is accompanied by a sharp collapse of the sampled configuration space, with the number
+                                                                                                                                                             9
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+FIG. 6.  Accuracy of the AGD-enhanced NQS for theJ      1-J  2 model as a function of the coupling ratioJ          2/J1.  (a) Relative errorϵ
+and V-score for the one-dimensional chain withN= 16 sites.  The shaded region indicates the strongly frustrated regime near
+the Majumdar-Ghosh pointJ  2/J1 = 0.5.  (b) Relative errorϵand V-score for the two-dimensional [4×4 lattice], comparing
+AGD-enhanced NQS with GRU-NQS.
+
+
+of  unique  samples  remaining  only  atO(10)  in  Fig.5(b).   Such  a  sharp  reduction  in  sampling  diversity  explains
+why once important configurations are no longer sampled, the optimizer receives little information about directions
+that  could  improve  the  wave  function.   In  contrast,  the  AGD-enhanced  NQS  exhibits  stronger  fluctuations  at  the
+beginning  of  training,  with  high  tempreture,  which  prevents  the  probability  distribution  from  concentrating  too
+early on a small subset of configurations, reflecting a more exploratory search over active configuration space, with
+approximatelyO(10                     4) unique samples throughout most of training.  As the temperature is gradually annealed, the
+sampling distribution becomes more focused, allowing the model to refine the energy while preserving enough diversity
+to avoid subspace trapping.  After the annealing stage ends, the number of unique samples decreases moderately but
+remains orders of magnitude larger than that of the vanilla NQS. Together, these results show that AGD improves
+NQS training by separating the optimization into an exploration-dominated stage followed by an annealed energy-
+minimization  stage,  leading  to  both  better  sampling  coverage  and  improved  convergence  toward  the  ground-state
+energy.
+
+
+                                                D.    Frustrated spin systems:  J1-J2 model
+
+   Here, we evaluates the AGD-enhanced NQS on frustratedJ                    1-J  2 spin models, which provide representative bench-
+marks for strongly correlated lattice models.
+
+                                                                     NX                  NX
+                                                          H=J       1    sisj +J    2         sisj,                                                              (8)
+                                                                    ⟨i,j⟩              ⟨⟨i,j⟩⟩
+wheres     i  represent  spin  operator  acting  on  lattice  sitei.   To  quantify  the  accuracy  of  the  proposed  method  and
+compared against the other approaches, we the relative errorϵand V-score [42],
+
+                                                                        ϵ= |E−E        0||E 0|  ,                                                                         (9)
+
+                                                                  Vscore = NVar(E)E2   ,                                                                     (10)
+
+whereEand Var(E) refers to variational energy and the corresponding variance,E                                        0 denotes the ground-state energy,
+Nis  the  system  size.   We  first  benchmark  AGD-enhanced  NQS  on  the  one-dimensionalJ                                    1-J  2  Heisenberg  model
+withN= 16 sites and periodic boundary conditions, scanning the coupling ratioJ                      2/J1 from 0 to 0.8.  As shown in
+Fig.6(a), the relative errorϵclosely tracks the V-score and remains small across the entire range, demonstrating that
+the  AGD-enhanced  NQS  accurately  captures  the  ground  state  in  both  weakly  and  moderately  frustrated  regimes.
+In the shaded strongly frustrated regime, the relative error remains below∼10  −4  , showing that the AGD-enhanced
+NQS remains accurate even where competing interactions render the ground-state sign structure nontrivial and the
+optimization landscape more challenging.
+                                                                                                                                                      10
+
+   We further assess the robustness of AGD-enhanced NQS on the 2D frustratedJ                    1-J  2 Heisenberg model over a broad
+range of coupling ratios,J             2/J1∈[0,0.8].  As shown in Fig.6(b),  it further highlights the advantage of AGD over
+the baseline NQS. While both methods attain relatively small errors in the weakly frustrated regime,  the baseline
+deteriorates  rapidly  asJ    2/J1  increases,  reaching  a  relative  error  of  approximately  10−3    atJ    2/J1  =  0.5  and  10 −2
+atJ    2/J1  =  0.8.   By  contrast,  AGD-NQS  maintains  relative  errors  of  approximately  10 −5    and  10−4  ,  respectively,
+together with substantially lower V-scores.  These results indicate that the advantage of AGD becomes increasingly
+pronounced  as  frustration  grows,  suggesting  that  its  sampling-aware  gradient  correction  prevents  the  optimization
+from  concentrating  on  the  subspace  and  thereby  enables  a  more  faithful  description  of  strongly  correlated  ground
+states.   Overall,  these  results  demonstrate  that  AGD-enhanced  NQS  has  promising  potential  for  treating  strongly
+correlated systems beyond molecular Hamiltonians.  The method maintains good accuracy in frustrated spin models
+and provides a meaningful hardness indicator through the V-score.
+
+
+                                                              III.    DISCUSSION
+
+   In  this  work,  we  attempt  to  address  a  fundamental  obstacle  in  NQS  optimization,  the  tendency  of  training  to
+converge to spurious local minima long before the true ground-state manifold is reached.  We first provide theoretical
+analysis (Theorem1) which explain the reason why this occurs. Because the gradient in NQS optimization is estimated
+stochastically  from  sampled  configurations,  configurations  that  are  statistically  rare,  but  physically  important  for
+capturing correlation, can be systematically underweighted during optimization.  Such sampling bias causes the NQS
+effectively explore in a subspace which diverges from the actual ground-state manifold, leading it ultimately trapped
+into the local minima in such subspace.
+   To mitigate this problem, we introduce a simple and effective approach to enhanced NQS with annealed optimization
+strategy  designed  to  prevent  configuration  collapse.   The  central  idea  is  to  incorporate  a  temperature-dependent
+annealing  factor  into  the  gradient  update,  thereby  reweighting  the  contribution  of  sampled  configurations  during
+training.  This controlled reweighting encourages the optimizer to continue exploring configurations that may carry
+essential correlation or sign information but would otherwise be rapidly eliminated from the sampling process.
+   We further validate our approach through numerical experiments on a range of molecular and strongly correlated
+many-body systems, where such trapping phenomena can naturally arise during NQS optimization.  With all tested
+cases,  AGD-enhanced  NQS  both  attains  chemical  accuracy.   They  also  provide  direct  evidence  of  the  necessity  of
+AGD, without its corrective influence, the optimization is susceptible to becoming trapped in the Hartree-Fock state,
+failing to capture the essential correlation.  Remarkably, we noticed that the enhancement of AGD achieved without
+increasing the computational overhead, as the it possesses the same computational complexity as standard gradient
+descent, which allows for the exploitation of large-sample autoregressive sampling to achieve higher accuracy.
+   More  broadly,  our  findings  indicate  that  improving  the  optimization  dynamics  of  NQS  requires  not  only  more
+expressive  neural  architectures,  but  also  training  rules  that  explicitly  account  for  the  statistical  structure  of  the
+sampled Hilbert space.  Looking forward, integrating sampling-aware optimization with advanced neural architectures
+and  adaptive  sampling  schemes  may  further  enhance  the  robustness  and  scalability  of  NQS  methods  for  tackling
+increasingly complex quantum systems.
+
+
+                                                                IV.    METHODS
+
+                                               A.    Variational Monte Carlo Framework
+
+   We consider the general quantum many-body problem defined by a Hamiltonian  ˆHacting on a Hilbert spaceH
+with dimensionD=|H|.  For a lattice system withN                s sites and local Hilbert space dimensiond, we haveD=d       Ns,
+which  grows  exponentially  with  system  size.   The  ground  state|Ψ           0⟩and  its  energyE               0  =⟨Ψ     0| ˆH|Ψ     0⟩/⟨Ψ      0|Ψ 0⟩are
+determined by the eigenvalue equation  ˆH|Ψ     0⟩=E     0|Ψ 0⟩.
+   According to the variational principle, the ground state energy can be obtained by minimizing the energy functional
+
+                                                             E[ψ] =  ⟨ψ|     ˆH|ψ⟩⟨ψ|ψ⟩   ≥E    0,                                                                   (11)
+
+over a trial wave function manifold.  The equality holds if and only if|ψ⟩=|Ψ              0⟩(up to a global phase factor).  In
+NQS approach, the trial wave function is parametrized by a neural network with real parametersθ∈R            Np:
+
+                                                                  ψθ(σ) =⟨σ|ψ              θ⟩,                                                                        (12)
+                                                                                                                                                                11
+
+where{|σ⟩}denotes a complete basis of the Hilbert space (e.g., the computational basis for spin systems).  The wave
+function can be decomposed into amplitude and phase as
+
+                                                                ψθ(σ) =  ppθ(σ)e   iϕθ(σ) ,                                                                  (13)
+
+wherep            θ(σ)  =|ψ         θ(σ)|      2/Zθ  is  the  normalized  probability  distribution  (Z  θ  = Pσ|ψ θ(σ)|      2).   The  neural  network
+predicts the probabilityp  θ(σ) for configurationσ, while the phaseϕ                                            θ(σ) is generated by an auxiliary network branch.
+   The variational energy Eq.(11)can be rewritten in terms of the local energy
+
+
+                                                      Eloc(σ) = ⟨σ|    ˆH|ψ     θ⟩⟨σ|ψ      θ⟩    =Xψθ(σ)  ,                                                      (14)
+                                                                                       σ′ Hσσ′ψθ(σ ′)
+as
+
+                                                       E(θ) =  X        pθ(σ)E      loc(σ) =E   pθ[E loc].                                                       (15)
+                                                                    σ
+
+Since dimension of the Hilbert space grows exponentially with system size, rendering the exact evaluation of Eq.(15)
+computationally  intractable.   The  local  energy  is  instead  evaluated  as  the  expectation  valueE   pθ[E loc],  which  is
+approximated via stochastic sampling.  Specifically,N S  configurations{σ                               (k) }NSk=1   are drawn independently from the
+neural network’s probability distributionp                       θ(σ), yielding the estimator
+
+                                                                                NSX
+                                                               E(θ) =         1NS    Eloc(σ  (k)   ).                                                                (16)
+                                                                                k=1
+
+Differentiating the energy estimator in Eq.(16)with respect to the network parametersθyields the parameter gradient
+expressed in Eq.(2).  The parameters are then updated via gradient descent in stand NQS based VMC.
+   The  optimization  proceeds  iteratively:  samples  are  generated  from  the  current  distributionp              θ(σ),  gradients  are
+estimated, and parameters are updated until convergence to a stationary point is achieved.  The quality of the final
+solution depends critically on (i) the expressivity of the ansatz (i.e., whether the parameterized manifold contains a
+good approximation to|Ψ     0⟩), and (ii) the ability of the sampling-based optimization to navigate the high-dimensional
+parameter landscape.  As discussed in the main text,  the latter is often hampered by sampling-based optimization
+bottlenecks that we address with the AGD method.
+
+
+                                             B.    cRNN Architecture and Ancestral Sampling
+
+   The trial wave function in our framework is parametrized by a complex-valued recurrent neural network (cRNN).
+The network architecture closely follows the RNN wave function ansatz introduced by Hibat-Allahet  al.[43], while
+the  sampling  procedure–adapted  to  molecular  systems  with  a  fixed  particle  number–builds  on  the  autoregressive
+scheme of Barrettet  al.[44].  Together, these ingredients endow the ansatz with both expressive power and exact,
+symmetry-respecting sampling, which are essential for the AGD optimization developed in this work.
+
+
+                                                 1.    Autoregressive wave function parametrization
+
+   For  a  configurationσ=  (σ               1,σ2,...,σN)  in  the  computational  basis,  whereNis  the  number  of  sites  (or  spin-
+orbitals in molecular systems) andσ   i∈{0,1,...,d−1}denotes the local state at sitei, the cRNN factorizes the joint
+probability into a product of conditionals:
+
+                                                                       NY
+                                                          pθ(σ) =          pθ(σ i|σ 1,...,σi−1   ).                                                           (17)
+                                                                      i=1
+
+Each conditional is produced by a softmax over a learned value functionV                θ with complex parametersθ,
+
+                                                     pθ(σ i|σ <i) =      exp [−V θ(σ i,h i−1   )]Pd−1
+                                                                             s=0  exp [−V θ(s,h  i−1   )],                                                     (18)
+                                                                                                                                                      12
+
+whereh     i−1     is the hidden state encoding the historyσ      <i.  The hidden state is propagated by a gated recurrent unit
+(GRU),
+
+                                                              hi = GRUθ(σ i,h i−1   ),                                                                    (19)
+
+in direct analogy with the construction of Ref. [43].
+   The phase of the wave function is generated by an independent linear head applied to the same sequence of hidden
+states and accumulated across sites,
+
+                                                            NX
+                                               ϕθ(σ) =         softsign [W phase·h i−1    +b    phase],                                                 (20)
+                                                           i=1
+with the softsign activation softsign(x) =πx/(1 +|x|) confining each contribution to (−π,π).  Combining amplitude
+and phase yields the full complex wave function
+
+                                                            ψθ(σ) =  ppθ(σ)e   iϕθ(σ) .                                                                  (21)
+
+
+                                                     2.    Sampling with physical constraints
+
+   A key benefit of the autoregressive form Eq.(17)is that it admits exact ancestral sampling:  configurations are
+drawn site by site from the conditional distributions of Eq.(18), producing independent and identically distributed
+(i.i.d.)  samples and thereby avoiding the autocorrelation overhead inherent to Markov-chain Monte Carlo schemes.
+   For  molecular  systems  with  a  fixed  particle  numberN    part,  naive  ancestral  sampling  does  not  respect  the  global
+U(1)  symmetry  of  the  Hamiltonian.   To  enforce  particle-number  conservation  exactly,  we  employ  the  constrained-
+sampling  scheme  of  Hibat-Allahet  al.[43],  wherein  the  conditional  distributions  are  masked  on  the  fly  such  that
+only  configurations  within  the  physical  sector  are  generated.   Specifically,  at  stept,  given  the  running  occupation
+nt =Pts=1 σs, a candidate occupationσ        t =sis rejected whenever either (i)n    t≥N    part, in which case the particle
+budget is exhausted, or (ii)n t +(N−t)<N             part, in which case the remaining sites are insufficient to accommodate the
+missing particles.  The surviving probabilities are subsequently renormalized to ensure that each conditional remains
+a properly normalized distribution.  This procedure is exact in the sense that every sampled configuration carries the
+prescribed particle number,  while the independent and identically distributed nature of ancestral sampling is fully
+preserved.  To efficiently exploit modern hardware, we further adopt the autoregressive sampling algorithm of Barrett
+et al.[44], which is particularly well suited for large-batch generation.
+
+
+                                                          ACKNOWLEDGMENTS
+
+   This  work  is  supported  by  Quantum  Science  and  Technology-National  Science  and  Technology  Major  Project
+(2023ZD0300200),  the  National  Natural  Science  Foundation  of  China  Grant  (No.  12361161602),  NSAF  (Grant
+No.  U2330201),  Beijing  Natural  Science  Foundation  Z250004,  Beijing  Science  and  Technology  Planning  Project
+(Grant  No.  Z25110100810000).   The  numerical  experiments  of  this  work  are  supported  by  the  High-performance
+Computing Platform of the Institute of High Energy Physics (Beijing) and Peking University.
+
+
+
+
+
+ [1]Alberto Peruzzo, Jarrod McClean, Peter Shadbolt, Man-Hong Yung, Xiao-Qi Zhou, Peter J. Love, Al´an Aspuru-Guzik,
+     and Jeremy L. O’Brien. A variational eigenvalue solver on a photonic quantum processor.Nature Communications, 5:4213,
+     2014.
+ [2]Giuseppe Carleo and Matthias Troyer.  Solving the quantum many-body problem with artificial neural networks.Science,
+     355(6325):602–606, 2017.
+ [3]Dong-Ling Deng, Xiaopeng Li, and Sankar Das Sarma.  Quantum entanglement in neural network states.Physical Review
+     X, 7(2):021021, 2017.
+ [4]Xun Gao and Lu-Ming Duan.  Efficient representation of quantum many-body states with deep neural networks.Nature
+     Communications, 8:662, 2017.
+ [5]Or Sharir, Yoav Levine, Noam Wies, Giuseppe Carleo, and Amnon Shashua.  Deep autoregressive models for the efficient
+     variational simulation of many-body quantum systems.Physical Review Letters, 124(2):020503, 2020.
+ [6]Mohamed Hibat-Allah, Martin Ganahl, Lauren E. Hayward, Roger G. Melko, and Juan Carrasquilla.  Recurrent neural
+     network wave functions.Physical Review Research, 2(2):023358, 2020.
+                                                                                                                                                        13
+
+ [7]Thomas  D.  Barrett,  Aleksei  Malyshev,  and  Alexander  I.  Lvovsky.   Autoregressive  neural-network  wavefunctions  for  ab
+     initio quantum chemistry. Nature Machine Intelligence, 4:351–358, 2022.
+ [8]Yangjun Wu, Chu Guo, Yi Fan, Pengyu Zhou, and Honghui Shang.  Nnqs-transformer:  an efficient and scalable neural
+     network quantum states approach for ab initio quantum chemistry. InProceedings of the International Conference for High
+     Performance Computing, Networking, Storage and Analysis. Association for Computing Machinery, 2023.
+ [9]Yuan-Hang Zhang and Massimiliano Di Ventra.  Transformer quantum state:  A multipurpose model for quantum many-
+     body problems.Physical Review B, 107(7):075147, 2023.
+[10]Honghui Shang, Chu Guo, Yangjun Wu, Zhenyu Li, and Jinlong Yang.  Solving the many-electron schr¨odinger equation
+     with a transformer-based framework.Nature Communications, 16:8464, 2025.
+[11]Honghui Shang, Chu Guo, Yangjun Wu, Zhenyu Li, and Jinlong Yang.  Solving the many-electron schr¨odinger equation
+     with a transformer-based framework.Nature Communications, 16(1):8464, 2025.
+[12]Xiongzhi Zeng, Ming Gong, Bowen Kan, Yi Fan, Huan Ma, Jianbin Cai, Yancheng Liu, Naibin Zhou, Tao Jiang, Shao-
+     jun  Guo,  et  al.    Transformer  refined  quantum  sampling  for  strongly  correlated  electronic  structure.arXiv  preprint
+     arXiv:2605.24617, 2026.
+[13]Daran Sun, Bowen Kan, Haoquan Long, Hairui Zhao, Haoxu Li, Yicheng Liu, Pengyu Zhou, Ankang Feng, Wenjing Huang,
+     Yida Gu,  et al.  A fully gpu-accelerated framework for high-performance configuration interaction selection with neural
+     network quantum states.arXiv preprint arXiv:2604.15768, 2026.
+[14]Bowen Kan and Honghui Shang.  Accelerating many-body quantum chemistry via generative transformer-enhanced con-
+     figuration interaction.Journal of Chemical Theory and Computation, 21(23):11989–12000, 2025.
+[15]Lizhong Fu, Honghui Shang, and Jinlong Yang. Evaluation of phase networks in transformer-based neural network quantum
+     states.Communications in Computational Chemistry, 7(2):120–126, 2025.
+[16]Hannah Lange, Anka Van de Walle, Atiye Abedinnia, and Annabelle Bohrdt. From architectures to applications:  A review
+     of neural quantum states.Quantum Science and Technology, 9(4):040501, 2024.
+[17]Matija Medvidovi´c and Javier Robledo Moreno.  Neural-network quantum states for many-body physics.The European
+     Physical Journal Plus, 139(7):631, 2024.
+[18]Jan Hermann, Zeno Sch¨atzle, and Frank No´e. Deep-neural-network solution of the electronic schr¨odinger equation.Nature
+     Chemistry, 12(10):891–897, 2020.
+[19]David Pfau, James S. Spencer, Alexander G. de G. Matthews, and W. M. C. Foulkes. Ab initio solution of the many-electron
+     schr¨odinger equation with deep neural networks.Physical Review Research, 2(3):033429, 2020.
+[20]Kenny Choo, Antonio Mezzacapo, and Giuseppe Carleo. Fermionic neural-network states for ab-initio electronic structure.
+     Nature Communications, 11:2368, 2020.
+[21]S. Sorella.  Green function monte carlo with stochastic reconfiguration.Physical Review Letters, 80(20):4558–4561, 1998.
+[22]Sandro  Sorella.   Generalized  lanczos  algorithm  for  variational  quantum  monte  carlo.Physical  Review  B,  64(2):024512,
+     2001.
+[23]Ao  Chen  and  Markus  Heyl.   Empowering  deep  neural  quantum  states  through  efficient  optimization.Nature  Physics,
+     20(9):1476–1481, 2024.
+[24]Riccardo Rende, Luciano Loris Viteritti, Lorenzo Bardone, Federico Becca, and Sebastian Goldt.  A simple linear algebra
+     identity to optimize large-scale neural network quantum states.Communications Physics, 7(1):260, 2024.
+[25]James Martens and Roger Grosse. Optimizing neural networks with kronecker-factored approximate curvature. InProceed-
+     ings of the 32nd International Conference on Machine Learning, volume 37 ofProceedings of Machine Learning Research,
+     pages 2408–2417. PMLR, 2015.
+[26]Gil Goldshlager, Nilin Abrahamsen, and Lin Lin.  A kaczmarz-inspired approach to accelerate the optimization of neural
+     network wavefunctions.Journal of Computational Physics, 516:113351, 2024.
+[27]Antoine Misery, Luca Gravina, Alessandro Santini, and Filippo Vicentini. Looking elsewhere: Improving variational monte
+     carlo gradients by importance sampling.Machine Learning:  Science and Technology, 7(1):015035, 2026.
+[28]Eimantas Ledinauskas and Egidijus Anisimovas.  Neural importance resampling:  A practical sampling strategy for neural
+     quantum states.arXiv preprint arXiv:2507.20510, 2025.
+[29]Aleksei Malyshev, Markus Schmitt, and A. I. Lvovsky. Neural quantum states and peaked molecular wave functions: Curse
+     or blessing?arXiv preprint arXiv:2408.07625, 2024.
+[30]Xiang Li, Jia-Cheng Huang, Guang-Ze Zhang, Hao-En Li, Chang-su Cao, Dingshun Lv, and Han-Shi Hu. A nonstochastic
+     optimization algorithm for neural-network quantum states.Journal of Chemical Theory and Computation, 19(22):8156–
+     8165, 2023.
+[31]Attila Szab´o and Claudio Castelnovo.  Neural network wave functions and the sign problem.Physical Review Research,
+     2(3):033075, 2020.
+[32]Dian Wu,  Lei Wang,  and Pan Zhang.  Solving statistical mechanics using variational autoregressive networks.Physical
+     Review Letters, 122(8):080602, 2019.
+[33]Dian Wu, Riccardo Rossi, and Giuseppe Carleo. Unbiased monte carlo cluster updates with autoregressive neural networks.
+     Physical Review Research, 3(4):L042024, 2021.
+[34]Dian Wu,  Lei Wang,  and Pan Zhang.  Solving statistical mechanics using variational autoregressive networks.Physical
+     review letters, 122(8):080602, 2019.
+[35]Mohamed Hibat-Allah, Estelle M Inack, Roeland Wiersema, Roger G Melko, and Juan Carrasquilla.  Variational neural
+     annealing.Nature Machine Intelligence, 3(11):952–961, 2021.
+[36]Dian Wu, Riccardo Rossi, and Giuseppe Carleo. Unbiased monte carlo cluster updates with autoregressive neural networks.
+     Physical Review Research, 3(4):L042024, 2021.
+                                                                                                                                                         14
+
+[37]Huan  Zhang,  Robert  J  Webber,  Michael  Lindsey,  Timothy  C  Berkelbach,  and  Jonathan  Weare.   Understanding  and
+     eliminating spurious modes in variational monte carlo using collective variables.Physical Review Research, 5(2):023101,
+     2023.
+[38]Estelle  M  Inack,  Stewart  Morawetz,  and  Roger  G  Melko.   Neural  annealing  and  visualization  of  autoregressive  neural
+     networks in the newman–moore model.Condensed Matter, 7(2):38, 2022.
+[39]Simone Ciarella, Jeanne Trinquier, Martin Weigt, and Francesco Zamponi.  Machine-learning-assisted monte carlo fails at
+     sampling computationally hard problems.Machine Learning:  Science and Technology, 4(1):010501, 2023.
+[40]Ao  Chen  and  Markus  Heyl.   Empowering  deep  neural  quantum  states  through  efficient  optimization.Nature  Physics,
+     20(9):1476–1481, September 2024.
+[41]Rodney  J.  Bartlett  and  Monika  Musia l.   Coupled-cluster  theory  in  quantum  chemistry.  Reviews  of  Modern  Physics,
+     79(1):291–352, 2007.
+[42]Dian  Wu,  Riccardo  Rossi,  Filippo  Vicentini,  Nikita  Astrakhantsev,  Federico  Becca,  Xiaodong  Cao,  Juan  Carrasquilla,
+     Francesco Ferrari, Antoine Georges, Mohamed Hibat-Allah, Masatoshi Imada, Andreas M. L¨auchli, Guglielmo Mazzola,
+     Antonio Mezzacapo, Andrew Millis, Javier Robledo Moreno, Titus Neupert, Yusuke Nomura, Jannes Nys, Olivier Parcollet,
+     Rico Pohle, Imelda Romero, Michael Schmid, J. Maxwell Silvester, Sandro Sorella, Luca F. Tocchio, Lei Wang, Steven R.
+     White, Alexander Wietek, Qi Yang, Yiqi Yang, Shiwei Zhang, and Giuseppe Carleo. Variational benchmarks for quantum
+     many-body problems.Science, 386(6719):296–301, October 2024.
+[43]Mohamed Hibat-Allah, Martin Ganahl, Lauren E. Hayward, Roger G. Melko, and Juan Carrasquilla.  Recurrent neural
+     network wave functions.Phys. Rev. Research, 2(2):023358, 2020.
+[44]Thomas  D.  Barrett,  Aleksei  Malyshev,  and  A.  I.  Lvovsky.   Autoregressive  neural-network  wavefunctions  for  ab  initio
+     quantum chemistry. Nature Machine Intelligence, 4(4):351–358, 2022.
+[45]Trygve Helgaker, Poul Jørgensen, and Jeppe Olsen.Molecular Electronic-Structure Theory.  Wiley, Chichester, England,
+     2000.
+[46]Paul Jordan and Eugene Wigner.        ¨Uber das Paulische ¨aquivalenzverbot.Zeitschrift f¨ur Physik, 47(9):631–651, 1928.
+[47]Tianchen Zhao, James Stokes, and Shravan Veerapaneni.  Scalable neural quantum states architecture for quantum chem-
+     istry. Machine Learning:  Science and Technology, 4(2):025034, 2023.
+[48]Sunghwan Kim, Paul A. Thiessen, Evan E. Bolton, Jie Chen, Gang Fu, Asta Gindulyte, Lianyi Han, Jane He, Siqian He,
+     Benjamin A. Shoemaker, Jiyao Wang, Bo Yu, Jian Zhang, and Stephen H. Bryant.  Pubchem substance and compound
+     databases.Nucleic Acids Research, 44(D1):D1202–D1213, 2016.
+[49]Daniel G. A. Smith, Lori A. Burns, Andrew C. Simmonett, Robert M. Parrish, Matthew C. Schieber, Raimondas Galvelis,
+     Peter Kraus, Holger Kruse, Roberto Di Remigio, Asem Alenaizan, et al. Psi4 1.4: Open-source software for high-throughput
+     quantum chemistry. The Journal of Chemical Physics, 152(18):184108, 2020.
+[50]Jarrod R. McClean, Nicholas C. Rubin, Kevin J. Sung, Ian D. Kivlichan, Xavier Bonet-Monroig, Yudong Cao, Chengyu
+     Dai, E. Schuyler Fried, Craig Gidney, Brendan Gimby, et al.  Openfermion:  the electronic structure package for quantum
+     computers.Quantum Science and Technology, 5(3):034014, 2020.
+                                                                                                                                               15
+
+                               Appendix A: Related works on solving training issues of NQS
+
+  Although neural quantum states provide expressive variational representations, their optimization remains intrin-
+sically vulnerable to sampling-induced failures.  In sampling-based training, the variational energy is evaluated only
+through configurations visited by the current model distribution.  As a result, regions of configuration space that are
+rarely sampled receive little or no gradient, even if they contain physically important contributions.  This creates a
+problematic feedback loop:  configurations that are sampled frequently and appear to lower the energy are preferen-
+tially reinforced,  whereas configurations with an incorrectly learned sign structure are assigned progressively lower
+probabilities and may eventually become undersampled.  Once the probabilities of these configurations are severely
+underestimated and fall far below the sampling resolution, they may remain unsampled over many iterations, render-
+ing them effectively invisible to both local-energy estimates and gradient updates.  This failure can manifest as mode
+collapse, exponentially suppressed configurations, and spurious modes.  Mode collapse refers to a degenerative phe-
+nomenon where the neural network loses its ability to represent the true quantum state, converging instead into trivial,
+unphysical,  or highly constrained states,  exponentially suppressed configurations describe individual configurations
+whose probability is underestimated by an exponential factor even when the global distribution appears accurate, and
+spurious modes correspond to artificial high-probability regions created by the variational model in poorly sampled
+parts of configuration space.  In all cases, the training dynamics may appear stable according to standard diagnostics,
+while the learned state only represents a restricted portion of the relevant Hilbert or configuration space.
+  Several works have clarified these pathologies in closely related variational neural sampling problems.  Variational
+autoregressive  networks  showed  that  minimizing  a  reverse-KL  or  variational-free-energy  objective  can  suffer  from
+mode collapse.  The model may correctly reproduce the relative Boltzmann weights within the modes it covers, while
+completely missing other modes [34].  A key implication is that low variance of the energy-like training signal is not
+a sufficient certificate of global correctness, because the zero-variance condition only constrains the support already
+covered by the model.  This observation explains why a variational distribution can appear well optimized while still
+yielding an incorrect free energy or missing symmetry-related sectors.  Temperature annealing and explicit symmetry
+restoration were proposed as practical remedies,  allowing the model to start from a high-temperature distribution
+with broad support and then follow the target distribution as the temperature is lowered [34].  Variational neural an-
+nealing further systematized this idea by introducing entropy-driven classical annealing and driver-Hamiltonian-based
+quantum annealing within an autoregressive variational framework, showing that annealed training can substantially
+outperform direct optimization on several spin-glass and optimization problems [35].
+  At  the  same  time,  subsequent  studies  revealed  important  limitations  of  annealing  and  neural  sampling.   In  the
+Newman-Moore model, variational neural annealing was found to locate low-energy states while still collapsing onto
+only  a  subset  of  degenerate  ground-state  configurations,  indicating  that  correct  energy  alone  does  not  guarantee
+correct representation of the full ground-state manifold [38].  More broadly, machine-learning assisted Monte Carlo
+was shown to fail on computationally hard sampling problems such as random graph coloring:  variational training
+tends to collapse onto a small region of phase space, whereas data-driven training can suffer from expressivity and
+overfitting limitations that destroy global MCMC acceptance [39].  These results suggest that difficult configuration-
+space geometry can be transferred into the trainability of the neural sampler.  In such regimes, the issue is not merely
+whether the neural network is expressive enough in principle, but whether the training dynamics can maintain access
+to all relevant modes before they are lost.
+  Other  works  have  focused  on  correcting  the  sampling  process  itself.   The  concept  of  exponentially  suppressed
+configurations was introduced to show that even a well-trained neural sampler can severely underestimate a small
+number of configurations because the reverse-KL objective penalizes such errors only logarithmically [36].  These rare
+configurations may have negligible impact on the variational objective, but can cause severe failures in importance
+sampling  or  neural  global-update  schemes  by  producing  large  weight  fluctuations  and  long  autocorrelation  times.
+Neural cluster updates, combined with symmetry operations, were therefore proposed to restore unbiased Monte Carlo
+sampling and help Markov chains escape such suppressed configurations [36].  In variational Monte Carlo for NQS,
+spurious modes provide a complementary failure mode:  under-sampled regions may develop artificial high-probability
+density,  leading  to  sudden  and  persistent  energy  spikes  when  walkers  enter  these  regions  [37].   Collective-variable
+VMC addresses this by adding a physically motivated penalty term that suppresses probability accumulation outside
+the relevant region of a chosen collective variable, thereby eliminating spurious energy spikes and improving energy
+accuracy [37].
+  These prior approaches identify and mitigate important aspects of neural-sampling failure, but they act at different
+levels from annealed gradient descent.  Temperature annealing and variational neural annealing modify the training
+path by introducing thermal entropy or quantum-driving terms.  Neural cluster updates and symmetry operations
+modify the sampling dynamics to preserve unbiasedness and reduce autocorrelation, collective-variable VMC intro-
+duces an additional diagnostic and penalty based on predefined physical coordinates, and machine-learning-assisted
+Monte Carlo studies emphasize the intrinsic difficulty of representing and sampling hard multimodal distributions.
+                                                                                                                                                     16
+
+AGD instead targets the gradient estimator used in NQS optimization itself.  It does not require replacing the sampler,
+introducing a new physical collective variable, enforcing a particular symmetry, changing the Hamiltonian, or solving
+an additional curvature problem.  By applying a temperature-dependent reweighting directly to sampled gradient con-
+tributions, AGD counteracts the premature dominance of high-probability configurations and amplifies the influence
+of low-probability configurations before they become statistically invisible.  In this sense, AGD is a gradient-level cor-
+rection to sampling-induced bias, which is designed not merely to improve sample quality after collapse has occurred,
+but to prevent the optimization trajectory from collapsing into an artificially restricted subspace in the first place.
+
+
+                     Appendix B: Mapping molecular ecectronic Hamiltonian to qubit Hamiltonian
+
+  Within the Born-Oppenheimer approximation, the nuclei are clamped at fixed positions{R       I}and the nonrelativistic
+electronic Hamiltonian of a molecule withN    e electrons reads, in atomic units,
+
+                                                      NeX          NeXX         ZI             X        1
+                                         ˆHel =−   12      ∇2i−             |r i−R I| + 12          |r i−r j|,                                         (B1)
+
+                                                      i=1         i=1    I                     i̸=j
+
+whereZ     I  denotes  the  charge  of  nucleusI;  the  constant  internuclear  repulsion  is  omitted  as  it  merely  shifts  the
+spectrum.  To obtain a finite-dimensional representation amenable to quantum simulation, the electronic degrees of
+freedom are projected onto a finite set ofNorthonormal spin orbitals{ϕ     p(x)}   Np=1  , withx= (r,σ) a combined spatial-
+spin coordinate.  These orbitals are typically obtained from a preceding self-consistent Hartree-Fock calculation in an
+atom-centered Gaussian basis set (e.g., STO-3G or cc-pVDZ) [45].  In this basis, Eq.(B1)takes the second-quantized
+form
+
+                                                       NX                       NX
+                                               ˆH=         hpq ˆa †pˆa q + 1          hpqrs ˆa †pˆa †qˆa rˆa s,                                                (B2)
+                                                     p,q=1                2 p,q,r,s=1
+
+where ˆa †p  (ˆa p) creates (annihilates) an electron in spin orbitalϕ      p.  The Hamiltonian ((B2)) acts on the Fock space
+spanned by occupation-number states|x     N−1  ,...,x1,x0⟩withx    p∈{0,1}, whose dimension 2    N  motivates the identi-
+fication of each fermionic mode with one qubit.
+  Qubit operators are distinguishable and commute on different sites, whereas the fermionic operators in Eq.(B2)
+anticommute; a faithful mapping must therefore encode the antisymmetric exchange statistics into nonlocal strings
+of Pauli operators.  The canonical choice is the Jordan-Wigner (JW) transformation [46], which stores the occupation
+of modeplocally in qubitpand attaches a parity string acting on all preceding qubits,
+                                                        Y        !                         Y         !
+                                            ˆa †p 7−→         σzq   σ−p,       ˆa p 7−→          σzq    σ+p,                                             (B3)
+                                                         q<p                                 q<p
+
+withσ  ±p   = (σ xp∓iσ  yp)/2.  Direct substitution of Eq.(B3)into Eq.(B2)and normal ordering of the resulting spin
+operators yields a qubit Hamiltonian in the general form of a weighted sum of Pauli strings,
+
+                                                                          N−1O
+                                        ˆHQ =Xhj  ˆPj,         ˆPj =            σνj,pp  ,  νj,p∈{I,x,y,z},                                        (B4)
+
+                                                  j                        p=0
+
+where the real coefficientsh j are linear combinations of the molecular integrals. Because the two-body term in Eq.(B2)
+carries four orbital indices, the number of Pauli strings scales asO(N          4), while the JW strings themselves have weight
+(number of nontrivial Pauli factors) up toO(N).  The qubit Hamiltonian of Eq.(B4)defines the computational basis
+and the operator whose expectation value is minimized in classical variational approaches based on neural-network
+quantum states.
+
+
+                                                     Appendix C: Experiment details
+
+  This section provides additional details supporting the results presented in the main text. Our wavefunction ansatz is
+a complex-valued recurrent neural network [43] in which the amplitude and phase of the wavefunction share a common
+recurrent backbone.  The backbone consists of two stacked GRU layers with an equal number of hidden units per layer
+                                                                                                                                                      17
+
+, which process the qubit (spin) configuration autoregressively, one site at a time.  At each site, the hidden state of
+the final GRU layer is passed to two separate linear output heads:  an amplitude head, which produces the conditional
+probability  distribution  over  the  local  two-dimensional  Hilbert  space  via  a  softmax  activation,  and  a  phase  head,
+which is composed of a single linear layer followed by a softsign activation, which outputs the local contribution to the
+phase. For the sampling procedure, we adopt the autoregressive sampling scheme proposed by Barrettet al.[44], which
+efficiently samples physically distinct configurations together with their corresponding occurrence counts.  Throughout
+all experiments in this work that employ AGD method, the total number of autoregressive samples is fixed at 1×10      12.
+To reduce the computational cost, the local energies are evaluated using the scalable approach proposed in Ref. [47].
+The  complete  optimization  workflow  and  pseudocode  for  the  annealed  gradient  descent  procedure  are  outlined  in
+Algorithm1.
+   To evaluate the performance of neural-network quantum states,  we benchmark our approach on a diverse set of
+molecular Hamiltonians.  The Hamiltonians listed in TableIare taken directly from the supporting code repository
+associated with Ref. [44], where they were generated using the following workflow.  Molecular geometries were obtained
+from the PubChem database [48], and the corresponding electronic-structure calculations were performed in the STO-
+3G minimal basis usingPsi4[49].  The resulting molecular integrals were then processed withOpenFermion[50] to
+construct the second-quantized electronic Hamiltonians, which were subsequently mapped onto qubit Hamiltonians
+via the Jordan-Wigner transformation.  The initial temperature parameters and the number of neurons per layer used
+to calculate these Hamiltonians using AGD are listed in TableI. Except for molecule LiCl, which has an annealing
+step count of 7k steps, the other molecules have an annealing step count of 4k steps.  Besides, the results reported in
+TableIare obtained with 10          4 optimization steps for all molecules, except for LiCl (1.5×10           4 steps) and C2 (2×10        4
+steps).  To further assess our method, we apply it to the linear hydrogen chain H10  with an interatomic separation
+of 2.0 Bohr in the STO-3G basis,  using canonical (restricted Hartree-Fock) molecular orbitals;  the hydrogen chain
+is  a  prototypical  benchmark  system  for  correlated  electronic-structure  methods,  whose  stretched  geometries  probe
+the  strongly  correlated  regime.   The  results  shown  in  Fig.4(b)  are  obtained  with  a  network  of  230  hidden  units
+per  layer  (481,164  parameters  in  total)  at  a  initial  temperature  ofT=  10.0  with  decay  steps  15k  and  total  steps
+1.5×10          5.  In all molecular experiments, all network parameters are optimized using the Adam optimizer with decay
+rates (β  1,β2) = (0.9,0.99) andϵ= 10      −8  .  We employ parameter-group-dependent learning rates:  the parameters of
+the phase subnetwork are updated with a learning rate of 10η,  while the amplitude subnetwork and all remaining
+parameters use the base learning rateη= 1×10    −3  .  All runs listed in TableIare performed with a fixed random
+seed (seed = 111), and only the particle-number (electron-number) conservation constraint is imposed on the sampled
+configurations.
+   Having established the performance of our approach on molecular Hamiltonians, we next turn to frustrated quantum
+spin systems and benchmark it on theJ      1-J  2 Heisenberg model in both one and two dimensions, scanning the frustration
+ratioJ          2/J1 across the weakly and strongly frustrated regimes.  The hyperparameters used for each value ofJ    2/J1 are
+summarized in TableII, including the number of hidden units per layer, the base learning rateη, the initial temperature
+T, the temperature-decay step count, and the total number of optimization steps.  For the one-dimensional chain, the
+weakly frustrated pointsJ    2/J1∈{0.0,0.1,0.2,0.3,0.4,0.5}are obtained with 10                                               5 optimization steps using 100 hidden
+units per layer, a base learning rate ofη= 1×10   −3  , an initial temperature ofT= 4.0, and a decay step count of
+8k.  In the more strongly frustrated regime, the pointJ  2/J1 = 0.6 uses the same network and annealing schedule but
+requires 3×10      5 optimization steps, whileJ           2/J1 = 0.8 additionally employs a larger network of 150 hidden units per
+layer, a reduced base learning rate ofη= 2.5×10    −4  , an initial temperature ofT= 5.0, and a decay step count of
+10k.
+   For our AGD-enhanced NQS experiment of two-dimensional square lattice, all points are computed with 3×10      5
+optimization steps, a base learning rate ofη= 2.5×10    −4  , and a decay step count of 30k.  The pointsJ    2/J1∈{0.0,0.2}
+use 200 hidden units per layer with an initial temperature ofT= 6.0; the pointJ            2/J1 = 0.5, lying in the maximally
+frustrated region, uses 200 hidden units withT= 4.0;  and the pointJ                 2/J1  = 0.8 uses an enlarged network of 250
+hidden  units  per  layer  withT=  6.0.   In  all  spin-model  experiments,  we  adopt  the  same  optimization  protocol  as
+in the molecular calculations described above.  AllJ      1-J  2 Heisenberg model runs are performed with a fixed random
+seed (seed = 111).  The GRU-NQS data points shown in Fig.6are obtained directly from theJ                 1–J  2 implementation
+provided in the public GitHub repository accompanying the work of Hibat-Allahet al.[43].  Each data point represents
+the average over three independent runs with different random seeds, where each run consists of 3×10      5 optimization
+steps.  We adopt the default initial learning rate of 2.5×10   −4   and a sample size of 500, together with the learning-rate
+decay schedule implemented in the original code,η      decayed = 1/(1/η+t/10), whereηdenotes the initial learning rate
+andtthe optimization step.  For a fair comparison, the model size and the number of hidden layers of the GRU-NQS
+are set to be identical to those listed in TableII.
+   Finally, we describe the learning-rate schedules employed during the variational optimization.  For the molecular
+systems, as well as for the one-dimensionalJ                                1-J  2  model withJ         2/J1≤0.6, we adopt a two-stage schedule:  starting
+from an initial learning rateη        0  = 1×10  −3  , the learning rate is first annealed following a cosine schedule over the
+                                                                                                                                                                                 18
+
+initialT            decay = 3000 optimization steps,
+
+                                         η(t) =η         min +  12 (η  0−η    min) [1 + cos(πt/T        decay)],   t≤T        decay,                                  (C1)
+
+
+withη         min  =  5×10  −4  ,  after  which  the  learning  rate  is  held  constant  atη    min  for  the  remainder  of  the  training.
+For  the  more  strongly  frustrated  regime  of  the  one-dimensional  model  (J  2/J1  =  0.8)  and  for  all  two-dimensional
+J1-J  2 calculations, where the optimization landscape is considerably more challenging, we instead employ a smooth
+inverse-time decay,
+
+
+                                                                             η(t) =     η01 +αη    0t,                                                                      (C2)
+
+
+withη         0 = 2.5×10   −4    andα= 0.1, which provides a slowly and monotonically decreasing learning rate over the full
+course of the optimization and thereby suppresses stochastic fluctuations in the late stage of the training.
+
+
+
+TABLE II. Hyperparameters used for the one- and two-dimensionalJ                            1-J  2 Heisenberg model calculations:  the frustration ratio
+J2/J1, the number of hidden units per layer, the base learning rateη, the initial temperatureT, the temperature-decay step
+count, and the total number of optimization steps.
+                                         SystemJ               2/J1  Hidden unitsη    T Decay steps  Total steps
+                                            1D     0.0-0.5         100          1×10     −3     4.0         8k            1×10          5
+                                            1D        0.6            100          1×10   −3     4.0         8k            3×10          5
+                                            1D        0.8            150         2.5×10    −4    5.0        10k           3×10          5
+                                            2D        0.0            200         2.5×10    −4    6.0        30k           3×10          5
+                                            2D        0.2            200         2.5×10    −4    6.0        30k           3×10          5
+                                            2D        0.5            200         2.5×10    −4    4.0        30k           3×10          5
+                                            2D        0.8            250         2.5×10    −4    6.0        30k           3×10          5
+
+
+ Algorithm 1:Annealed Gradient Descent for NQS
+       Input:Hamiltonian             ˆH,T     init,T decay,N steps,N S
+       Output:Optimizedθ
+   1Initializeθ;
+   2fort= 0toN                steps−1do
+   3      Sample{σ        i}NSi=1 ∼p    θ(σ);
+
+   4      ComputeE                     loc(σ i) =⟨σ  i| ˆH|ψ     θ⟩/⟨σ  i|ψ θ⟩;
+   5  T(t)←T               init−(T     init−1)·min(1,t/T                     decay);hi
+   6  w i∝exp                  2                      ;
+                             T(t)     log|ψ       θ(σ i)|
+   7  E  baseline←PiwiEloc(σ i);
+   8  L←2 Re [  Piwi (E  loc(σ i)−E     baseline) logψ  ∗θ(σ i)];θ←Adam(θ,∇                             θL);
+
+   9returnθ;
+
+
+
+
+
+                                                              Appendix D: Gradient Expression
+
+   To understand the specific meaning of the gradient formula, we can use the expansion method to see it clearly.  This
+expansion approximation reveals how the probability current generated by the neural network flows.  LetL=⟨H⟩        ψθ
+be variational energy, ∆E(σ) =E      loc(σ)−⟨E   loc⟩be the deviation of the local energy and   ˆgbe the annealed gradient.
+Instead  of  estimating  the  gradients  via  sampling  configurations  according  to  thep      θ  =|ψ     θ|2,  we  replacep              θ  with
+                1
+qθ(T) =p       Tθ  and considerT= 1 +ϵwhereϵ≪1.  Then, we have
+                                                                                                                                                                                     19
+
+
+                                (X                                                      )
+
+                                                      1
+       ∂θLT (θ)∝2 Re                     [p θ(σ)]   1+ϵ    ∆E(σ)∂             θ logψ  ∗θ(σ)                                                                                      (D1)
+                                (Xσ                                                                      )
+
+                     ≃2 Re               pθ(σ)  1−ϵlogp             θ(σ) ∆E(σ)∂             θ logψ  ∗θ(σ)                                                                       (D2)
+                                (Xσ                                               )             (                                                                     )
+
+                     = 2 Re              [p θ(σ)] ∆E(σ)∂                  θ logψ  ∗θ(σ)+2 Re       ϵX[−p     θ(σ) logp          θ(σ)] ∆E(σ)∂                  θ logψ  ∗θ(σ),      (D3)
+                         |           σ                {z                            }                  σ
+
+                                                   ∂θL(θ)
+
+where Eq.(D2)follows from a first-order Taylor expansion ofq                    θ inϵ,
+
+                                                     1
+                                                 p 1+ϵ     =p    1−ϵlogp+ϵ                    2 logp+        (logp)          22+O(ϵ         3),                                         (D4)
+
+
+Thus, we define∂            θK(θ) as a general form of the each term in Eq.(D3),
+                                                                           (X                                                   )
+                                                   ∂θK(θ) = 2 Re                    w(p     θ(σ))∆E(σ)∂                     θ logψ  ∗θ(σ).                                           (D5)
+                                                                                σ
+
+Thus, for instance, the vanilla gradient∂  θL(θ) and the second term in Eq.(D3)can be naturally written as∂                      θK(θ)
+withw(p) =pandw(p)≡plog                                              1p =−plogp, respectively.
+   We then consider the contribution with respect to each terms in Eq.(D3)for the change ofθ,
+
+                                                    ∆θ=−η∂             θK(θ),                                                                                                (D6)(X)
+
+                                                          =−2ηRe                   w(p     θ(σ))∆E(σ)∂                     θ logψ  ∗θ(σ),                                            (D7)
+                                                                               σ
+                                                          =−2η   X         w(p     θ(σ))∆E(σ)∂                     θ logp      θ(σ).                                                        (D8)
+                                                                       σ
+
+From Eq.(D7)to Eq.(D8), it is based on the fact that logψ          ∗θ(σ) = logp          θ−iϕ    θ whereϕ            θ is the phase of NQS. For an
+arbitrary single configurationσ                 0, the change of logp  θ can be computed as
+
+                                                                ∆ logp      θ(σ  0)≈  ∂θ logp      θ(σ  0)⊤∆θ.                                                        (D9)
+
+then, substituting Eq.(D8)into Eq.(D9), we have
+
+                                      ∆ logp      θ(σ  0)≈−2η  X           w(p     θ(σ))∆E(σ)      ∂θ logp      θ(σ  0)⊤∂θ logp      θ(σ).                             (D10)
+                                                                       σ
+
+When we only consider the contribution of a single configuration, i.e.{σ}={σ                   0}, then Eq.(D10)becomes,
+
+                                                             −2η·w(p              θ(σ  0))∆E(σ             0)∂θ logp      θ(σ  0)2.                                                   (D11)
+
+   We  can  observe  that  when  ∆E(σ         0)<0  which  makes  ∆ logp           θ(σ  0)>0  and  leads  increase  of  logp     θ(σ),  thereby
+increasing the probability to sampleσ              0.  The effect of the annealing factor on the sampling is illustrated in Fig.7.
+The orange dashed line corresponds to the vanilla gradient weight,w(p) =p, whereas the blue curve represents the
+second correction term in Eq.(D3), with the entropy-like weighting functionw(p) =−plogp.  In the low-probability
+region, particularly forp∈[0,0.1], this entropy-like weight amplifies the contribution of configurationsσwith small
+model probabilityp  θ(σ).  As a result, physically important but underrepresented configurations are less likely to be
+missed  during  gradient  estimation.   At  the  same  time,w(p)  =−plogpvanishes  asp→1,  so  it  does  not  further
+enhance configurations that already have high probability.  This prevents dominant configurations from overwhelming
+the update and helps the NQS maintain access to low-probability but relevant regions of the Hilbert space.
+                                                                                                                                                               20
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+FIG. 7.  Comparison between the entropy-like weighting functionf(p) =−plogpand the linear weighting functionf(p) =p
+overp∈[0,1].
+
+   Compared to the zeroth-order weightw(p) =p, which corresponds to standard gradient descent, the higher-order
+weight exhibit a logarithmic enhancement in the regime of smallp.  Specifically, as indicated by Eq.(D4), then-th
+order contribution provides an enhancement scaling as (logp)    n as shown in Fig.8.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+FIG. 8.  Comparison ofp    1/(1+ϵ)          and its Taylor expansions inϵevaluated atϵ= 1.  Relative to the zeroth-order approximation
+O(ϵ     0), the higher-order truncations that incorporateϵ-dependent corrections exhibit a logarithmically enhanced weighting in
+the small-pregime.
+
+
+
+                                                        Appendix E: Proof of Theorem1
+
+   When the probability of a configurationσ                           0  is misestimated by the neural network and becomes so strongly sup-
+pressed that the optimization fails to sampleσ              0 over many steps, the sampling process can be regarded as effectively
+unable to reach this configuration.  The only remaining channel through whichσ   0 can re-enter the local-energy esti-
+mate is then through a sampleable configurationσthat is coupled toσ                                 0 via the matrix elementH σσ0.  Unfortunately,
+this contribution is suppressed as well.  If this suppression is likewise assumed to be negligibly small, the local-energy
+estimate becomes entirely independent ofσ    0.  We now make this statement precise and present the proof of Theorem1.
+Proof.LetHdenote the full Hilbert space andSbe the truncated subspace excluding the unsampled state|σ                                     0⟩.  Note
+that this can occur if a component is suppressed due to the sign problem, rendering it inaccessible to sampling.  We
+define the projection operator into this subspace as  ˆP=    ˆI−|σ   0⟩⟨σ    0|.  Under the assumption that|σ           0⟩is never sampled
+, the variational wave function is strictly confined toS, satisfying|ψ           θ⟩=   ˆP|ψ  θ⟩.
+                                                                                                                                                              21
+
+   In the framework of VMC, the empirical local energy for any sampled state|σ⟩∈Sis given by
+
+                                                  Eloc(σ) =  X          Hσσ′ψθ(σ ′)ψθ(σ)     +H σσ0ψθ(σ  0)ψθ(σ)  .                                                  (E1)
+                                                                 σ′̸=σ    0
+
+where,  sinceσ          0  is  never  sampled,  we  haveψ θ(σ  0)∝p  θ(σ  0)≈0,  allowing  us  to  neglect  the  second  term.   Strictly
+speaking, a near-vanishing function value does not necessarily imply a vanishing derivative.  However, as explicitly
+shown in Eq.(2), the gradient is fundamentally governed by the parameter derivatives ofψ                θ, withE         loc acting merely
+as  a  multiplicative  weight  that  does  not  enter  the  differentiation  process.   Furthermore,  the  gradient  estimator  is
+evaluated as a sum over the sampled configurations.  Thus this restricted summation is mathematically equivalent to
+defining an effective Hamiltonian  ˆHsubspace =  ˆP ˆH ˆP.  Consequently, for anyσ̸=σ            0, the local energy can be rigorously
+expressed as
+
+                                                             Eloc(σ) = ⟨σ|    ˆHsubspace|ψ θ⟩⟨σ|ψ  θ⟩   .                                                              (E2)
+
+
+   The objective of gradient-based optimization is to minimize the energy functionalE(θ) =⟨ψ              θ| ˆHsubspace|ψ θ⟩/⟨ψ  θ|ψ θ⟩
+within the restricted subspaceS.  Assuming the NQS possesses sufficient expressivity,  convergence to a stationary
+point dictates that the wave function must satisfy the variational extremum condition:
+                                                                 ˆHsubspace|ψ θ⟩=E     0|ψ θ⟩.                                                                 (E3)
+
+This  implies  that  the  optimization  algorithm  invariably  drives|ψ  θ⟩to  become  an  exact  eigenstate  of  the  effective
+Hamiltonian  ˆHsubspace.
+   Substituting this eigenvalue equation back into the definition of the local energy Eq.(E2)yields
+
+                                                    Eloc(σ) = ⟨σ|(E        0|ψ θ⟩)⟨σ|ψ  θ⟩     =E    0⟨σ|ψ  θ⟩⟨σ|ψ  θ⟩ =E    0.                                                   (E4)
+
+Therefore, for all sampled statesσ∈S, the residual energy identically vanishes, yielding ∆E(σ)≡E                                  loc(σ)−E→0.
+Due to Eq.(D10), we can concluded ∆ logp          θ(σ  0)→0.
+   Following Theorem1, ∆ logp     θ(σ  0) vanishes.  This demonstrates that ifp(σ       0)→0 due to any mechanism–such as
+suppression induced by the sign problem–the subsequent updates top(σ        0) will also tend to zero.  Consequently, the
+neural network becomes trapped in a local minimum.  However, the aforementioned assumption is highly idealized.
+In  practice,  given  a  sufficiently  large  sample  size,  a  specific  component  may  still  be  sampled  a  handful  of  times,
+even under severe suppression induced by the sign problem.  If the network manages to dynamically correct the sign
+structure during training, the local energy deviation ∆E(σ) will not vanish.  Instead, this recovery provides crucial
+gradient information, driving the energy of the NQS significantly lower.

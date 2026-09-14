@@ -72,9 +72,141 @@ function tablesOf(h) {
   return out;
 }
 
-const files = fs.readdirSync("sources").filter(f => f.endsWith(".html"));
+// ---------------------------------------------------------------------------------
+// PDF TEXT TABLES
+// ---------------------------------------------------------------------------------
+// arXiv has no HTML before ~Dec 2023, so for the entire pre-2024 backlog - which is
+// where the primary sources live, and where 54 of the first 97 accepted rows came from -
+// pypdf's layout-mode text is the only machine-readable form. Three things make it a
+// different parsing problem from the HTML path, and all three are handled here:
+//
+//   * There are no cell boundaries. What layout mode preserves instead is CHARACTER
+//     OFFSET, so a column header is matched to a value by position on the line, not by
+//     token index - headers are centred while values are right-aligned, so index
+//     alignment fails on almost every real table.
+//   * A dash is two different things. "-0.5603734" uses U+2212 as a minus; "---" marks a
+//     missing entry. The HTML path flattens all dashes to "-", which here would turn
+//     every empty cell into a number. A dash is a minus only when a digit follows it.
+//   * Layout mode strips the spaces out of justified caption text, so a caption arrives
+//     as "TABLEIII.Optimisedground-stateenergies(inunitsof...". The words survive intact,
+//     so keyword tests are run against both the raw and the despaced form.
+//
+// This path is tuned for RECALL. Every hit is a worklist entry that gets read before any
+// row is written (RULES.md 8), so a spurious table costs a glance and a missed one costs
+// a record.
+
+// a dash followed by a digit is a minus sign; any other dash is an empty cell
+const dashes = s => s.replace(/[−–—‒‐]\s*(?=[0-9])/g, "-")
+                     .replace(/[−–—‒‐]+/g, " NA ");
+const normLine = s => mathDigits(s).replace(ZERO_WIDTH, "");
+
+// test a keyword against both the line and its despaced form, because layout mode
+// removes the spaces from justified text
+const hits2 = (re, s) => re.test(s) || re.test(s.replace(/\s+/g, ""));
+
+// split a header line into cells on runs of 2+ spaces, keeping each cell's centre column
+function headerCells(line) {
+  const out = [];
+  for (const m of line.matchAll(/\S(?:.*?\S)?(?=\s{2,}|$)/g)) {
+    const text = m[0].trim();
+    if (text) out.push({ text, centre: m.index + text.length / 2 });
+  }
+  return out;
+}
+
+// every energy token on a line, with the column it sits at
+function energyTokens(line) {
+  const out = [];
+  for (const m of line.matchAll(/\S+/g)) {
+    const t = tight(m[0]);
+    if (CELL.test(t)) out.push({ t, centre: m.index + m[0].length / 2, index: m.index });
+  }
+  return out;
+}
+
+const CAPTION_RE = /TABLE\s*(?:[IVXLC]+|[0-9]+)\s*[.:]/i;
+
+function textTables(raw) {
+  const lines = dashes(normLine(raw)).split("\n");
+  const isData = lines.map(l => energyTokens(l).length);
+
+  // contiguous runs of lines carrying energies, tolerating one blank line inside
+  const blocks = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (!isData[i]) continue;
+    let j = i;
+    while (j + 1 < lines.length && (isData[j + 1] || (isData[j + 2] && !lines[j + 1].trim()))) j++;
+    if (j > i || isData[i] >= 2) blocks.push([i, j]);       // a lone single-value line is prose
+    i = j;
+  }
+
+  return blocks.map(([a, b], bi) => {
+    // header: the nearest preceding non-blank line that carries no energy
+    let header = "";
+    for (let k = a - 1; k >= Math.max(0, a - 4); k--) {
+      if (!lines[k].trim()) continue;
+      if (isData[k]) break;
+      header = lines[k]; break;
+    }
+    // caption: nearest "TABLE n." within 25 lines, in EITHER direction. Two-column PDFs
+    // routinely put it after the body in reading order - 2211.07749 does.
+    let cap = "", best = 1e9;
+    for (let k = Math.max(0, a - 25); k < Math.min(lines.length, b + 25); k++) {
+      if (!CAPTION_RE.test(lines[k])) continue;
+      const d = k < a ? a - k : k - b;
+      if (d < best) { best = d; cap = lines.slice(k, k + 4).join(" "); }
+    }
+    return { bi, a, b, header, caption: clean(cap).slice(0, 700).replace(/\t/g, " "),
+             rows: lines.slice(a, b + 1) };
+  });
+}
+
 const out = [];
-let dataTables = 0;
+let dataTables = 0, textTablesN = 0;
+
+for (const f of fs.readdirSync("sources").filter(f => f.endsWith(".txt") && !f.startsWith("_"))) {
+  const id = f.replace(".txt", "");
+  const raw = fs.readFileSync(`sources/${f}`, "utf8");
+  // paper-level model tags: captions in PDF text are often too terse to name the model
+  const paperTags = MODEL.filter(([, re]) => hits2(re, raw)).map(([n]) => n);
+
+  for (const tbl of textTables(raw)) {
+    const cells = headerCells(tbl.header);
+    const capSizes = sizeTokens(tbl.caption);
+    const capTags = MODEL.filter(([, re]) => hits2(re, `${tbl.caption} ${tbl.header}`)).map(([n]) => n);
+    const models = [...new Set(capTags.length ? capTags : paperTags)];
+    let wrote = 0;
+
+    for (const line of tbl.rows) {
+      const ens = energyTokens(line);
+      if (!ens.length) continue;
+      // tokens before the first energy are the row label
+      const label = line.slice(0, ens[0].index).replace(/\s+/g, " ").trim().slice(0, 70);
+      // layout mode occasionally glues two table rows onto one line; flag rather than
+      // guess, so triage knows the row label may belong to the other half
+      const glued = cells.length && ens.length > cells.length ? 1 : 0;
+
+      for (const e of ens) {
+        const v = parseFloat(e.t.replace(/\(.*/, ""));
+        const em = e.t.match(/\(([0-9]{1,4})\)$/);
+        const dec = (e.t.replace(/\(.*/, "").split(".")[1] || "").length;
+        const err = em ? +(+em[1] * 10 ** -dec).toPrecision(3) : null;
+        // nearest header cell by character position - not by token index
+        const col = cells.length
+          ? cells.reduce((p, c) => Math.abs(c.centre - e.centre) < Math.abs(p.centre - e.centre) ? c : p).text
+          : "";
+        const sizes = [...new Set([...sizeTokens(label), ...sizeTokens(col), ...capSizes])];
+        out.push({ src: "pdf", id, ti: tbl.bi, value: v, err, label, col: col.slice(0, 45),
+                   sizes: sizes.slice(0, 4).join(","), models: models.join("+"),
+                   caption: tbl.caption, glued });
+        wrote++;
+      }
+    }
+    if (wrote) textTablesN++;
+  }
+}
+
+const files = fs.readdirSync("sources").filter(f => f.endsWith(".html"));
 
 for (const f of files) {
   const id = f.replace(".html", "");
@@ -109,19 +241,33 @@ for (const f of files) {
         const col = header[ci] || "";
         // size hints, most specific first: this row, this column, the caption
         const sizes = [...new Set([...sizeTokens(label), ...sizeTokens(col), ...capSizes])];
-        out.push({ id, ti, value: v, err, label: label.slice(0, 70), col: col.slice(0, 45),
-          sizes: sizes.slice(0, 4).join(","), models: models.join("+"), caption });
+        out.push({ src: "html", id, ti, value: v, err, label: label.slice(0, 70), col: col.slice(0, 45),
+          sizes: sizes.slice(0, 4).join(","), models: models.join("+"), caption, glued: 0 });
       }
     }
   }
 }
 
-fs.writeFileSync("sweep-tables.tsv",
-  "arxiv\ttable\tvalue\terr\trow_label\tcol_header\tsizes\tmodels\tcaption\n" +
-  out.map(r => [r.id, r.ti, r.value, r.err ?? "", r.label, r.col, r.sizes, r.models, r.caption].join("\t")).join("\n") + "\n");
+// The same number reached through both paths is one candidate, not two. HTML wins: it
+// has real cell boundaries, so its row label and column header are the trustworthy ones.
+const seenCell = new Set();
+const rows = out.filter(r => {
+  const k = `${r.id}|${r.value}|${r.err ?? ""}`;
+  return seenCell.has(k) ? false : (seenCell.add(k), true);
+});
 
-console.error(`${files.length} cached sources, ${dataTables} data tables, ${out.length} energy cells -> sweep-tables.tsv`);
+fs.writeFileSync("sweep-tables.tsv",
+  "arxiv\tsrc\ttable\tvalue\terr\trow_label\tcol_header\tsizes\tmodels\tglued\tcaption\n" +
+  rows.map(r => [r.id, r.src, r.ti, r.value, r.err ?? "", r.label, r.col, r.sizes, r.models, r.glued, r.caption].join("\t")).join("\n") + "\n");
+
+const nPdf = rows.filter(r => r.src === "pdf").length;
+console.error(`${files.length} HTML sources -> ${dataTables} data tables; ` +
+              `${fs.readdirSync("sources").filter(f => f.endsWith(".txt") && !f.startsWith("_")).length} PDF-text sources -> ${textTablesN} blocks`);
+console.error(`${out.length} energy cells, ${out.length - rows.length} duplicates dropped, ` +
+              `${rows.length} kept (${rows.length - nPdf} html + ${nPdf} pdf) -> sweep-tables.tsv`);
+const glued = rows.filter(r => r.glued).length;
+if (glued) console.error(`${glued} cells come from lines where layout mode glued two table rows together; their row_label may belong to the other half.`);
 const per = {};
-out.forEach(r => per[r.models || "(none)"] = (per[r.models || "(none)"] || 0) + 1);
+rows.forEach(r => per[r.models || "(none)"] = (per[r.models || "(none)"] || 0) + 1);
 console.error("cells by model tag:", Object.entries(per).sort((a, b) => b[1] - a[1]).slice(0, 12)
   .map(([k, v]) => `${k}:${v}`).join("  "));

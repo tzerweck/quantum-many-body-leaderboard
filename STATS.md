@@ -31,18 +31,24 @@ is untested, and it is the cheapest possible target for anyone looking for one.
 
 …and 49 more.
 
-## Does symmetrising win?
+## Records held: symmetrised vs not
 
-Among the **35 contested instances** (5+ rows, a record held), 14 have at least one
-ansatz with an explicit symmetry projection competing against one without.
+Does enforcing the Hamiltonian's own symmetries on the ansatz — momentum, point group,
+spin parity, SU(2), the Marshall sign — actually win records? The table can answer that
+for itself, which beats any single paper's ablation.
 
-- The record goes to the **symmetrised** ansatz in **7 of 14** (50%).
-- It goes to an unsymmetrised one in 7.
-- 21 contested instances have no symmetrised entry at all.
+| ansatz | records (all) | records (contested) | head-to-head |
+|---|---:|---:|---:|
+| explicit symmetry projection | 39 | 7 | 7 |
+| no explicit projection | 143 | 28 | 7 |
 
-Read it as a hint, not a result: symmetrised ansätze are also, on average, the more
-recent and more heavily optimised ones, so this does not isolate the effect of the
-projection itself. It does say what a newcomer should try first.
+**Head-to-head is the column that means something**: 14 instances have both kinds of ansatz
+competing, so the record there was won against the other kind rather than by default.
+It is currently **7–7** — a dead heat.
+
+Read it as a hint rather than a result. Symmetrised ansätze are also, on average, the
+newer and more heavily optimised ones, so this does not isolate the projection itself.
+It does say that symmetrising is not the free win it is sometimes assumed to be.
 
 ## The records that have stood longest
 
@@ -114,10 +120,41 @@ Families are matched by regular expression against the `method` string, so read 
 as indicative. A row describing both an architecture and its optimiser lands in the
 first family that matches, in the order listed above.
 
+## Records held by country
+
+**This is the country of the first author's institution, which is not anyone's
+nationality** — a Chinese researcher at ETH counts here as Switzerland, and a paper
+with twelve authors across four countries counts once, for the first author.
+
+Computed over **68 of 182 records**. Of the rest, 96 cite a run script rather than a
+paper and have no author at all, and 18 name a paper whose affiliation we could not resolve.
+
+| country | records | first-author institutions |
+|---|---:|---|
+| IT | 22 | Scuola Internazionale Superiore di Studi Avanzati |
+| US | 16 | Department of Physics and Astronomy; The University of Texas at Austin… |
+| AT | 12 | Graz University of Technology |
+| CH | 6 | University of Zurich |
+| CN | 4 | State Key Laboratory of General Artificial Intelligence; Beijing Natio… |
+| FR | 2 | CPHT |
+| CA | 2 | University of Waterloo |
+| JP | 2 | RIKEN Center for Emergent Matter Science |
+| DE | 1 | University of Augsburg |
+| BE | 1 | Ghent University |
+
+For the record, since someone will ask: **US 16, China 4.** Resist reading a trend
+into it. The counts are dominated by instances settled years ago, and the coverage gap
+above is not random — the unresolved sources skew heavily towards recent preprints,
+which is exactly where the newest groups publish first. What the table does show is
+that the current frontier records on 10×10, 16×16 and 20×20 J1-J2, and on 4×16 Hubbard,
+are held by groups at the Chinese Academy of Sciences and Peking University — and that
+none of those four appear in a by-country view built from bibliographic metadata alone,
+because none of those preprints carries an affiliation in it.
+
 ---
 
-Countries and institutions are deliberately absent. Affiliation data resolves for only
-part of the table, and the gap is not random — recent preprints carry the thinnest
-metadata, which is exactly where the newest groups are. A country table built on that
-would measure which papers are well indexed, not who is winning.
+Affiliations come from OpenAlex where it has them, and otherwise from the author block
+of the paper itself via `scripts/affiliations_local.mjs`. Institution names are as the
+registries record them and are not deduplicated: OpenAlex splits the Flatiron Institute
+into two entities, one of which is a health-technology company.
 

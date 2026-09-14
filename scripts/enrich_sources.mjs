@@ -45,6 +45,21 @@ const affiliations = w => ({
   countries: [...new Set((w.authorships || []).flatMap(a => a.countries || []))],
 });
 
+// The FIRST author's affiliation, kept separately from the paper-wide lists. A paper
+// with twelve authors across four countries has no single country; the first author's
+// institution is the one defensible choice, and it is what the by-country view uses.
+//
+// Note what this is NOT: it is an institution's country, not anyone's nationality.
+// A Chinese researcher at ETH counts as CH here. The field name says "institution"
+// so that no reader has to guess which of the two was meant.
+const firstAuthor = w => {
+  const a = (w.authorships || [])[0];
+  return {
+    first_author_institution: a?.institutions?.[0]?.display_name ?? null,
+    first_author_institution_country: a?.countries?.[0] ?? a?.institutions?.[0]?.country_code ?? null,
+  };
+};
+
 // DataCite mints the arXiv DOIs, so it has every preprint the moment it is posted -
 // including the recent ones OpenAlex has not indexed yet. Thinner data (rarely any
 // affiliation), but it is authors and a year where the alternative is nothing.
@@ -69,6 +84,8 @@ async function resolveDatacite(id) {
     type: a.types?.resourceTypeGeneral?.toLowerCase() ?? "preprint",
     venue: a.publisher ?? null,
     authors, institutions, countries: [],
+    first_author_institution: institutions[0] ?? null,
+    first_author_institution_country: null,
     affiliations_from: null,
     source_api: "datacite",
     checked_on: new Date().toISOString().slice(0, 10),
@@ -81,6 +98,7 @@ async function resolve(id) {
   if (!w) return resolveDatacite(id);
 
   let { institutions, countries } = affiliations(w);
+  let first = firstAuthor(w);
   let merged_from = null;
   // Preprint records in OpenAlex usually carry the author list but no affiliations. The
   // published version of the same paper does, so when we land on a bare preprint we look
@@ -92,7 +110,11 @@ async function resolve(id) {
     const hit = (alt?.results || []).find(r =>
       r.id !== w.id && affiliations(r).institutions.length &&
       r.display_name?.toLowerCase() === w.display_name.toLowerCase());
-    if (hit) { ({ institutions, countries } = affiliations(hit)); merged_from = hit.doi || hit.id; }
+    if (hit) {
+      ({ institutions, countries } = affiliations(hit));
+      first = firstAuthor(hit);
+      merged_from = hit.doi || hit.id;
+    }
   }
 
   const authors = (w.authorships || []).map(a => a.author.display_name);
@@ -108,6 +130,7 @@ async function resolve(id) {
     authors,
     institutions,
     countries,
+    ...first,
     // Recorded so a later reader can tell a genuine "no affiliation data" from one we
     // patched in from the published version of the same paper.
     affiliations_from: merged_from,
@@ -116,10 +139,26 @@ async function resolve(id) {
   };
 }
 
-// Read the committed cache. Every consumer goes through this rather than reading the
-// file directly, so there is one place that knows what to do when it is absent.
-export const sources = () =>
-  fs.existsSync(CACHE) ? JSON.parse(fs.readFileSync(CACHE, "utf8")) : {};
+// Read the committed cache, with locally-parsed affiliations layered on top. Every
+// consumer goes through this rather than reading the files directly, so there is one
+// place that knows what to do when either is absent.
+//
+// The local layer only fills gaps: where a registry supplied a first-author affiliation
+// it wins, because it is the checkable one. affiliations_local.mjs only ever writes
+// entries the registries left empty, so in practice the two do not overlap.
+const LOCAL = "sources/affiliations-local.json";
+export function sources() {
+  const base = fs.existsSync(CACHE) ? JSON.parse(fs.readFileSync(CACHE, "utf8")) : {};
+  if (!fs.existsSync(LOCAL)) return base;
+  for (const [key, loc] of Object.entries(JSON.parse(fs.readFileSync(LOCAL, "utf8")))) {
+    const s = base[key];
+    if (!s || s.first_author_institution_country) continue;
+    s.first_author_institution = s.first_author_institution ?? loc.first_author_institution;
+    s.first_author_institution_country = loc.first_author_institution_country;
+    s.first_author_country_from = loc.from;
+  }
+  return base;
+}
 
 // The metadata for a row, or null when its reference names no paper at all.
 export function sourceOf(row, cache = sources()) {

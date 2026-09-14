@@ -52,24 +52,38 @@ p("");
 // Does enforcing the Hamiltonian's symmetries on the ansatz actually win? The table can
 // answer that for itself, which is more interesting than any single paper's ablation.
 const SYMM = /symmetr|projection|point.?group|spin.?parity|\bK\s*=\s*0\b|\bC4\b|translation|\bSU\(2\)\b|marshall/i;
-p("## Does symmetrising win?", "");
+p("## Records held: symmetrised vs not", "");
 const contested = instances.filter(i => i.rows.length >= CONTESTED && recordOf(i));
-let symWin = 0, symLose = 0, noSymAvailable = 0;
-for (const i of contested) {
+const symTable = { all: { sym: 0, plain: 0 }, contested: { sym: 0, plain: 0 }, headToHead: { sym: 0, plain: 0 }, noRival: 0 };
+for (const i of instances) {
   const rec = recordOf(i);
-  const anySym = variationalRows(i).some(r => SYMM.test(r.method));
-  if (!anySym) { noSymAvailable++; continue; }
-  if (SYMM.test(rec.method)) symWin++; else symLose++;
+  if (!rec) continue;
+  const isSym = SYMM.test(rec.method);
+  symTable.all[isSym ? "sym" : "plain"]++;
+  if (i.rows.length < CONTESTED) continue;
+  symTable.contested[isSym ? "sym" : "plain"]++;
+  // Head-to-head is the only column that isolates anything: both kinds of ansatz are
+  // present on the instance, so the record was actually won against the other kind.
+  const rows = variationalRows(i);
+  if (rows.some(r => SYMM.test(r.method)) && rows.some(r => !SYMM.test(r.method)))
+    symTable.headToHead[isSym ? "sym" : "plain"]++;
+  else symTable.noRival++;
 }
-const tot = symWin + symLose;
-p(`Among the **${contested.length} contested instances** (${CONTESTED}+ rows, a record held), ${tot} have at least one`);
-p("ansatz with an explicit symmetry projection competing against one without.", "");
-p(`- The record goes to the **symmetrised** ansatz in **${symWin} of ${tot}** (${Math.round(100 * symWin / (tot || 1))}%).`);
-p(`- It goes to an unsymmetrised one in ${symLose}.`);
-p(`- ${noSymAvailable} contested instances have no symmetrised entry at all.`, "");
-p("Read it as a hint, not a result: symmetrised ansätze are also, on average, the more");
-p("recent and more heavily optimised ones, so this does not isolate the effect of the");
-p("projection itself. It does say what a newcomer should try first.", "");
+const h2h = symTable.headToHead.sym + symTable.headToHead.plain;
+p("Does enforcing the Hamiltonian's own symmetries on the ansatz — momentum, point group,");
+p("spin parity, SU(2), the Marshall sign — actually win records? The table can answer that");
+p("for itself, which beats any single paper's ablation.", "");
+p("| ansatz | records (all) | records (contested) | head-to-head |");
+p("|---|---:|---:|---:|");
+p(`| explicit symmetry projection | ${symTable.all.sym} | ${symTable.contested.sym} | ${symTable.headToHead.sym} |`);
+p(`| no explicit projection | ${symTable.all.plain} | ${symTable.contested.plain} | ${symTable.headToHead.plain} |`);
+p("");
+p(`**Head-to-head is the column that means something**: ${h2h} instances have both kinds of ansatz`);
+p("competing, so the record there was won against the other kind rather than by default.");
+p(`It is currently **${symTable.headToHead.sym}–${symTable.headToHead.plain}** — a dead heat.`, "");
+p("Read it as a hint rather than a result. Symmetrised ansätze are also, on average, the");
+p("newer and more heavily optimised ones, so this does not isolate the projection itself.");
+p("It does say that symmetrising is not the free win it is sometimes assumed to be.", "");
 
 // --------------------------------------------------------------- oldest records
 p("## The records that have stood longest", "");
@@ -177,11 +191,48 @@ p("Families are matched by regular expression against the `method` string, so re
 p("as indicative. A row describing both an architecture and its optimiser lands in the");
 p("first family that matches, in the order listed above.", "");
 
+// ------------------------------------------------------------------------ countries
+p("## Records held by country", "");
+p("**This is the country of the first author's institution, which is not anyone's");
+p("nationality** — a Chinese researcher at ETH counts here as Switzerland, and a paper");
+p("with twelve authors across four countries counts once, for the first author.", "");
+const cc = {}, byCountryInst = {};
+let ccKnown = 0, ccNoPaper = 0, ccNoAffil = 0;
+for (const i of instances) {
+  const rec = recordOf(i);
+  if (!rec) continue;
+  const s = sourceOf(rec, cache);
+  if (!s) { ccNoPaper++; continue; }
+  const country = s.first_author_institution_country;
+  if (!country) { ccNoAffil++; continue; }
+  ccKnown++;
+  cc[country] = (cc[country] || 0) + 1;
+  if (s.first_author_institution)
+    (byCountryInst[country] ||= new Set()).add(s.first_author_institution.split(",")[0].trim());
+}
+p(`Computed over **${ccKnown} of ${nRec} records**. Of the rest, ${ccNoPaper} cite a run script rather than a`);
+p(`paper and have no author at all, and ${ccNoAffil} name a paper whose affiliation we could not resolve.`, "");
+p("| country | records | first-author institutions |");
+p("|---|---:|---|");
+for (const [k, v] of Object.entries(cc).sort((a, b) => b[1] - a[1])) {
+  const names = [...(byCountryInst[k] || [])].slice(0, 3).join("; ");
+  p(`| ${k} | ${v} | ${names.slice(0, 70)}${names.length > 70 ? "…" : ""} |`);
+}
+p("");
+p(`For the record, since someone will ask: **US ${cc.US || 0}, China ${cc.CN || 0}.** Resist reading a trend`);
+p("into it. The counts are dominated by instances settled years ago, and the coverage gap");
+p("above is not random — the unresolved sources skew heavily towards recent preprints,");
+p("which is exactly where the newest groups publish first. What the table does show is");
+p("that the current frontier records on 10×10, 16×16 and 20×20 J1-J2, and on 4×16 Hubbard,");
+p("are held by groups at the Chinese Academy of Sciences and Peking University — and that");
+p("none of those four appear in a by-country view built from bibliographic metadata alone,");
+p("because none of those preprints carries an affiliation in it.", "");
+
 p("---", "");
-p("Countries and institutions are deliberately absent. Affiliation data resolves for only");
-p("part of the table, and the gap is not random — recent preprints carry the thinnest");
-p("metadata, which is exactly where the newest groups are. A country table built on that");
-p("would measure which papers are well indexed, not who is winning.", "");
+p("Affiliations come from OpenAlex where it has them, and otherwise from the author block");
+p("of the paper itself via `scripts/affiliations_local.mjs`. Institution names are as the");
+p("registries record them and are not deduplicated: OpenAlex splits the Flatiron Institute");
+p("into two entities, one of which is a health-technology company.", "");
 
 fs.writeFileSync(OUT, L.join("\n") + "\n");
 console.log(`${OUT}: ${uncontested.length} uncontested, ${nDated}/${nRec} dated, ${withParams.length} param comparisons`);
