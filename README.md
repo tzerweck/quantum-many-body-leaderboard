@@ -25,15 +25,15 @@ nothing is re-run: this is the literature, organised.
 
 | instance | rows | record | method | source | closest challenger |
 |---|---:|---|---|---|---|
-| J1-J2 square 8x8, J2 = 0.5 | 8 | **-0.498963(2)** | RBM+PP with momentum (K=0), spin-parity (even... | [paper](https://journals.aps.org/prx/abstract/10.1103/PhysRevX.11.031034) | -0.498666 RBM with momentum (K=0)... |
-| J1-J2 square 10x10, J2 = 0.5 | 15 | **-0.4976939(2)** | CNN-MPS (h,D,l)=(32,20,20), Marshall sign... | [arXiv:2603.14425](https://arxiv.org/abs/2603.14425) | -0.4976923 T-MPS |
-| J1-J2 square 16x16, J2 = 0.5 | 3 | **-0.4969140(5)** | CNN-MPS | [arXiv:2603.14425](https://arxiv.org/abs/2603.14425) | -0.4967860 T-MPS |
-| J1-J2 square 20x20, J2 = 0.5 | 2 | **-0.4967987(6)** | CNN-MPS (h,D,l)=(32,15,20) | [arXiv:2603.14425](https://arxiv.org/abs/2603.14425) | -0.4967320 ViT with symmetry restoration |
-| Hubbard square 16x16, U = 8, n = 0.875 | 13 | **-0.75865(3)** | VAFQMC stripe length 8 | [paper](https://journals.aps.org/prb/abstract/10.1103/PhysRevB.107.115133) | -0.75730 &#9675; ACE (16 conv layers), no symmetry... |
-| Hubbard 4x16, U = 8, n = 0.875 | 8 | **-0.76623(1)** | ACE (16 conv layers) + full symmetry... | [arXiv:2604.25775](https://arxiv.org/abs/2604.25775) | -0.76560 NNBF, 32 determinants + free... |
-| Triangular Heisenberg, 196 sites, open | 5 | **-0.5138(1)** | 2D Gated RNN | [arXiv:2207.14314](https://arxiv.org/abs/2207.14314) | -0.5108 DMRG (Bond dimension = 2000) |
-| Kagome Heisenberg, 192 sites | 1 | **-0.42987(1)** | VMC with Dirac spin liquid + Jastrow | [code](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/kagome-8x8_192_P/vmc_gutzwiller.sh) | none |
-| Pyrochlore Heisenberg, 256 sites | 1 | **-0.48310(7)** | mVMC with SU(2) and symmetry projections | [paper](https://journals.aps.org/prx/abstract/10.1103/PhysRevX.11.041021) | none |
+| J1-J2 square 8x8, J2 = 0.5 | 8 | **-0.498963(2)** | RBM+PP with momentum (K=0), spin-parity (even... | [Nomura & Imada (2021)](https://doi.org/10.1103/physrevx.11.031034) | -0.498666 RBM with momentum (K=0)... |
+| J1-J2 square 10x10, J2 = 0.5 | 15 | **-0.4976939(2)** | CNN-MPS (h,D,l)=(32,20,20), Marshall sign... | [Fan et al. (2026)](https://doi.org/10.48550/arxiv.2603.14425) | -0.4976923 T-MPS |
+| J1-J2 square 16x16, J2 = 0.5 | 3 | **-0.4969140(5)** | CNN-MPS | [Fan et al. (2026)](https://doi.org/10.48550/arxiv.2603.14425) | -0.4967860 T-MPS |
+| J1-J2 square 20x20, J2 = 0.5 | 2 | **-0.4967987(6)** | CNN-MPS (h,D,l)=(32,15,20) | [Fan et al. (2026)](https://doi.org/10.48550/arxiv.2603.14425) | -0.4967320 ViT with symmetry restoration |
+| Hubbard square 16x16, U = 8, n = 0.875 | 13 | **-0.75865(3)** | VAFQMC stripe length 8 | [Sorella (2023)](https://doi.org/10.1103/physrevb.107.115133) | -0.75730 &#9675; ACE (16 conv layers), no symmetry... |
+| Hubbard 4x16, U = 8, n = 0.875 | 8 | **-0.76623(1)** | ACE (16 conv layers) + full symmetry... | [Gu et al. (2026)](https://doi.org/10.48550/arxiv.2604.25775) | -0.76560 NNBF, 32 determinants + free... |
+| Triangular Heisenberg, 196 sites, open | 5 | **-0.5138(1)** | 2D Gated RNN | [Hibat-Allah et al. (2022)](https://doi.org/10.48550/arxiv.2207.14314) | -0.5108 DMRG (Bond dimension = 2000) |
+| Kagome Heisenberg, 192 sites | 1 | **-0.42987(1)** | VMC with Dirac spin liquid + Jastrow | [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/kagome-8x8_192_P/vmc_gutzwiller.sh) &mdash; no paper cited | none |
+| Pyrochlore Heisenberg, 256 sites | 1 | **-0.48310(7)** | mVMC with SU(2) and symmetry projections | [Astrakhantsev et al. (2021)](https://doi.org/10.1103/physrevx.11.041021) | none |
 
 Energies are per site: spin models as `E/N (S.S)`, Hubbard as `E/site` (see
 [units and conventions](#units-and-conventions)). **Bold** is the record under
@@ -219,6 +219,13 @@ node scripts/records.mjs J1J2/square_100_P_0.5   # full ranked table for an inst
 node scripts/classify_report.mjs                 # bound_type coverage
 node scripts/audit.mjs [class]                   # distinct method strings per class
 ```
+
+The one step that is **not** part of the build is `scripts/enrich_sources.mjs`, which
+resolves each row's paper identifier to authors, year, DOI, institutions and countries
+via [OpenAlex](https://openalex.org) and caches the result in `sources/openalex.json`.
+It is the only script that touches the network, it is run by hand, and its output is
+committed — so `build.sh` works offline and a fresh clone reproduces the same tables.
+That cache is what turns a bare `[paper]` link into a citation you can read.
 
 ## Contributing
 
