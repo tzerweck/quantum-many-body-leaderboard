@@ -23,9 +23,14 @@
 // ever add candidates, never silently drop the ones a previous run found. --fresh opts
 // out.
 //
+// There are also two ways to reach arXiv, and they are rate-limited separately. The API
+// at export.arxiv.org returned 429 to every request for over an hour on 2026-09-14 while
+// arxiv.org served PDFs and HTML normally, so --via auto falls back to the arxiv.org
+// search UI rather than let an outage produce an empty sweep.
+//
 // Usage: node scripts/sweep_search.mjs [--since 2019-01-01] [--max-pages 40]
 //                                      [--only tag,tag] [--out sweep-candidates.tsv]
-//                                      [--fresh]
+//                                      [--via api|search|auto] [--fresh]
 import fs from "node:fs";
 
 // --- queries ----------------------------------------------------------------------
@@ -74,12 +79,125 @@ const MAXPAGES = +opt("--max-pages", 40);
 const OUT = opt("--out", "sweep-candidates.tsv");
 const ONLY = (opt("--only", "") || "").split(",").filter(Boolean);
 const FRESH = args.includes("--fresh");
+const VIA = opt("--via", "auto");       // api | search | auto (API, falling back to search)
 const PAGE = 100;                       // arXiv serves 100/page comfortably
 const GAP = 3500;                       // arXiv asks for one request per 3 s
 
 const UA = "qmbl-sweep/2.0 (quantum-many-body-leaderboard; academic literature sweep)";
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const strip = s => s.replace(/\s+/g, " ").trim();
+
+// --- fallback: arxiv.org/search ----------------------------------------------------
+// export.arxiv.org/api and arxiv.org are rate-limited separately, and the API is the one
+// that goes first: on 2026-09-14 it returned 429 to every request for over an hour while
+// arxiv.org served PDFs and HTML normally. With only the API path, a sweep in that state
+// harvests nothing at all, which is the same outcome the old silent-failure bug produced
+// and the reason the pool has never been a census.
+//
+// The queries stay defined ONCE, in API syntax, and are parsed into groups here. The
+// search UI applies its operators left to right with no grouping, so `A AND (B OR C)`
+// cannot be expressed - instead the OR groups are expanded into their cartesian product
+// of flat AND queries and the results unioned. More requests, but no reliance on the
+// UI's operator precedence.
+const FIELD_UI = { abs: "abstract", ti: "title", all: "all", au: "author" };
+
+function parseQuery(q) {
+  const groups = [];
+  let cat = "";
+  // split on top-level AND, respecting parentheses
+  const parts = [];
+  let depth = 0, cur = "";
+  for (let i = 0; i < q.length; i++) {
+    if (q[i] === "(") depth++;
+    if (q[i] === ")") depth--;
+    if (depth === 0 && q.slice(i, i + 5) === " AND ") { parts.push(cur); cur = ""; i += 4; continue; }
+    cur += q[i];
+  }
+  parts.push(cur);
+
+  for (let p of parts) {
+    p = p.trim().replace(/^\((.*)\)$/s, "$1");
+    const alts = [];
+    for (const a of p.split(/\s+OR\s+/)) {
+      const m = a.trim().match(/^(\w+):\s*"?([^"]+)"?$/);
+      if (!m) continue;
+      if (m[1] === "cat") { cat = m[2]; continue; }
+      alts.push({ field: m[1], phrase: m[2] });
+    }
+    if (alts.length) groups.push(alts);
+  }
+  return { cat, groups };
+}
+
+// cartesian product of the OR groups -> one flat AND query per combination
+function expand(groups) {
+  return groups.reduce((acc, g) => acc.flatMap(c => g.map(t => [...c, t])), [[]]);
+}
+
+function searchUrl(terms, cat, since, start, size) {
+  const p = new URLSearchParams({ advanced: "", start: String(start), size: String(size) });
+  terms.forEach((t, i) => {
+    p.append(`terms-${i}-operator`, i === 0 ? "AND" : "AND");
+    p.append(`terms-${i}-term`, t.phrase);
+    p.append(`terms-${i}-field`, FIELD_UI[t.field] || "all");
+  });
+  // the UI filters by ARCHIVE, not by category, so cat:cond-mat.str-el becomes cond-mat.
+  // That is slightly broader than the API query, which costs recall nothing.
+  if (cat) {
+    p.append("classification-physics", "y");
+    p.append("classification-physics_archives", cat.split(".")[0]);
+  } else p.append("classification-physics_archives", "all");
+  p.append("date-filter_by", "date_range");
+  p.append("date-date_type", "submitted_date");
+  p.append("date-from_date", since);
+  p.append("date-to_date", "");
+  return `https://arxiv.org/search/advanced?${p}`;
+}
+
+const MONTH = { January: "01", February: "02", March: "03", April: "04", May: "05", June: "06",
+                July: "07", August: "08", September: "09", October: "10", November: "11", December: "12" };
+const asDate = s => {
+  const m = s.match(/([0-9]{1,2})\s+(\w+),\s*([0-9]{4})/);
+  return m ? `${m[3]}-${MONTH[m[2]] || "01"}-${m[1].padStart(2, "0")}` : "";
+};
+const unent = s => s.replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<")
+                    .replace(/&gt;/g, ">").replace(/&#x?[0-9a-f]+;/gi, " ").replace(/&[a-z]+;/gi, " ");
+const untag = s => strip(unent(s.replace(/<[^>]+>/g, " ")));
+
+// parse one arxiv-result <li> into the same shape the Atom path produces
+function parseResult(li) {
+  const id = (li.match(/arxiv\.org\/abs\/([0-9]{4}\.[0-9]{4,5})/) || [])[1];
+  if (!id) return null;
+  const ti = untag((li.match(/<p class="title is-5 mathjax">([\s\S]*?)<\/p>/) || [])[1] || "");
+  const ab = untag((li.match(/<span class="abstract-full[^"]*"[^>]*>([\s\S]*?)<\/span>/) || [])[1] || "")
+               .replace(/\s*△?\s*Less\s*$/, "");
+  const jr = untag((li.match(/Journal ref:<\/span>([\s\S]*?)<\/p>/) || [])[1] || "");
+  const doi = untag((li.match(/<p class="list-doi[^"]*">[\s\S]*?doi\.org\/([^"<]+)/) || [])[1] || "");
+  // the v1 date is what the API reports as <published>; prefer it over a revision date
+  const sub = li.match(/v1 submitted\s*([0-9]{1,2}\s+\w+,\s*[0-9]{4})/)
+           || li.match(/Submitted<\/span>\s*([0-9]{1,2}\s+\w+,\s*[0-9]{4})/);
+  return { id, ti, ab, jr, doi, d: sub ? asDate(sub[1]) : "" };
+}
+
+async function getSearchPage(terms, cat, since, start, size) {
+  const url = searchUrl(terms, cat, since, start, size);
+  let last = "no attempt";
+  for (let a = 0; a < 4; a++) {
+    try {
+      const r = await fetch(url, { headers: { "User-Agent": UA } });
+      if (r.ok) {
+        const text = await r.text();
+        if (/arxiv-result|Sorry, your query returned no results/.test(text)) return { ok: true, text };
+        last = `HTTP 200 but not a results page (${text.length} bytes)`;
+      } else {
+        last = `HTTP ${r.status}`;
+        if (r.status === 429) { await sleep(30000); continue; }
+      }
+    } catch (e) { last = `network: ${String(e?.message || e).slice(0, 70)}`; }
+    await sleep(5000 * (a + 1));
+  }
+  return { ok: false, err: last };
+}
 
 // A request either returns an Atom feed or it FAILS. There is no third outcome that
 // looks like an empty result set - that conflation is the bug this rewrite exists for.
@@ -138,8 +256,63 @@ const FAM = [
 const audit = [];
 let hardFail = 0, newThisRun = 0;
 
-for (const [tag, q] of Q) {
-  if (ONLY.length && !ONLY.includes(tag)) continue;
+// score and merge one paper. Shared by both harvest paths so the two can never disagree
+// about what a candidate is worth.
+function record({ id, d, ti, ab, jr, doi }, tag) {
+  const fam = FAM.filter(([, re]) => re.test(`${ti} ${ab}`)).map(([n]) => n);
+  // score: does the abstract promise an energy we could actually use?
+  let sc = 0;
+  if (/ground[- ]state energ|variational energ|lowest energ/i.test(ab)) sc += 3;
+  if (/state[- ]of[- ]the[- ]art|benchmark|outperform|improve.{0,20}energ/i.test(ab)) sc += 2;
+  if (/\b(kagome|pyrochlore|triangular|J_?1.?J_?2|Hubbard|shuriken|Shastry)/i.test(ab)) sc += 2;
+  if (jr) sc += 2;                       // peer reviewed
+  if (/\b(neural|RNN|transformer|PEPS|DMRG|AFQMC|VMC|backflow)/i.test(ab)) sc += 1;
+  // a family with no post-2024 row at all is worth more attention per hit
+  if (fam.some(f => f === "tV" || f === "Impurity" || f === "TFIsing" ||
+                    f === "pyrochlore" || f === "shuriken")) sc += 2;
+
+  const prev = seen.get(id);
+  if (!prev) newThisRun++;
+  if (!prev || sc > prev.sc) seen.set(id, { id, d, ti, jr, doi, sc, tag, fam: fam.join("+") });
+}
+
+// --- harvest via arxiv.org/search ---------------------------------------------------
+async function harvestViaSearch(tag, q) {
+  const { cat, groups } = parseQuery(q);
+  const combos = expand(groups);
+  let entriesSeen = 0, kept = 0, pages = 0, failed = 0, truncated = 0;
+
+  for (const terms of combos) {
+    let start = 0;
+    for (let p = 0; p < MAXPAGES; p++) {
+      const r = await getSearchPage(terms, cat, SINCE, start, 200);
+      if (!r.ok) { failed++; break; }
+      pages++;
+      const lis = [...r.text.matchAll(/<li class="arxiv-result">([\s\S]*?)<\/li>/g)];
+      if (!lis.length) break;
+      for (const m of lis) {
+        const e = parseResult(m[1]);
+        entriesSeen++;
+        if (!e || (e.d && e.d < SINCE)) continue;
+        kept++;
+        record(e, tag);
+      }
+      if (lis.length < 200) break;                    // last page
+      start += 200;
+      if (p === MAXPAGES - 1) truncated++;
+      await sleep(GAP);
+    }
+    await sleep(GAP);
+  }
+  const stop = failed ? `${failed}/${combos.length} sub-queries FAILED`
+             : truncated ? `PAGE CAP ${MAXPAGES} BOUND on ${truncated} sub-queries - TRUNCATED`
+             : `${combos.length} sub-queries complete`;
+  if (failed) hardFail++;
+  return { total: "", pages, entriesSeen, kept, stop };
+}
+
+// --- harvest via export.arxiv.org/api -----------------------------------------------
+async function harvestViaApi(tag, q) {
   let start = 0, pages = 0, entriesSeen = 0, kept = 0, total = null, stop = "";
 
   while (pages < MAXPAGES) {
@@ -168,23 +341,8 @@ for (const [tag, q] of Q) {
       const ab = strip((e.match(/<summary>([\s\S]*?)<\/summary>/) || [])[1] || "");
       const jr = strip((e.match(/<arxiv:journal_ref[^>]*>([\s\S]*?)<\/arxiv:journal_ref>/) || [])[1] || "");
       const doi = strip((e.match(/<arxiv:doi[^>]*>([\s\S]*?)<\/arxiv:doi>/) || [])[1] || "");
-      const fam = FAM.filter(([, re]) => re.test(`${ti} ${ab}`)).map(([n]) => n);
-
-      // score: does the abstract promise an energy we could actually use?
-      let sc = 0;
-      if (/ground[- ]state energ|variational energ|lowest energ/i.test(ab)) sc += 3;
-      if (/state[- ]of[- ]the[- ]art|benchmark|outperform|improve.{0,20}energ/i.test(ab)) sc += 2;
-      if (/\b(kagome|pyrochlore|triangular|J_?1.?J_?2|Hubbard|shuriken|Shastry)/i.test(ab)) sc += 2;
-      if (jr) sc += 2;                       // peer reviewed
-      if (/\b(neural|RNN|transformer|PEPS|DMRG|AFQMC|VMC|backflow)/i.test(ab)) sc += 1;
-      // a family with no post-2024 row at all is worth more attention per hit
-      if (fam.some(f => f === "tV" || f === "Impurity" || f === "TFIsing" ||
-                        f === "pyrochlore" || f === "shuriken")) sc += 2;
-
       kept++;
-      const prev = seen.get(id);
-      if (!prev) newThisRun++;
-      if (!prev || sc > prev.sc) seen.set(id, { id, d, ti, jr, doi, sc, tag, fam: fam.join("+") });
+      record({ id, d, ti, ab, jr, doi }, tag);
     }
 
     if (oldest < SINCE) { stop = `reached --since ${SINCE}`; break; }
@@ -192,6 +350,26 @@ for (const [tag, q] of Q) {
     await sleep(GAP);
   }
   if (!stop) stop = `PAGE CAP ${MAXPAGES} BOUND - TRUNCATED at ${start + PAGE} of ${total} hits`;
+  return { total, pages, entriesSeen, kept, stop };
+}
+
+for (const [tag, q] of Q) {
+  if (ONLY.length && !ONLY.includes(tag)) continue;
+
+  let r;
+  if (VIA === "search") r = await harvestViaSearch(tag, q);
+  else {
+    r = await harvestViaApi(tag, q);
+    // auto: the API is rate-limited separately from arxiv.org and fails for hours at a
+    // time. Falling back keeps a sweep from returning nothing at all.
+    if (VIA === "auto" && /FAILED after retries/.test(r.stop)) {
+      hardFail--;                                   // the API attempt is not the verdict
+      console.error(`${tag.padEnd(16)} API unavailable (${r.stop}) - falling back to arxiv.org/search`);
+      const s = await harvestViaSearch(tag, q);
+      r = { ...s, stop: `${s.stop} [via arxiv.org/search; API said ${r.stop}]` };
+    }
+  }
+  const { total, pages, entriesSeen, kept, stop } = r;
 
   audit.push({ tag, q, total: total ?? "", pages, entriesSeen, kept, stop });
   console.error(`${tag.padEnd(16)} ${String(total ?? "?").padStart(6)} hits  ${String(pages).padStart(3)}p  ` +
