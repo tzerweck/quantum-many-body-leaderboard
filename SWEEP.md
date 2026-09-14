@@ -68,15 +68,66 @@ Two entries touch QMBL instances and **neither is a new row**:
 
 Everything else in that table is a thermodynamic-limit or extrapolated estimate.
 
+## The PDF pass (2026-09-14) — the papers no sweep could see
+
+`scripts/fetch_pdfs.mjs` downloads an arXiv PDF and extracts its text with pypdf into
+`sources/<id>.txt`, which **is committed** (the PDF itself stays ignored) so a row's number
+remains checkable from a clone. This exists because of a blind spot in every sweep so far:
+**arXiv has no HTML for papers before roughly Dec 2023**, so the entire pre-2024 literature —
+which is where most *primary* sources live — was invisible to the harvester.
+
+### arXiv:2206.14307 (2022) — the J2 ≠ 0.5 column, filled
+
+A Lanczos-recursion paper carrying a full J2 sweep at 6×6 and 10×10. **Eight new records**:
+`square_36_P` at J2 = 0.4, 0.6, 0.8, 1.0 and `square_100_P` at J2 = 0.4, 0.7, 0.8, 1.0.
+
+This corrects the provisional read recorded below. The J2 ≠ 0.5 instances were not stale
+because the 2025-26 field concentrated on the maximally frustrated point — they were **never
+populated from the literature that already existed in 2022**. One of them was still held by a
+plain α=1 RBM while a published p-step Lanczos result sat 8.5e-3 lower.
+
+Convention was verified before a single row was written, and this is the pattern to reuse:
+the paper prints its own **exact-diagonalization column** at 6×6, which agrees with the exact
+rows already on those instances at J2 = 0.4, 0.7, 0.8 and 1.0 to six significant digits (max
+deviation 4.3e-7). That fixes the unit convention, the meaning of the J2 label and the cluster
+geometry in one step. Every 6×6 value added then sits above its instance's exact row.
+
+### Five rows upgraded from `secondary` to `primary`
+
+The pre-2024 primaries behind rows added in the table pass were fetched and all five values
+located in the paper that produced them, with the quoted passage now on the row:
+arXiv:2211.07749, 2206.07370, 2104.05085 (triangular 36) and 2206.14307 (square 36 and 100).
+This matters most for `triangular_36_P`, whose record no longer rests on a quote of a quote.
+
+### Kagome — the dispute is real, the numbers are not usable
+
+`arXiv:2605.28861` (Kamal, Kufel, Vu, Laumann & Yao) is a Comment on Ðurić et al.,
+*Phys. Rev. X* 15, 011047 (2025), which reported a G-CNN energy **1.78% below the best DMRG
+benchmark** on a 108-site kagome cluster and claimed a spinon pair-density-wave ground state.
+The Comment shows the single-spin-flip update rule used at N=108 does not conserve total
+magnetisation, so the Markov chains freeze — acceptance collapses to exactly zero beyond 5000
+iterations — and with ergodic exchange updates the same ansatz converges **≈3.5% above** DMRG.
+Re-evaluating the spin-flip-optimised parameters under ergodic sampling raises the energy from
+≈−46.2 to ≈−42.6 against a DMRG value of ≈−47.3.
+
+This is the same failure mode as the TFIsing RBM case in RULES.md §9 — a published record-low
+energy that is an artifact of the sampler — and it is the best available argument for why the
+`bound_type` and objection machinery exists. **But no row can be written from it:** the
+Comment quotes energies only as figure-read approximations with no error bars, and QMBL has no
+N=108 kagome instance. Opening one needs the precise numbers from the PRX paper and from the
+DMRG benchmark, not from the Comment. Flagged as a watch item: if an N=108 instance is ever
+added, the Ðurić row carries a defect from the start.
+
 ### Still blocked
 
-- **Kagome.** The cached HTML for the Comment `2605.28861` is the abstract stub only — 18 KB,
-  no energies. Needs the PDF. `2510.04907`'s kagome numbers stay rejected (iPEPS, ξ→∞).
+- **Kagome.** PDF now fetched and read (see above): a real dispute, but no row-quality numbers.
+  `2510.04907`'s kagome values stay rejected (iPEPS, ξ→∞). Next: the Ðurić PRX paper itself.
 - **Triangular above L=6.** `2505.20406` reports L=6…30 finite-size energies in *figures*;
   Tab. 2 carries only their V-scores and Tab. 6 only thermodynamic-limit values. Its −0.5497
   (OBC) and −0.5517569(9) (PBC) are **E∞/N, not finite-size** — the earlier note below reads as
   if they were rows, and importing them would have been a false record at every triangular size.
-- **Square J1-J2 at J2 ≠ 0.5.** Still nothing; the provisional read below stands.
+- **Square J1-J2 at J2 ≠ 0.5.** RESOLVED by the PDF pass above — 8 new records. The provisional
+  read below was wrong about the cause, and is kept only to show how it failed.
 
 ## Harvest (2026-09-12)
 
