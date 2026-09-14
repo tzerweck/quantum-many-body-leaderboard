@@ -9,6 +9,12 @@
 // Read from the arXiv HTML of the citing paper, never LLM-transcribed. A number quoted
 // from a different paper than the one that produced it is `secondary` and names both
 // (RULES.md 8); the citing paper's own results are `primary`.
+//
+// UPGRADE 2026-09-14: five rows marked `direct: true` below were afterwards located in
+// the paper that PRODUCED them - all pre-2024 papers with no arXiv HTML, fetched as PDF
+// (scripts/fetch_pdfs.mjs) and extracted with pypdf. Each quoted passage is recorded on
+// the row. They are therefore `primary`, not `secondary`; this matters most for
+// triangular_36_P, whose record now rests on a number read in its own source.
 import fs from "node:fs";
 
 const CHECKED = "2026-09-14";
@@ -42,11 +48,15 @@ const ADD = {
   "Heisenberg/triangular_36_P": { rows: [
     { eps: -0.560313, err: 3e-6, m: "Group CNN (deep, symmetry-projected)", bt: "variational",
       src: MOSS_TRI, primary: P.gcnn23,
+      direct: 'arXiv:2211.07749, results table: "J2/J1 N GCNN ... Exact/Interpolated ... 0 36 -0.560313(3) - -0.5603734" - the GCNN energy at J2/J1 = 0, N = 36, printed beside the exact value.',
       note: T5_TRI + ' Row "Group Convolutional Neural Network [32]" = arXiv:2211.07749. Sits 6.0e-5 ABOVE the exact -0.5603734 already on this instance, as a variational bound must.' },
     { eps: -0.5601, err: 4e-4, m: "Lattice Convolutional Network", bt: "variational",
-      src: MOSS_TRI, primary: P.lcn22, note: T5_TRI + ' Row "Lattice Convolutional Network [49]" = arXiv:2206.07370.' },
+      src: MOSS_TRI, primary: P.lcn22,
+      direct: 'arXiv:2206.07370, results table: "Triangular 36 0 - -0.55889 -0.5601(4) -0.5603734" - the special-kernel LCN energy at J2 = 0 on the 36-site triangular lattice.',
+      note: T5_TRI + ' Row "Lattice Convolutional Network [49]" = arXiv:2206.07370.' },
     { eps: -0.55922, err: null, m: "Group CNN", bt: "variational",
       src: MOSS_TRI, primary: P.gcnn21,
+      direct: 'arXiv:2104.05085, results table: "J2 = 0 ... ED [28] -0.5603734 ... G-CNN -0.55922".',
       note: T5_TRI + ' Row "Group Convolutional Neural Network [104]" = arXiv:2104.05085. No error bar is given in the table, so under RULES.md 6 this sampled row cannot hold a record.' },
     { eps: -0.5562, err: 2e-4, m: "2D RNN wavefunction (iterative retraining, s=4.0, r=0.158)", bt: "variational",
       src: MOSS_TRI, primary: null, note: T5_TRI + " The citing paper's own result." },
@@ -56,7 +66,9 @@ const ADD = {
   // DMRG chi=2048 at -0.6786224, which three NQS results beat.
   "Heisenberg/square_36_P": { rows: [
     { eps: -0.678868, err: 2e-6, m: "RBM + Lanczos recursion", bt: "variational",
-      src: MOSS_SQ, primary: P.lanczos, note: T5_SQ + ' Row "RBM+Lanczos [40]" = arXiv:2206.14307.' },
+      src: MOSS_SQ, primary: P.lanczos,
+      direct: 'arXiv:2206.14307 Table 4: "6x6 -0.678873(4) 2.51799(6) -0.678868(2) 2.51(2)" - Energy(QMC) beside Energy(RBM).',
+      note: T5_SQ + ' Row "RBM+Lanczos [40]" = arXiv:2206.14307.' },
     { eps: -0.67887, err: 2e-5, m: "2D RNN wavefunction (best variational)", bt: "variational",
       src: MOSS_SQ, primary: null, note: T5_SQ + ' Row "This work (best RNN)".' },
     { eps: -0.67882, err: 1e-5, m: "CNN", bt: "variational",
@@ -72,7 +84,9 @@ const ADD = {
     { eps: -0.67155260, err: 3e-8, m: "CNN + MinSR", bt: "variational",
       src: MOSS_SQ, primary: P.minsr, note: T5_SQ + ' Row "VMC - CNN+MinSR [12]" = Chen & Heyl, Nat. Phys. 20, 1476 (2024).' },
     { eps: -0.671519, err: 4e-6, m: "RBM + Lanczos recursion", bt: "variational",
-      src: MOSS_SQ, primary: P.lanczos, note: T5_SQ + ' Row "RBM+Lanczos [40]" = arXiv:2206.14307.' },
+      src: MOSS_SQ, primary: P.lanczos,
+      direct: 'arXiv:2206.14307 Table 4: "10x10 0.671549(4) 5.3124(3) -0.671519(4) 5.38(6)" - Energy(QMC) beside Energy(RBM).',
+      note: T5_SQ + ' Row "RBM+Lanczos [40]" = arXiv:2206.14307.' },
     { eps: -0.67151, err: 2e-5, m: "2D RNN wavefunction (best variational)", bt: "variational",
       src: MOSS_SQ, primary: null, note: T5_SQ + ' Row "This work (best RNN)".' },
     { eps: -0.67135, err: null, m: "CNN", bt: "variational",
@@ -138,13 +152,18 @@ for (const [id, spec] of Object.entries(ADD)) {
       reference: r.primary ?? r.src.ref,
       peer_reviewed: r.primary ? null : r.src.pr,
       source: "sweep-tables-2026-09-14",
-      provenance: r.primary ? "secondary" : "primary",
+      // `direct` means the number was afterwards located in the paper that produced it,
+      // so the row is no longer a quote of a quote (RULES.md 8).
+      provenance: r.primary && !r.direct ? "secondary" : "primary",
       verified: {
         checked_on: CHECKED,
-        method: "arXiv HTML parsed locally from a benchmark comparison table, no LLM transcription",
+        method: r.direct
+          ? "found in the citing paper's comparison table, then confirmed in the primary source's own PDF (pypdf); no LLM transcription"
+          : "arXiv HTML parsed locally from a benchmark comparison table, no LLM transcription",
         reported_as: `${r.eps}${r.err != null ? ` (+/- ${r.err})` : ""} per site in S.S units`,
-        note: r.note,
-        secondary_of: r.primary ? r.src.ref : null,
+        note: r.direct ? `${r.note} CONFIRMED IN PRIMARY SOURCE - ${r.direct}` : r.note,
+        secondary_of: r.primary && !r.direct ? r.src.ref : null,
+        found_via: r.direct ? r.src.ref : null,
       },
     });
     added++;
