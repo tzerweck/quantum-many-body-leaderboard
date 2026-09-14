@@ -4,6 +4,24 @@
 
 export const SPIN_MODELS = new Set(["Heisenberg", "J1J2", "TFIsing"]);
 
+// Is the reported energy a Monte-Carlo estimate, or a deterministic contraction?
+// RULES.md 6 requires a stated sigma before a row can hold a record, but that rule
+// only makes sense for a sampled energy. DMRG at a stated bond dimension, exact
+// diagonalization and statevector circuits carry no statistical error at all, and
+// 144 of the 399 variational rows are of that kind - requiring sigma of them would
+// vacate more than half the table's records over a field that cannot exist.
+// Deterministic is asserted by explicit markers; everything else counts as sampled.
+const DETERMINISTIC = /\bdmrg\b|\bmps\b|\bpeps\b|\bmera\b|tensor network|statevector|exact diagonaliz|exact solution|bethe ansatz|hartree|mean[- ]field|truncation error|bond dimension|\bfci\b|full configuration/i;
+export const isSampled = method => !DETERMINISTIC.test(method || "");
+
+// A row may hold its instance's record only if it is a strict variational bound,
+// carries no unresolved defect (RULES.md 6.1), and - when its energy was sampled -
+// states the error bar the tie rule needs (RULES.md 6).
+export function recordEligible(r) {
+  if (r.bound_type !== "variational" || r.defect) return false;
+  return !isSampled(r.method) || r.sigma != null;
+}
+
 // VarBench writes spin Hamiltonians with PAULI matrices (sigma.sigma) and stores
 // TOTAL energies. NQS papers quote E/N in the S.S convention. Factor 4 N_sites.
 // Fermionic models (Hubbard, tV) are stored as totals; papers quote per site.

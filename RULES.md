@@ -89,14 +89,25 @@ Any submitted number is converted by the loader, never by hand.
 
 ## 6. Records and ties
 
-The record for an instance is the **lowest `variational` energy with a stated `sigma`**.
+The record for an instance is the **lowest eligible `variational` energy**.
 `projected`, `extrapolated` and `exact` rows are displayed alongside but never hold it.
 
 - Rows whose error bars overlap at **2 sigma** share the rank.
-- `sigma` must state how it was estimated. An error bar that ignores autocorrelation
-  understates by around an order of magnitude, which is enough to manufacture a record.
-  Report the blocking or binning analysis, or the raw chain.
-- A row without `sigma` is listed and is eligible for nothing.
+- **A sampled energy must state its `sigma` to be eligible.** `sigma` must also state how it
+  was estimated. An error bar that ignores autocorrelation understates by around an order of
+  magnitude, which is enough to manufacture a record. Report the blocking or binning analysis,
+  or the raw chain. A sampled row without `sigma` is listed and is eligible for nothing.
+- **A deterministic energy needs no `sigma`.** DMRG at a stated bond dimension, exact
+  diagonalization, statevector circuits and tensor-network contractions carry no statistical
+  error, so there is no error bar to withhold; their convergence control is the bond dimension
+  or truncation error carried in `method`. 144 of the 399 variational rows are of this kind.
+  Requiring `sigma` of them would vacate more than half the table's records over a field that
+  cannot exist. `scripts/units.mjs` draws the line by explicit deterministic markers, and
+  anything not so marked counts as sampled.
+- Case: the 4x4 J1-J2 VQE rows. `exact grads & metric, statevector` and `2^14 samples/grad`
+  appear as separate rows on the same instance. The first is deterministic and eligible without
+  a `sigma`; the second is sampled, reports none, and is not. On four instances the sampled
+  variant sat lower and would have taken the record with no error bar to check it against.
 - A row without `energy_variance` is completely fine. The V-score renders `n/a` and nothing is
   inferred or reconstructed. Most of the literature stops at the energy, and a missing V-score
   is never held against a row; it only means the row cannot be compared across instances.
