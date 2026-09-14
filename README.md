@@ -40,8 +40,8 @@ Energies are per site: spin models as `E/N (S.S)`, Hubbard as `E/site` (see
 [the ranking rules](#how-the-ranking-works); &dagger; marks a sampled energy with no stated
 error bar, which is listed but cannot hold a record.
 
-Across the whole table: **179 of 201 instances have a record**, from 661 rows.
-Of the 22 instances without one, 16 are solved exactly and have nothing to compete
+Across the whole table: **179 of 202 instances have a record**, from 665 rows.
+Of the 23 instances without one, 16 are solved exactly and have nothing to compete
 for. Separately, **31 sampled variational rows across 25 instances carry no error bar**, so
 they are listed and rank for nothing — and 4 of them sit below their instance's current
 record. If one of those is your paper, the error bar is the only thing missing.

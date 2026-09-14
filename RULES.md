@@ -192,6 +192,32 @@ This is why §6 requires a stated sigma *and* how it was estimated, and why §10
 objection. A leaderboard that ranked on energy alone, with no exact-reference check, would
 have carried all three as records.
 
+**The case none of the above would catch — kagome, 108 sites (2026-09-14).** Ðurić et al.,
+*Phys. Rev. X* 15, 011047 (2025), report a spinon pair-density-wave ground state at
+E₀ = −48.18 on a 108-site cluster, 1.78% below the DMRG benchmark of −47.33964 they compare
+against. A Comment (arXiv:2605.28861) shows the single-spin-flip update used at that size
+does not conserve total magnetisation. As the network concentrates on the physical
+S<sup>z</sup><sub>tot</sub> = 0 sector the acceptance rate collapses to *exactly zero* beyond
+5000 iterations, so the chains freeze and the average is taken over a non-representative set
+of configurations. Under the magnetisation-preserving exchange update the same architecture
+converges to ≈ −45.6, and re-evaluating the spin-flip-optimised *parameters* ergodically gives
+≈ −42.6 — the published number lies below all of them.
+
+Three things make this the sharpest case in this document:
+
+1. **No check on the number itself could have caught it.** DMRG at finite bond dimension is
+   an upper bound too, so an energy below it is not evidence of error — ordinarily it is just
+   a better state. There is no exact reference at 108 sites. The refutation had to come from
+   the *sampler*, which is why §10 now admits non-ergodic sampling as its own ground.
+2. **The instance ends with no record at all.** Its only `variational` row is flagged, and the
+   DMRG row is `extrapolated` — Depenbrock et al. state their energies are "extrapolated in
+   the truncation error of single-site DMRG", which lies below any energy an MPS achieved.
+   "No eligible record" is the correct answer here, and a table ranking on energy alone would
+   instead have printed a refuted number as the record.
+3. **DMRG is not one `bound_type`.** At a *stated bond dimension* it is a strict variational
+   bound; *extrapolated in the truncation error* it is not. The same method name maps to two
+   different classes depending on one sentence in the methods section.
+
 ## 10. Pending, confirmed, objections
 
 A new row is **`pending`** for 30 days and **`confirmed`** if no objection is unresolved.
@@ -203,6 +229,9 @@ technical. Admissible grounds:
 - `bound_type` misdeclared (§4);
 - `sigma` estimated without autocorrelation correction (§6);
 - the energy violates the variational principle against a known exact reference (§9);
+- **the sampling is non-ergodic** — the Monte Carlo update rule is incompatible with a
+  conservation law or symmetry of the Hamiltonian, so the reported average is taken over a
+  non-representative set of configurations (§9, the kagome case);
 - the number cannot be located in the cited source (§8).
 
 Not admissible: that a method is uninteresting, that a comparison is unflattering, or that

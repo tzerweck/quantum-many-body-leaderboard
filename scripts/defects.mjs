@@ -35,7 +35,29 @@ DEFECTS.push(
     finding:"Claims E/N = -0.5001, below RBM+PP's -0.4989635, while reporting a variance that gives a V-score of 5.6e-3 against RBM+PP's 9.81e-4 - 5.7x worse. A state further from an eigenstate cannot also be lower in energy: by the V-score calibration (rel. err ~ V/63) this energy should sit ~1.2e-3 ABOVE where it is reported. The inconsistency is internal to the paper's own E and Var and needs no external reference." },
 );
 
+DEFECTS.push(
+  { match: { instance: "Heisenberg/kagome-6x6_108_P", method: "GCNN, spinon pair-density-wave state (chi0, P_Z2 = -1, q = (pi, pi/sqrt3))" },
+    flag: "sampling-nonergodic",
+    finding: "Published in Phys. Rev. X 15, 011047 (2025) as a ground state 1.78% below the DMRG benchmark. A Comment (arXiv:2605.28861) shows the single-spin-flip update used at this size does not conserve total magnetisation, so the Markov chains freeze and the low energy is a sampling artifact. Under ergodic sampling the same ansatz converges ~3.5% ABOVE DMRG." },
+);
+
 export const SHARED = {
+  "sampling-nonergodic": {
+    diagnosis:
+      "The reported energy is an artifact of non-ergodic Monte Carlo sampling, not a property of the ansatz. " +
+      "The kagome Heisenberg Hamiltonian is SU(2) symmetric and its ground state lies in a fixed total-magnetisation " +
+      "sector, so a single-spin-flip update - which changes S^z_tot - is incompatible with the symmetry. As the network " +
+      "concentrates on the physical S^z_tot = 0 sector the acceptance rate collapses to exactly zero beyond 5000 " +
+      "iterations and the chains freeze, so the reported average is taken over a non-representative set of configurations. " +
+      "With the magnetisation-preserving exchange update the same architecture and optimizer converge stably to " +
+      "E ~ -45.6 against a DMRG value of E ~ -47.3; re-evaluating the spin-flip-optimised PARAMETERS under ergodic " +
+      "sampling raises the energy further, to E ~ -42.6. The published -48.18 lies below all of them.",
+    ruled_out:
+      "NOT a variational-principle violation, and that is the point: DMRG at finite bond dimension is itself an upper " +
+      "bound, so an energy below it is not on its own evidence of error - it would ordinarily just be a better state. " +
+      "Nothing about the number alone identifies it as wrong. The refutation had to come from the sampler.",
+    evidence: "arXiv:2605.28861 (Kamal, Kufel, Vu, Laumann & Yao), Fig. 1(a) acceptance-rate collapse and Fig. 1(b) energy convergence; Ðurić et al., Phys. Rev. X 15, 011047 (2025), arXiv:2401.02866, Sec. IV.",
+  },
   "energy-variance-inconsistent": {
     diagnosis: "The reported energy is inconsistent with the paper's OWN reported variance. At 8x8 the claimed E/N = -0.5001 beats RBM+PP's -0.4989635 while the reported variance (sigma^2 = 1.4e-3 per site, S.S units) gives a V-score of 5.6e-3 against RBM+PP's 9.81e-4 - 5.7x worse. Energy and variance move together - a state further from an eigenstate cannot be lower in energy - so by the V-score calibration this energy should be ~1.2e-3 higher than claimed.",
     ruled_out: "NOT 'below the exact ground state'. There is no exact reference at 8x8 or 10x10: ED for this model reaches about 6x6, and the paper correctly uses 6x6 ED (-0.5038) as its only exact anchor. Chen & Heyl's -0.497715(9) is a zero-variance extrapolation, not a bound, so a lower variational energy would only mean the extrapolation carries systematic error. The sigma^2 is per site, so the V-score is 5.6e-3 and not a range. Separately, the paper is internally inconsistent about it: Table 1 gives sigma^2 = 1.4e-3 for the 8x8 run while the J2 scan lists 0.0034 at J2 = 0.50, which would make the V-score 1.4e-2 and the contradiction larger. No variance is reported at 10x10 at all, so that row's flag rests only on it being an unclaimed record.",
