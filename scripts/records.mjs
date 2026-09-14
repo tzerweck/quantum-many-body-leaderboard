@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import { perSiteDivisor, perSiteLabel, SPIN_MODELS, isSampled, recordEligible } from "./units.mjs";
+import { perSiteDivisor, perSiteLabel, SPIN_MODELS, isSampled, recordEligible, noErrorMetrics } from "./units.mjs";
 
 for (const id of process.argv.slice(2)) {
   const d = JSON.parse(fs.readFileSync(`data/${id}.json`, "utf8"));
@@ -10,8 +10,11 @@ for (const id of process.argv.slice(2)) {
     const mark = r.defect ? "!" : r.bound_type === "variational" ? " "
       : r.bound_type === "projected" ? "P" : r.bound_type === "extrapolated" ? "X" : "?";
     const v = r.v_score ? r.v_score.toExponential(1) : "  n/a ";
-    console.log(`  ${mark} ${(r.energy / f).toFixed(7)}  V=${v}  ${(r.provenance || "").padEnd(9)} ${r.method.slice(0, 50)}`);
+    // "o" = the source reported no error metric at all, neither a sigma nor a variance.
+    const err = noErrorMetrics(r) ? "o" : " ";
+    console.log(`  ${mark}${err} ${(r.energy / f).toFixed(7)}  V=${v}  ${(r.provenance || "").padEnd(9)} ${r.method.slice(0, 50)}`);
   }
+  console.log("  legend: ! flagged  P projected  X extrapolated  ? unclassified  o no error metrics reported");
   // A flagged row is listed in place but cannot hold the record (RULES.md 6.1). Suspicion is
   // enough to withhold the record, never enough to hide the row; RULES.md 10 is how a flag
   // gets lifted or upheld. A sampled energy with no stated sigma is likewise listed and

@@ -14,6 +14,16 @@ export const SPIN_MODELS = new Set(["Heisenberg", "J1J2", "TFIsing"]);
 const DETERMINISTIC = /\bdmrg\b|\bmps\b|\bpeps\b|\bmera\b|tensor network|statevector|exact diagonaliz|exact solution|bethe ansatz|hartree|mean[- ]field|truncation error|bond dimension|\bfci\b|full configuration/i;
 export const isSampled = method => !DETERMINISTIC.test(method || "");
 
+// Does the row state ANY way to judge how good its number is? A row carrying neither
+// a sigma nor an energy variance offers no error metric of any kind, and that is worth
+// marking next to the number rather than leaving a reader to infer it from two blank
+// cells. Deliberately NOT a `defect`: RULES.md 3 says a missing field never excludes a
+// row, so this is a display marker about what the source reported, not a suspicion
+// about whether it is right. `exact` rows are excluded - an exact diagonalization has
+// no error to report, so the absence carries no information.
+export const noErrorMetrics = r =>
+  r.bound_type !== "exact" && r.sigma == null && r.energy_variance == null;
+
 // A row may hold its instance's record only if it is a strict variational bound,
 // carries no unresolved defect (RULES.md 6.1), and - when its energy was sampled -
 // states the error bar the tie rule needs (RULES.md 6).

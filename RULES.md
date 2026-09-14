@@ -111,6 +111,13 @@ The record for an instance is the **lowest eligible `variational` energy**.
 - A row without `energy_variance` is completely fine. The V-score renders `n/a` and nothing is
   inferred or reconstructed. Most of the literature stops at the energy, and a missing V-score
   is never held against a row; it only means the row cannot be compared across instances.
+- **A row reporting neither `sigma` nor `energy_variance` is marked, not penalised.** With no
+  error bar and no variance, the source has said nothing about how converged its number is, and
+  a reader comparing two energies should see that rather than infer it from two blank cells. The
+  marker is `o` in `scripts/records.mjs` and a circle in the README table, and it is derived at
+  display time from the two absent fields - deliberately **not** a `defect` (11), which asserts
+  a suspected error. Missing data is not an error, and by 3 it excludes nothing. `exact` rows
+  are not marked: an exact diagonalization has no error to report, so the absence says nothing.
 
 ### 6.1 A flagged row cannot hold a record
 

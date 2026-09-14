@@ -7,7 +7,7 @@
 // of what is actually on disk.
 import fs from "node:fs";
 import path from "node:path";
-import { recordEligible, isSampled } from "./units.mjs";
+import { recordEligible, isSampled, noErrorMetrics } from "./units.mjs";
 
 export function collect() {
   const instances = [];
@@ -33,7 +33,7 @@ export function summarize(instances) {
   const s = {
     instances: instances.length, rows: 0,
     by_bound: {}, by_source: {}, by_provenance: {},
-    vscore_rows: 0, no_variance: 0, no_sigma: 0, flagged: 0,
+    vscore_rows: 0, no_variance: 0, no_sigma: 0, no_error_metrics: 0, flagged: 0,
     records: { held: 0, none_exact_only: 0, none_no_sigma: 0, none_other: 0 },
     // Sampled variational energies published without an error bar: listed, ranking for
     // nothing. `would_take_record` is the subset sitting below their instance's current
@@ -51,6 +51,7 @@ export function summarize(instances) {
       if (r.v_score != null) s.vscore_rows++;
       if (r.energy_variance == null || Number.isNaN(r.energy_variance)) s.no_variance++;
       if (r.sigma == null || Number.isNaN(r.sigma)) s.no_sigma++;
+      if (noErrorMetrics(r)) s.no_error_metrics++;
       if (r.defect) s.flagged++;
       if (!r.bound_type) s.needs_review.push(`${inst.instance_id}: "${r.method}"`);
     }

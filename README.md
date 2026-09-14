@@ -29,7 +29,7 @@ nothing is re-run: this is the literature, organised.
 | J1-J2 square 10x10, J2 = 0.5 | 15 | **-0.4976939(2)** | CNN-MPS (h,D,l)=(32,20,20), Marshall sign... | [arXiv:2603.14425](https://arxiv.org/abs/2603.14425) | -0.4976923 T-MPS |
 | J1-J2 square 16x16, J2 = 0.5 | 3 | **-0.4969140(5)** | CNN-MPS | [arXiv:2603.14425](https://arxiv.org/abs/2603.14425) | -0.4967860 T-MPS |
 | J1-J2 square 20x20, J2 = 0.5 | 2 | **-0.4967987(6)** | CNN-MPS (h,D,l)=(32,15,20) | [arXiv:2603.14425](https://arxiv.org/abs/2603.14425) | -0.4967320 ViT with symmetry restoration |
-| Hubbard square 16x16, U = 8, n = 0.875 | 13 | **-0.75865(3)** | VAFQMC stripe length 8 | [paper](https://journals.aps.org/prb/abstract/10.1103/PhysRevB.107.115133) | -0.75730 &dagger; ACE (16 conv layers), no symmetry... |
+| Hubbard square 16x16, U = 8, n = 0.875 | 13 | **-0.75865(3)** | VAFQMC stripe length 8 | [paper](https://journals.aps.org/prb/abstract/10.1103/PhysRevB.107.115133) | -0.75730 &#9675; ACE (16 conv layers), no symmetry... |
 | Hubbard 4x16, U = 8, n = 0.875 | 8 | **-0.76623(1)** | ACE (16 conv layers) + full symmetry... | [arXiv:2604.25775](https://arxiv.org/abs/2604.25775) | -0.76560 NNBF, 32 determinants + free... |
 | Triangular Heisenberg, 196 sites, open | 5 | **-0.5138(1)** | 2D Gated RNN | [arXiv:2207.14314](https://arxiv.org/abs/2207.14314) | -0.5108 DMRG (Bond dimension = 2000) |
 | Kagome Heisenberg, 192 sites | 1 | **-0.42987(1)** | VMC with Dirac spin liquid + Jastrow | [code](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/kagome-8x8_192_P/vmc_gutzwiller.sh) | none |
@@ -37,14 +37,20 @@ nothing is re-run: this is the literature, organised.
 
 Energies are per site: spin models as `E/N (S.S)`, Hubbard as `E/site` (see
 [units and conventions](#units-and-conventions)). **Bold** is the record under
-[the ranking rules](#how-the-ranking-works); &dagger; marks a sampled energy with no stated
-error bar, which is listed but cannot hold a record.
+[the ranking rules](#how-the-ranking-works). **&#9675;** marks a row whose source reported **no
+error metric at all** — no error bar and no energy variance, so there is no way to judge how
+close the number is; **&dagger;** marks a sampled energy with a variance but no error bar. Either
+way the row is listed in rank order and, if its energy was sampled, cannot hold a record.
 
 Across the whole table: **179 of 202 instances have a record**, from 665 rows.
 Of the 23 instances without one, 16 are solved exactly and have nothing to compete
 for. Separately, **31 sampled variational rows across 25 instances carry no error bar**, so
 they are listed and rank for nothing — and 4 of them sit below their instance's current
 record. If one of those is your paper, the error bar is the only thing missing.
+
+**19 rows report no error metric at all** (&#9675;): no error bar and no energy variance,
+so nothing in the published source says how converged the number is. They are kept and
+shown, because a missing field never excludes a row — but the marker travels with them.
 
 <!-- END LEADERBOARD -->
 
