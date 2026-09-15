@@ -73,7 +73,7 @@ order; the marker is an open question regarding ambiguous information (see [erro
 | kagome 6x6 (108 sites) | no record | every variational row is flagged | |
 | kagome 8x8 (192 sites) | **-0.42987(1)** | VMC with Dirac spin liquid + Jastrow [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/kagome-8x8_192_P/vmc_gutzwiller.sh), no paper cited | none |
 | pyrochlore 2x2x2 (32 sites) | **-0.51627(2)** | mVMC with SU(2) and symmetry projections [Astrakhantsev et al. (2021)](https://doi.org/10.1103/physrevx.11.041021) | -0.51523 RBM with symmetry projections [Astrakhantsev et al. (2021)](https://doi.org/10.1103/physrevx.11.041021) |
-| pyrochlore 2x2x2 (128 sites) | **-0.49220(4)** | mVMC (PP + RBM + 1st step Lanczos... [Pohle et al. (2023)](https://doi.org/10.48550/arxiv.2311.11561) | none |
+| pyrochlore 2x2x2 (128 sites) | **-0.49229(7)** | spin-parity mVMC-RBM/Lanczos [Pohle et al. (2023)](https://doi.org/10.48550/arxiv.2311.11561) | -0.49220 mVMC (PP + RBM + 1st step Lanczos... [Pohle et al. (2023)](https://doi.org/10.48550/arxiv.2311.11561) |
 | pyrochlore 3x3x3 (108 sites) | **-0.48711(9)** | mVMC with SU(2) and symmetry projections [Astrakhantsev et al. (2021)](https://doi.org/10.1103/physrevx.11.041021) | -0.48510 DMRG [Hagymási et al. (2021)](https://doi.org/10.1103/physrevlett.126.117204) |
 | pyrochlore 3x3x3 (432 sites) | **-0.48847(3)** | mVMC (PP + 1st step Lanczos, spin-parity... [Pohle et al. (2023)](https://doi.org/10.48550/arxiv.2311.11561) | none |
 | pyrochlore 4x4x4 (256 sites) | **-0.48310(7)** | mVMC with SU(2) and symmetry projections [Astrakhantsev et al. (2021)](https://doi.org/10.1103/physrevx.11.041021) | none |
@@ -102,7 +102,7 @@ order; the marker is an open question regarding ambiguous information (see [erro
 | square, 40 sites | no record | solved exactly | |
 | square, 50 sites | no record | solved exactly | |
 | square 8x8, open | **-0.619033(3)** | PEPS, GO method, D=10, Dc=20 Gradient optimization of finite  | -0.619013 PEPS, GO method, D=8, Dc=16 Gradient optimization of finite  |
-| square 8x8 | **-0.673482(3)** | RBM [Chen et al. (2022)](https://doi.org/10.48550/arxiv.2206.14307) | none |
+| square 8x8 | **-0.673482(3)** | RBM [Chen et al. (2022)](https://doi.org/10.48550/arxiv.2206.14307) | -0.673434 &#9675; ViT Extremely slow scaling of minima |
 | square 10x10, open | **-0.628656(9)** | 2D tensorized RNN (symmetry + annealing) [Hibat-Allah et al. (2022)](https://doi.org/10.48550/arxiv.2207.14314) | -0.628649 RNN + translational symmetry [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/square_100_O/vmc_rnn.sh), no paper cited |
 | square 10x10 | **-0.67155260(3)** | CNN + MinSR [Chen & Heyl (2023)](https://doi.org/10.48550/arxiv.2302.01941) | -0.67154400 Grassmann Variational Monte Carlo... Grassmann Variational Monte Carl |
 | square 12x12, open | no record | solved exactly | |
@@ -185,7 +185,7 @@ order; the marker is an open question regarding ambiguous information (see [erro
 | square 6x6, J2 = 0.6 | **-0.49318(5)** | RBM wave function + 2-step Lanczos recursion [Chen et al. (2022)](https://doi.org/10.48550/arxiv.2206.14307) | -0.49313 RBM wave function + 1-step... [Chen et al. (2022)](https://doi.org/10.48550/arxiv.2206.14307) |
 | square 6x6, J2 = 0.7 | **-0.5299243** | DMRG (bond dimension = 2048) [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_36_P_0.7/dmrg.sh), no paper cited | -0.5299210 RBM wave function [Chen et al. (2022)](https://doi.org/10.48550/arxiv.2206.14307) |
 | square 6x6, J2 = 0.8 | **-0.586411(9)** | RBM wave function [Chen et al. (2022)](https://doi.org/10.48550/arxiv.2206.14307) | -0.585900 CNN Choo, Neupert & Carleo, Two-dime |
-| square 6x6, J2 = 0.9 | **-0.6478705** | DMRG (bond dimension = 2048) [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_36_P_0.9/dmrg.sh), no paper cited | -0.6416472 RBM (alpha = 1) [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_36_P_0.9/vmc_rbm.sh), no paper cited |
+| square 6x6, J2 = 0.9 | **-0.6478705** | DMRG (bond dimension = 2048) [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_36_P_0.9/dmrg.sh), no paper cited | -0.6473710 &#9675; ViT Extremely slow scaling of minima |
 | square 6x6, J2 = 1 | **-0.71429(1)** | RBM wave function [Chen et al. (2022)](https://doi.org/10.48550/arxiv.2206.14307) | -0.71351 CNN Choo, Neupert & Carleo, Two-dime |
 | square, 40 sites, J2 = 0.1 | no record | solved exactly | |
 | square, 40 sites, J2 = 0.2 | no record | solved exactly | |
@@ -208,7 +208,7 @@ order; the marker is an open question regarding ambiguous information (see [erro
 | square 10x10, J2 = 0.7 | **-0.51889(2)** | RBM wave function [Chen et al. (2022)](https://doi.org/10.48550/arxiv.2206.14307) | -0.51643 DMRG (bond dimension = 1024) [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_100_P_0.7/dmrg.sh), no paper cited |
 | square 10x10, J2 = 0.8 | **-0.57404(2)** | RBM wave function [Chen et al. (2022)](https://doi.org/10.48550/arxiv.2206.14307) | -0.57383 CNN Choo, Neupert & Carleo, Two-dime |
 | square 10x10, J2 = 0.9 | **-0.6269664** | DMRG (bond dimension = 1024) [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_100_P_0.9/dmrg.sh), no paper cited | -0.5974150 RBM (alpha = 1) [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_100_P_0.9/vmc_rbm.sh), no paper cited |
-| square 10x10, J2 = 1 | **-0.69670(2)** | RBM wave function [Chen et al. (2022)](https://doi.org/10.48550/arxiv.2206.14307) | -0.69636 CNN Choo, Neupert & Carleo, Two-dime |
+| square 10x10, J2 = 1 | **-0.69670(2)** | RBM wave function [Chen et al. (2022)](https://doi.org/10.48550/arxiv.2206.14307) | -0.69664 &#9675; ViT Extremely slow scaling of minima |
 | square 14x14, J2 = 0.5 | **-0.49638(1)** | VMC + 1 Lanczos step Hu, Becca, Parola & Sorella, Dir | -0.49447 VMC, p = 0 Lanczos steps Hu, Becca, Parola & Sorella, Dir |
 | square 16x16, J2 = 0.5 | **-0.4969140(5)** | CNN-MPS [Fan et al. (2026)](https://doi.org/10.48550/arxiv.2603.14425) | -0.4967860 T-MPS [Fan et al. (2026)](https://doi.org/10.48550/arxiv.2603.14425) |
 | square 20x20, J2 = 0.5 | **-0.4967987(6)** | CNN-MPS (h,D,l)=(32,15,20) [Fan et al. (2026)](https://doi.org/10.48550/arxiv.2603.14425) | -0.4967320 ViT with symmetry restoration [Viteritti et al. (2026)](https://doi.org/10.48550/arxiv.2602.02665) |
@@ -219,7 +219,7 @@ order; the marker is an open question regarding ambiguous information (see [erro
 </details>
 
 <details>
-<summary><b>Hubbard</b>: 137 instances, 77 with a record, energies as <code>E/site</code></summary>
+<summary><b>Hubbard</b>: 137 instances, 81 with a record, energies as <code>E/site</code></summary>
 
 | instance | record | method | closest challenger |
 |---|---|---|---|
@@ -241,8 +241,8 @@ order; the marker is an open question regarding ambiguous information (see [erro
 | rectangular 4x16, periodic/open, U = 8, n = 0.9375 | **-0.6378750** | DMRG (MaxLinkDim = 4000, MaxTruncErr~1.5E-05) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_hubbard/rectangular-4x16_64_PO_30_8.jl), no paper cited | none |
 | rectangular 4x16, periodic/open, U = 2, n = 1 | **-1.1710781** | DMRG (MaxLinkDim = 4000, MaxTruncErr~3.5E-05) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_hubbard/rectangular-4x16_64_PO_32_2.jl), no paper cited | none |
 | rectangular 4x16, periodic/open, U = 8, n = 1 | **-0.5144219** | DMRG (MaxLinkDim = 4000, MaxTruncErr~4.7E-07) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_hubbard/rectangular-4x16_64_PO_32_8.jl), no paper cited | none |
-| rectangular 4x8, U = 8, n = 0.875 | **-0.76690(1)** | HFPS (hidden-fermion Pfaffian state) [Chen et al. (2025)](https://doi.org/10.48550/arXiv.2507.10705) | -0.76410 RHB (hierarchical backflow K = 2... Zhou, Zhou & Liu, Locality-Induc |
-| rectangular 4x8, periodic/open, U = 8, n = 0.875 | **-0.7363906** | DMRG (MaxLinkDim = 12000, MaxTruncErr~6.6E-06... [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_hubbard/rectangular-4x8_32_PO_14_8.jl), no paper cited | -0.7350000 VMC Hidden Fermion Determinant... [Moreno et al. (2022)](https://doi.org/10.1073/pnas.2122059119) |
+| rectangular 4x8, U = 8, n = 0.875 | **-0.768337(2)** | MLP-NNBF, 128 determinants, symmetry-optimized... [Loehr & Clark (2025)](https://doi.org/10.48550/arxiv.2510.26906) | -0.766900 HFPS (hidden-fermion Pfaffian... [Chen et al. (2025)](https://doi.org/10.48550/arXiv.2507.10705) |
+| rectangular 4x8, periodic/open, U = 8, n = 0.875 | **-0.7363906** | DMRG (MaxLinkDim = 12000, MaxTruncErr~6.6E-06... [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_hubbard/rectangular-4x8_32_PO_14_8.jl), no paper cited | -0.7363290 DMRG (8x4) [Sharma et al. (2025)](https://doi.org/10.48550/arXiv.2510.11710) |
 | rectangular 6x48, U = 8, n &asymp; 0.8333 | **-0.82075(3)** | VMC with stripe of wavelength 6 (+Jastrow and... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/rectangular-6x48_288_P_120_8/VMC-stripes/vmc_hubbard.sh), no paper cited | -0.81909 VMC with uniform BCS pairing... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/rectangular-6x48_288_P_120_8/VMC-uniform/vmc_hubbard.sh), no paper cited |
 | rectangular 6x48, U = 8, n = 0.875 | **-0.74834(3)** | VMC with stripe of wavelength 8 (+Jastrow and... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/rectangular-6x48_288_P_126_8/VMC-stripes/vmc_hubbard.sh), no paper cited | -0.74365 VMC with uniform BCS pairing... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/rectangular-6x48_288_P_126_8/VMC-uniform/vmc_hubbard.sh), no paper cited |
 | rectangular 6x48, U = 12, n = 0.875 | **-0.62556(3)** | VMC with stripe of wavelength 6 (+Jastrow and... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/rectangular-6x48_288_P_126_12/VMC-stripes/vmc_hubbard.sh), no paper cited | -0.62226 VMC with uniform BCS (+Jastrow... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/rectangular-6x48_288_P_126_12/VMC-uniform/vmc_hubbard.sh), no paper cited |
@@ -270,7 +270,7 @@ order; the marker is an open question regarding ambiguous information (see [erro
 | square 4x4, periodic/antiperiodic, U = 4, n = 1 | no record | solved exactly | |
 | square 4x4, periodic/antiperiodic, U = 6, n = 1 | no record | solved exactly | |
 | square 4x4, periodic/antiperiodic, U = 8, n = 1 | no record | solved exactly | |
-| square 6x6, U = 4, n &asymp; 0.6667 | no record | no variational row | |
+| square 6x6, U = 4, n &asymp; 0.6667 | **-1.1834(1)** | VAFQMC (N_l=4) arXiv:2308.08594 | none |
 | square 6x6, U = 2, n = 1 | no record | sampled rows carry no error bar | |
 | square 6x6, U = 4, n = 1 | no record | sampled rows carry no error bar | |
 | square 6x6, U = 6, n = 1 | no record | solved exactly | |
@@ -282,15 +282,15 @@ order; the marker is an open question regarding ambiguous information (see [erro
 | square 6x6, periodic/antiperiodic, U = 8, n = 1 | **-0.52705(3)** | VMC Hidden Fermion Determinant State Ansatz... [Moreno et al. (2022)](https://doi.org/10.1073/pnas.2122059119) | none |
 | square, 50 sites, U = 8, n = 0.84 | **-0.82328(3)** | VAFQMC [Sorella (2023)](https://doi.org/10.1103/physrevb.107.115133) | none |
 | square 8x8, U = 4, n = 0.4375 | no record | no variational row | |
-| square 8x8, U = 4, n = 0.6875 | no record | sampled rows carry no error bar | |
+| square 8x8, U = 4, n = 0.6875 | **-1.18419(7)** | VAFQMC (N_l=4) arXiv:2308.08594 | -1.18330 &#9675; Tensor-Backflow (no Lanczos step... Investigating the Fermi-Hubbard  |
 | square 8x8, U = -8, n &asymp; 0.7813 | no record | solved exactly | |
 | square 8x8, U = -4, n &asymp; 0.7813 | no record | solved exactly | |
-| square 8x8, U = 4, n &asymp; 0.7813 | **-1.130375(5)** | mVMC with SU(2) and momentum projections... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_64_P_25_4/mVMC/mVMC.sh), no paper cited | -1.126833 VMC with uniform pairing... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_64_P_25_4/VMC-uniform/vmc_hubbard.sh), no paper cited |
-| square 8x8, U = 8, n &asymp; 0.7813 | **-0.91483(2)** | mVMC with SU(2) and momentum projections... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_64_P_25_8/mVMC/mVMC.sh), no paper cited | -0.91012 VMC with uniform BCS pairing... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_64_P_25_8/VMC-uniform/vmc_hubbard.sh), no paper cited |
-| square 8x8, U = -8, n = 0.875 | no record | sampled rows carry no error bar | |
+| square 8x8, U = 4, n &asymp; 0.7813 | **-1.13048(8)** | VAFQMC (N_l=4) arXiv:2308.08594 | -1.13037 mVMC with SU(2) and momentum... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_64_P_25_4/mVMC/mVMC.sh), no paper cited |
+| square 8x8, U = 8, n &asymp; 0.7813 | **-0.91483(2)** | mVMC with SU(2) and momentum projections... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_64_P_25_8/mVMC/mVMC.sh), no paper cited | -0.91480 VAFQMC (N_l=4) arXiv:2308.08594 |
+| square 8x8, U = -8, n = 0.875 | **-4.0169(1)** | Pfaffian Beyond Variational Bias: Resolvi | -4.0167 Det-PH Beyond Variational Bias: Resolvi |
 | square 8x8, U = -4, n = 0.875 | no record | solved exactly | |
-| square 8x8, U = 4, n = 0.875 | **-1.00580(3)** | VMC with uniform BCS pairing (+Jastrow and... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_64_P_28_4/VMC-uniform/vmc_hubbard.sh), no paper cited | none |
-| square 8x8, U = 8, n = 0.875 | **-0.7458(6)** | Jastrow-backflow (JBf), 8x8 torus [Sharma et al. (2025)](https://doi.org/10.48550/arXiv.2510.11710) | -0.7454 Hidden-fermion determinant state... [Sharma et al. (2025)](https://doi.org/10.48550/arXiv.2510.11710) |
+| square 8x8, U = 4, n = 0.875 | **-1.01391(8)** | VAFQMC (N_l=4) arXiv:2308.08594 | -1.00580 VMC with uniform BCS pairing... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_64_P_28_4/VMC-uniform/vmc_hubbard.sh), no paper cited |
+| square 8x8, U = 8, n = 0.875 | **-0.7469(2)** | VAFQMC (N_l=4) arXiv:2308.08594 | -0.7458 Jastrow-backflow (JBf), 8x8 torus [Sharma et al. (2025)](https://doi.org/10.48550/arXiv.2510.11710) |
 | square 8x8, U = -8, n = 1 | no record | sampled rows carry no error bar | |
 | square 8x8, U = -4, n = 1 | no record | sampled rows carry no error bar | |
 | square 8x8, U = 2, n = 1 | no record | sampled rows carry no error bar | |
@@ -302,7 +302,7 @@ order; the marker is an open question regarding ambiguous information (see [erro
 | square 8x8, periodic/antiperiodic, U = 6, n = 1 | **-0.6574(2)** | VMC Hidden Fermion Determinant State Ansatz... [Moreno et al. (2022)](https://doi.org/10.1073/pnas.2122059119) | none |
 | square 8x8, periodic/antiperiodic, U = 8, n = 1 | **-0.5245(2)** | VMC Hidden Fermion Determinant State Ansatz... [Moreno et al. (2022)](https://doi.org/10.1073/pnas.2122059119) | none |
 | square 8x8, periodic/open, U = 8, n = 1 | **-0.49944(4)** | VAFQMC [Sorella (2023)](https://doi.org/10.1103/physrevb.107.115133) | -0.49843 DMRG (MaxLinkDim=10000... [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_hubbard/square_64_PO_32_8.jl), no paper cited |
-| square 10x10, U = 4, n = 0.8 | no record | sampled rows carry no error bar | |
+| square 10x10, U = 4, n = 0.8 | **-1.11097(6)** | VAFQMC (N_l=4) arXiv:2308.08594 | -1.11090 &#9675; Tensor-Backflow + 1 Lanczos step... Investigating the Fermi-Hubbard  |
 | square 10x10, U = 2, n = 1 | no record | sampled rows carry no error bar | |
 | square 10x10, U = 4, n = 1 | no record | sampled rows carry no error bar | |
 | square 10x10, U = 6, n = 1 | no record | sampled rows carry no error bar | |
@@ -379,9 +379,9 @@ order; the marker is an open question regarding ambiguous information (see [erro
 | square 6x6, V = 0.1, n &asymp; 0.3611 | **-0.759460(1)** | VMC Determinant Slater-Jastrow (RBM) Ansatz... [Romero et al. (2024)](https://doi.org/10.48550/arxiv.2406.09077) | -0.759460 VMC Determinant Slater-Backflow-Ja... [Romero et al. (2024)](https://doi.org/10.48550/arxiv.2406.09077) |
 | square 6x6, V = 1, n &asymp; 0.3611 | **-0.6132263** | DMRG (maxbonddim = 4096) [run script](https://github.com/varbench/methods/blob/main/scripts/tV/square_36_P_13_1/dmrg.sh), no paper cited | -0.6131929 VMC Determinant Slater-Backflow-Ja... [Romero et al. (2024)](https://doi.org/10.48550/arxiv.2406.09077) |
 | square 6x6, V = 10, n &asymp; 0.3611 | **-0.2201239** | DMRG (maxbonddim = 4096) [run script](https://github.com/varbench/methods/blob/main/scripts/tV/square_36_P_13_10/dmrg.sh), no paper cited | -0.2101835 VMC Determinant Slater-Backflow-Ja... [Romero et al. (2024)](https://doi.org/10.48550/arxiv.2406.09077) |
-| square 8x8, V = 1, n = 0.5 | **-0.4590635** | DMRG (maxbonddim = 4096) [run script](https://github.com/varbench/methods/blob/main/scripts/tV/square_64_P_32_1/dmrg.sh), no paper cited | none |
-| square 8x8, V = 2, n = 0.5 | **-0.2911555** | DMRG (maxbonddim = 4096) [run script](https://github.com/varbench/methods/blob/main/scripts/tV/square_64_P_32_2/dmrg.sh), no paper cited | none |
-| square 8x8, V = 4, n = 0.5 | **-0.1601344** | DMRG (maxbonddim = 4096) [run script](https://github.com/varbench/methods/blob/main/scripts/tV/square_64_P_32_4/dmrg.sh), no paper cited | none |
+| square 8x8, V = 1, n = 0.5 | **-0.4590635** | DMRG (maxbonddim = 4096) [run script](https://github.com/varbench/methods/blob/main/scripts/tV/square_64_P_32_1/dmrg.sh), no paper cited | -0.4561552 &#9675; HF Autoregressive neural Slater-Jas |
+| square 8x8, V = 2, n = 0.5 | **-0.2911555** | DMRG (maxbonddim = 4096) [run script](https://github.com/varbench/methods/blob/main/scripts/tV/square_64_P_32_2/dmrg.sh), no paper cited | -0.2891614 &#9675; HF Autoregressive neural Slater-Jas |
+| square 8x8, V = 4, n = 0.5 | **-0.1601344** | DMRG (maxbonddim = 4096) [run script](https://github.com/varbench/methods/blob/main/scripts/tV/square_64_P_32_4/dmrg.sh), no paper cited | -0.1597047 &#9675; HF Autoregressive neural Slater-Jas |
 
 </details>
 
@@ -420,13 +420,13 @@ order; the marker is an open question regarding ambiguous information (see [erro
 
 </details>
 
-Across the whole table: **188 of 322 instances have a record**, from 1008 energies.
-Of the 134 instances without one, 111 are solved exactly and have nothing to compete
-for. Separately, **91 sampled variational energies across 54 instances carry no error bar**, so
-they are listed and rank for nothing, and 38 of them sit below their instance's current
+Across the whole table: **192 of 322 instances have a record**, from 1104 energies.
+Of the 130 instances without one, 111 are solved exactly and have nothing to compete
+for. Separately, **135 sampled variational energies across 81 instances carry no error bar**, so
+they are listed and rank for nothing, and 43 of them sit below their instance's current
 record. If one of those is your paper, the error bar is the only thing missing.
 
-And **112 energies carry no error metric we could find** (&#9675;). Those numbers stay in the
+And **159 energies carry no error metric we could find** (&#9675;). Those numbers stay in the
 table and in the ranking; the marker only says the energy still needs verification or a word
 from the people who produced it.
 
