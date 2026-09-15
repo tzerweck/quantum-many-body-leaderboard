@@ -303,14 +303,14 @@ order; the marker is an open question regarding ambiguous information (see [erro
 
 </details>
 
-Across the whole table: **182 of 205 instances have a record**, from 681 rows.
+Across the whole table: **182 of 205 instances have a record**, from 681 energies.
 Of the 23 instances without one, 16 are solved exactly and have nothing to compete
-for. Separately, **31 sampled variational rows across 26 instances carry no error bar**, so
+for. Separately, **31 sampled variational energies across 26 instances carry no error bar**, so
 they are listed and rank for nothing, and 5 of them sit below their instance's current
 record. If one of those is your paper, the error bar is the only thing missing.
 
-And **22 rows carry no error metric we could find** (&#9675;). Those numbers stay in the
-table and in the ranking; the marker only says the row still needs verification or a word
+And **22 energies carry no error metric we could find** (&#9675;). Those numbers stay in the
+table and in the ranking; the marker only says the energy still needs verification or a word
 from the people who produced it.
 
 More views of the same data (which records nobody has ever challenged, which have stood

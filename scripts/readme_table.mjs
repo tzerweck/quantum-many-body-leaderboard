@@ -193,14 +193,14 @@ for (const [model, name] of MODELS) {
   lines.push("", ...HEADER, ...group.map(i => row(i, instanceLabel(i))), "", "</details>", "");
 }
 const b = s.blocked_on_sigma;
-lines.push(`Across the whole table: **${s.records.held} of ${s.instances} instances have a record**, from ${s.rows} rows.`);
+lines.push(`Across the whole table: **${s.records.held} of ${s.instances} instances have a record**, from ${s.rows} energies.`);
 lines.push(`Of the ${s.instances - s.records.held} instances without one, ${s.records.none_exact_only} are solved exactly and have nothing to compete`);
-lines.push(`for. Separately, **${b.rows} sampled variational rows across ${b.instances} instances carry no error bar**, so`);
+lines.push(`for. Separately, **${b.rows} sampled variational energies across ${b.instances} instances carry no error bar**, so`);
 lines.push(`they are listed and rank for nothing, and ${b.would_take_record} of them sit below their instance's current`);
 lines.push("record. If one of those is your paper, the error bar is the only thing missing.");
 lines.push("");
-lines.push(`And **${s.no_error_metrics} rows carry no error metric we could find** (&#9675;). Those numbers stay in the`);
-lines.push("table and in the ranking; the marker only says the row still needs verification or a word");
+lines.push(`And **${s.no_error_metrics} energies carry no error metric we could find** (&#9675;). Those numbers stay in the`);
+lines.push("table and in the ranking; the marker only says the energy still needs verification or a word");
 lines.push("from the people who produced it.");
 lines.push("");
 lines.push("More views of the same data (which records nobody has ever challenged, which have stood");
