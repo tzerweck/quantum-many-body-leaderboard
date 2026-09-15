@@ -41,6 +41,12 @@ DEFECTS.push(
     finding: "Published in Phys. Rev. X 15, 011047 (2025) as a ground state 1.78% below the DMRG benchmark. A Comment (arXiv:2605.28861) shows the single-spin-flip update used at this size does not conserve total magnetisation, so the Markov chains freeze and the low energy is a sampling artifact. Under ergodic sampling the same ansatz converges ~3.5% ABOVE DMRG." },
 );
 
+DEFECTS.push(
+  { match: { instance: "Hubbard/square_64_P_32_8", method: "Transformer backflow + MARCH optimizer" },
+    flag: "below-exact-suspected",
+    finding: "Reported without an error bar at E/N = -0.52582, 1.6e-4 per site below the stored AFQMC exact row -0.5256563(78): 2.1 sigma of the AFQMC error alone. Not established - the paper's own AFQMC reference for this lattice is -0.5262(5), lower still, and the NQS error is unknown - but a variational energy below a numerically exact one is grounds for objection (RULES.md 10). It holds nothing either way: a sampled energy with no sigma is eligible for nothing (RULES.md 6)." },
+);
+
 export const SHARED = {
   "sampling-nonergodic": {
     diagnosis:

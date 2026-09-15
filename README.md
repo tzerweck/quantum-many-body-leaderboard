@@ -35,7 +35,7 @@ nothing is re-run: this is the literature, organised.
 | Hubbard 4x16, U = 8, n = 0.875 | 8 | **-0.76623(1)** | ACE (16 conv layers) + full symmetry... | [Gu et al. (2026)](https://doi.org/10.48550/arxiv.2604.25775) | -0.76560 NNBF, 32 determinants + free... |
 | Triangular Heisenberg, 196 sites, open | 5 | **-0.5138(1)** | 2D Gated RNN | [Hibat-Allah et al. (2022)](https://doi.org/10.48550/arxiv.2207.14314) | -0.5108 DMRG (Bond dimension = 2000) |
 | Kagome Heisenberg, 192 sites | 1 | **-0.42987(1)** | VMC with Dirac spin liquid + Jastrow | [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/kagome-8x8_192_P/vmc_gutzwiller.sh) &mdash; no paper cited | none |
-| Pyrochlore Heisenberg, 256 sites | 1 | **-0.48310(7)** | mVMC with SU(2) and symmetry projections | [Astrakhantsev et al. (2021)](https://doi.org/10.1103/physrevx.11.041021) | none |
+| Pyrochlore Heisenberg, 256 sites | 2 | **-0.48310(7)** | mVMC with SU(2) and symmetry projections | [Astrakhantsev et al. (2021)](https://doi.org/10.1103/physrevx.11.041021) | none |
 
 Energies are per site: spin models as `E/N (S.S)`, Hubbard as `E/site` (see
 [units and conventions](#units-and-conventions)). **Bold** is the record under
@@ -44,13 +44,13 @@ metric** — neither an error bar nor an energy variance — in the source we re
 sampled energy with a variance but no error bar. Both rows stay in the table and in rank
 order; the marker is an open question, not a criticism (see [error metrics](#error-metrics)).
 
-Across the whole table: **182 of 205 instances have a record**, from 675 rows.
+Across the whole table: **182 of 205 instances have a record**, from 679 rows.
 Of the 23 instances without one, 16 are solved exactly and have nothing to compete
-for. Separately, **31 sampled variational rows across 25 instances carry no error bar**, so
-they are listed and rank for nothing — and 4 of them sit below their instance's current
+for. Separately, **31 sampled variational rows across 26 instances carry no error bar**, so
+they are listed and rank for nothing — and 5 of them sit below their instance's current
 record. If one of those is your paper, the error bar is the only thing missing.
 
-And **21 rows carry no error metric we could find** (&#9675;). Those numbers stay in the
+And **22 rows carry no error metric we could find** (&#9675;). Those numbers stay in the
 table and in the ranking — the marker only says the row still needs verification or a word
 from the people who produced it.
 

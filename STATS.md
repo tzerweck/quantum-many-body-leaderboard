@@ -6,7 +6,7 @@ who holds a record. Where a view can only be computed over part of the table, it
 
 ## Records nobody has challenged
 
-**64 of 182 records stand on a single published number.**
+**61 of 182 records stand on a single published number.**
 One group computed an energy, and in the years since, nobody has published a second
 one to compare it against. That is not a criticism of the number — it is a statement
 about the coverage of this table, and of the literature it draws on.
@@ -16,7 +16,6 @@ about the coverage of this table, and of the literature it draws on.
 | `Heisenberg/pyrochlore-4x4x4_1024_P` | -0.4880022 | mVMC (PP + 1st step Lanczos, spin-parity | [Pohle et al. (2023)](https://doi.org/10.48550/arxiv.2311.11561) |
 | `Heisenberg/pyrochlore-3x3x3_432_P` | -0.4884745 | mVMC (PP + 1st step Lanczos, spin-parity | [Pohle et al. (2023)](https://doi.org/10.48550/arxiv.2311.11561) |
 | `Heisenberg/shuriken_384_P` | -0.4371289 | mVMC with SU(2) and point group projecti | [Astrakhantsev et al. (2021)](https://doi.org/10.1103/physrevb.104.l220408) |
-| `Heisenberg/pyrochlore-4x4x4_256_P` | -0.4830957 | mVMC with SU(2) and symmetry projections | [Astrakhantsev et al. (2021)](https://doi.org/10.1103/physrevx.11.041021) |
 | `Hubbard/square_256_P_106_8` | -0.8378770 | VAFQMC stripe length=8 | [Sorella (2023)](https://doi.org/10.1103/physrevb.107.115133) |
 | `Hubbard/square_256_P_108_8` | -0.8119840 | VAFQMC stripe length=8 | [Sorella (2023)](https://doi.org/10.1103/physrevb.107.115133) |
 | `Hubbard/square_256_P_109_8` | -0.7989620 | VAFQMC stripe length=8 | [Sorella (2023)](https://doi.org/10.1103/physrevb.107.115133) |
@@ -28,8 +27,9 @@ about the coverage of this table, and of the literature it draws on.
 | `Hubbard/square_256_P_120_8` | -0.6405290 | VAFQMC stripe length=8 | [Sorella (2023)](https://doi.org/10.1103/physrevb.107.115133) |
 | `Hubbard/square_256_PA_107_8_t12` | -0.7993750 | mVMC with SU(2) and momentum projections | no paper cited |
 | `Hubbard/square_256_PA_107_8_t12_UV1V2` | 1.2591797 | mVMC with SU(2) and momentum projections | no paper cited |
+| `Hubbard/rectangular-14x16_224_P_98_8` | -0.7582990 | VAFQMC stripe length=7 | [Sorella (2023)](https://doi.org/10.1103/physrevb.107.115133) |
 
-…and 49 more.
+…and 46 more.
 
 ## Records held: symmetrised vs not
 
@@ -64,14 +64,14 @@ all would say more about that paper's scope than about how long records last.
 | year | oldest standing record | instance | records held by this paper |
 |---|---|---|---|
 | 2017 | [Bauernfeind et al. (2017)](https://doi.org/10.1103/physrevx.7.031013) | `Impurity/SB-DMFT-MI-HF_9` (-34.5805205) | 12 |
-| 2020 | [Hibat-Allah et al. (2020)](https://doi.org/10.1103/physrevresearch.2.023358) | `TFIsing/square_144_O_3` (-0.7934755) | 1 |
+| 2020 | [Hibat-Allah et al. (2020)](https://doi.org/10.1103/physrevresearch.2.023358) | `TFIsing/square_144_O_3` (-3.1739018) | 1 |
 | 2021 | [Astrakhantsev et al. (2021)](https://doi.org/10.1103/physrevx.11.041021) | `Heisenberg/pyrochlore-2x2x2_32_P` (-0.5162656) | 3 |
 | 2021 | [Astrakhantsev et al. (2021)](https://doi.org/10.1103/physrevb.104.l220408) | `Heisenberg/shuriken_216_P` (-0.4375995) | 3 |
 | 2021 | [Nomura & Imada (2021)](https://doi.org/10.1103/physrevx.11.031034) | `J1J2/square_36_P_0.5` (-0.5038001) | 2 |
 | 2021 | [Vieijra & Nys (2021)](https://doi.org/10.1103/physrevb.104.045123) | `J1J2/square_64_P_0.55` (-0.4883500) | 1 |
 | 2022 | [Hibat-Allah et al. (2022)](https://doi.org/10.48550/arxiv.2207.14314) | `Heisenberg/square_100_O` (-0.6286560) | 3 |
 | 2022 | [Roth et al. (2022)](https://doi.org/10.48550/arxiv.2211.07749) | `Heisenberg/triangular_108_P` (-0.5531500) | 4 |
-| 2022 | [Moreno et al. (2022)](https://doi.org/10.1073/pnas.2122059119) | `Hubbard/rectangular-4x8_32_P_14_8` (-0.7633125) | 10 |
+| 2022 | [Moreno et al. (2022)](https://doi.org/10.1073/pnas.2122059119) | `Hubbard/square_16_P_5_3.5981` (-1.2431527) | 9 |
 | 2022 | [Chen et al. (2022)](https://doi.org/10.48550/arxiv.2206.14307) | `J1J2/square_100_P_0.4` (-0.5238800) | 8 |
 | 2023 | [Pohle et al. (2023)](https://doi.org/10.48550/arxiv.2311.11561) | `Heisenberg/pyrochlore-2x2x2_128_P` (-0.4922012) | 3 |
 | 2023 | [Chen & Heyl (2023)](https://doi.org/10.48550/arxiv.2302.01941) | `Heisenberg/square_100_P` (-0.6715526) | 1 |
@@ -83,10 +83,10 @@ Records by vintage:
 | 2017 | ████████████ 12 |
 | 2020 | █ 1 |
 | 2021 | █████████ 9 |
-| 2022 | █████████████████████████ 25 |
+| 2022 | ████████████████████████ 24 |
 | 2023 | ███████████████████████████ 27 |
 | 2024 | █████ 5 |
-| 2025 | ██ 2 |
+| 2025 | ███ 3 |
 | 2026 | █████ 5 |
 
 ## What a record costs in parameters
