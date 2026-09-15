@@ -12,13 +12,10 @@
 physics.**
 
 This is the literature organised to serve fellow researchers and AI. 
-So that we can see the works of the wider research community at one glance.
-As well as place our own results in the context of other research.
 
-Every row is one published claim about a Hamiltonian instance, carrying the energy value,
-its error bar (uncertainty of last digit in brackets), the method, the primary reference, 
-and a declared `bound_type` saying what kind of quantity the energy value actually is (either a strict
-variational bound, a fixed-node estimate or a zero-variance extrapolation).
+So that we can see the works of the wider research community at one glance.
+
+As well as place our own results in the context of other research.
 
 ## Leaderboard
 
@@ -36,6 +33,11 @@ variational bound, a fixed-node estimate or a zero-variance extrapolation).
  c.2207.14314) | -0.5108 DMRG (Bond dimension = 2000) |
 | Kagome Heisenberg, 192 sites | 1 | **-0.42987(1)** | VMC with Dirac spin liquid + Jastrow | [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/kagome-8x8_192_P/vmc_gutzwiller.sh) &mdash; no paper cited | none |
 | Pyrochlore Heisenberg, 256 sites | 2 | **-0.48310(7)** | mVMC with SU(2) and symmetry projections | [Astrakhantsev et al. (2021)](https://doi.org/10.1103/physrevx.11.041021) | none |
+
+Every row is one published claim about a Hamiltonian instance, carrying the energy value,
+its error bar (uncertainty of last digit in brackets), the method, the primary reference, 
+and a declared `bound_type` saying what kind of quantity the energy value actually is (either a strict
+variational bound, a fixed-node estimate or a zero-variance extrapolation).
 
 Energies are per site: spin models as `E/N (S.S)`, Hubbard as `E/site` (see
 [units and conventions](#units-and-conventions)). **Bold** is the record under
