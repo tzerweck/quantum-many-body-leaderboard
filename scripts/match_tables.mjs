@@ -56,6 +56,9 @@ const instanceTokens = inst => {
   if (lat === "chain") t.add(`L=${inst.n_sites}`);
   const m = lat.match(/(\d+)x(\d+)(?:x(\d+))?$/);          // rectangular-4x16, kagome-8x8
   if (m) t.add(m[0]);
+  // papers write either order: arXiv:2507.10705 prints "8 × 4" for rectangular-4x8, and
+  // its record-beating HFPS energy was never compared with that instance
+  if (m && !m[3] && m[1] !== m[2]) t.add(`${m[2]}x${m[1]}`);
   // L x L only when the lattice name states no dimensions of its own: rectangular-4x16 has
   // 64 sites but is not 8x8, and pyrochlore-4x4x4_256 is not 16x16.
   const r = Math.round(Math.sqrt(inst.n_sites));
