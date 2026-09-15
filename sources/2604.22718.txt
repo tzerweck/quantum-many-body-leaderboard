@@ -1,0 +1,1323 @@
+ SciPost Physics                                                                                  Submission
+
+
+                                       Replica Tensor Train
+
+                   Miha Srdinšek1⋆  , Gabriel Gouraud1†   and Xavier Waintal1‡
+
+  1Université Grenoble Alpes, CEA, Grenoble INP, IRIG, Pheliqs, F-38000 Grenoble, France
+
+        ⋆mihasrdinsek@gmail.com,    †gab.gouraud@gmail.com,    ‡xavier.waintal@cea.fr
+
+
+Abstract
+
+We describe a numerical many-body technique that is based on both tensor networks
+and quantum Monte Carlo.  The variational ansatz is a tensor network that can harvest
+volume-law entanglement.  It is constructed from a tensor train to which one applies
+a set of non-local operators that force several indices of the tensor train to represent
+the same physical index, hence its name – replica tensor train (RTT). From the tensor
+network toolbox, it inherits the possibility to make linear combinations of these states
+and apply a certain class of operators. We can therefore find the ground-state of a local
+Hamiltonian in a purely algebraic way as in standard tensor network algorithms – i.e.
+without using gradient descent methods.  On the other hand, the volume-law structure
+forbids calculating physical observables directly. In much the same way as on a quantum
+computer where one can prepare a state but can only sample it at the end, here we have
+to use Markov Chain Monte Carlo to compute the observables. We further show that the
+approach can be extended to build Krylov-subspace ground-state methods within the
+variational manifold.  We illustrate the different algorithms on a two-dimensional spin
+model with a transverse magnetic field, which can be solved by this approach at low
+computational cost.
+
+
+
+1 Introduction
+
+Finding the ground-state of a quantum many-body problem is hindered by the exponential
+growth of the Hilbert space size with the numberNof particles (e.g., spins, qubits, or fermionic
+sites).  It is very tempting, and often effective, to focus on a small part of the Hilbert space,
+the one we expect to be relevant, i.e. to use a variational approach to the problem. However,
+not all variational approaches are born equal.  Thecomputability, i.e.  the mathematical tools
+at our disposal to compute with them has strong variations with the underlying class of wave
+functions.  A second thing that varies is theexpressivityof the ansatz, i.e.  its ability to ap-
+proximate the true ground-state for a given size of the variational manifold. Often, one must
+compromise and give up some computability in exchange for an increased expressivity.
+    In terms of computability, the gold standard are arguably the matrix product states (MPS).
+This one-dimensional tensor network ansatz has everything that one could dream of:  it can
+be sampled exactly, two states can be added together, calculating local observables is straight-
+forward, and we have powerful algebraic approaches to find the ground-state – i.e., the cele-
+brated DMRG algorithm[1,2].  The only drawback of MPS is that its expressivity is excellent
+for one-dimensional problems[3,4], but somewhat limited for two-dimensional problems and
+beyond.  Its two-dimensional tensor network generalization, PEPS, essentially solves the ex-
+pressivity problem.  However, there is a large cost in computability:  finding the ground-state
+becomes a much more complex affair and the computational cost increases drastically[5].
+
+
+                                                       1
+  SciPost Physics                                                                                  Submission
+
+
+
+    At the other extreme of the spectrum, one finds ansätze with limited internal structure:
+we only know how to evaluate the unnormalized wave function for a given configuration
+and,  thanks to automatic differentiation,  we can easily calculate the gradient of the wave
+function with respect to its parameters.  With such properties, we are left with a unique path
+for calculating the observables and finding the ground-state:  Markov chain Monte Carlo and
+energy minimization with noisy gradient descent. This approach is known as variational Monte
+Carlo (VMC)[6–8].   Since there are almost no constraints for constructing a VMC ansatz,
+highly expressive ones can be built. A natural choice for such constructions is to use a neural
+network.  For instance, convolutional image processing models that retain a notion of space
+and locality, and language processing transformer models, which describe complex long-range
+correlations via an attention mechanism.  The resulting neural quantum states (NQS) have
+become very popular[9–17].   Despite the field being rather recent,  very promising results
+have been obtained.  Yet, we think that it is fair to state that the noisy gradient descent in a
+non-convex manifold is not ideal:  it requires a large number of optimization steps and there
+is no guarantee of convergence (presence of local minima or barren plateaus).
+    Researchers on both sides are seeking solutions to this computability-expressivity duality
+problem. On the NQS side, they try to add more structure. For instance, one can build objects
+that automatically capture the antisymmetry of the wave function[15]or certain symme-
+tries such as translational invariance[18].  On the tensor network side, one can decrease the
+computational burden by using Markov Chain Monte Carlo on PEPS[19–21]or increase the
+expressivity through String Bond States (SBS)[22–24]or embed MPS inside NQS[25–30].
+This is a very active and quickly evolving field. Indeed, with the techniques already available
+to us, there is increasing evidence that we are not far from solving the founding models of the
+field, such as the Hubbard model[31–33].
+    The purpose of this article is to address the above problem through a new mathematical
+object – we shall call it a Replica Tensor Train (RTT) – that has interesting mathematical prop-
+erties.  As we shall see, the RTT is an extension of MPS that allows one to quite dramatically
+increase the expressivity of the MPS while keeping some of its core algebraic properties. The
+main appeal of RTT, and chief result of this paper, is that while it can harvest volume-law
+entanglement with low bond dimension, we shall be able to find the ground-state within the
+RTT manifoldwithoutresorting to gradient descent.
+    In a nutshell, an RTT is a long tensor train where several sites of the tensor network cor-
+respond to the same physical spin, see Fig.1for a schematic. The RTT ansatz is introduced in
+four different, but equivalent ways in section2:
+    •as an MPS where physical indices appear more than once,
+
+    •as an “MPS of MPS”,
+
+    •as a tensor network,
+
+    •and as an MPS embedded in a quantum error correction code (An MPS with a set of
+       stabilizers).
+We show that these different formulations provide different insights, allowing us to construct
+our formalism.
+    In Section3, we provide the algorithms for finding the ground-state of a given Hamiltonian.
+The algorithms are rather peculiar:  on the one hand, the ground-state can be constructed in
+a fully algebraic way using only tensor network tools such as tensor contraction and singular
+value decomposition (as in the DMRG algorithm). On the other hand, to compute any observ-
+able, one must sample the state using Markov chain Monte Carlo. In some sense, the situation
+is very similar to that of a quantum computer where we can construct the state algebraically
+using quantum gates, but the sampling of qubits is still needed for measuring anything.
+
+                                                         2
+  SciPost Physics                                                                                  Submission
+
+
+
+
+
+
+
+
+
+
+
+      Figure 1: The RTT ansatz compared to other tensor networks (TN). (a) A toy model:
+      a 3×3 grid of 9 spins.  (b) Schematic of an MPS that goes through these spins in
+      a snake-like manner.  Some spins may be close by on the lattice but far away in the
+      MPS structure. (c) A PEPS ansatz for the same lattice. The connectivity of the PEPS
+      naturally respects the local connections between spins. (d) The RTT ansatz consists
+      of a first (red) MPS followed by a second (blue) MPS such that different sites of the
+      tensor network correspond to a unique physical spin.
+
+
+    In Section4, we illustrate the above on a 20×20 two-dimensional transverse-field Ising
+model.
+
+
+2 Replica Tensor Trains
+
+In this section, we build the Replica Tensor Train (RTT). The RTT is a variational ansatz that
+has special algebraic properties, which will allow us to build new algorithmic procedures for
+finding ground-states of many-body systems.
+
+2.1Preliminary remark: Tensor Trains versus Matrix Product States
+
+The concepts of Matrix Product States and Tensor Trains are used interchangeably in the liter-
+ature, the former originating from quantum many-body physics and the latter from mathemat-
+ics. For the purpose of this article, it will be important to properly separate the two concepts.
+We define a TT (Tensor Train)φ           i1,...i    Ω  withΩdiscrete variablesi                                1,i 2...i   Ω, wherei    α∈{0, 1},
+(the generalization to dimensions larger than 2 is trivial) as,
+
+                                              φi1,...i    Ω =TrA      i11 Ai22 . . .A iΩΩ .                                                 (1)
+
+Aiαα  is a set of twoχ   α×χ α+1     matricesA                  0α andA        1α (or in tensor network language a tensor with
+three indices) where, by convention, the first and last bond dimensionsχ        α are set to unity:
+χ1 =χ   Ω+1     =1. A TT is just a tensor network. It can represent any large tensorφ                 i1,...i    Ω without,
+a priori, any connection to a quantum many-body state.
+    What we call an MPS, on the other hand, is a TT used to represent a quantum many-body
+state (this was its actual original meaning before these objects started to be used for many
+new purposes).  We consider a system withNspins, qubits or fermionic occupation states.  A
+basis set for our Hilbert space is|s〉=|s              1...s    N〉wheres     α∈{0, 1}is the state of the chosen
+spin/qubit. A general quantum state|Ψ〉takes the form,
+                                                         X
+                                                |Ψ〉=          ψs1...s    N|s〉.                                                    (2)
+                                                          s
+
+We define the MPS as a state whereψ             s1...s    N is a TT withΩ=N. In this article we will construct
+other quantum states, also defined with TTs, but withΩ≥N.
+
+
+
+
+                                                             3
+  SciPost Physics                                                                                  Submission
+
+
+2.2Four equivalent definitions of RTT
+We now construct the Replica TT quantum state. There are four different but equivalent ways
+of defining the RTT, each providing different insights which will later be useful in the discussion
+of different algorithms.
+
+2.2.1RTT as a TT with repeated appearance of the physical degrees of freedom
+
+We define an RTT as follows:  we consider a TTφ   i1...i   Ω  withΩ≥N.  As an example, in the
+actual applications discussed later, we will haveΩ=2NorΩ=4N. We introduce a function
+j=σ(ω)that takes one of the tensorsω∈{1...Ω}as an input and returns one of the spins
+j∈{1...N}as an output. The RTT is then defined as,
+
+                                            ψs1...s    N  =TrA      sσ(1)1    Asσ(2)2    . . .A sσ(Ω)Ω    .                                             (3)
+
+In other words, an RTT is a generalization of MPS where each physical degree of freedom may
+appear more than once, i.e. may be replicated. For later use, we introduce the setR       j =σ −1  (j)
+which enumerates the different replica tensors of the TT for a given physical index. Its size is
+|R  j|. The different elements ofR      j are designated byR      ja∈{1..Ω}. By construction    Pj|R  j|=Ω
+andσ(R              ja) =j,∀a∈{1..|R                      j|}.
+     The functionσ(ω)is best understood graphically as a discrete "path" between the physical
+degrees of freedom; the parameterωis the "time" of the parametrized curve.  Importantly,
+this path visits the different physical degrees of freedom more than once. Let us illustrate the
+above construction on a practical example.  We consider a small system of 6 spins on a 2D
+lattice like so,
+
+
+
+The pathσ(ω)withΩ=Nwhich we call the "horizontal ordering" can be visualized as,
+
+                                 σH(ω) =                                                                                      (4)
+
+Since the ordering of the physical sites has been preserved, this path is simply the identity
+functionσ(ω) =ωand the resulting RTT reduces to a simple MPS,
+
+                                                 ψHs1...s    6 =TrA      s11 As22 . . .A s66 .                                                  (5)
+
+However, a different ordering of the tensors is also possible. For instance, the "vertical order-
+ing",
+
+                                 σV (ω) =                                                                                     (6)
+
+that also corresponds to a plain MPS but with a different ordering of the tensors,
+
+                                             ψVs1...s    6 =TrA      s41 As32 As23 As54 As65 As16 .                                             (7)
+
+Our first non-MPS RTT combines both the vertical and the horizontal orderings like so,
+
+
+                                σHV (ω) =                                                                                     (8)
+
+
+
+
+
+                                                                4
+  SciPost Physics                                                                                  Submission
+
+
+
+which corresponds explicitly to the following state:
+
+                                           ψHVs1...s    6 =TrA      s11 As22 As33 As44 As55 As66
+                                                         As47 As38 As29 As510As611As112                                                  (9)
+
+We observe in particular that the path goes through all the connections between the spins, i.e.
+if two spins are neighbors physically, they are also neighbors insomepart of the RTT.
+     For later reference, we define the sumσ=σ                 1⊕σ    2 of two pathsσ            1(ω)of sizeΩ                1 and
+σ2(ω)of sizeΩ                2 as the path of sizeΩ=Ω                1 +Ω    2 that goes first through the sites ofσ    1 and
+then through those ofσ    2:
+                                              ¤σ1(ω)∀ω∈{1···Ω                      1}
+                                  σ(ω) =        σ2(ω−Ω          1)∀ω∈{Ω            1 +1···Ω}                                           (10)
+
+
+With this notation, we haveσ          HV =σ    H⊕σ    V . Another example of pathσis shown in Fig.1d.
+
+2.2.2RTT as a nested MPS of MPS
+Another way of viewing an RTT is as an "MPS of MPS".  For the sake of clarity, let us suppose
+that the functionσ(ω)goes through all the physical sites once, then again through all the sites
+a second time (in a different order), then again untilΩ=KN.  We call such a state an RTT
+withKorderings (withKreplicas per site). Defining
+
+                                           φ(i)s   =A    sσ(1+iN)1+iN      Asσ(2+iN)2+iN       . . .A sσ(N+iN)N+iN                                                (11)
+
+we arrive at,                              X       φ(0)      φ(1)                        
+                                ψs =                   s    α0     s    α0α1···φ(K−1)s       αK−2                                (12)
+                                        α0...α    K−2
+justifying the name “an MPS of MPS”, as each tensor network[φ                      (i)s  ]αβ corresponds to a regular
+MPS. It follows automatically from this remark that RTT generalizes MPS, as well as String
+Bond States which are a rank 1 product of MPS. However, this construction shows that an
+RTT does not only allow for a product of different MPS, but also for any linear combinations
+between them.  Last, since it has been shown that String Bond States naturally encompass
+Restricted Boltzmann Machine[24], it follows that RTT contains this class of neural networks
+as well.
+
+2.2.3RTT as a tensor network
+
+A third way of viewing an RTT is as a tensor network made of the underlying TT together
+with Kronecker tensors that enforce the link between the variables of the TT and the physical
+degrees of freedom.
+     The Kronecker tensor, also known as the copy tensor, is defined asδ     i jk  =δ    i jδjk.  It en-
+forces the fact that all its indices must be equal (and may also be defined with four or more
+indices). The binding between a spins   α and the tensors in RTT can be expressed as a contrac-
+tion between the TT of the RTT and the tensor
+
+                                                                 |R  j|Y
+                                                     δ(j)sj,R  j =    δsj,R  ja.                                                    (13)
+                                                                 a=1
+In this notation, the RTT can be rewritten as the following tensor network contraction,
+                                                   X                           NY
+                                          ψs =           TrA  i11 Ai22 . . .A iΩΩ δ(j)sj,R  j                                        (14)
+                                                   i1...i   Ω                 j=1
+
+                                                                 5
+  SciPost Physics                                                                                  Submission
+
+
+
+     Once again, such a contraction is best viewed graphically using standard tensor network
+drawing conventions. Einstein summation is assumed on any connection between two tensors.
+For our RTTψ   HVs1...s    6, it reads,
+
+
+
+
+                      ψHVs1...s    6 =
+
+
+
+where the empty circles correspond to the Kronecker tensors,
+
+                                                                                        .                                      (15)
+
+     To proceed and analyze the structure of this peculiar tensor network, let us name separately
+the TT part and the Kronecker part. We denote the TT part,
+
+                                             φi =φ    i1...i   Ω =TrA      i11 Ai22 . . .A iΩΩ                                            (16)
+
+whereiis a shortcut fori= (i                        1, ...i   Ω), and the Kronecker part as,
+
+                                                               NY
+                                                     Cs,i   =      δ(j)sj,R  j,                                                      (17)
+                                                               j=1
+
+whereCstands for constraint. With this new notation we have,
+                                                             X
+                                                     ψs =         Cs,i φi                                                      (18)
+                                                               i
+
+which can be viewed as a simple matrix-vector multiplication
+
+                                                          ψ=Cφ                                                         (19)
+
+in the exponentially large spaces spanned by(s       1...s    N )and(i            1...i   Ω)which we call, respectively,
+thephysical spaceand thereplica space.
+     We are now going to make a simple algebraic remark on which are based all the subsequent
+developments of this article.  Suppose that we want to apply an operatorAon our stateψ.
+For instance,Acan be the HamiltonianHof the problem but we will also use other operators.
+Now, further suppose that we know how to commuteAwithC.  In other words, we suppose
+that we can compute  ¯Asuch that,
+                                                         AC=C         ¯A                                                        (20)
+What do we gain from this construction? Essentially, we recover the crucial ability to perform
+linear combinations of wavefunctions while keeping the ansatz in the same RTT form. Indeed,
+suppose that we want to constructψ     ′ =ψ+Aψ. We trivially haveψ        ′ =Cφ  ′ withφ   ′ =φ+       ¯Aφ.
+As we shall see below, computing   ¯Aφwill be a straightforward tensor network contraction
+yielding a new TT; the resulting sum simply amounts to adding two TTs, a standard TT process
+which yields another TT (see e.g. Section 8.2 of Ref.[34]). The capacity to perform these linear
+combinations is crucial and will provide us with the direct means of finding the ground-state
+of a problem without resorting to the stochastic gradient descent used in variational Monte
+Carlo.
+     We now show that  ¯Acan be constructed with simple rules whenAis written as a sum of
+Pauli strings, i.e. is a polynomial in the three Pauli matricesX                   i,Y i andZ        i acting on spini. Spin
+
+                                                               6
+  SciPost Physics                                                                                  Submission
+
+
+
+models are naturally written in such a form; fermionic models may be brought to this form
+using e.g. a Jordan Wigner transformation. We writeAas,
+
+                                                                NAX
+                                                         A=          ηkAk                                                       (21)
+                                                                k=1
+whereA             k is a Pauli string andη        k is the corresponding amplitude. For the special case of strings
+of two Pauli matrices (the generalization to shorter or longer strings is straightforward),
+
+                                                         Ak =Λ    akik Λbkjk                                                         (22)
+
+whereΛ             ai  is thea       th  Pauli matrix (a=1  : X           i, a=2  : Y         i, a=3  : Z         i) applied on spini.
+Hence, the integersa                 k,b k point to the type of Pauli matrices, andi        k,j k to the spin they apply
+to.  The above decomposition is always possible since Pauli strings form a basis of the space
+of operators.   However,  the appeal of this decomposition comes from the fact that for the
+operators of interest to us, the number of termsN         A in the decomposition is polynomial (often
+linear) inN.
+     The rules to compute  ¯Afollow from the observation that,
+
+                                       X j j′δj′kl =δ    jk′l′Xkk′Xll′
+                                                   =δ    1−j,kl                                                                          (23)
+                                        Yj j′δj′kl =δ    jk′l′Ykk′Xll′  =δ    jk′l′Xkk′Yll′
+                                                   =i(−1)              lδ1−j,kl                                                                (24)
+                                       Zj j′δj′kl =δ    jk′l′ Zkk′       =δ    jk′l′ Zll′
+                                                   = (−1)        lδjkl                                                                 (25)
+
+where we used Einstein summation convention. Again, these rules are best understood graph-
+ically:
+
+
+                                                                                                                               (26)
+
+
+                                                                                                                               (27)
+
+
+                                                                                                                               (28)
+
+
+In other words, the rules are the following:  when we commute anXoperator withδwe get
+twoXoperators (one on each side). On the other hand, when we commute aZoperator with
+δ, we get a singleZoperator on the other side and we have the freedom to choose where we
+place it.  SinceY=iX Z, when we commute aYoperator withδ, we get oneYand oneX
+operator on the other side, with the freedom to choose where we place theY. An alternative
+possibility for theZoperator is to write it as the square (Z=S                  2) of the "phase gate" 1   0     Sdefined
+asS=        0  i     .  Upon commutingZwithδ, one obtains anSgate on each output leg of the
+Kronecker tensor.
+     Let us give a concrete example for our RTTψ   HV  =C    HVφHV .  Suppose we want to apply
+the operator
+                                             A=Z        1Z2 +Z    1Z6 +X    3 +X    1X2                                           (29)
+
+                                                                  7
+  SciPost Physics                                                                                  Submission
+
+
+
+When we commuteZ                    1 withC          HV , we can decide to send it toA    1 or toA    12. Same withZ          6 which
+we can send toA    6 orA     11. A possible choice for  ¯Ais therefore,
+
+                                    ¯A=Z        1Z2 +Z    11Z12 +X    3X8 +X    1X2X9X12                                   (30)
+
+but alternate choices that satisfy the equationAC=C                       ¯Aare also possible.  The above choice
+has the advantage that it keeps a term local in the physical space also local in the replica space.
+
+2.2.4RTT as an MPS with quantum error correction
+
+The fourth way of viewing an RTT is to define it as the projection of an MPS on the logical
+space of a quantum error correction code[35]. Indeed, if we define the stabilizers
+
+                                                   Vja =Z    R j,a  ZR j,a+1                                                         (31)
+
+then satisfying the constraintCamounts to enforcing
+
+                                                   〈Ψ|V       ja|Ψ〉= +1                                                     (32)
+
+for all the stabilizers. In other words, we can write the projectorC                    TCas,
+
+                                                         NY|R  j|−1Y1+V      ja
+                                              CTC=                     2     .                                               (33)
+                                                        j=1   a=1
+
+In the rest of this article, we will not explore the implications of this stabilizer formulation
+further. However, it could be an interesting avenue for adapting the algorithms of this article
+to actual quantum hardware.  Indeed, there exist efficient quantum circuits for constructing
+any MPS as well as quantum circuits (using ancilla qubits) for measuring the stabilizers.
+
+2.3Discussion of the expressivity and volume-law entanglement.
+
+The expressivity of an MPS is directly linked to the value of its bond dimensions since for
+a given sitea, the quantum entanglement entropy between the two subsystems defined by
+i<aandi≥ais bounded byS≤logχ                                          a.   The way we order the tensors may also play
+an important role[36].  More generally, for an arbitrary TT, the bond dimension controls the
+amount of "correlations" that can be built between two TT sites; any correlation function must
+decay exponentially with distance with a correlation "length"ξcontrolled byχ. In an RTT, the
+presence of the replicas brings non-local correlations into the picture: they provide "shortcuts"
+so that sites that are far away in the replica space become close in the physical space.  We
+therefore have two routes to increase the expressivity of the RTT ansatz:  increase the bond
+dimension and/or add new replicas.
+    We argue that the RTT ansatz can harvest volume-law entanglement.   This point is in-
+tuitively very clear:  by using enough (∼N/ξ) replicas, any physical site can be arbitrarily
+correlated with any other physical site.   The statement can also be understood algorithmi-
+cally:  if one tries to compress an RTT back into an MPS form using standard tools (writing
+e.g. the constraints as rank 2 matrix product operators), one expects an exponential increase
+of the bond dimension. A more formal proof of the assertion follows from previous results of
+the literature.  Indeed, seeing the RTT as a nested MPS of MPS[see Eq. (11)]it follows that
+"string bond states" are a particular case of RTT. Since these string bond states are themselves
+a generalization of the Restricted Boltzmann Machine (RBM)[24]and the RBM can exhibit
+volume-law entanglement[37], it follows that RTT possesses this characteristic too.  In that
+point of view, the replicas play the role of the hidden units in an RBM.
+
+
+                                                             8
+  SciPost Physics                                                                                  Submission
+
+
+
+     In this article, we restrict ourselves to very specific paths[shown in Eqs. (54,55)], however,
+many other paths can be considered depending on the entanglement structure of the targeted
+quantum state. In the following, we explore how the RTT representation of volume-law states
+can be learned using different algebraic methods, avoiding the gradient descent typically used
+in volume-law ansätze such as RBMs and NQS.
+
+
+3 Finding the ground-state with an RTT ansatz
+
+In this section, we discuss our approach to find the ground-stateψ                           0 of a HamiltonianHusing
+an RTT variational ansatz.  As we shall see, the technique is very peculiar:  the ground-state
+can be constructed in a purely algebraic way without resorting to gradient descent (in contrast
+to what is done in VMC). In that sense, the technique to find the ground-state is relatively close
+to DMRG. On the other hand, in order to compute observables, we need to resort to sampling,
+i.e. the method becomes stochastic. In that sense, the technique shares similarities with what
+is usually done in VMC.
+     Perhaps a good analogy is with quantum computers where the construction of the state is
+purely deterministic through the application of a sequence of quantum gates. But in order to
+measure anything, one needs to measure the qubits and the output becomes stochastic.
+     We will design two distinct routes for obtaining the ground-state.  In the first, we work
+purely in the replica space while in the second we work in the physical space. What we mean
+by this statement is that in the first technique, we work directly on the objectφusing the
+replica space Hamiltonian  ¯H.  In contrast, in the second technique, we work onψusing the
+actual physical HamiltonianH.
+
+3.1Optimization in the replica space
+
+Our first approach is to use a variant of the power method to find the ground-state ofH.
+Starting from an initial RTTψ   (0)    =Cφ       (0)   , we define
+
+                                                 ψ(P)    = (1−τH)                Pψ(0)                                                   (34)
+
+By construction (providedτis sufficiently small and the overlap ofψ                               (0)    withψ          0 is nonzero),
+ψ(P)    converges to the ground-stateψ                           0,
+
+                                                     ψ0 =limP→∞ ψ(P)                                                        (35)
+
+We seek to representψ                    0 as an RTT, by using,
+
+                                                       ψ(P)    =Cφ       (P)                                                          (36)
+
+with,
+                                                 φ(P) ≡(1−τ          ¯H)     Pφ(0)                                                    (37)
+So far, the process is exact. However, in its naive implementation, the internal rankχofφ                   (P)
+may increase very quickly withP.  The actual algorithm alternates the application of 1−τ               ¯H
+with compression steps. Indeed, the underlying assumption of the overall approach is thatψ         0
+can be approached very precisely with a small value ofχ.
+     More precisely,φ  (P)    is created fromφ           (P−1)       using the following sequence,
+
+    •compute the different contributionsη                               i ¯Hiφ(P−1)       for∀i∈{1...N                     ¯H}. The Pauli strings are
+        MPOs with rank 1 so these MPO.MPS multiplications are straightforward and do not
+        increase the rank.
+
+                                                               9
+  SciPost Physics                                                                                  Submission
+
+
+
+    •sum the different terms together two by two.
+
+    •compress the resulting sums to a targeted rankχ(see the algorithm in e.g. Section 5.3.1
+       of Ref.[34]).
+
+    •repeat the two preceding steps until all the terms are exhausted and one is left with a
+       single TT. Multiply the result byτand subtract it fromφ                    (P−1)       to obtainφ               (P)   .
+
+    In other words, the algorithm amounts to performing a form of Time-evolving block deci-
+mation (TEBD) with the replica space Hamiltonian  ¯H. Other approaches are also possible. For
+instance, one could try and run the DMRG algorithm on  ¯Husing an auto-MPO computation
+followed by a regular DMRG computation leveraging the fact that ifφis an eigenstate of       ¯H
+thenψ=Cφis an eigenstate ofH.  In our preliminary exploration, we have found that our
+TEBD-like approach is effective and although it might be improved, the crucial point does not
+lie there but in the choice of  ¯H. Indeed, as we have mentioned above, there are many different
+choices of  ¯Hthat correspond to a singleH. While all are valid choices, the different TTφare
+not all amenable to the same level of compression. We will experiment with different possible
+choices in the next section.
+
+3.2Optimization in the physical space
+
+As we shall see, the preceding technique has some limitations in terms of precision in its current
+form. The reason is that the algorithm works blindly: one does not compute the energy of the
+state until the very end, so the effect of the compression on the energy is unknown and cannot
+be mitigated.
+    While the algorithm in the preceding subsection was close in spirit to the power method,
+we now introduce an algorithm that resembles the Lanczos Krylov technique.  Letψbe our
+current approximation of the ground-stateψ                           0 and letO  α be a set of operators. For instance, to
+recover a variant of the Lanczos algorithm, we useO  α =H α−1     but we will consider also other
+operators. By conventionO                        1 =1is the identity operator. The algorithm goes as follows. First,
+we construct the productsψ      α =O αψ, by using     ¯Oα, as done in the replica space optimization.
+Second, we seek the new approximation of the ground-stateψ       ′ in the form of an optimal linear
+combination of these states,                              X
+                                                   ψ′ =        cαψα.                                                      (38)
+                                                            α
+Because RTTs are by constructionnotnormalized, we also need to introduce the constraint that
+the state has to be normalized.ψ       ′ is then the solution of the generalized eigenvalue problem
+
+                                                      Hc=λSc,                                                          (39)
+
+with the lowest eigenvalue.   The Hamiltonian matrixH     αβ  and the overlap matrixS     αβ  are
+expressed in the reduced basis
+
+                                                Hαβ    =ψ α† Hψ β                                                   (40)
+                                                 Sαβ    =ψ α† ψβ,                                                    (41)
+
+with the normalization enforced byc     †Sc=1, wherec= (c                       1c2...)represents the vector of the
+coefficientsc        α. This small eigenvalue problem (we typically consider fewer than ten operators
+Oα) is readily solved and it yields the new approximationψ         ′ of the ground-state.  If we wish
+to continue with another optimization step, we turnψ   ′ back to an RTT form by summing the
+TTsφ α. The finalφ   ′ can also be compressed.
+    The important difference between this scheme and the one of the preceding section is
+that we need to compute the matrix elementsH      αβ andS   αβ. These computations will involve
+
+                                                           10
+  SciPost Physics                                                                                  Submission
+
+
+
+a stochastic approach.  Indeed, while in principle these matrix elements could be computed
+through a direct contraction of the associated tensor network, it is unfeasible in practice as the
+cost is exponential inN.  In the next section, we show how a simple adaptation of the varia-
+tional Monte Carlo algorithm, which we call dual Monte Carlo (because it involves sampling
+both|ψ    α|2 and|ψ   β|2), solves this problem.
+
+3.3Dual Monte Carlo
+
+The remaining problem is the following: given two RTTsψ  1 andψ        2, how can we compute the
+matrix elementsψ                   1†Hψ    2 andψ        1†ψ2.  The following algorithm is actually very general and
+does not require the states to be RTTs, it would work equally well for e.g.  neural quantum
+states.  Although not widely spread, similar algorithms have already been developed in the
+literature[38,39].
+    Let us callZ       1 =ψ    1†ψ1 =Psψ1∗s ψ1s  andZ        2 =ψ    2†ψ2 the unknown norms of the corre-
+sponding states.  Using Markov Chain Monte Carlo (e.g.  the Metropolis algorithm), we can
+sample the probability distributionP                            s defined as,
+
+                                                       P1         s|2
+                                                        s  =|ψ 1Z1                                                            (42)
+
+with a similar definition forP      2s . Hence, we can obtain the desired quantities by sampling over
+P1 andP        2 but only up to the unknown normalization factorsZ              1 andZ        2.  To see how we can
+get rid of these normalizations, let us first look at the matrix elements of the normalized states
+                                ψ1†                                  X
+                               pZ1H ψ2pZ2           =         1pZ1Z2      ψ1∗s Hs,  ¯sψ2¯s
+                                                         vt      ﬁX¯s,s                ‚
+                                                    =        Z1           1  Hs,  ¯sψ2       .                             (43)
+                                                             Z2          ψ1s          ¯s
+                                                                     ¯s                   P1s
+
+where readers familiar with VMC will recognize inside the average〈···〉                 P1s  over the distribution
+P1 a quantity similar to the local energy used in VMC. We shall call it amixed local energyas
+both wavefunctions are involved in its calculation (in contrast to the standard VMC definition).
+By multiplying the above equation with the same equation where the roles ofψ    1 andψ        2 are
+reversed, we see that the normalization factor cancels out
+
+                                           2    ›X                    •›X                        •
+                        pψ1†    H ψ2p        =           1  Hs,  ¯sψ2              1   Hs,  ¯sψ1                       (44)
+                            Z1        Z2                ψ1s          ¯s P1s       ψ2s          ¯s  P2s
+                                                    ¯s                         ¯s
+
+In other words, we need to performtwoMonte Carlo simulations to obtain the matrix element:
+one samplingP                    1 and one samplingP                    2. The phase of the matrix element is recovered from the
+phase of Eq.(43) since    pZ1/Z  2 is a real positive number.  The overlaps can be analogously
+calculated by replacingH                      s,  ¯s withδ           s,  ¯s in the above equation yielding,
+
+                                                       2      ψ1          ψ2
+                                        pψ1†   pψ2        =       s           s      .                                      (45)
+                                           Z1     Z2           ψ2s    P2s   ψ1s   P1s
+
+    In our formulation of the generalized eigenvalue problem,  we shall not work with the
+
+
+
+
+
+                                                            11
+  SciPost Physics                                                                                  Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      Figure 2:  Example of theSmatrix computed with dual Monte Carlo before (left)
+      and after (right) the orthogonalization procedure. The matrix was constructed when
+      solving the Ising model in Fig.5. The new states are compressed toχ=2.
+
+
+normalized states above, but directly with the unnormalized ones. To this end we define
+                                                       ﬁX                     ‚
+                                          ˜Hαβ    =             1  Hs,  ¯sψβ                                           (46)
+                                                               ψαs          ¯s
+                                                           ¯s                   Pαs
+                                                       ﬁψβ     ‚
+                                          ˜Sαβ    =          s                                                         (47)
+                                                          ψαs    Pαs
+
+which implies that we haveH   αβ  =Z α ˜Hαβ  =  ˜H†αβZβ  andS   αβ  =Z α˜Sαβ  = ˜S†αβZβ.  Dividing
+each rowαof Eq.(39) byZ          α, we arrive at a new generalized eigenvalue problem
+
+                                                        ˜Hc=λ    ˜Sc,                                                          (48)
+
+expressed in terms of the un-symmetrized Hamiltonian matrix  ˜Hand the un-symmetrized
+overlap matrix ˜S. The result of this problem is normalized as Pαβ c∗α˜Sαβ cβ =1, so the resulting
+stateψ   ′  is not normalized.   However,  one can verify that the normalizations cancel in the
+calculation of the energy so that the lowest generalized eigenvalueλ                       0  remains the actual
+energy of the system.
+                                                 E= 〈Ψ ′|H|Ψ  ′〉〈Ψ ′|Ψ′〉    =λ    0                                                  (49)
+
+In practice,  we need to consider a slight modification of the above for numerical stability.
+Indeed, as one proceeds to find the ground-state, all the statesψ    α will approachψ                    0, so that
+the overlap matrixS     αβ  becomes almost singular:S      αβ ≈1∀α,βmaking the generalized
+problem unstable. To solve this problem, we perform a stochastic generalization of the Gram-
+Schmidt orthogonalization of the statesψ    α with respect toψ β∀β<α, so that we obtain an
+approximately diagonal matrixS     αβ. We define the new statesψ   ′α  iteratively, as
+
+                                          ψ′1  =ψ    1                                                                           (50) ψ2
+
+                                          ψ′2  =ψ    2−      ψ1
+                                                                    P1ψ1                                                    (51)
+                                               ...
+
+                                                           M−1X   ψM
+                                         ψ′M  =ψ    M−              ψα
+                                                            α=1            Pαψα,                                          (52)
+
+                                                             12
+  SciPost Physics                                                                                  Submission
+
+
+
+whereMis the number of statesψ          α.  In practice, we have found that it is often sufficient to
+re-orthogonalize with respect to the first vectorψ             1 only. As an example of a dual Monte Carlo
+calculation, a matrixS     αβ before (left) and after (right) re-orthogonalization is shown in Fig.2.
+    This concludes the general description of the algorithm. We note that although dual Monte
+Carlo is very handy, it is not strictly speaking necessary: since the optimization performed on
+thec  α is done on a handful of parameters, one could use a standard variational Monte Carlo
+for this very small problem (a typical number we have used so far isM≤5).  The key aspect
+of the physical optimization is our ability to select a handful of importantMdirections for
+finding the ground-state (typically guided by the Hamiltonian), as opposed to using a gradient
+on thousands or hundreds of thousands of parameters.
+
+
+4 Application to the 2D transverse Ising model
+
+We  now  turn  to  an  actual  calculation  to  illustrate  the  above  RTT  approach  on  a  practical
+example.  We consider the transverse field Ising model with nearest-neighbor interactions on
+a square lattice ofN=L×Lspins. The Hamiltonian is defined as,
+                                                  X                 X
+                                            H=         ZiZj−h    x      Xi,                                               (53)
+                                                   〈i,j〉             i
+
+where〈i,j〉represents the sum over all the nearest-neighbor pairs of sites. The interest in this
+model stems from different aspects. First, as a function of the transverse magnetic fieldh          x the
+model undergoes a quantum phase transition, from the paramagnetic to the antiferromagnetic
+phase which breaks theZ       2 symmetry[40,41].  This is a paradigmatic example of a quantum
+phase transition. The transition is furthermore accompanied by a classical phase transition at
+finite temperature.  Second, these types of models have recently received a lot of interest in
+the context of quantum annealing[42–44]. The quantum annealers based on Rydberg atoms,
+in particular, are described by Eq. (53) with slightly longer range interactions. Third, we have
+already established in a previous publication that String Bond States with very low rank are
+extremely efficient ansätze for this model[28].  Since RTT generalizes String Bond States, it
+follows that RTT must as well be very efficient for this problem.  Our goal below is merely
+to illustrate the new algebraic approach described in the preceding section, we postpone the
+study of more difficult models to future publications.
+
+4.1Specification of the algorithm
+
+To specify the algorithm entirely, we need to specify two things:  the path (i.e.  the function
+σ(ω)) and the operatorsO           α.
+
+4.1.1Specification of the algorithm
+
+We use a path that first goes through all the sites column by column (Vfor Vertical), then line
+by line (Hfor Horizontal), then diagonally (D), and then along the other diagonal (D    ′).
+    More formally, we introduce the different pathsσ            V ,σ  H,σ  D andσ        D′ defined graphically
+as,
+
+
+                                                                                                 .                    (54)
+
+
+
+
+
+                                                          13
+  SciPost Physics                                                                                  Submission
+
+
+
+The global pathσ(ω)of our RTT is
+
+                                           σ=σ        HV DD′≡σ    V⊕σ    H⊕σ    D⊕σ    D′                                      (55)
+
+It follows that for a given sitei,R          i1  is the TT index of this site in the horizontal ordering,R                    i2
+corresponds toV,R         i3  toDandR                i4  toD ′.
+
+4.1.2Definition of the operators in the physical space
+Second, we need to define the operatorsO       α. We use only local operators that include at most
+two Pauli matrices.  Our convention is the following:  we writeα= (A,B)whereAindicates
+which Pauli matrix is concerned (for instanceA=Z Zfor product of twoZoperators andA=X
+for a singleXoperator). For pairs of Pauli strings,Blabels the direction of the bond (V,H,D,
+D′, possibly combinations such asV Hif both vertical and horizontal bonds are considered).
+For instance, nearest neighbourZ Zoperators along the vertical direction are noted,
+                                                               X
+                                               OZ Z,V    =             Z(i  x,i  y)Z(i  x,i  y+1)                                              (56)
+                                                            i=(i       x,i  y)
+
+while along the diagonal direction, they are noted,
+                                                            X
+                                            OZ Z,D    =              Z(i  x,i  y)Z(i  x +1,i        y+1)    .                                        (57)
+                                                          i=(i       x,i  y)
+
+Likewise the transverse field operator reads,
+                                                                   X
+                                                       OX =                X(i  x,i  y)                                                   (58)
+                                                                i=(i       x,i  y)
+
+With these notations, the transverse field Ising Hamiltonian reads,
+
+                                                H=O        Z Z,V    +O    Z Z,H −h    xOX .                                            (59)
+
+4.1.3Definition of the operators in the replica space
+Next, when we commute theZ       i operators with the Kronecker circuitC, we have several choices
+for the definition of  ¯Oα i.e. we can decide where we move theZ       i operators. We use the notation
+→CwhereC=V,H,D,D            ′ to indicate on which part of the RTT theZ       i are sent.  This is not
+the most general choice, here we assume that all theZ       i operators of a given operator are sent
+to the same part of the RTT. For instance, for the example of theO       Z Z,V    operator, we might
+decide to send theZ       i to the vertical part of the path (this is the natural path that works best
+in practice),                                                    X
+                                             ¯OZ Z,V→V        =          ZRi,2 ZRi=(i      x ,i y +1),2                                           (60)
+
+                                                              i=(i       x,i  y)
+but we could also decide to send them to the diagonal part of the path,
+                                             ¯OZ Z,V→D        =  X
+                                                                         ZRi,3 ZRi=(i      x ,i y +1),3                                           (61)
+                                                              i=(i       x,i  y)
+
+There is no such freedom for theO       X  operator, so we simply have,
+                                               ¯OX =      X
+                                                                  XRi,1 XRi,2 XRi,3 XRi,4 .                                          (62)
+                                                       i=(i       x,i  y)
+
+
+                                                                   14
+  SciPost Physics                                                                                  Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      Figure 3:  Error on the energy during a replica space optimization by application of
+      (1−τ       ¯H)     P  for three choices of  ¯H, see text.  The number of active sub-MPS is one
+      (blue), two (orange) and four (green). The optimization is purely algebraic but the
+      calculation of the energy is performed using VMC sampling.   The parameters are
+      hx =3,L=20,χ=2,τ=0.1 andα=0.08 for the                                          ¯HHV DD′ curve (green line).
+
+
+Note that in these numerical experiments we limit ourselves to using operators in the replica
+space that are obtained using the commutation rules derived earlier.  This is important for
+replica space optimization to guarantee that the replica Hamiltonian has the same eigenstates
+as the physical one. However, no such constraint exists for physical space optimization where
+we may use any operator we want. This freedom may be used for e.g. optimizing a particular
+tensorA              (i)   (or a pair of tensors) without resorting to gradient descent. Another remark is that
+if all the operators contain onlyZ         i  Pauli matrices, then Dual Monte Carlo is not needed – a
+single Monte Carlo simulation provides all the needed matrix elements (since all the different
+states share the same probabilities).
+
+4.2Replica space optimization
+
+We now present the result of some numerical experiments where we apply the operator 1−τ      ¯H
+iterativelyPtimes on an initially constant TTφ                              (0)    (φ  (0)i    =1∀i).  Importantly, the algorithm
+to obtainφ               (P)    is perfectly deterministic. However, to obtain the physical observable (here the
+energy), we need to resort to VMC stochastic sampling.  The results are shown in Fig.3for
+hx =−3, a point very close to the quantum critical point[40,41], hence supposedly the most
+difficult to compute.  The reference ground-state energyE/N=−3.18185±0.00004 for this
+point was obtained using the Green Function Monte Carlo algorithm and a perceptrain ansatz
+as discussed in[28]. We choose the smallest non-trivial rank for the RTT,χ=2. One should
+keep in mind that tensor network calculations are typically performed with much higher ranks
+in the hundreds or thousands. We use three different choices of  ¯H. The first is
+
+                                       ¯HH =  ¯OZ Z,H→H        +  ¯OZ Z,V→H  −h    x ¯OX                                       (63)
+
+This choice corresponds to sending all the operators to a single sub-MPS part of the RTT.
+Therefore, it does not exploit the full freedom of the RTT but rather works as a regular MPS.
+We find that the error barely decreases to an errorδE/E≈6×10         −2   consistent with what one
+obtains with a regular MPS for such a small rank. The situation improves drastically when one
+sends the different interaction terms to the parts of the RTT where they are local, i.e.  when
+
+
+                                                            15
+  SciPost Physics                                                                                  Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      Figure 4:  Error on the energy after a replica space optimization versus system size
+      L. The number of active sub-MPS is one (blue), two (orange) and four (green), see
+      text. The accuracy of the RTT is robust with respect to system size. Same parameters
+      as in Fig.3.
+
+
+we use,
+                                     ¯HHV =  ¯OZ Z,H→H        +  ¯OZ Z,V→V  −h    x ¯OX .                                     (64)
+
+We find that the error drops by more than one order of magnitude reachingδE/E≈3×10           −3  ,
+an error level where the physics of the ansatz is qualitatively correct.  It is still possible to
+improve on these results in a variational manner in order to take advantage of the diagonal
+parts of the RTTDandD    ′. For instance, if we add one more operator with a parameterα,
+
+                                 ¯HHV DD′ =  ¯HHV +α   ¯OZ Z,D→D        +  ¯OZ Z,D ′→D ′ ,                               (65)
+
+we find that the error reachesδE/E≈10         −3   for the optimum choice of the parameterα=0.08.
+In the various experiments that we have performed, we have found that the curves shown in
+Fig.3are very generic: the descent is fast, robust and independent of the initial state or choice
+of metaparameters.  The error levels that we have achieved are consistent with those found
+using VMC and gradient descent using the technique described in[28]for, respectively,K=1
+(MPS level),K=2 (two subparts of the RTT are active) andK=4 (the diagonal parts are
+also active). The advantage of the present approach is that we bypass entirely the non-convex
+optimization problem. We have also checked that the method works robustly across different
+system sizes in Fig.4where we observe that the error barely increases while going from a 6×6
+system to a 20×20 one.  For the         ¯HHV DD′ replica space Hamiltonian, the valueα=0.08 was
+found to be close to optimum across the three system sizes.
+
+4.3Physical space optimization
+
+We now turn to physical space optimization using the dual Monte Carlo technique.  We start
+from the RTTψobtained using replica space optimization with the       ¯HHV replica space Hamil-
+tonian Eq.(63) and seek the best linear combination Eq.(38) using certain operators. Based on
+the results of the replica space optimization, we expect the important operators to be those that
+involve the diagonal part of the RTT but we will work in an agnostic way to see how the method
+works in practice. We will use 4 operators: identity,  ¯OX ,  ¯OZ Z,HV    =  ¯OZ Z,H→H        +  ¯OZ Z,V→V       , and
+¯OZ Z,DD ′ =  ¯OZ Z,D→D        +  ¯OZ Z,D ′→D ′.  The results are shown in Table1for various choices of the
+operators included in the calculation.  We find an improvement (of the same order as in the
+
+
+                                                           16
+  SciPost Physics                                                                                  Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      Figure 5:  Dual Monte Carlo optimization steps starting from the solution of  ¯HHV
+      (star). At each step, Eq. (48) is solved. The eigenvalues of the equation (arrows) are
+      compared with the actual energies of the state after the compression (points).
+
+
+replica space optimization when we considered the  ¯HHV DD′ replica space Hamiltonian) when-
+ever the diagonal operator  ¯OZ Z,DD ′ was included. The main difference with replica space op-
+timization is that in the physical space optimization, we can only improve the energy since we
+are building, by construction, the best linear combination of the different orbitals. We checked
+explicitly that the accuracy was not affected by the final compression used to put the linear
+combination back into an RTT form.  Table1also includes the rescaled variance of energy, a
+quantity known as the V-score[45].
+    The above approach could be extended in various ways by considering more operators. For
+instance using powers of  ¯H, we can build a Lanczos-like method. We could also add operators
+that favor a given phase (say a staggering operator for the antiferromagnetic phase). We leave
+the associated explorations to further studies.
+    Fig.5shows different steps of the physical space optimization process.  We observe that
+the convergence happens within a handful of iterations. Also, the eigenvalues of the general-
+ized eigenproblem almost coincide with the result of the Dual Monte Carlo calculation which
+indicates that the compression performed after solving the linear system does not significantly
+alter the state.
+    Fig.6shows the error obtained using the same optimization as in Table1for a span of
+theh       x  values in the paramagnetic region of the phase diagram.   We find that the error is
+consistently belowδE/E≈10        −3  .  We did not study the antiferromagnetic side of the phase
+
+
+      Table 1:   Energy and energy variance after the physical space optimization.  The×
+      indicate which operators have been included. The starting point is the replica space
+      optimization using the  ¯HHV replica space Hamiltonian. The reference energy for this
+      point isE/N=−3.169946±0.00004. The parameters areh                                                   x =3,L=10 andχ=2
+
+                               ¯OZ Z,HV        ¯OZ Z,DD ′      ¯OX     E/N          Nvar/E                  2
+                               ×    ×                    -3.1682    0.0013
+                               ×    ×    ×    -3.1682    0.0013
+                               ×        ×    -3.163      0.005
+                                            ×    ×    -3.1682    0.0013
+                                                                 -3.163      0.005
+
+
+
+                                                           17
+  SciPost Physics                                                                                  Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      Figure 6:  Error ofχ=2 RTT versush                         x  in the paramagnetic region of the phase
+      diagram.  The parameters and optimization procedure are the same as in Table1:
+      (solid line) replica space optimization using  ¯HHV , followed by (dashed line) phys-
+      ical  space  optimization  using   ¯OZ Z,DD ′.   The  error  is  estimated  using  the  V-score,
+      δE/E≈0.2Nvar[H]/E                                          2, see Ref.[28]
+
+
+diagram which, we surmise, would require the introduction of operators that explicitly break
+translational symmetry since we expect a boundary phase transition before the bulk one[46].
+An interesting feature of Fig.6is a relatively large gain in precision obtained in the presence
+of the diagonal operator  ¯OZ Z,DD ′ aroundh                x  =4.  We attribute this feature to the increase of
+the antiferromagnetic correlation length as one decreasesh                     x: at some point it becomes large
+enough for the presence of the diagonal correlations to play a significant role.  Loweringh                    x
+further, one would need to add more orderings and/or increase the bond dimension to keep
+up with the increasingly long-range correlations that build in the system.
+
+
+5 Conclusions
+
+In this work we have introduced a variational ansatz, the Replica Tensor Train, that naturally
+extends a class of previously discussed powerful ansätze[22–24,28].  Our chief result is that
+RTT has an internal structure that provides the possibility to build the ground-state of a Hamil-
+tonian directly without resorting to gradient descent. We have shown a proof of principle that
+the method works for the 2D Ising model with transverse field, obtaining a very good accuracy
+while using a minimal bond dimensionχ=2.
+    This article opens more new questions than it answers and much more work is needed.
+The most urgent question is whether the set of new techniques will be efficient to solve more
+difficult models, notably models with sign problems. Indeed, while VMC is immune to the sign
+problem, we do not yet have a general approach tolearn the sign. The hope is that ourglobal
+operator based approach will not suffer from the same limitations aslocalgradient descent.
+One could also envision combining the two approaches.  While we focused on ground-state
+search, the dynamics, within the time-dependent variational principle framework should also
+be directly in scope of the operator approach (in either replica and/or physical space). On the
+technical ground, one needs to study how the quality of the ansatz can be controlled using e.g.
+higher ranks, more complex paths, more operators and possibly meta algorithms that choose
+the best combination dynamically. Last, variants of the RTT-based techniques compatible with
+quantum hardware could also be constructed.
+
+
+                                                          18
+  SciPost Physics                                                                                  Submission
+
+
+Acknowledgements
+
+MS would like to thank Antoine Georges’ group at Collège de France for hosting him during
+his stay in Paris.
+
+Author  contributionsMS  wrote  the  code  and  performed  the  simulations.   MS,  GG  and
+XW contributed to the mathematical concepts, algorithms, data analysis and writing of the
+manuscript. XW supervised the project.
+
+Funding informationWe acknowledge the Plan France 2030 ANR-22-PETQ-0007 “EPIQ”,
+the PEPR “EQUBITFLY”, the ANR “DADI” and the CEA-FZJ French-German project AIDAS for
+the funding.
+
+
+References
+
+ [1]S. R. White,Density matrix formulation for quantum renormalization groups,  Physical
+       Review Letters69(19), 2863 (1992), doi:10.1103/physrevlett.69.2863.
+
+ [2]S. R. White and R. M. Noack,Real-space quantum renormalization groups,   Physical
+       Review Letters68(24), 3487 (1992), doi:10.1103/physrevlett.68.3487.
+
+ [3]M.  B.  Hastings,An  area  law  for  one-dimensional  quantum  systems,    J.  Stat.  Mech.
+       2007(08), P08024 (2007), doi:10.1088/1742-5468/2007/08/P08024.
+
+ [4]J. I. Cirac, D. Pérez-García, N. Schuch and F. Verstraete,Matrix product states and pro-
+       jected  entangled  pair  states:  Concepts,  symmetries,  theorems,   Rev.  Mod.  Phys.93(4),
+       045003 (2021), doi:10.1103/RevModPhys.93.045003.
+
+ [5]G. Scarpa, A. Molnár, Y. Ge, J. J. García-Ripoll, N. Schuch, D. Pérez-García and S. Iblisdir,
+       Projected Entangled Pair States: Fundamental Analytical and Numerical Limitations, Phys.
+       Rev. Lett.125(21), 210504 (2020), doi:10.1103/PhysRevLett.125.210504.
+
+ [6]S. Sorella,Green Function Monte Carlo with Stochastic Reconfiguration,  Physical Review
+       Letters80(20), 4558 (1998), doi:10.1103/PhysRevLett.80.4558.
+
+ [7]S.  Sorella  and  L.  Capriotti,Green  function  monte  carlo  with  stochastic  reconfigura-
+       tion:  An effective remedy for the sign problem,  Physical Review B61(4), 2599 (2000),
+       doi:10.1103/PhysRevB.61.2599.
+
+ [8]M.  Casula  and  S.  Sorella,Geminal  wavefunctions  with  Jastrow  correlation:   a  first
+       application  to  atoms,      The  Journal  of  Chemical  Physics119(13),   6500  (2003),
+       doi:10.1063/1.1604379.
+
+ [9]G. Carleo and M. Troyer, Solving the quantum many-body problem with artificial neural
+       networks, Science355(6325), 602 (2017), doi:10.1126/science.aag2302.
+
+[10]Y. Nomura, A. S. Darmawan, Y. Yamaji and M. Imada,Restricted Boltzmann machine learn-
+       ing for solving strongly correlated quantum systems,  Physical Review B96(20), 205152
+       (2017), doi:10.1103/PhysRevB.96.205152.
+
+[11]F.  Vicentini,  A.  Biella,  N.  Regnault  and  C.  Ciuti,Variational  Neural-Network  Ansatz
+       for Steady States in Open Quantum Systems,  Physical Review Letters122(25), 250503
+       (2019), doi:10.1103/PhysRevLett.122.250503.
+
+                                                        19
+  SciPost Physics                                                                                  Submission
+
+
+
+[12]K.  Choo,  T.  Neupert  and  G.  Carleo,Two-dimensional  frustrated  J                         1-J2  model  studied
+       with  neural  network  quantum  states,    Physical  Review  B100(12),  125124  (2019),
+       doi:10.1103/PhysRevB.100.125124.
+
+[13]M.  Hibat-Allah,  M.  Ganahl,  L.  E.  Hayward,  R.  G.  Melko  and  J.  Carrasquilla,Recur-
+       rent neural network wave functions,   Physical Review Research2(2),  023358 (2020),
+       doi:10.1103/PhysRevResearch.2.023358.
+
+[14]A. Lovato, C. Adams, G. Carleo and N. Rocco,Hidden-nucleons neural-network quantum
+       states for the nuclear many-body problem, Physical Review Research4(4), 043178 (2022),
+       doi:10.1103/PhysRevResearch.4.043178.
+
+[15]J. Robledo Moreno, G. Carleo, A. Georges and J. Stokes,Fermionic wave functions from
+       neural-network constrained hidden states,  Proceedings of the National Academy of Sci-
+       ences119(32), e2122059119 (2022), doi:10.1073/pnas.2122059119.
+
+[16]O.  Sharir,  A.  Shashua  and  G.  Carleo,Neural  tensor  contractions  and  the  expres-
+       sive  power  of  deep  neural  quantum  states,    Phys.  Rev.  B106(20),  205136  (2022),
+       doi:10.1103/PhysRevB.106.205136.
+
+[17]J.   Kim,   G.   Pescia,   B.   Fore,   J.   Nys,   G.   Carleo,   S.   Gandolfi,   M.   Hjorth-Jensen
+       and   A.   Lovato,Neural-network   quantum   states   for   ultra-cold   Fermi   gases,
+       doi:10.48550/arXiv.2305.08831(2023).
+
+[18]C. Roth, A. Szabo and A. MacDonald,High-accuracy variational Monte Carlo for frus-
+       trated magnets with deep neural networks,  Physical Review B108(5), 054410 (2023),
+       doi:10.1103/PhysRevB.108.054410.
+
+[19]W.-Y. Liu, Y.-Z. Huang, S.-S. Gong and Z.-C. Gu,Accurate simulation for finite projected
+       entangled pair states in two dimensions,   Physical Review B103(23), 235155 (2021),
+       doi:10.1103/PhysRevB.103.235155.
+
+[20]W.-Y.  Liu,  S.-J.  Du,  R.  Peng,  J.  Gray  and  G.  K.-L.  Chan,Tensor  Network  Computa-
+       tions  That  Capture  Strict  Variationality,  Volume  Law  Behavior,  and  the  Efficient  Rep-
+       resentation  of  Neural  Network  States,     Phys.  Rev.  Lett.133(26),  260404  (2024),
+       doi:10.1103/PhysRevLett.133.260404.
+
+[21]J.  Naumann,  E.  L.  Weerda,  M.  Rizzi,  J.  Eisert  and  P.  Schmoll,An  introduction
+       to  infinite  projected  entangled-pair  state  methods  for  variational  ground  state  simula-
+       tions  using  automatic  differentiation,    SciPost  Physics  Lecture  Notes  p.  086  (2024),
+       doi:10.21468/SciPostPhysLectNotes.86.
+
+[22]N. Schuch, M. M. Wolf, F. Verstraete and J. I. Cirac,Strings, Projected Entangled Pair
+       States, and variational Monte Carlo methods,  Physical Review Letters100(4), 040501
+       (2008), doi:10.1103/PhysRevLett.100.040501.
+
+[23]A. Sfondrini, J. Cerrillo, N. Schuch and J. I. Cirac,Simulating two- and three-dimensional
+       frustrated quantum systems with string-bond states,  Physical Review B81(21), 214426
+       (2010), doi:10.1103/PhysRevB.81.214426.
+
+[24]I. Glasser, N. Pancotti, M. August, I. D. Rodriguez and J. I. Cirac,Neural-Network Quan-
+       tum States, String-Bond States, and Chiral Topological States,   Physical Review X8(1),
+       011006 (2018), doi:10.1103/PhysRevX.8.011006.
+
+[25]G. Lami, G. Carleo and M. Collura,Matrix product states with backflow correlations, Phys.
+       Rev. B106(8), L081111 (2022), doi:10.1103/PhysRevB.106.L081111.
+
+                                                          20
+  SciPost Physics                                                                                  Submission
+
+
+
+[26]M. Wang, Y. Pan, Z. Xu, X. Yang, G. Li and A. Cichocki,Tensor Networks Meet Neural
+       Networks: A Survey and Future Perspectives(2023).
+
+[27]D.  Wu,  R.  Rossi,  F.  Vicentini  and  G.  Carleo,From  tensor-network  quantum  states
+       to  tensorial  recurrent  neural  networks,      Phys.  Rev.  Res.5(3),   L032001  (2023),
+       doi:10.1103/PhysRevResearch.5.L032001.
+
+[28]M. Srdinšek and X. Waintal,Hybrid between biologically and quantum-inspired many-body
+       states, Phys. Rev. B113(12), 125107 (2026), doi:10.1103/b2kz-15c5.
+
+[29]X. Liang, S.-J. Dong and L. He,Hybrid convolutional neural network and projected en-
+       tangled pair states wave functions for quantum many-particle states, Phys. Rev. B103(3),
+       035138 (2021), doi:10.1103/PhysRevB.103.035138.
+
+[30]S.-J. Du, A. Chen and G. K.-L. Chan,Neuralized Fermionic Tensor Networks for Quantum
+       Many-Body Systems, doi:10.48550/arXiv.2506.08329(2025).
+
+[31]D.-W. Qu, Q. Li, S.-S. Gong, Y. Qi, W. Li and G. Su,Phase Diagram, $d$-Wave Super-
+       conductivity, and Pseudogap of the $t\ensuremath{-}{t}^{\ensuremath{’}}\ensuremath{-
+       }J$   Model   at   Finite   Temperature,       Phys.   Rev.   Lett.133(25),   256003   (2024),
+       doi:10.1103/PhysRevLett.133.256003.
+
+[32]H. Xu, C.-M. Chung, M. Qin, U. Schollwöck, S. R. White and S. Zhang,Coexistence of
+       superconductivity with partially filled stripes in the Hubbard model,  Science384(6696),
+       adh7691 (2024), doi:10.1126/science.adh7691.
+
+[33]C. Roth, A. Chen, A. Sengupta and A. Georges,Superconductivity in the two-dimensional
+       Hubbard  model  revealed  by  neural  quantum  states,    doi:10.48550/arXiv.2511.07566
+       (2025).
+
+[34]X.  Waintal,  C.-H.  Huang  and  C.  W.  Groth,Who  can  compete  with  quantum  com-
+       puters?   Lecture  notes  on  quantum  inspired  tensor  networks  computational  techniques,
+       doi:10.48550/arXiv.2601.03035(2026).
+
+[35]M. A. Nielsen and I. L. Chuang,Quantum computation and quantum information,  Cam-
+       bridge Univ. Press, 10th anniversary ed edn., ISBN 978-1-107-00217-3 (2010).
+
+[36]G. Moritz, B. A. Hess and M. Reiher,Convergence behavior of the density-matrix renormal-
+       ization group algorithm for optimized orbital orderings,  J. Chem. Phys.122(2), 024107
+       (2004), doi:10.1063/1.1824891.
+
+[37]D.-L. Deng, X. Li and S. Das Sarma,Quantum entanglement in neural network states,
+       Phys. Rev. X7, 021021 (2017), doi:10.1103/PhysRevX.7.021021.
+
+[38]M. P. Nightingale and V. Melik-Alaverdian,Optimization of Ground- and Excited-State
+       Wave  Functions  and  van  der  Waals  Clusters,   Phys.  Rev.  Lett.87(4),  043401  (2001),
+       doi:10.1103/PhysRevLett.87.043401.
+
+[39]C. J. Umrigar,  J. Toulouse,  C. Filippi,  S. Sorella and R. G. Hennig,Alleviation of the
+       Fermion-Sign Problem by Optimization of Many-Body Wave Functions,   Phys. Rev. Lett.
+       98(11), 110201 (2007), doi:10.1103/PhysRevLett.98.110201.
+
+[40]R.  J.  Webber  and  M.  Lindsey,    Rayleigh-Gauss-Newton  optimization  with  enhanced
+       sampling  for  variational  Monte  Carlo,     Phys.  Rev.  Research4(3),  033099  (2022),
+       doi:10.1103/PhysRevResearch.4.033099.
+
+
+                                                         21
+  SciPost Physics                                                                                  Submission
+
+
+
+[41]P. M. Vecsei, J. L. Lado and C. Flindt,Lee-Yang theory of the two-dimensional quantum
+       Ising model, Phys. Rev. B106(5), 054402 (2022), doi:10.1103/PhysRevB.106.054402.
+
+[42]P. Scholl, M. Schuler, H. J. Williams, A. A. Eberharter, D. Barredo, K.-N. Schymik, V. Lien-
+       hard, L.-P. Henry, T. C. Lang, T. Lahaye, A. M. Läuchli and A. Browaeys,Quantum sim-
+       ulation of 2D antiferromagnets with hundreds of Rydberg atoms,  Nature595(7866), 233
+       (2021), doi:10.1038/s41586-021-03585-1.
+
+[43]S.  Ebadi,  T.  T.  Wang,  H.  Levine,  A.  Keesling,  G.  Semeghini,  A.  Omran,  D.  Bluvstein,
+       R. Samajdar, H. Pichler, W. W. Ho, S. Choi, S. Sachdevet al., Quantum Phases of Mat-
+       ter on a 256-Atom Programmable Quantum Simulator,  Nature595(7866), 227 (2021),
+       doi:10.1038/s41586-021-03582-4.
+
+[44]C. Chen, G. Bornet, M. Bintz, G. Emperauger, L. Leclerc, V. S. Liu, P. Scholl, D. Barredo,
+       J.  Hauschild,  S.  Chatterjee,  M.  Schuler,  A.  M.  Läuchliet  al.,    Continuous  symme-
+       try  breaking  in  a  two-dimensional  Rydberg  array,    Nature616(7958),  691  (2023),
+       doi:10.1038/s41586-023-05859-2.
+
+[45]D.  Wu,  R.  Rossi,  F.  Vicentini,  N.  Astrakhantsev,  F.  Becca,  X.  Cao,  J.  Carrasquilla,
+       F.  Ferrari,  A.  Georges,  M.  Hibat-Allah,  M.  Imada,  A.  M.  Läuchliet  al.,     Varia-
+       tional benchmarks for quantum many-body problems,  Science386(6719), 296 (2024),
+       doi:10.1126/science.adg9774.
+
+[46]M. Kalinowski, R. Samajdar, R. G. Melko, M. D. Lukin, S. Sachdev and S. Choi,Bulk
+       and boundary quantum phase transitions in a square Rydberg atom array,  Phys. Rev. B
+       105(17), 174417 (2022), doi:10.1103/PhysRevB.105.174417.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                         22

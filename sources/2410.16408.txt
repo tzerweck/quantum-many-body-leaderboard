@@ -1,0 +1,1632 @@
+Neural network distillation of orbital dependent density functional theory
+Matija Medvidović,1 Jaylyn C. Umana,2,3,4 Iman Ahmadabadi,5,6,7
+Domenico Di Sante,8 Johannes Flick,3,4,6 and Angel Rubio9,6,10
+1Institute for Theoretical Physics, ETH Zürich, CH-8093 Zürich, Switzerland∗
+2Center for Computational Quantum Physics, Flatiron Institute, 162 5th Avenue, New York, NY 10010, USA
+3Department of Physics, City College of New York, New York, New York 10031, USA
+4Department of Physics, The Graduate Center, City University of New York, New York, New York 10016, USA
+5Joint Quantum Institute, NIST and University of Maryland, College Park, Maryland 20742, USA
+6Center for Computational Quantum Physics, Flatiron Institute,
+162 5th Avenue, New York, New York 10010, USA
+7Department of Chemistry, Princeton University, Princeton, New Jersey 08544, USA
+8Department of Physics and Astronomy, University of Bologna, 40127 Bologna, Italy
+9Max Planck Institute for the Structure and Dynamics of Matter,
+Luruper Chaussee 149, 22761 Hamburg, Germany
+10Initiative for Computational Catalysis, Flatiron Institute,
+162 5th Avenue, New York, New York 10010, USA
+(Dated: May 7, 2025)
+Density functional theory (DFT) offers a desirable balance between quantitative accuracy and
+computational efficiency in practical many-electron calculations. Its central component, the
+exchange-correlation energy functional, has been approximated with increasing levels of complexity
+ranging from strictly local approximations to nonlocal and orbital-dependent expressions with many
+tuned parameters. In this paper, we formulate a general way of rewriting complex density functionals
+using deep neural networks in a way that allows for simplified computation of Kohn-Sham potentials
+as well as higher functional derivatives through automatic differentiation, enabling access to highly
+nonlinear response functions and forces. These goals are achieved by using a recently developed class
+of robust neural network models capable of modeling functionals, as opposed to functions, with ex-
+plicitly enforced spatial symmetries. Functionals treated in this way are then calledglobal density
+approximations and can be seamlessly integrated with existing DFT workflows. Tests are performed
+for a dataset featuring a large variety of molecular structures and popular meta-generalized gradi-
+ent approximation density functionals, where we successfully eliminate orbital dependencies coming
+from the kinetic energy density, and discover a high degree of transferability to a variety of physical
+systems. The presented framework is general and could be extended to more complex orbital and
+energy dependent functionals as well as refined with specialized datasets.
+I. INTRODUCTION
+The many-electron problem has been central to quan-
+tum physics for decades. With exact solutions out
+of reach in most cases, different approximate meth-
+ods have been used in their place, offering controlled
+tradeoffs between efficiency, accuracy, and applicabil-
+ity. Density functional theory (DFT) [1–5] should be
+contrasted with the accuracy of wavefunction methods
+such as full configuration interaction (FCI) [6], coupled
+cluster [7, 8], quantum Monte Carlo (QMC) [9–12] and
+Green’s function methods such as dynamical mean field
+theory (DMFT) [13–18] due to its considerably lower
+computational cost while still capturing the essential
+physics in most cases. This feature often makes DFT the
+only method that can access many-electron physics at
+large scales becoming the method of choice in solid state
+physics, quantum chemistry, and material science [19].
+While the existence of the exact energy functional
+mapping from the electron densities to energies has been
+∗ mmedvidovic@ethz.ch
+proven [1], its explicit form remains unknown. Approxi-
+mateformsoftheexchange-correlation(XC)energyfunc-
+tionalhavebeenconstructedatvaryinglevelsofcomplex-
+ity [2, 20–28]. More recently, expressive machine learn-
+ing methods have been used to build representations of
+XC functionals from data [29–41], showing that achieving
+chemically accurate, efficient and transferable functionals
+is feasible, at least within a targeted domain.
+In this paper, we propose a method of constructing
+fully machine-learned nonlocal XC functionals based on
+neural networks, accurately reproducing known function-
+als. There are two benefits of constructing a neural net-
+work copy of known functionals. First, for meta gener-
+alized gradient approximation (meta-GGA) functionals,
+we eliminate the orbital dependence of the kinetic contri-
+bution to the XC energy by directly controlling data gen-
+eration and neural network inputs during training. Sec-
+ond, higher-order functional derivatives of the resulting
+XC functionals can easily be evaluated using automatic
+differentiation (AD) tools [42, 43]. We call this method
+the global density approximation (GDA).
+The neural network model used in this work is built
+around recent progress in transformer models that have
+recently revolutionized natural language and image pro-
+arXiv:2410.16408v2  [physics.chem-ph]  6 May 2025
+2
+…
+ψa(r)
+n(r)
+Meta-GGA
+GDA
+τ(r)
+τθ(r)
+≈
+Linear self-attention
+Gated MLP
+Field embedding
+Field projection
+Grid norm Grid norm
+FIG. 1. A schematic representation of the global density approximation scheme.Left: The approximation scheme in which
+the kinetic energy densityτ is directly inferred from the density, eliminating the orbital dependence in all resulting functionals.
+Right: A diagrammatic representation of the internal connectivity of the GDA model. We useL = 3 blocks andd = 128 as
+the dimension of the internal field representation.
+cessing [44, 45]. We employ the linear version of the un-
+derlying attention mechanism [46–48] to customize the
+network architecture for functional learning while re-
+specting underlying spatial symmetries.
+The GDA scheme results in an approximate but pure
+density functional. The main contribution of this work is
+the regularized training scheme allowing us to construct
+the GDA functional using only density-energy pairs as
+a part of the training dataset. As a direct result, GDA
+approximations are generalizable between molecules and
+can be used in independent self-consistent field (SCF)
+calculations without retraining.
+II. METHODS
+A. The global functional distillation
+Consider an isolated molecule withN electrons in an
+external potentialvext(r). We limit the discussion to iso-
+lated molecules in this paper but the discussion is equally
+applicable to ensembles of molecules and other quantum
+systems. A standard DFT calculation [3, 4, 49] outputs
+an approximation to the ground state densityn0 min-
+imizing the total energy: n0(r) = argmin nE[n]. The
+total energy functionalE[n] is commonly written as
+E[n] =T [n] +Eext[n] +EH[n] +Exc[n] (1)
+where the external contributionEext[n] captures the ef-
+fects of the external nuclear potentialvext and the direct
+Hartree componentEH is directly computable given the
+densityn(r). We use atomic units throughout.
+A successful evaluation of Eq. 1 depends on approx-
+imating the unknown kinetic and exchange-correlation
+(XC) functionals,T [n]andExc[n]. The Kohn-Sham (KS)
+DFT [2] framework approximates the ground state den-
+sity as induced by an effective system of non-interacting
+electrons,n(r) =∑
+ana|ψa(r)|2, wherena is the occupa-
+tion of the single-particle orbitalψa(r) with energiesϵa.
+Crucially, orbitals also allow for an approximate treat-
+ment of the kinetic energy contribution asT =
+∫
+d3rτ(r)
+with the kinetic energy densityτ given by
+τ(r) = 1
+2
+∑
+a
+na|∇ψa(r)|2 . (2)
+For an overview of KS-DFT, we refer the readers to the
+Supplemental Material and Refs. [3, 4, 49–51].
+After the desired XC functional has been specified, the
+constrained minimization of the total energy functional
+given in Eq. 1 can proceed, yielding Kohn-Sham equa-
+tions [2] outlined in the Supplemental Material. These
+equations have to be solved in a self-consistent (SCF)
+manner, ensuring thatn(r) =∑
+ana|ψa(r)|2 holds at all
+times.
+The exact energy functional is unknown. However, ap-
+proximations with increasing levels of complexity have
+been ordered into the so-called Jacob’s ladder [20].
+Higher rungs capture more details of local density neigh-
+borhoods at increased computational cost, starting with
+the local density approximation (LDA) which approxi-
+mates electron XC effects as a uniform gas of interacting
+electrons of densityn(r) [52]. While providing a good
+approximation for systems with slowly varying densities,
+it often lacks accuracy for molecular systems. This mo-
+tivated the development of the second rung, the gener-
+alized gradient approximation (GGA) [24, 53], which in-
+cludes local gradients∇n(r) and∇2n(r) as a local vari-
+able, offering better accuracy for a wider range of chem-
+ical systems.
+3
+0
+100
+200
+r2SCAN
+10 6
+ 10 5
+ 10 4
+ 10 3
+ 10 2
+|Exc Exc|/|Exc|
+0
+50
+100
+150 TPSS
+1.1
+ 1.0
+ 0.9
+ 0.8
+Exc/N (a.u.)
+0.0000
+0.0025
+0.0050(Exc Exc)/N (a.u.)
+ Number of test systems
+0
+50
+100 r2SCAN
+10 2
+ 10 1
+ 100
+| |/| |
+0
+50
+100 TPSS
+0.05 0.10 0.15 0.20 0.25 0.30
+ (a.u.)
+0.000
+0.025
+0.050
+0.075 (a.u.)
+Number of test systems
+0
+50
+100
+r2SCAN
+10 2
+ 10 1
+ 100
+p p / p
+0
+50
+100 TPSS
+0.002 0.004 0.006 0.008 0.010
+p /N (a.u.)
+0.000
+0.005
+0.010p p /N (a.u.)
+Number of test systems
+FIG. 2. Error distributions of observables obtained from first-principles calculations using the GDA approximation. The
+surrogate functional was tested on 717 test molecular systems withheld during training, a random selection of10% of the
+QM7 [54, 55] dataset.Left: XC energy values.Middle: HOMO-LUMO gap values.Right: Total dipole moments.
+Even higher rungs host the meta-GGA functionals [28,
+56–65], which capture more complex electronic interac-
+tions and offer improved accuracy for diverse systems,
+especially in terms of chemical reactivity and band gaps.
+These benefits come from including new local variables
+such asτ(r) and its orbital dependence via Eq. 2.
+Mathematically, the capacity to numerically solve the
+KS equations and access observables relies on our abil-
+ity to approximate functional derivatives of the total en-
+ergy in Eq. 1 during the SCF loop. In this paper, we
+propose an approximation to efficiently estimate func-
+tional derivatives of common meta-GGA density func-
+tionals by systematically removing orbital dependence.
+We do this by fitting them to expressive parameterized
+neural network models with restricted input variables.
+After capturing the target functional to a satisfactory
+degree, derivatives of the model can be efficiently calcu-
+lated using automatic differentiation tools [42, 43, 66].
+We rewrite the kinetic energy density asτ≈ τθ[n], a
+nonlocalfunctionalcapturedbyanexpressivedeepneural
+network [67–69] withθ indicating a set of all free param-
+eters in neural network sub-components (see Supplemen-
+tal Material for details). This approximation allows us
+to trivially rewrite any meta-GGA functional as
+EGDA
+xc [n] =
+∫
+d3r n(r)εxc(n(r),∇n(r),τθ[n](r)), (3)
+turning it into a nonlocal density functional.
+B. The neural network model
+In Eq. 3, we parametrize the kinetic energy density
+τθ[n] as a deep neural network, capable of approximat-
+ing functionals in a controlled way while respecting the
+underlying spatial symmetries. Additionally, to satisfy
+known exact scaling laws, we model the local dimen-
+sionless enhancement factor with a parametrized form
+ϕθ[n](r), such that
+τθ(r) =τW (r) +eϕθ(r) (τU(r) +ητW (r)) (4)
+is represented by a neural network with parametersθ∈
+R P, based on a dimensionless kinetic energy indicator
+variable used in Ref. [63]. In Eq. 4,τU = 3
+10(3π2)
+2/3n
+5/3
+is the uniform electron gas kinetic energy, and τW =
+|∇n|2/
+8n is the von Weizsäcker [70] kinetic functional.
+The regularization parameter was set toη = 10−3, as de-
+fined in Ref. [63] and informed by normalization heuris-
+tics [71, 72] based on exact values ofτ(r) in the dataset.
+Parameterizing only dimensionless enhancement fac-
+tors in Eq. 4 allows us to recover the correct scaling laws
+for the output τθ(r). Therefore, the GDA approxima-
+tioninheritsallscalingpropertiesfromparentmeta-GGA
+functionals, such as the uniform scaling of the exchange
+functional.
+Our architecture is similar to an encoder-only trans-
+former [44] with linear attention modules [46, 47]. At-
+tention layers were chosen because of the permutation
+equivariance property – permuting input values on the
+grid also permutes outputs in the same way, making this
+architecture well suited for functional learning on grids.
+We highlight two main differences in internal compo-
+nent design: a flexible density embedding layer, lifting
+the density into a high-dimensional representation while
+respecting underlying symmetries, and specialized lin-
+ear attention layers to directly operate on DFT grids
+equipped with custom normalization sub-components.
+Local molecular densities can vary several orders of
+magnitude, depending on proximity to nuclei. To nor-
+malize density variations, we construct the following di-
+mensionless d-component input field:
+ϕ(r) = lnn(r) en + ln|∇n(r)|2 eγ , (5)
+where en, eγ∈ R d are trainable vectors andf(r) indi-
+cates subtracting the mean and dividing by the standard
+4
+10 4
+ 10 3
+KL divergence
+0
+50
+100
+150
+r2SCAN
+TPSS
+10 4
+ 10 3
+MAE per electron
+0
+50
+100
+150
+200
+Number of test systems
+r2SCAN
+6.5 7.0 7.5 8.0 8.5 9.0 9.5 10.0
+TPSS
+Excitation energy (eV)
+Intensity (arb. unit)
+Libxc GDA (r2SCAN) GDA (TPSS)
+FIG. 3. Comparison of first-principles densities calculated using independent KS-DFT calculations and an example linear-
+response calculation of dimethyl ether (CH3OCH3) spectra using TD-DFT where the predicted KS gaps are indicated by
+vertical lines in the same style as the corresponding spectra. We note that the spectral data are shown as a proof-of-principle,
+as an example of a calculation that can be performed with more specialized GDA functionals using automatic differentiation.
+deviation off(r) with respect to the distributionn(r)/N.
+Inputϕvalues are updated by subsequent network layers.
+To makeϕθ invariant with respect to translations and
+rotations of input coordinates we use a symmetry-aware
+positional encoding sub-layer. All computations are per-
+formed in a coordinate system where the mean value
+(dipole moment) of the density distributionn(r)/N van-
+ishes and the covariance matrix is diagonal. This choice
+eliminates the special Euclidean symmetries in SE(3), de-
+termining the resulting computational coordinate values
+up to molecular point-group symmetries.
+The coordinates are then lifted to ad-dimensional rep-
+resentation using random Fourier features (RFFs) [73–75]
+combined with the density embedding of Eq. 5 using a
+gating mechanism described in Ref. [76]. The lifted den-
+sity representation is then processed by a sequence of
+L blocks. One GDA block is defined as a stack of self-
+attention (SA) and gated multi-layer perceptron (MLP)
+layers [76] with SiLU activations [77]. After L blocks,
+one final projection layer consisting of an element-wise
+gated MLP is applied, projecting the point-wise embed-
+dingsintoasinglerealnumberpercoordinate r, whichwe
+then interpret as the final value of the fieldϕ =ϕθ[n](r)
+in Eq. 4. We refer the reader to Fig. 1 for an overview of
+the internal connectivity and the Supplemental Material
+for numerical and technical details.
+The nonlocality in the GDA model is captured by the
+linear attention layer [46, 47]. The input fieldϕ is trans-
+formed as:
+ϕ′(r) =
+∫
+d3r′n(r′) (Q(r)·K(r′))V (r′) (6)
+where Qi(r),Ki(r),Vi(r) are the query, key and value
+parametrized local projections of the input field:∑
+kWQ,K,V
+ik ϕk(r). Furthermore, we employ rotary po-
+sitional encoding (RoPE) [47, 48] independently for each
+block to ensure that the productQ(r)·K(r′) =K(r− r′)
+depends only on the relative coordinate, parametrizing a
+flexible continuous convolutional kernel.
+Apartfromfacilitatingtranslationalinvariance, weem-
+phasize that the linear attention mechanism used in this
+work sidesteps the unfavorable quadratic scaling of sim-
+ple functional evaluations. As a consequence, using the
+transformer architecture does not spoil asymptotic scal-
+ing properties of the SCF loop. Further details about the
+model used in this work are given in the Supplemental
+Material
+The GDA model ϕθ is trained using gradient-based
+optimization of parameters θ using the RAdam opti-
+mizer [78–80] and the gradients [81] of the scalar cost
+function
+C(θ) =∥ϕθ−ϕ0∥2
+G
+∥ϕ0∥2
+G
++λ∥T −T0∥2
+F
+∥T0∥2
+F
+(7)
+consisting of two terms. The first term is the scaled mean
+squared error (MSE) forϕ itself where the unweighted
+grid norm∥f∥2
+G =∑
+if(ri)2 is defined over all DFT grid
+points{r1,..., rNg}, whereϕ0(r) is evaluated from pre-
+calculated τ values in the dataset, by inverting Eq. 4.
+The second term in Eq. 7 enforces the correct predicted
+kinetic energy matrixT in the KS orbital basis, which
+can be easily predicted from the one-body electronic den-
+sity matrix Γ as
+Tab =
+∑
+µν
+CµaCνb
+∂T [n]
+∂Γµν
+(8)
+by using standard AD routines and the linear combi-
+nation of atomic orbitals (LCAO) expansion coefficients
+Cµa, see Supplemental Material Reference valuesT0 can
+be precalculated asT0,ab = 1
+2
+∫
+d3r∇ψa·∇ψb from easily
+accessible basis set integrals [82, 83].
+Including the second term in the cost function in Eq. 7
+ensures that the kinetic contribution to the overall KS
+effective HamiltonianHeff = ∂E/∂Γ is well approximated
+5
+by the GDA surrogate functional when solving the KS
+equation C⊤HeffC = ϵ. We find that including such a
+gradient cost term is key for making the resulting neural
+network functional converge in a practical DFT SCF cal-
+culation, allowing us to use it to obtain energies, orbitals,
+densitiesorobservablesfromfirstprinciples, withoutever
+referring to the parent functional. Similar regularization
+methods have been proposed in Refs. [38, 84].
+III. RESUL TS
+We examine GDA approximations to two promi-
+nent meta-GGA functionals: r 2SCAN [28, 61, 63] and
+TPSS [56]. We use a single neural-network GDA model
+for evaluation of all molecules for all three functionals.
+Each functional is tested in both ground state KS-DFT
+and linear response time-dependent density functional
+theory (TD-DFT) calculations. The architecture out-
+lined in Fig. 1 withL = 3 blocks and the embedding
+dimension ofd = 128 is used and optimized usingλ = 1
+in Eq. 7. Molecular geometries from the QM7 [54, 55]
+dataset are used, consisting of 7165 organic molecules of
+up to 23 atoms, and featuring a large variety of molecular
+structures such as double and triple bonds, cycles, car-
+boxy, cyanide, amide, alcohol and epoxy. Corresponding
+KS-DFT calculations were done using the r2SCAN func-
+tional to obtain input densities and targetτ values.
+We independently calculate and compare several phys-
+ical observables: the total energy, the molecular dipole
+moment, the KS highest occupied molecular orbital –
+lowest unoccupied molecular orbital (HOMO-LUMO)
+gap, and the self-consistent density itself. Error distri-
+butions are shown in Fig. 2, demonstrating that the re-
+sulting surrogate GGA functionals converge to physical
+results independently from the source meta-GGA func-
+tional, using only density inputs as shown in Eq. 3.
+The GDA functional is able to accurately predict XC
+energies and potentials over a large range of diverse
+test molecules, eliminating orbital dependence from in-
+put functionals. Gap values are predicted within10%for
+TPSS with higher errors in r2SCAN calculations where
+GDA approximations tend to over estimate the gap. A
+similar trend persists with dipole moments, demonstrat-
+ing qualitative accuracy. Since all of the results have
+been obtained with a single transferable neural network
+model, the GDA approximation scheme eliminates the
+need to train multiple models for de-orbitalizing differ-
+ent XC functionals and can serve as a starting point for
+more fine-tuned approximations. Furthermore, we spec-
+ulate that such broad generalization for larger models
+trained on more diverse datasets can be used to train
+foundation functionals to then fine tune on downstream
+problems with limited data.
+As a direct global divergence measure between two
+densities, we consider the Kullback-Liebler (KL) diver-
+gence [85] DKL(n ∥ ˆn) = 1
+N
+∫
+d3r n(r) ln n(r)
+ˆn(r) com-
+monly used in statistical literature, whereˆn is the den-
+sity obtained by independent SCF convergence using
+the GDA approximation of the original functional. In
+addition, we also compare direct mean absolute errors
+(MAEs) of density values defined as DMAE(n, ˆn) =
+1
+N
+∫
+d3r|n(r)− ˆn(r)|. In all cases the trained model
+produces a good approximation to the ground-state den-
+sity indicating good transferability, as can be seen in the
+left panel of Fig. 3. We see that TPSS densities are re-
+produced more accurately indicating that the generated
+dataset based on QM7 is better suited to some typical
+densities encountered with that functional. A more ex-
+pansive dataset with more diverse densities and geome-
+tries is likely to close the gap in Fig. 3.
+To showcase the performance of GDA approximations
+in the excited state regime, we present a qualitative
+demonstration in the right panel of Fig. 3. Here, we sim-
+ulate absorption spectra via linear response for a single
+test molecule. We compare spectra generated using the
+GDA model with the parent functionals accessed through
+the LibXC [86, 87] library. Calculations are carried out
+in the Casida TD-DFT [88] formalism for 100 excited
+states, and we focus on a low energy range to highlight
+the ability of our model to replicate physically meaning-
+ful features before the ionization threshold [89, 90] in a
+fashion similar to the original functional. Unsurprisingly,
+the GDA scheme captures the behavior of TPSS. How-
+ever, for most test molecules in our dataset, the excited
+state energy values are qualitative. For example, in the
+case of r2SCAN, we observe spectral shifts (on the order
+of∼ 1 eV in Fig. 3) but still capture the overall shape
+and widths of the affected features. The GDA model has
+a higher error in r2SCAN with the expectation that the
+predictions can be improved by using larger GDA neural
+networks trained on more specialized datasets. There-
+fore, the spectral data is shown as a proof of principle,
+as an example of a linear response calculation that can
+be performed with fine-tuned GDA functionals using au-
+tomatic differentiation.
+IV. CONCLUSION AND OUTLOOK
+We introduce another class of approximations, en-
+abling first-principles replacement of orbital-dependent
+meta-GGA functionals. Using these approximations,
+arbitrary derivatives of source functionals can be con-
+structed, enabling access to different results and phenom-
+ena (e.g. highly nonlinear responses).
+As a proof of principle, this approximation is accurate
+and resource-efficient with a high degree of transferabil-
+ity between different functionals and molecular systems.
+Tests on periodic systems are left for future research. In
+addition, our GDA approximation scheme formally en-
+ables the use of orbital-free DFT (OF-DFT) calculations
+at the meta-GGA level of theory. However robust OF-
+DFT solvers for Gaussian-type basis sets are still an ac-
+tive area of research with experimental support for non-
+local functionals at best. Therefore, extending the GDA
+6
+approximation to OF-DFT is left for future research.
+More general orbital-dependent functionals have
+shown great potential in overcoming the limitations
+of their pure density functionals. Hybrid func-
+tionals, such as Becke three-parameter Lee-Yang-Parr
+(B3LYP), Heyd-Scuseria-Ernzerhof (HSE) and Perdew-
+Burke-Ernzerhof 0 (PBE0) [25, 91, 92], which combine
+GGA functionals with a fraction of orbital-dependent
+exact exchange, have achieved superior accuracy in pre-
+dicting molecular geometries, reaction barriers, and elec-
+tronic properties. The GDA treatment of the Fock opera-
+tor is a topic of ongoing research. The GDA approach al-
+lows reformulating orbital-dependent functionals as pure
+but nonlocal density functionals, offering a promising di-
+rection to bridge the gap between pure DFT and the
+quantum chemical accuracy.
+Software and simulations
+All DFT simulations were performed using a custom
+interface between the PySCF [82, 83] library and Py-
+Torch [66, 81], used for automatic generation of XC po-
+tentials for KS-DFT calculations and kernels for linear-
+response TD-DFT calculations.
+All calculations were performed using the correlation-
+consistent polarized valence double zeta (cc-pVDZ) basis
+set at grid level 1 in PySCF. Convergence tolerance was
+set to 10−6 Ha. Code needed to reproduce results in
+this work or experiment with new results has been open-
+sourced and can be found at GitHub:https://github.
+com/Matematija/global-density-approximation.
+Acknowledgements
+M.M. acknowledges support from the CCQ Graduate
+Fellowship in computational quantum physics under the
+Grant No. 653217. J.C.U. acknowledges support from
+the CCQ Graduate Fellowship in computational quan-
+tum physics under the Grant No. 1165064.
+[1] P. Hohenberg and W. Kohn, “Inhomogeneous Electron
+Gas,” Physical Review136, B864–B871 (1964).
+[2] W. Kohn and L. J. Sham, “Self-Consistent Equations In-
+cluding Exchange and Correlation Effects,” Physical Re-
+view 140, A1133–A1138 (1965).
+[3] Miguel A.L. Marques, Carsten A. Ullrich, Fernando
+Nogueira, Angel Rubio, Kieron Burke, and Eberhard
+K. U. Gross, eds., Time-Dependent Density Functional
+Theory, Vol. 706 (Springer Berlin Heidelberg, Berlin,
+Heidelberg, 2006) series Title: Lecture Notes in Physics.
+[4] Carlos Fiolhais, Fernando Nogueira, Miguel A. L. Mar-
+ques, R. Beig, B. G. Englert, U. Frisch, P. Hänggi,
+K. Hepp, W. Hillebrandt, D. Imboden, R. L. Jaffe,
+R. Lipowsky, H. V. Löhneysen, I. Ojima, D. Sornette,
+S. Theisen, W. Weise, J. Wess, and J. Zittartz, eds.,A
+Primer in Density Functional Theory, Lecture Notes in
+Physics, Vol. 620 (Springer, Berlin, Heidelberg, 2003).
+[5] Giovanni Onida, Lucia Reining, and Angel Rubio,
+“Electronic excitations: density-functional versus many-
+body Green’s-function approaches,” Reviews of Modern
+Physics 74, 601–659 (2002).
+[6] John A. Pople, Martin Head-Gordon, and Krishnan
+Raghavachari, “Quadratic configuration interaction. A
+general technique for determining electron correlation en-
+ergies,” The Journal of Chemical Physics87, 5968–5975
+(1987).
+[7] Rodney J. Bartlett and Monika Musiał, “Coupled-cluster
+theory in quantum chemistry,” Reviews of Modern
+Physics 79, 291–352 (2007).
+[8] Bogumil Jeziorski and Hendrik J. Monkhorst, “Coupled-
+cluster method for multideterminantal reference states,”
+Physical Review A24, 1668–1681 (1981).
+[9] Federico Becca and Sandro Sorella, Quantum Monte
+Carlo Approaches for Correlated Systems (Cambridge
+University Press, Cambridge, 2017).
+[10] Dian Wu, Riccardo Rossi, Filippo Vicentini, Nikita As-
+trakhantsev, Federico Becca, Xiaodong Cao, Juan Car-
+rasquilla, Francesco Ferrari, Antoine Georges, Mohamed
+Hibat-Allah, Masatoshi Imada, Andreas M. Läuchli,
+Guglielmo Mazzola, Antonio Mezzacapo, Andrew Mil-
+lis, Javier Robledo Moreno, Titus Neupert, Yusuke No-
+mura, Jannes Nys, Olivier Parcollet, Rico Pohle, Imelda
+Romero, Michael Schmid, J. Maxwell Silvester, Sandro
+Sorella, Luca F. Tocchio, Lei Wang, Steven R. White,
+Alexander Wietek, Qi Yang, Yiqi Yang, Shiwei Zhang,
+and Giuseppe Carleo, “Variational benchmarks for quan-
+tum many-body problems,” Science386, 296–301 (2024).
+[11] Matija Medvidović and Javier Robledo Moreno, “Neural-
+network quantum states for many-body physics,” The
+European Physical Journal Plus139, 631 (2024).
+[12] Joonho Lee, Hung Q. Pham, and David R. Reichman,
+“Twenty Years of Auxiliary-Field Quantum Monte Carlo
+in Quantum Chemistry: An Overview and Assessment
+on Main Group Chemistry and Bond-Breaking,” Jour-
+nal of Chemical Theory and Computation18, 7024–7042
+(2022).
+[13] Antoine Georges and Gabriel Kotliar, “Hubbard model
+in infinite dimensions,” Physical Review B45, 6479–6483
+(1992).
+[14] Antoine Georges, Gabriel Kotliar, Werner Krauth, and
+Marcelo J. Rozenberg, “Dynamical mean-field theory of
+strongly correlated fermion systems and the limit of infi-
+nite dimensions,” Reviews of Modern Physics68, 13–125
+(1996).
+[15] Lars Hedin, “New Method for Calculating the One-
+Particle Green’s Function with Application to the
+Electron-Gas Problem,” Physical Review 139, A796–
+A823 (1965).
+[16] F. Aryasetiawan and O. Gunnarsson, “The GW method,”
+Reports on Progress in Physics61, 237 (1998).
+7
+[17] Lucia Reining, “The GW approximation: content, suc-
+cesses and limitations,” WIREs Computational Molecu-
+lar Science 8, e1344 (2018).
+[18] Dorothea Golze, Marc Dvorak, and Patrick Rinke, “The
+GW Compendium: A Practical Guide to Theoretical
+Photoemission Spectroscopy,” Frontiers in Chemistry7,
+377 (2019).
+[19] Kieron Burke, “Perspective on density functional the-
+ory,” The Journal of Chemical Physics 136 (2012),
+10.1063/1.4704546.
+[20] John P. Perdew and Karla Schmidt, “Jacob’s ladder
+of density functional approximations for the exchange-
+correlation energy,” AIP Conference Proceedings577, 1–
+20 (2001).
+[21] A. Seidl, A. Görling, P. Vogl, J. A. Majewski, and
+M. Levy, “Generalized Kohn-Sham schemes and the
+band-gap problem,” Physical Review B 53, 3764–3774
+(1996).
+[22] Chengteh Lee, Weitao Yang, and Robert G. Parr, “De-
+velopment of the Colle-Salvetti correlation-energy for-
+mula into a functional of the electron density,” Physical
+Review B 37, 785–789 (1988).
+[23] Axel D. Becke, “Density-functional thermochemistry. III.
+The role of exact exchange,” The Journal of Chemical
+Physics 98, 5648–5652 (1993).
+[24] John P. Perdew, Kieron Burke, and Matthias Ernzer-
+hof, “Generalized Gradient Approximation Made Sim-
+ple,” Physical Review Letters77, 3865–3868 (1996).
+[25] Jochen Heyd, Gustavo E. Scuseria, and Matthias Ernz-
+erhof, “Hybrid functionals based on a screened Coulomb
+potential,” The Journal of Chemical Physics118, 8207–
+8215 (2003).
+[26] Stefan Grimme, “Semiempirical GGA-type density func-
+tional constructed with a long-range dispersion correc-
+tion,” Journal of Computational Chemistry 27, 1787–
+1799 (2006).
+[27] Alexandre Tkatchenko and Matthias Scheffler, “Accu-
+rate Molecular Van Der Waals Interactions from Ground-
+State Electron Density and Free-Atom Reference Data,”
+Physical Review Letters102, 073005 (2009).
+[28] Jianwei Sun, Adrienn Ruzsinszky, and John P. Perdew,
+“Strongly Constrained and Appropriately Normed
+Semilocal Density Functional,” Physical Review Letters
+115, 036402 (2015).
+[29] John C. Snyder, Matthias Rupp, Katja Hansen, Klaus-
+Robert Müller, and Kieron Burke, “Finding Density
+Functionals with Machine Learning,” Physical Review
+Letters 108, 253002 (2012).
+[30] Mihail Bogojeski, Leslie Vogt-Maranto, Mark E. Tucker-
+man, Klaus-Robert Müller, and Kieron Burke, “Quan-
+tum chemical accuracy from density functional approxi-
+mations via machine learning,” Nature Communications
+11, 5223 (2020).
+[31] Kyle Bystrom and Boris Kozinsky, “CIDER: An Expres-
+sive, Nonlocal Feature Set for Machine Learning Density
+Functionals with Exact Constraints,” Journal of Chemi-
+cal Theory and Computation18, 2180–2192 (2022).
+[32] Sebastian Dick and Marivi Fernandez-Serra, “Machine
+learning accurate exchange and correlation functionals
+of the electronic density,” Nature Communications 11,
+3509 (2020).
+[33] Xiangyun Lei and Andrew J. Medford, “Design and anal-
+ysis of machine learning exchange-correlation function-
+als via rotationally invariant convolutional descriptors,”
+Physical Review Materials3, 063801 (2019).
+[34] Yixiao Chen, Linfeng Zhang, Han Wang, and Weinan E,
+“DeePKS: A Comprehensive Data-Driven Approach to-
+ward Chemically Accurate Density Functional Theory,”
+Journal of Chemical Theory and Computation17, 170–
+181 (2021).
+[35] Ryo Nagai, Ryosuke Akashi, and Osamu Sugino, “Com-
+pleting density functional theory by machine learning
+hidden messages from molecules,” npj Computational
+Materials 6, 43 (2020).
+[36] Pablo A. M. Casares, Jack S. Baker, Matija Medvi-
+dović, Roberto dos Reis, and Juan Miguel Arrazola,
+“GradDFT. A software library for machine learning en-
+hanced density functional theory,” The Journal of Chem-
+ical Physics 160, 062501 (2024).
+[37] Beatriz G. Del Rio, Brandon Phan, and Rampi Ram-
+prasad, “A deep learning framework to emulate density
+functional theory,” npj Computational Materials9, 158
+(2023).
+[38] James Kirkpatrick, Brendan McMorrow, David H. P.
+Turban, Alexander L. Gaunt, James S. Spencer, Alexan-
+der G. D. G. Matthews, Annette Obika, Louis Thiry,
+Meire Fortunato, David Pfau, Lara Román Castellanos,
+Stig Petersen, Alexander W. R. Nelson, Pushmeet Kohli,
+Paula Mori-Sánchez, Demis Hassabis, and Aron J. Co-
+hen, “Pushing the frontiers of density functionals by solv-
+ing the fractional electron problem,” Science374, 1385–
+1389 (2021).
+[39] Johannes T. Margraf and Karsten Reuter, “Pure non-
+local machine-learned density functional theory for
+electron correlation,” Nature Communications 12, 344
+(2021).
+[40] Kyle Bystrom and Boris Kozinsky, “Nonlocal Machine-
+Learned Exchange Functional for Molecules and Solids,”
+Physical Review B110, 075130 (2024).
+[41] Kyle Bystrom, Stefano Falletta, and Boris Kozinsky,
+“Training Machine-Learned Density Functionals on Band
+Gaps,” JournalofChemicalTheoryandComputation 20,
+7516–7532 (2024).
+[42] Charles C. Margossian, “A review of automatic dif-
+ferentiation and its efficient implementation,” WIREs
+Data Mining and Knowledge Discovery 9 (2019),
+10.1002/widm.1305.
+[43] Atilim Gunes Baydin, Barak A. Pearlmutter, Alexey An-
+dreyevich Radul, and Jeffrey Mark Siskind, “Automatic
+Differentiation in Machine Learning: a Survey,” Journal
+of Machine Learning Research18, 1–43 (2018).
+[44] Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob
+Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser,
+and Illia Polosukhin, “Attention Is All You Need,”
+(2017), arXiv: 1706.03762.
+[45] Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov,
+Dirk Weissenborn, Xiaohua Zhai, Thomas Unterthiner,
+Mostafa Dehghani, Matthias Minderer, Georg Heigold,
+Sylvain Gelly, Jakob Uszkoreit, and Neil Houlsby, “An
+Image is Worth 16x16 Words: Transformers for Image
+Recognition at Scale,” (2020), arXiv:2010.11929.
+[46] Shuhao Cao, “Choose a Transformer: Fourier or
+Galerkin,” (2021), arXiv:2105.14995 [cs, math].
+[47] Zijie Li, Kazem Meidani, and Amir Barati Farimani,
+“TransformerforPartialDifferentialEquations’Operator
+Learning,” (2023), arXiv:2205.13671.
+[48] Jianlin Su, Yu Lu, Shengfeng Pan, Ahmed Murtadha,
+Bo Wen, and Yunfeng Liu, “RoFormer: Enhanced
+8
+Transformer with Rotary Position Embedding,” (2023),
+arXiv:2104.09864.
+[49] Richard M Martin,Electronic structure: basic theory and
+practical methods(Cambridge university press, 2020).
+[50] R. O. Jones, “Density functional theory: Its origins, rise
+toprominence, andfuture,” Rev.Mod.Phys. 87,897–923
+(2015).
+[51] Stephan Kümmel and Leeor Kronik, “Orbital-dependent
+densityfunctionals: Theoryandapplications,” Rev.Mod.
+Phys. 80, 3–60 (2008).
+[52] J. P. Perdew and Alex Zunger, “Self-interaction cor-
+rection to density-functional approximations for many-
+electron systems,” Physical Review B 23, 5048–5079
+(1981).
+[53] David C Langreth and MJ Mehl, “Beyond the local-
+density approximation in calculations of ground-state
+electronic properties,” Physical Review B 28, 1809
+(1983).
+[54] Lorenz C. Blum and Jean-Louis Reymond, “970 Million
+Druglike Small Molecules for Virtual Screening in the
+Chemical Universe Database GDB-13,” Journal of the
+American Chemical Society131, 8732–8733 (2009).
+[55] Matthias Rupp, Alexandre Tkatchenko, Klaus-Robert
+Müller, and O. Anatole Von Lilienfeld, “Fast and Ac-
+curate Modeling of Molecular Atomization Energies with
+Machine Learning,” Physical Review Letters108, 058301
+(2012).
+[56] Jianmin Tao, John P. Perdew, Viktor N. Staroverov, and
+Gustavo E. Scuseria, “Climbing the Density Functional
+Ladder: Nonempirical Meta–Generalized Gradient Ap-
+proximation Designed for Molecules and Solids,” Physical
+Review Letters 91, 146401 (2003).
+[57] John P. Perdew, Adrienn Ruzsinszky, Gábor I. Csonka,
+Lucian A. Constantin, and Jianwei Sun, “Workhorse
+Semilocal Density Functional for Condensed Matter
+Physics and Quantum Chemistry,” Physical Review Let-
+ters 103, 026403 (2009).
+[58] Yan Zhao and Donald G. Truhlar, “A new local den-
+sity functional for main-group thermochemistry, transi-
+tion metal bonding, thermochemical kinetics, and non-
+covalent interactions,” The Journal of Chemical Physics
+125, 194101 (2006).
+[59] Jianwei Sun, Bing Xiao, and Adrienn Ruzsinszky, “Ef-
+fect of the orbital-overlap dependence in the meta gener-
+alized gradient approximation,” The Journal of Chemical
+Physics 137, 051101 (2012).
+[60] Jianwei Sun, Robin Haunschild, Bing Xiao, Ireneusz W.
+Bulik, Gustavo E. Scuseria, and John P. Perdew,
+“Semilocal and hybrid meta-generalized gradient approx-
+imations based on the understanding of the kinetic-
+energy-density dependence,” The Journal of Chemical
+Physics 138, 044113 (2013).
+[61] Jianwei Sun, Richard C. Remsing, Yubo Zhang, Zhaoru
+Sun, Adrienn Ruzsinszky, Haowei Peng, Zenghui Yang,
+Arpita Paul, Umesh Waghmare, Xifan Wu, Michael L.
+Klein, and John P. Perdew, “Accurate first-principles
+structures and energies of diversely bonded systems from
+anefficientdensityfunctional,” NatureChemistry 8,831–
+836 (2016).
+[62] Albert P. Bartók and Jonathan R. Yates, “Regularized
+SCANfunctional,” TheJournalofChemicalPhysics 150,
+161101 (2019).
+[63] James W. Furness, Aaron D. Kaplan, Jinliang Ning,
+John P. Perdew, and Jianwei Sun, “Accurate and Nu-
+merically Efficient r2SCAN Meta-Generalized Gradient
+Approximation,” The Journal of Physical Chemistry Let-
+ters 11, 8208–8215 (2020).
+[64] Axel D. Becke and Erin R. Johnson, “A simple effective
+potential for exchange,” The Journal of Chemical Physics
+124, 221101 (2006).
+[65] Fabien Tran and Peter Blaha, “Accurate Band Gaps
+of Semiconductors and Insulators with a Semilocal
+Exchange-Correlation Potential,” Physical Review Let-
+ters 102, 226401 (2009).
+[66] Adam Paszke, Sam Gross, Soumith Chintala, Gregory
+Chanan, Edward Yang, Zachary DeVito, Zeming Lin, Al-
+ban Desmaison, Luca Antiga, and Adam Lerer, “Auto-
+matic Differentiation in PyTorch,” inNIPS 2017 Work-
+shop Autodiff Decision Program Chairs (2017) iSSN:
+01635778.
+[67] Yann LeCun, Yoshua Bengio, and Geoffrey Hinton,
+“Deep learning.” Nature 521, 436–44 (2015).
+[68] Ian Goodfellow, Yoshua Bengio, and Aaron Courville,
+Deep Learning(MIT Press, 2016).
+[69] Anna Dawid, Julian Arnold, Borja Requena, Alexan-
+der Gresch, Marcin Płodzień, Kaelan Donatella, Kim A.
+Nicoli, Paolo Stornati, Rouven Koch, Miriam Büttner,
+Robert Okuła, Gorka Muñoz-Gil, Rodrigo A. Vargas-
+Hernández, Alba Cervera-Lierta, Juan Carrasquilla, Ve-
+dran Dunjko, Marylou Gabrié, Patrick Huembeli, Evert
+van Nieuwenburg, Filippo Vicentini, Lei Wang, Sebas-
+tian J. Wetzel, Giuseppe Carleo, Eliška Greplová, Ro-
+man Krems, Florian Marquardt, Michał Tomza, Maciej
+Lewenstein, and Alexandre Dauphin, “Modern applica-
+tions of machine learning in quantum sciences,” (2022),
+arXiv:2204.04198.
+[70] C. F. V. Weizsäcker, “Zur Theorie der Kernmassen,”
+Zeitschrift für Physik96, 431–458 (1935).
+[71] ShashankSubramanian, PeterHarrington, KurtKeutzer,
+Wahid Bhimji, Dmitriy Morozov, Michael Mahoney, and
+Amir Gholami, “Towards Foundation Models for Sci-
+entific Machine Learning: Characterizing Scaling and
+Transfer Behavior,” (2023), arXiv:2306.00258.
+[72] Michael McCabe, Bruno Régaldo-Saint Blancard,
+Liam Holden Parker, Ruben Ohana, Miles Cranmer, Al-
+berto Bietti, Michael Eickenberg, Siavash Golkar, Ger-
+aud Krawezik, Francois Lanusse, Mariel Pettee, Tiberiu
+Tesileanu, Kyunghyun Cho, and Shirley Ho, “Multi-
+ple Physics Pretraining for Physical Surrogate Models,”
+(2023), arXiv:2310.02994.
+[73] Ali Rahimi and Benjamin Recht, “Random Features for
+Large-Scale Kernel Machines,” inAdvances in Neural In-
+formation Processing Systems, Vol. 20, edited by J. Platt,
+D. Koller, Y. Singer, and S. Roweis (Curran Associates,
+Inc., 2007).
+[74] Matthew Tancik, Pratul P. Srinivasan, Ben Mildenhall,
+Sara Fridovich-Keil, Nithin Raghavan, Utkarsh Sing-
+hal, Ravi Ramamoorthi, Jonathan T. Barron, and Ren
+Ng, “Fourier Features Let Networks Learn High Fre-
+quency Functions in Low Dimensional Domains,” (2020),
+arXiv:2006.10739.
+[75] Yang Li, Si Si, Gang Li, Cho-Jui Hsieh, and Samy Ben-
+gio, “Learnable Fourier Features for Multi-Dimensional
+Spatial Positional Encoding,” (2021), arXiv:2106.02795.
+[76] Noam Shazeer, “GLU Variants Improve Transformer,”
+(2020), arXiv:2002.05202.
+[77] Stefan Elfwing, Eiji Uchibe, and Kenji Doya, “Sigmoid-
+Weighted Linear Units for Neural Network Function
+9
+Approximation in Reinforcement Learning,” (2017),
+arXiv:1702.03118.
+[78] Liyuan Liu, Haoming Jiang, Pengcheng He, Weizhu
+Chen, Xiaodong Liu, Jianfeng Gao, and Jiawei Han,
+“On the Variance of the Adaptive Learning Rate and Be-
+yond,” (2019), arXiv:1908.03265.
+[79] Diederik P. Kingma and Jimmy Lei Ba, “Adam: A
+method for stochastic optimization,” in3rd International
+Conference on Learning Representations, ICLR 2015 -
+Conference Track Proceedings(International Conference
+on Learning Representations, ICLR, 2015).
+[80] Ilya Loshchilov and Frank Hutter, “Fixing Weight Decay
+Regularization in Adam,” (2017), arXiv:1711.05101.
+[81] Adam Paszke, Sam Gross, Francisco Massa, Adam Lerer,
+James Bradbury, Gregory Chanan, Trevor Killeen, Zem-
+ing Lin, Natalia Gimelshein, Luca Antiga, Alban Des-
+maison, Andreas Kopf, Edward Yang, Zachary DeVito,
+Martin Raison, Alykhan Tejani, Sasank Chilamkurthy,
+Benoit Steiner, Lu Fang, Junjie Bai, and Soumith Chin-
+tala, “PyTorch: An Imperative Style, High-Performance
+Deep Learning Library,” inAdvances in Neural Informa-
+tion Processing Systems, Vol. 32, edited by H. Wallach,
+H. Larochelle, A. Beygelzimer, F. d’ Alché-Buc, E. Fox,
+and R. Garnett (Curran Associates, Inc., 2019).
+[82] Qiming Sun, Timothy C. Berkelbach, Nick S. Blunt,
+George H. Booth, Sheng Guo, Zhendong Li, Junzi Liu,
+James D. McClain, Elvira R. Sayfutyarova, Sandeep
+Sharma, Sebastian Wouters, and Garnet Kin-Lic Chan,
+“PySCF: the Python-based simulations of chemistry
+framework,” WIREs Computational Molecular Science8,
+e1340 (2018).
+[83] Qiming Sun, Xing Zhang, Samragni Banerjee, Peng
+Bao, Marc Barbry, Nick S. Blunt, Nikolay A. Bogdanov,
+George H. Booth, Jia Chen, Zhi-Hao Cui, Janus J. Erik-
+sen, Yang Gao, Sheng Guo, Jan Hermann, Matthew R.
+Hermes, KevinKoh, Peter Koval, SusiLehtola, Zhendong
+Li, Junzi Liu, Narbe Mardirossian, James D. McClain,
+Mario Motta, Bastien Mussard, Hung Q. Pham, Artem
+Pulkin, Wirawan Purwanto, Paul J. Robinson, Enrico
+Ronca, Elvira R. Sayfutyarova, Maximilian Scheurer,
+Henry F. Schurkus, James E. T. Smith, Chong Sun,
+Shi-Ning Sun, Shiv Upadhyay, Lucas K. Wagner, Xiao
+Wang, Alec White, James Daniel Whitfield, Mark J.
+Williamson, Sebastian Wouters, Jun Yang, Jason M. Yu,
+Tianyu Zhu, Timothy C. Berkelbach, Sandeep Sharma,
+Alexander Yu. Sokolov, and Garnet Kin-Lic Chan, “Re-
+cent developments in the PySCF program package,” The
+Journal of Chemical Physics153, 024109 (2020).
+[84] Pablo del Mazo-Sevillano and Jan Hermann, “Variational
+principle to regularize machine-learned density function-
+als: The non-interacting kinetic-energy functional,” The
+Journal of Chemical Physics159 (2023).
+[85] S. Kullback and R. A. Leibler,“On Information and Suffi-
+ciency,” The Annals of Mathematical Statistics22, 79–86
+(1951).
+[86] Miguel A. L. Marques, Micael J. T. Oliveira, and To-
+bias Burnus, “Libxc: A library of exchange and correla-
+tion functionals for density functional theory,” Computer
+Physics Communications 183, 2272–2281 (2012).
+[87] Susi Lehtola, Conrad Steigemann, Micael J. T. Oliveira,
+and Miguel A. L. Marques, “Recent developments in libxc
+— A comprehensive library of functionals for density
+functional theory,” SoftwareX7, 1–5 (2018).
+[88] Mark E. Casida, “Time-Dependent Density Functional
+Response Theory for Molecules,” inRecent Advances in
+Density Functional Methods, Recent Advances in Com-
+putational Chemistry, Vol. Volume 1 (World Scientific,
+1995) pp. 155–192.
+[89] Wing-Cheung Tam and C. E. Brion, “Electron impact
+spectra of some alkyl derivatives of water and related
+compounds,” Journal of Electron Spectroscopy and Re-
+lated Phenomena 3, 263–279 (1974).
+[90] Peter J. Linstrom and William G. Mallard, “The NIST
+Chemistry WebBook: A Chemical Data Resource on the
+Internet,” Journal of Chemical & Engineering Data46,
+1059–1063 (2001).
+[91] P. J. Stephens, F. J. Devlin, C. F. Chabalowski, and
+M. J. Frisch, “Ab Initio Calculation of Vibrational Ab-
+sorption and Circular Dichroism Spectra Using Density
+Functional Force Fields,” The Journal of Physical Chem-
+istry 98, 11623–11627 (1994).
+[92] Carlo Adamo and Vincenzo Barone, “Toward reliable
+density functional methods without adjustable parame-
+ters: ThePBE0model,” TheJournalofChemicalPhysics
+110, 6158–6170 (1999).
+Neural network distillation of orbital dependent density functional theory
+Supplementary Material
+Matija Medvidović,1 Jaylyn C. Umana,2,3,4 Iman Ahmadabadi,5,2,6
+Domenico Di Sante,7 Johannes Flick,3,4,2 and Angel Rubio8,2,9
+1Institute for Theoretical Physics, ETH Zürich, CH-8093 Zürich, Switzerland
+2Center for Computational Quantum Physics, Flatiron Institute, 162 5th Avenue, New York, NY 10010, USA
+3Department of Physics, City College of New York, New York, NY 10031, USA
+4Department of Physics, The Graduate Center, City University of New York, New York, NY 10016, USA
+5Joint Quantum Institute, NIST and University of Maryland, College Park, MD 20742, USA
+6Department of Chemistry, Princeton University, Princeton, NJ 08544, USA
+7Department of Physics and Astronomy, University of Bologna, 40127 Bologna, Italy
+8Max Planck Institute for the Structure and Dynamics of Matter,
+Luruper Chaussee 149, 22761 Hamburg, Germany
+9Initiative for Computational Catalysis, Flatiron Institute, 162 5th Avenue, New York, NY 10010, USA
+(Dated: May 7, 2025)
+I. NEURAL NETWORK ARCHITECTURE
+A. Linear attention layers as continuous convolutions
+We consider input data in a point cloud format of density values with coordinatesri, density valuesni = n(ri)
+and quadrature weightswi where i = 1,...,N g indexes the cloud in arbitrary order. Functional inputs in this form
+are general and can be readily extracted from modern quantum chemistry software packages. This enables us to
+approximate integrals of sufficiently well-behaved functions as:
+∫
+d3rf(r)≈
+∑
+i
+wif(ri). (1)
+Global density approximations rely on the linear attention [1] mechanism for propagating information between local
+density values. In purely mathematical terms, the linear self-attention operation used in this work can be seen as a
+discretization of an integral transform with a learnable kernelK:
+ϕ′(r) =
+∫
+d3r′n(r′)K(r, r′)ϕ(r′) =
+∫
+d3r′n(r′) (Q(r)·K(r′))V (r′) (2)
+whereK has been parameterized in factorized form in order to exploit thekernel trick.
+In Eq. 2, we define the so-called queries, keys, and valuesQ,K,V ∈ R d as learnable local linear transformations of
+the input fieldϕ(r)∈ R d:
+Q(r) =WQϕ(r), K(r) =WKϕ(r) and V (r) =WVϕ(r). (3)
+The functional form of Eq. 2 should be contrasted with an equivalent definition of the standardsoftmax nonlinear
+attention [2, 3] kernel head
+Ksm(r, r′) = eQ(r)·K(r′)
+∫
+d3r′eQ(r)·K(r′) (4)
+where a similar kernel trick cannot be exploited.
+Large integration grids ofNg > 106 points are not uncommon in modern DFT calculations. Therefore, the naive
+softmax self-attention operation between all grid points with asymptotic scalingO(N 2
+g ) is prohibitively numerically
+expensive. For large point cloud datasets like densitiesn(r) on Becke grids, this is necessary to avoid materializing
+the fullNg×Ng kernel matrixK(ri, rj), incurring prohibitively large memory requirements. Instead, in Eq. 2, we
+first contractK(r) and V (r′), then perform the integral and, finally, multiply byQ(r).
+arXiv:2410.16408v2  [physics.chem-ph]  6 May 2025
+2
+Grid norm Grid norm
+RoPERoPE
+.
+Translate
+and rotateLog
+.
+Normalize RFF
+Linear
+Linear
+SiLU
+Linear
+FIG. 1. Diagrammatic representations of internal connectivities of GDA sub-components.Left: The linear attention module
+enablingthenonlocalbehaviorofresultingfunctionals. Right: Thefieldembeddingmoduleliftingthelocalfieldrepresentations
+to a high-dimentional space.
+Additionally, we apply customgrid normalization, to field projections of the input fieldϕ defined in Eq. 3 before
+performing the attention operation in Eq. 2. Grid normalization amounts to normalizing keysK and queriesQ in the
+following way:
+f(r) ↦→ f(r)√ ∫
+d3rn(r)(f(r))2
+, (5)
+in an component-wise way for multi-component fields. We note that the choice of leaving valuesV unnormalized has
+been called Fourier linear attention as opposed toGalerkin linear attention where keys and values are normalized.
+Furthermore, in order to ensure that the resulting kernelK(r− r′) =Q(r)·K(r) is purely a function of the relative
+coordinate, we employ rotary positional encoding (RoPE) [4, 5]. The RoPE mechanism relies on the composition
+propery of representationsD of the rotation groupSO(2) in two dimensions:D(α)D(α′) = D(α +α′) for anglesα
+and α′.
+We generalize the RoPE mechanism to three spatial dimensions by settingα = k· r for an input at pointr∈ R 3
+and include k∈ R 3 in the learnable parameters of the model. Therefore, we have
+D(k· r)D(−k· r′) =D(k· r)D−1(k· r′) =D(k· (r− r′)). (6)
+To construct an orthogonal representationD operating on the input field componentsϕi(r) and exploit Eq. 6, we first
+note that a trivial representation of SU(2) onR 2 is given by simple rotation matrices
+DR 2(α) =
+[
+cosα sinα
+− sinα cosα
+]
+. (7)
+Therefore, a multi-component input fieldϕ(r) with an even number of components, we define the 3D RoPE as a
+trivially reducible orthogonal representationϕ(r)↦→DR 2n(k· r)ϕ(r) with
+DR 2n(k1· r,..., kn· r) =
+
+
+cos(k1· r) sin( k1· r)
+− sin(k1· r) cos( k1· r)
+...
+cos(kn· r) sin( kn· r)
+− sin(kn· r) cos( kn· r)
+
+
+(8)
+depending onn rotation angles defined by trainable parametersK ={k1,..., kn}. The block-diagonal structure in
+Eq. 8 mixes adjacent components of the input field in a way that reflects the targetSO(2) multiplication property.
+3
+In that case, the query-key product in Eq. 2
+K(r, r′) =Q(r)·K(r′) =
+=[D(K· r)WQϕ(r)]⊤[D(K· r′)WKϕ(r)] =
+=ϕ(r)⊤(WQ)⊤D⊤(K· r)D(K· r′)WKϕ(r) =
+=ϕ(r)⊤(WQ)⊤D⊤(−K· (r− r′))WKϕ(r) =
+=K(r− r′)
+reduces the linear attention integral to a learnable continuous convolution, if we apply the 3D RoPE transformation
+as a final step just before integration.
+Finally, after the attention layer has been updated, the output fieldϕ is transformed by a component-wise gated
+multi-layer perceptron [6]:
+ϕ(r) ↦→W3 ((W1ϕ(r) + b1)⊙σ(W2ϕ(r) + b2)) + b3 (9)
+with SiLU activations [7] σ(x) = x
+1+e−x. Weights Wi and biases bi are included in trainable parameters and⊙
+indicates element-wise multiplication.
+In summary, the steps comprising one GDAblock are:
+1. Evaluate raw queries, keys and values by linear projections in Eq. 3.
+2. Normalize queries and keys using grid normalization in Eq. 5.
+3. Apply the 3D RoPE transformation in Eq. 8 to queries and keys.
+4. Evaluate the final linear attention integral in Eq. 2 using the kernel trick. Add a skip connection.
+5. Normalize [8] and apply the gated MLP in Eq. 9. Add a skip connection.
+Internal connectivity of sub-layers can be found in Fig. 1.
+B. Field embedding
+The field embedding layer is used in the GDA architecture to ensure correct symmetry properties of the learned
+model. Since the model is explicitly coordinate-dependent, we fix a coordinate system to perform the computation
+with comparable values of resultingcomputational coordinates. We choose the coordinate system in which the mean
+value (electronic dipole moment)
+µ = 1
+N
+∫
+d3rn(r) r (10)
+vanishes and the covariance matrix
+Σij = 1
+N
+∫
+d3rn(r) (ri−µi) (rj−µj) (11)
+is diagonal. After fixing translations and rotations, individual coordinates ri are independently embedded into a
+d-dimensional space as
+r↦→ξ(r) = 1√
+d
+[cos (K0r) ∥ sin (K0r)]⊤
+, (12)
+where∥ denotes vector concatenation andK0∈ R
+d
+2×3 is a trainable matrix randomly initialized with values sam-
+pled from the normal distributionN (0,σ−2). This random Fourier feature (RFF) encoding has effectively been used
+to encode high-frequency maps of continuous coordinates in kernel learning [12], and has been shown to measur-
+ably increase expressivity of various architectures in geometric deep learning [13–15], including in combination with
+transformers [16].
+The mapping r↦→ξ(r) in Eq. 12 is designed to take advantage of the (approximate) kernel trick described in the
+main text, in a related way to to the RoPE mechanism described in Eq. 8. However, we emphasize that it is often
+used outside the kernel context, as a featurization layer (calledpositional encoding) for coordinate-dependent neural
+4
+Symbol Name Value Domain Description
+L Number of blocks 3 N GDA block count
+d Field embedding
+dimension 128 N Dimension of internal field
+representations within the model
+σ RFF kernel scale 1 R +
+Gaussian scale used to
+initialize the RFF embedding layer
+η Learning rate Scheduled
+2× 10−4→ 5× 10−5 R + (R)Adam optimizer learning rate [9, 10]
+B Batch size 288 N Number of molecules used for cost
+gradient estimation
+Ne Number of epochs 4000 N Number iterations over the entire dataset
+λ Relative cost weight 1 R +
+Constant mutiplier for the potential
+matrix penalty in the main text
+˜λ Weight decay 0.01 R +
+Weight decay regularizer
+for the network parameters [11]
+α Enhancement 2 R +
+Relative increase in the number of
+features in the middle MLP layer.
+t1
+Learning rate
+annealing start
+Ne/3 N Epoch at which the learning
+rate annealing starts (see Fig. 2)
+t2
+Learning rate
+annealing end 0.95Ne N Epoch at which the learning
+rate annealing ends (see Fig. 2)
+TABLE I. The list of relevant hyperparameter choices used in this work.
+network inputs. Suppose that a convolution integral with a kernelK needs evaluation. Denoting Fourier transforms
+with hats and employing the convolution theorem in combination with Monte Carlo integration, we have:
+∫
+d3r′K(r− r′)f(r′) =
+∫ d3k
+(2π)3
+ˆK(k) ˆf(k)eik·r≈ 1
+(2π)3× 1
+Ns
+∑
+j
+ˆf(kj)eikj·r (13)
+for Ns samples kj∼ ˆK, assuming the the kernelK is a positive distribution on both sides of the Fourier transform.
+Therefore, the spread of the distribution in determines the initialization ofK0 and it is, in turn, determined by the
+inverse of the spread ofK in real space, constrained by the uncertainty relation. If we choose to initialize the kernel
+as a GaussianN, we havekj∼ exp
+(
+− 1
+2σ2k2)
+∝N (0,σ−2).
+Local density field values are embedded into ad-dimensional space as well with learnable linear projections of
+normalized values. We take local field information in the form ofn(r) and γ(r) =|∇n(r)|2 and construct
+lnn(r) = lnn(r)−⟨ lnn(r)⟩√
+⟨(lnn(r)−⟨ lnn(r)⟩)2⟩
+and lnγ(r) = lnγ(r)−⟨ lnγ(r)⟩√
+⟨(lnγ(r)−⟨ lnγ(r)⟩)2⟩
+, (14)
+where we use the density average⟨·⟩ = 1
+N
+∫
+d3r′n(r)(·), normalized to unity. In practice, we initialize
+ϕ(r) =WE
+[
+ln(n(r) +ϵ)
+ln(γ(r) +ϵ)
+]
+(15)
+withϵ = 10−4, instead of bare logarithms for numerical stability andWE∈ R d×2 are trainable parameters represented
+by trainable unit vectors in the main text. After input fields and coordinates have been independently processed, we
+combine them using learnable weightsW and biasesb
+ϕ(r)↦→W′(ϕ(r)⊙σ(Wξξ(r) +bξ)) +b′ . (16)
+to produce final density embeddings. We useσ = SiLU as an element-wise nonlinear activation function [7]. A list of
+all relevant hyperparameters used in this work can be found in table IB. A diagram of the overall connectivuty of the
+embedding layer can be found in the right panel of Fig. 1.
+5
+0 500 1000 1500 2000 2500 3000 3500 4000
+Epoch t
+0.00006
+0.00008
+0.00010
+0.00012
+0.00014
+0.00016
+0.00018
+0.00020Learning rate 
+ t1 t2
+0
+f
+FIG. 2. The learning rate scheduling used to optimize the full GDA model.
+II. OPTIMIZATION AND CONVERGENCE
+A. Neural-network training
+As noted in the main text, the GDA neural network was trained withL = 3 blocks, internal field embedding
+dimension d = 128 , totaling 645000 parameters. The rectified Adam [9] (RAdam) [10] optimizer was used for
+Ne = 4000 epochs with learning rate decreasing fromηi = 2× 10−4 to ηf = 5× 10−5 using a customized cosine
+annealing schedule defined as
+ηt =
+
+
+
+ηi, if t<t 1
+ηf + (ηi−ηf) cos2
+(
+π
+2
+t−t1
+t2−t1
+)
+, if t1≤t≤t2
+ηf, if t>t 2
+(17)
+for epocht. The schedule is shown in Fig. 2. We find that decreasing the learning rate during the course of training
+helps fine-tune the model in the later epochs when the loss landscape changes at smaller scales. We sett1 = Ne/3
+and t2 = 0.95Ne.
+B. Self-consistent field optimization from first principles
+We use PySCF [17, 18] for first-principles optimizations of molecular densities, where the default method is the
+standard SCF Pulay mixing or direct inversion in the iterative subspace (DIIS) [19]. Using that method, we optimize
+a random molecule from the training dataset a total of six times – three times with library [20] versions of targeted
+meta-GGA functionals [21–23] and three times with the GDA substitutionτ→ τθ. Results can be seen in the left
+panel of Fig. 3.
+We note that r2SCAN and TPSS converge in a similar number of mixing iterations to the original functionals,
+while SCAN (included for comparison) appears to be more sensitive to numerical errors associated with the GDA
+approximation. We report that this trend persists in most of the other molecules that we examined more closely.
+III. NUMERICAL PERFORMANCE BENCHMARKS
+In this subsection, we state some numerical heuristics when comparing the efficiency of the GDA approximation
+when compared to the parent meta-GGA functional. We note that, like many computational benchmarks, it is difficult
+to control all variables contributing to practical wall-clock times. That is especially true for the case of DFT within
+the context of parametrized models. Such modern AI models are accelerated using graphical processing units (GPUs),
+offering speedups coming massive parallelism for some operations (e.g. matrix multiplication).
+Therefore, any fair comparison between efficient implementations oftraditional and machine-learned density and
+orbitalfunctionalswillalmostcertainlybe apples-to-oranges tosomedegree. Resultschangewithdifferent(andrapidly
+evolving) hardware, suffer from CPU-GPU communication overhead, just to name a few factors. Additionally, desired
+6
+0 2 4 6 8 10 12 14 16
+DIIS iteration
+10 4
+10 3
+10 2
+10 1
+E E0 (a.u.)
+DIIS optimization for C4H8N2O
+r2SCAN
+GDA-r2SCAN
+TPSS
+GDA-TPSS
+SCAN
+GDA-SCAN
+3 × 101 4 × 101 6 × 101
+N
+100
+101
+Wall time (s)
+t N3
+t N2
+libXC-r2SCAN
+GDA-r2SCAN
+3 × 101 4 × 101 6 × 101
+N
+t N3
+t N2
+libXC-TPSS
+GDA-TPSS
+100
+101
+102
+103
+r2SCAN-GDA / r2SCAN
+100
+101
+102
+103
+TPSS-GDA / TPSS
+100
+101
+102
+103
+r2SCAN-GDA / PBE
+0.5
+ 0.0 0.5 1.0 1.5 2.0 2.5
+SCF iteration relative speedup
+100
+101
+102
+103
+TPSS-GDA / PBE
+Number of test systems
+100
+101
+102
+103
+r2SCAN-GDA / r2SCAN
+100
+101
+102
+103
+TPSS-GDA / TPSS
+100
+101
+102
+103
+r2SCAN-GDA / PBE
+0.5
+ 0.0 0.5 1.0 1.5 2.0 2.5
+Relative speedup
+100
+101
+102
+103
+TPSS-GDA / PBE
+Number of test systems
+FIG. 3. Convergence and numerical performance properties of the GDA functionals.Top left: Convergence properties of the
+DIIS [19] optimization used in PySCF [17, 18], on an example of a random molecule from the test dataset.Top right: Total
+wall clock time required for SCF convergence as a function of the number of electronsN. We observe scaling consistent with
+the expected O(N 3) in the large-N limit. Bottom left: Relative speedups defined in Eq. 18 for individual SCF iterations. We
+observe that the GDA approximation offers up to50% faster SCF iterations while still not being as efficient as the representative
+pure-density functional (PBE).Bottom right: Relative speedups for total wall clock times. We see that, within our hardware
+constraints, the GDA approximation offers minor speedups at best. We note that these results are extremely hardware and
+software dependent. Additionally, we expect that the more fine-tuned models trained on specialized data sets will improve in
+performance as well as benefit from more optimizations in the GDA code under development.
+convergenceaccuracyandtargetprecisionmayplayanimportantroleindeterminingtheoutcomesofsuchcomparisons
+because modern GPU hardware tends to be heavily optimized for single-precision floating point operations.
+Our testing setup reflects a workstation setup with an AMD Ryzen Threadripper 7970X 32-core CPU, Nvidia
+RTX 4500 (Ada Generation) GPU. Numerical run-time data was collected from independent calculations on 10% of
+the total QM7 [24, 25] dataset discussed in the main text. Heuristics on relative runtime speedups, data on SCF
+convergence, and individual iteration efficiency can be found in Fig. 3.
+To quantify the performance difference, we define therelative speedup as
+r = tX−tref
+tref
+(18)
+for a DFT calculation takingtX time using the GDA functional X, compared against a reference calculationtref. In
+Fig. 3, we compare the performance of GDA approximations against target meta-GGAs as well as PBE [26] as a
+representative of the pure-density functional (GGA) family.
+Within the scope of our tests, we observe that GDA models are more efficient than their parent functionals on
+average, based on timings of individual SCF iterations. In the case of TPSS, we observe a more consistent performance
+7
+boost (up to50%), in addition to the results presented in the main text. In terms of total (wall clock) times, we see
+that GDA approximations offer moderate speedups for the QM7 training set by requiring a few extra SCF iterations
+than reference functionals. Heuristically, we observe that this can be controlled by changing the gradient penalty
+term couplingλ in the cost function presented in the main text. We expect that the transferability of GDA models
+allows fine-tuning on more specific datasets where additional performance gains can be accessed.
+Within the available hardware constraints, we observe that the overall performance gain of GDA approximation
+puts them somewhere between traditional meta-GGA and GGA functionals, with overall scaling still consistent with
+the expected asymptoticO(N 3).
+IV. DENSITY FUNCTIONAL THEORY
+A. Kohn-Sham density functional theory
+Assetupinthemaintext, weconsiderisolatedmolecularsystems. ADFTcalculation[27]outputsanapproximation
+to the ground state densityn0 minimizing the total energy:n0(r) = argminnE[n] where
+E[n] =T [n] +Eext[n] +EH[n] +Exc[n] (19)
+Known terms in the total energy functionalE[n] given in Eq. 19 are the external contributionEext[n]
+Eext[n] =
+∫
+d3rn(r)vext(r) (20)
+capturing the effects of the atomic Coulomb interactionvext(r) and the direct Hartree component capturing the
+classical electronic Coulomb interaction:
+EH[n] = 1
+2
+∫
+d3r
+∫
+d3r′ n(r)n(r′)
+|r− r′| . (21)
+Kohn-Sham DFT [28] framework assumes that the densityn0 comes from an effective system of non-interacting
+electrons with orbitals Ψ ={ψk(r)|k = 1,...,N } where N is the number of electrons in the system. In that case,
+the kinetic term in Eq. 19 evaluates to
+T [n] ↦→TKS[n] =
+∑
+a
+na
+∫
+d3r ψ∗
+a(r)
+(
+−1
+2∇2
+)
+ψa(r) = 1
+2
+∑
+a
+na
+∫
+d3r|∇ψa(r)|2 . (22)
+After the desired kinetic and XC functional has been specified, the constrained minimization of the total energy
+functional given in Eq. 19 can proceed, enforcing orbital normalization with Lagrange multipliersϵa:
+L[Ψ] =E[Ψ] +
+∑
+a
+ϵa
+∫
+d3r|ψa(r)|2 =TKS[Ψ] +U[Ψ] +
+∑
+a
+ϵa
+∫
+d3r|ψa(r)|2 (23)
+where we choose to trivially rewrite all density functionals as orbital functionals and collect all of the different kinds
+of potential energy intoU[Ψ] =Eext[Ψ] +EH[Ψ] +Exc[Ψ]. Trivial functional differentiation yields:
+δL[Ψ]
+δψ∗a(r) =
+(
+−1
+2∇2 +veff[n](r)−ϵa
+)
+ψa(r) = ⇒
+(
+−1
+2∇2 +veff[n](r)
+)
+ψa(r) =ϵaψa(r), (24)
+known as the Kohn-Sham (KS) equation. Mathematically speaking, the KS Eq. 24 is a non-linear partial differential
+equation for the unknown orbitalsΨ. The source of non-linearity, other than the classical Coulomb term, comes from
+exchange and correlation effects built into the approximate functionalExc that gives rise to the effective one-electron
+potential
+veff(r) = δU [n]
+δn(r) =vext(r) +
+∫
+d3r′ n(r′)
+|r− r′| + δExc[n]
+δn(r) . (25)
+The last term in Eq. 25 is sometimes labeled as the XC potentialvxc(r) and in it highlights the importance of being
+able to calculate functional derivatives of the XC functional efficiently.
+Numerically, Eq. 24 is usually solved in a self-consistent (SCF) manner, ensuring thatn(r) = ∑
+ana|ψa(r)|2. The
+SCF procedure takes the form of fixed-point iteration of the following two steps, starting from the initial guess for
+n(r):
+8
+• Update orbital estimatesΨ by solving Eq. 24 for a fixed density.
+• Update density estimate throughn(r) = ∑
+ana|ψa(r)|2.
+The loop is terminated after successive density and energy estimates stop changing beyond a given tolerance.
+B. Calculations in the basis of atomic orbitals
+For isolated molecular systems, Gaussian basis sets are a common approach of representing atomic orbitals used
+in density expansions. In this subsection, we derive all of the expressions used during training to evaluate the GDA
+effective one-particle Hamiltonian
+Heff = p2
+2 +veff[n](r) (26)
+from the neural-network functional using automatic differentiation, withp being the one-particle momentum operator.
+With the definition of Eq. 26, the KS equations simply readHeff|ψa⟩ =ϵa|ψa⟩.
+In the following, we use Greek indices{µ,ν,... } for the fixed atomic orbital (AO) basis and latin{a,b,... } indices
+for the molecular orbital (MO) basis. The two bases are related by the LCAO (linear combination of atomic orbitals)
+coefficients C as|ψa⟩ = ∑
+µCµa|χµ⟩. The density matrixΓ is usually defined in the AO basis through
+n(r) =
+∑
+µν
+Γµνχµ(r)χν(r). (27)
+The full effective Hamiltonian matrix in the AO basis decomposes as:
+Fµν =⟨χµ|Heff|χν⟩ = ∂E
+∂Γµν
+=Tµν +Vµν +Jµν +Xµν , (28)
+where T, V, J, and X are kinetic, nuclear, Coulomb and XC matrices, respectively. These quantities are readily
+available in quantum chemistry software packages and we saveT as a part of the training dataset. The Kohn-Sham
+kinetic energy functional is of special interest in this work. Employing partial integration, we get
+T [n] =
+∑
+a
+na⟨ψa| p2
+2 |ψa⟩ =
+=
+∑
+a
+na
+∫
+d3rψ∗
+a(r)
+(
+−1
+2∇2
+)
+ψa(r) = 1
+2
+∑
+a
+na
+∫
+d3r|∇ψa(r)|2 =
+=
+∑
+µν
+(∑
+a
+naCµaCνa
+)
+× 1
+2
+∫
+d3r∇χµ(r)·∇χν(r) =
+∑
+µν
+ΓµνTµν = Tr (ΓT ) ,
+where we identify the kinetic energy matrixTµν that goes into the cost function defined in the main text. Other
+similar matrices in the AO basis work out to be:
+Tµν = 1
+2
+∫
+d3r∇χµ(r)·∇χν(r), V µν =
+∫
+d3r vext (r)χµ(r)χν(r) and
+Jµν =
+∑
+αβ
+Γαβ
+∫
+d3r
+∫
+d3r′ χµ(r)χν(r)χα(r′)χβ(r′)
+|r− r′| .
+(29)
+The XC matrixX is the only component we need to evaluate using from the GDA functional in order to regularize
+the training loop. We only need to evaluate the derivative of the total XC energy with respect to the input density
+matrix because:
+ˆXµν = ∂ ˆExc
+∂Γµν
+=
+∫
+d3r δ ˆExc
+δn(r)
+∂n(r)
+∂Γµν
+=
+∫
+d3r ˆvxc(r)χµ(r)χν(r). (30)
+where we put hats on quantities estimated using the GDA functional approximation. These derivatives can be
+calculated efficiently using automatic differentiation at the cost of evaluating the functional itself.
+[1] Shuhao Cao, “Choose a Transformer: Fourier or Galerkin,” (2021), arXiv:2105.14995 [cs, math].
+9
+[2] Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser, and Illia
+Polosukhin, “Attention Is All You Need,” (2017), arXiv: 1706.03762.
+[3] Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas Unterthiner, Mostafa
+Dehghani, Matthias Minderer, Georg Heigold, Sylvain Gelly, Jakob Uszkoreit, and Neil Houlsby, “An Image is Worth
+16x16 Words: Transformers for Image Recognition at Scale,” (2020), arXiv:2010.11929.
+[4] Jianlin Su, Yu Lu, Shengfeng Pan, Ahmed Murtadha, Bo Wen, and Yunfeng Liu, “RoFormer: Enhanced Transformer with
+Rotary Position Embedding,” (2023), arXiv:2104.09864.
+[5] Zijie Li, Kazem Meidani, and Amir Barati Farimani, “Transformer for Partial Differential Equations’ Operator Learning,”
+(2023), arXiv:2205.13671.
+[6] Noam Shazeer, “GLU Variants Improve Transformer,” (2020), arXiv:2002.05202.
+[7] Stefan Elfwing, Eiji Uchibe, and Kenji Doya, “Sigmoid-Weighted Linear Units for Neural Network Function Approximation
+in Reinforcement Learning,” (2017), arXiv:1702.03118.
+[8] Jimmy Lei Ba, Jamie Ryan Kiros, and Geoffrey E. Hinton, “Layer Normalization,” (2016), arXiv: 1607.06450.
+[9] Diederik P. Kingma and Jimmy Lei Ba, “Adam: A method for stochastic optimization,” in3rd International Conference
+on Learning Representations, ICLR 2015 - Conference Track Proceedings (International Conference on Learning Repre-
+sentations, ICLR, 2015).
+[10] Liyuan Liu, Haoming Jiang, Pengcheng He, Weizhu Chen, Xiaodong Liu, Jianfeng Gao, and Jiawei Han, “On the Variance
+of the Adaptive Learning Rate and Beyond,” (2019), arXiv:1908.03265.
+[11] Ilya Loshchilov and Frank Hutter, “Fixing Weight Decay Regularization in Adam,” (2017), arXiv:1711.05101.
+[12] Ali Rahimi and Benjamin Recht, “Random Features for Large-Scale Kernel Machines,” inAdvances in Neural Information
+Processing Systems, Vol. 20, edited by J. Platt, D. Koller, Y. Singer, and S. Roweis (Curran Associates, Inc., 2007).
+[13] Ben Mildenhall, Pratul P. Srinivasan, Matthew Tancik, Jonathan T. Barron, Ravi Ramamoorthi, and Ren Ng, “NeRF:
+Representing Scenes as Neural Radiance Fields for View Synthesis,” (2020), arXiv:2003.08934.
+[14] Kyle Gao, Yina Gao, Hongjie He, Dening Lu, Linlin Xu, and Jonathan Li, “NeRF: Neural Radiance Field in 3D Vision,
+A Comprehensive Review,” (2022), arXiv: 2210.00379.
+[15] Jianqiao Zheng, Sameera Ramasinghe, and Simon Lucey, “Rethinking Positional Encoding,” (2021), arXiv: 2107.02561.
+[16] Yang Li, Si Si, Gang Li, Cho-Jui Hsieh, and Samy Bengio, “Learnable Fourier Features for Multi-Dimensional Spatial
+Positional Encoding,” (2021), arXiv:2106.02795.
+[17] Qiming Sun, Timothy C. Berkelbach, Nick S. Blunt, George H. Booth, Sheng Guo, Zhendong Li, Junzi Liu, James D.
+McClain, Elvira R. Sayfutyarova, Sandeep Sharma, Sebastian Wouters, and Garnet Kin-Lic Chan, “PySCF: the Python-
+based simulations of chemistry framework,” WIREs Computational Molecular Science8, e1340 (2018).
+[18] Qiming Sun, Xing Zhang, Samragni Banerjee, Peng Bao, Marc Barbry, Nick S. Blunt, Nikolay A. Bogdanov, George H.
+Booth, Jia Chen, Zhi-Hao Cui, Janus J. Eriksen, Yang Gao, Sheng Guo, Jan Hermann, Matthew R. Hermes, Kevin Koh,
+Peter Koval, Susi Lehtola, Zhendong Li, Junzi Liu, Narbe Mardirossian, James D. McClain, Mario Motta, Bastien Mussard,
+Hung Q. Pham, Artem Pulkin, Wirawan Purwanto, Paul J. Robinson, Enrico Ronca, Elvira R. Sayfutyarova, Maximilian
+Scheurer, Henry F. Schurkus, James E. T. Smith, Chong Sun, Shi-Ning Sun, Shiv Upadhyay, Lucas K. Wagner, Xiao
+Wang, Alec White, James Daniel Whitfield, Mark J. Williamson, Sebastian Wouters, Jun Yang, Jason M. Yu, Tianyu Zhu,
+Timothy C. Berkelbach, Sandeep Sharma, Alexander Yu. Sokolov, and Garnet Kin-Lic Chan, “Recent developments in
+the PySCF program package,” The Journal of Chemical Physics153, 024109 (2020).
+[19] Péter Pulay, “Convergence acceleration of iterative sequences. the case of scf iteration,” Chemical Physics Letters73,
+393–398 (1980).
+[20] Miguel A. L. Marques, Micael J. T. Oliveira, and Tobias Burnus, “Libxc: A library of exchange and correlation functionals
+for density functional theory,” Computer Physics Communications183, 2272–2281 (2012).
+[21] Jianwei Sun, Adrienn Ruzsinszky, and John P. Perdew, “Strongly Constrained and Appropriately Normed Semilocal
+Density Functional,” Physical Review Letters115, 036402 (2015).
+[22] James W. Furness, Aaron D. Kaplan, Jinliang Ning, John P. Perdew, and Jianwei Sun, “Accurate and Numerically Efficient
+r2SCAN Meta-Generalized Gradient Approximation,” The Journal of Physical Chemistry Letters11, 8208–8215 (2020).
+[23] Jianmin Tao, John P. Perdew, Viktor N. Staroverov, and Gustavo E. Scuseria, “Climbing the Density Functional Ladder:
+Nonempirical Meta–Generalized Gradient Approximation Designed for Molecules and Solids,” Physical Review Letters91,
+146401 (2003).
+[24] Lorenz C. Blum and Jean-Louis Reymond, “970 Million Druglike Small Molecules for Virtual Screening in the Chemical
+Universe Database GDB-13,” Journal of the American Chemical Society131, 8732–8733 (2009).
+[25] Matthias Rupp, Alexandre Tkatchenko, Klaus-Robert Müller, and O. Anatole Von Lilienfeld, “Fast and Accurate Modeling
+of Molecular Atomization Energies with Machine Learning,” Physical Review Letters108, 058301 (2012).
+[26] John P. Perdew, Kieron Burke, and Matthias Ernzerhof, “Generalized Gradient Approximation Made Simple,” Physical
+Review Letters77, 3865–3868 (1996).
+[27] Richard M Martin,Electronic structure: basic theory and practical methods (Cambridge university press, 2020).
+[28] W. Kohn and L. J. Sham, “Self-Consistent Equations Including Exchange and Correlation Effects,” Physical Review140,
+A1133–A1138 (1965).

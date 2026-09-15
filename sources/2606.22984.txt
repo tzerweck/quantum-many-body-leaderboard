@@ -1,0 +1,1872 @@
+                           Scalable Physics-Inspired Transformers for Spin Glasses
+
+                   Lu Zhong,1,∗  Wenli Duan,1,∗  Jing Liu,2, 3,†  Pan Zhang,3, 4,‡  and Ying Tang1, 5, 6, 7,§
+                                              1Institute  of  Fundamental  and  Frontier  Sciences,
+                         University  of  Electronic  Science  and  Technology  of  China,  Chengdu  611731,  China
+  2School of Physical Science and Technology, Beijing University of Posts and Telecommunications, Beijing 100876, China
+                      3Institute  of  Theoretical  Physics,  Chinese  Academy  of  Sciences,  Beijing  100190,  China
+                                       4School  of  Fundamental  Physics  and  Mathematical  Sciences,
+                               Hangzhou  Institute  for  Advanced  Study,  UCAS,  Hangzhou  310024,  China
+             5School  of  Physics,  University  of  Electronic  Science  and  Technology  of  China,  Chengdu  611731,  China
+                6Key  Laboratory  of  Quantum  Physics  and  Photonic  Quantum  Information,  Ministry  of  Education,
+                         University  of  Electronic  Science  and  Technology  of  China,  Chengdu  611731,  China
+                    7Non-classical  Information  Science  Basic  Discipline  Research  Center  of  Sichuan  Province,
+                         University  of  Electronic  Science  and  Technology  of  China,  Chengdu  611731,  China
+                   Efficient sampling of the Boltzmann distribution in frustrated spin glasses is central to statistical
+                mechanics and combinatorial optimization.  Despite advances in machine-learning-based approaches,
+                two issues persist:  limited understanding of why variational models fail to benefit from increased
+                scale, unlike the monotonic scaling law of large language models; and high computational cost on
+                large systems that negates advantages over classical sampling methods.  Here, we develop a physics-
+                inspired transformer with interpretable sparse attention and spin-tailored positional embeddings to
+                address these challenges.  By further leveraging FlashAttention for parallel ancestral sampling,  it
+                achieves up to two orders of magnitude speedup over vanilla variational autoregressive networks,
+                enabling neural-network simulations of spin-glass systems to unprecedented sizes on a single GPU. It
+                can resolve full probability distributions, free energies, and overlap statistics across temperatures, for
+                Sherrington-Kirkpatrick and 2D or 3D Edwards-Anderson models, where existing machine-learning
+                methods encounter limitations at certain temperatures.  This framework thus establishes a scalable
+                paradigm for frustrated spin-glass systems.
+
+
+
+
+                                                             I.    INTRODUCTION
+
+   Understanding the collective behavior of high-dimensional spin-glass models remains a central problem in statistical
+mechanics and combinatorial optimization [1–4].  The paradigm spin-glass models, such as the Sherrington-Kirkpatrick
+(SK) [5] and Edwards-Anderson (EA) [6], exhibit frustration, disorder, and rugged energy landscapes.  Characterizing
+these systems, especially in high dimensions and with large sizes, requires resolving exponentially increasing probability
+distributions over spin configurations. The conventional sampling approaches, including Markov chain Monte Carlo [7],
+often struggle to equilibrate in the rugged energy landscape, especially near phase transitions where correlation times
+become extremely long.  Consequently, understanding the free-energy landscape, ground state, and phase structure of
+general spin glasses remains an outstanding theoretical and computational problem in physics.
+   Recent advances in machine learning have opened new possibilities for modeling complex spin-glass systems.  In
+particular,  variational  autoregressive  networks  (VANs)  [8]  offer  a  powerful  method  by  enabling  parallel  ancestral
+sampling from learned Boltzmann distributions.  VANs and related generative models have been applied to equilibrium
+statistical mechanics [9,10], quantum many-body systems [11–17], and nonequilibrium dynamics [18–20]. Yet a critical
+limitation  lies  in  the  model  scalability:  unlike  large  language  models,  which  often  exhibit  consistent  performance
+gains  with  increasing  scale,  autoregressive  models  for  spin-glass  systems  show  no  clear  scaling  advantage.   Deeper
+architectures  or  more  sophisticated  designs  (e.g.,  transformers)  do  not  necessarily  yield  better  performance,  while
+often lacking the physical inductive biases needed to capture spin correlations.  Thus, practitioners have predominantly
+relied on simpler architectures such as MADE [21] or NADE [22,23],  whereas these models suffer from degrading
+performance over increasing system sizes, restricting them to relatively small systems.
+   Besides  modeling  the  full  probability  distribution  at  finite  temperature,  the  scalability  bottleneck  also  limits
+machine-learning methods in the task of searching for ground states at low temperature.  The VAN-assisted Monte
+Carlo  simulations  have  been  used  but  found  to  struggle  on  computationally  hard  problems  [24],  motivating  more
+
+
+
+
+∗ These authors contributed equally
+† Corresponding authors:jing.liu@bupt.edu.cn
+‡ Corresponding authors:panzhang@itp.ac.cn
+§ Corresponding authors:jamestang23@gmail.com
+                                                                                                                                                           2
+
+dedicated graph-neural architectures to capture long-range correlations [25].  In parallel, reinforcement-learning ap-
+proaches  for  searching  spin-glass  ground  states  at  low  temperatures  have  also  been  proposed  [26],  although  their
+accuracy was debated [27, 28].  This  trade-off between  architectural expressivity  and computational feasibility has
+left large-scale SK and EA models beyond the reach of the previous machine-learning methods.  Developing scalable
+neural-network approaches that circumvent these barriers while faithfully capturing complex probability distributions
+across temperatures remains an urgent and unsolved problem.
+   Here, we address these challenges by introducing a physics-inspired transformer built on an interpretable sparse-
+attention mechanism motivated by large language models such as DeepSeek [29].  This attention pattern explicitly
+encodes  the  interaction  topology  of  spin  systems,  enabling  a  more  faithful  representation  of  lattice  geometry  and
+coupling structure.  We also design positional embeddings tailored to spin systems suitable for modeling long-range
+correlations.  We further include a hardware-efficient implementation:  by leveraging FlashAttention kernels together
+with key-value (KV) caching for efficient autoregressive sampling, as developed for modern transformers [30–32], the
+present framework makes training and sampling practical at substantially larger scales.  To strengthen performance
+in  challenging  low-temperature  regimes,  we  introduce  a  training  strategy  that  combines  local  Monte  Carlo  refine-
+ment with self-distillation, improving optimization stability while promoting exploration among low-energy valleys.
+Combined with modern optimization techniques [33], this framework delivers substantial gains in both computational
+efficiency and accuracy.
+   The present framework accurately resolves free energies, Boltzmann and overlap distributions across temperatures
+for the paradigmatic SK and EA spin-glass models in both two and three dimensions. It also identifies low-temperature
+ground states that remain challenging for previous reinforcement-learning approaches [26–28].  On a single GPU, it
+scales  to  systems  with  4,096  spins  (Table.I),  extending  the  accessible  size  range  beyond  previous  neural-network
+methods  [34–36].   It  achieves  up  to  two  orders  of  magnitude  speedup  over  the  vanilla  VAN  [8]  and  improves  on
+recent  natural-gradient  variants  [35].   Beyond  the  recent  observations  underlying  Global  Annealing  (GA)  [37],  our
+results further show that machine-learning-assisted sampling can be robust over a broader temperature range, while
+avoiding  expensive  population-based  updates  required  by  annealing-based  approaches.   These  results  establish  a
+scalable framework for exploring glassy phase structure in frustrated spin systems at unprecedented scales.
+
+TABLE I. Comparison of the largest system size reported for the machine-learning methods on the benchmark models.  Ap-
+proaches include the vanilla VAN [8], variational neural annealing (VNA) [34], ng-VAN [35], two-body interactions (TwoBo) [36],
+nearest-neighbors neural network (4N) [25], GA [37], and our FlashVAN (on a single GPU). Values represent the maximum
+system sizeNreported.  NA: Not available, as it was not reported in the original literature.
+
+Model                  VAN                 VNA                 ng-VAN                 TwoBo                 4N                   GA                  FlashVAN
+SK                        100                   100                       30                        NA                    NA                  NA                        256
+2D EA                  NA                  3,600                    NA                      1,024                  256                  NA                      3,600
+3D EA                  NA                   NA                      NA                      1,728                  NA                 2,744                     4,096
+
+
+
+
+                                                                   II.    RESULTS
+
+                                                                   A.    Framework
+
+   Consider a spin system of sizeN, whose configurationsσ∈{±1}                     N  follow the Boltzmann distribution
+
+                                                                   p(σ) =   e−βE(σ)Z  ,                                                                         (1)
+
+whereβ= 1/Tis the inverse temperature andZis the partition function.  The VAN [8] can approximate this target
+distribution through a tractable autoregressive factorization,q           θ(σ) =  QNi=1 qθ(σ i|σ <i), allowing for direct sampling.
+It can yield accurate estimates of thermodynamic observables, such as the free energyF=−(1/β) lnZby minimizing
+the Kullback-Leibler (KL)-divergence betweenq   θ andp, and the ground-state energyE                0 = minσE(σ).
+   Despite its success, existing VANs still exhibit notable limitations in both representational focus and computational
+scalability [8].  First, current transformer-based VANs tend to focus excessively on the content information encoded in
+spin states, while paying insufficient attention to the positional relationships among spins.  A key distinction between
+spin systems and natural language lies in the nature of their tokens:  tokens in natural language carry rich semantic
+meaning,  whereas spin tokens are merely symbolic states (+1/−1) conveying limited intrinsic information.  That
+is,  for spin systems,  it is not the content of each token but its positional and relational structure that defines the
+physical configuration.  Several recent studies have also noted that detailed pairwise correlations between spin values
+A    Framework                                                                                                                                                              3
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+FIG. 1.The present framework facilitates solving spin-glass problems.(a) Schematic illustration of representative
+spin-glass systems.  (b) Optimization workflow: a parameterized joint distribution, termed FlashVAN, is trained to approximate
+the Boltzmann distribution of a given Hamiltonian by minimizing the KL-divergence, with free-energy gradients taken with
+respect to the model parameters.  (c) Architecture:  featuring CUDA kernel acceleration modules, a physics-inspired attention
+mechanism, and a tailored positional embedding design, which together enhance expressivity and accuracy.  (d) Training results
+show the convergence of the free energy and ground-state energy under the temperature-annealing scheme.  (e) Computational
+performance,  demonstrating  a  substantial  speedup  over  vanilla  VAN  approaches  including  faster  sampling  procedures,  and
+favorable scaling of computational time with system sizes.
+
+
+are often irrelevant for modeling global distributions [38]; for example, replacing the attention weights with a factored
+(query-key-independent)  attention  matrix  can  still  yield  competitive  performance  in  certain  structured  tasks  [39].
+Second, existing VAN implementations, particularly those based on transformer architectures, have not leveraged the
+latest hardware-efficient algorithms that have become standard in large language models (LLMs).  As a result, their
+scalability remains constrained by quadratic attention complexity and large memory overhead.
+   To  tackle  these  challenges,  we  propose  a  physics-inspired,  position-aware,  and  hardware-efficient  autoregressive
+model designed for large-scale spin systems.  We term it Flash Variational Autoregressive Network (FlashVAN) to
+highlight  its  accelerated  computational  performance  and  its  variational  formulation.   Specifically,  we  employ  the
+physics-inspired sparse attention and develop a new positional embedding mechanism tailored for spin systems, which
+provides  richer  structural  representations  and  effectively  characterizes  spatial  correlations  across  different  models,
+A    Framework                                                                                                                                                              4
+
+including two-dimensional (2D) and three-dimensional (3D) lattices.  In addition, we integrate FlashAttention-based
+acceleration [31,32], which substantially reduces the computational cost of parallel ancestral sampling and autore-
+gressive forward evaluation, enabling efficient training at unprecedented system sizes for neural-network approaches
+to spin-glass systems on a single GPU.
+
+
+
+                                                     1.    Physics-inspired sparse attention
+
+  The  design  of  our  attention  mechanism  is  physically  rooted  in  the  locality  of  interactions  inherent  to  two-body
+Hamiltonians.  Standard autoregressive transformer architectures employ full causal self-attention,  which evaluates
+global  dependencies  across  the  entire  generated  sequence.   However,  the  local  topological  structure  of  lattice  spin
+models allows for rigorous truncation of this attention span without compromising representational accuracy (Supple-
+mentary Figure 2).  This strategy parallels other physics-inspired autoregressive frameworks, such as TwoBo [36] and
+tensor network Monte Carlo algorithms [40–42], which explicitly exploit the properties of exact conditional probability
+in systems with nearest-neighbor interactions.  More specifically, for a 2D spin model with open boundary conditions,
+the exact conditional probabilityp(σ   i|σ <i) is entirely determined by the boundary spins that separate the sampled
+region from the unsampled region (Fig.1c).  Consequently, predicting the state of siteidoes not require an attention
+mechanism spanning the entire sequence history fromi−1 down to 1.  Instead, the essential physical dependencies
+are strictly localized within a receptive field that corresponds to the most recentO(L) sites.
+  Guided by this physical intuition, FlashVAN can implement a physics-inspired sparse attention mechanism restricted
+to  a  local  window  of  sizeL.   This  truncation  reduces  the  memory  footprint  and  computational  complexity  of  the
+attention block.  Crucially, this structured sparsity pattern integrates seamlessly with FlashAttention kernels, which
+facilitates further acceleration of training.  This physical insight extends naturally to higher dimensions, e.g., in a 3D
+lattice of linear sizeL, the effective boundary mediating conditional dependence scales with the cross-sectional area,
+which yields a requisite attention window of sizeO(L             2) (Section IA, Supplementary Information).
+
+
+
+                                                            2.    Positional embedding
+
+  We  find  that  the  performance  of  VANs  is  highly  sensitive  to  the  representation  of  positional  information.   To
+investigate this sensitivity, we systematically evaluated a range of positional encoding strategies across physical models
+with  varying  topological  complexities.   For  the  Ising  model,  which  is  characterized  by  a  simple  lattice  structure,
+a  learnable  additive  (absolute)  positional  embedding  is  sufficient.   However,  for  the  more  intricate  Sherrington–
+Kirkpatrick (SK) model, additive embeddings induce pronounced oscillations in the variational free-energy convergence
+at low temperatures (Supplementary Figure 4).  For more structured spin systems, such as the 2D and 3D Edwards–
+Anderson  (EA)  models,  incorporating  relative  positional  information  yields  additional  empirical  gains,  suggesting
+that relative positional embeddings, such as 2D or 3D RoPE [43], are also a promising design choice.  One possible
+explanation is that, for networks with limited depth, encoding positional variance solely through additive offsets tends
+to conflate spatial and state information, undermining the model’s ability to resolve individual spins and triggering
+these instabilities.  To overcome this, we design a concatenated positional embedding (Fig.1c) that integrates token
+and positional vectors into a unified yet distinct representation.  This approach improves convergence across a broad
+range of temperatures and leads to higher accuracy.
+  The training results of FlashVAN advance our understanding of the role of positional embeddings in VANs:  rather
+than attributing instability to a lack of expressivity in autoregressive models,  we find that providing accurate and
+sufficient  positional  information during model design  and training is crucial  for stable and  efficient learning.  This
+suggests that, in non-language modalities such as spin systems, performance gains may come primarily from properly
+encoding positional structure rather than from content-based embeddings as in natural language processing.  A more
+detailed analysis of the effects of different positional embeddings is provided in Methods Sec.IV A 2.
+
+
+
+                                                             3.    Overall architecture
+
+  We next introduce the overall architecture of FlashVAN, which features a specialized positional embedding scheme
+and is equipped withFlashAttention-2[44] for efficient training.  The backbone of FlashVAN follows the standard
+transformer framework:  as in other transformer-based neural ansatzes [45–47], it consists of a stack of decoder layers,
+each containing a self-attention layer followed by a feed-forward network (FFN). Fig.1c provides an overview of the
+model architecture.
+A    Framework                                                                                                                                                              5
+
+  Given a spin configurationσ={σ                                    1,σ2,...,σN}of lengthN, each spin is linearly projected into ad-dimensional
+embedding space using the concatenated positional embedding as in Eq. (15), producing a sequence of input vectors
+(x  1,x 2,...,x N).  For higher-dimensional spin systems (e.g.,N=L                 2  in 2D andN=L               3  in 3D), the configuration
+is flattened into a 1D sequence using a raster-scan ordering over the spatial dimensions.  In all cases, the resulting
+sequence is processed in the same manner as the 1D input.  Each decoder layer contains a masked multi-head attention
+layer followed by an FFN. For the attention layer, letn  h denote the number of attention heads,d     h the dimension per
+head, andh   t∈R d the input to the attention block for thet-th token:
+
+                                                    □t =W  □ht = [□ t,1  ;□ t,2  ;...;□  t,nh],                                                          (2)
+
+where□     t∈{q t,k t,v t},W  □∈{W Q,W K,W V}∈R dhnh×d    are the projection matrices for queries, keys, and values,
+respectively, and [·;·] denotes concatenation.  The attention outputs are computed as:
+
+                                                               tX              q⊤t,ikj,i  !
+                                                     ot,i =       Softmaxj         √dh       vj,i,                                                  (3)
+                                                             j=1
+                                                      ut = [o t,1  ;o t,2  ;...;o  t,nh].
+
+Different from the standard transformer architecture, the final output projectionW    O is bypassed.
+  To  accelerate  computation,  we  employ  theFlashAttention-2CUDA  kernel  for  efficient  attention  calculation,
+which significantly reduces memory bandwidth overhead during training.  In addition, we integrate a key-value (KV)
+cache strategy to improve sampling efficiency.  Implementation details can be found in Methods SectionIV B.
+
+
+                                               4.    Optimization:  free energy and ground state
+
+  Next, we present the training strategy used for FlashVAN. The optimization follows a reinforcement learning style
+scheme, allowing the model to learn directly from sampled configurations without relying on Markov chains.  For a
+given problem instance, estimating the free energyF=−(1/β) lnZrequires an accurate approximation ofZ, which
+is generally intractable to compute directly.  To circumvent this, VAN introduces a variational distributionq          θ(σ) and
+minimizes the KL divergence to learn the Boltzmann distribution [8]:
+
+                                           DKL(q θ∥p) =  Xqθ(σ) ln  qθ(σ)p(σ)        =β(F   q−F)≥0,                                               (4)
+                                                              σ
+where the variational free energy is defined as
+                                                              X
+                                                    Fq =  1β       qθ(σ) βE(σ) + lnq     θ(σ) ,                                                         (5)
+                                                               σ
+minimizingF         q therefore provides an upper bound to the true free energyF.
+  FlashVAN optimizesF        q  using a score-function estimator (REINFORCE [48]) with a  variance-reduction baseline
+and hardware-efficient sampling (KV cache + FlashAttention).  We optimize the parametersθusing Muon [33],  a
+recently proposed optimizer originally developed for LLMs.  In our experiments,  Muon exhibits stable convergence
+while maintaining comparable computational efficiency (Supplementary Information, Section III).
+  This self-sampling and self-training approach eliminates the need for Markov chains, enabling efficient and inde-
+pendent sampling directly on GPUs while allowing the exact computation of lnq  θ(σ).  The runtime cost per training
+step is dominated by sampling, which constitutes the main bottleneck for scaling VANs to larger systems.  To mitigate
+this, we implement FlashVAN with a KV-cache sampling procedure (Algorithm2).  By caching past key-value vectors
+during autoregressive generation, we avoid redundant recomputation and further boost performance using FlashAt-
+tention CUDA kernels.  Supplementary Figure 7 provides a per-step runtime comparison between vanilla VANs and
+FlashVAN  across  system  scales.   With  the  optimized  sampling  pipeline,  the  total  wall-clock  time  required  by  our
+model is approximately 19.85 minutes for 4,000 training steps on the SK model (N= 256), corresponding to tasks
+such as free energy estimation.  For the 2D EA model (N= 60      2), the runtime is about 4.83 hours for 6,600 training
+steps.  All experiments are performed on a single NVIDIA H100 GPU.
+  For estimating the ground-state energy, the same training framework applies, augmented with an annealing scheme.
+As temperature is annealed (T↓),  the entropic contribution inF    q  (proportional toT) vanishes,  and the objective
+reduces to minimizingE         qθ[E(σ)], yielding the ground-state energy in theT→0 limit.  The annealing strategy we adopt
+can be found in Methods Sec.IV C 2.  At low temperatures, however, training is especially sensitive to mode collapse:
+A    Framework                                                                                                                                                              6
+
+accurate  overlap  distributions  and  reliable  ground-state  search  require  both  exploration  of  competing  valleys  and
+concentration on low-energy configurations.  We therefore combine the variational objective with local Monte Carlo
+refinement and a self-distillation loss.  This design, motivated by the observation in the GA study that generative-
+model samples become substantially more useful after local Monte Carlo relaxation [37], is a key ingredient in the
+results discussed below.
+
+
+                                                     B.    Application to spin glass systems
+
+   We have evaluated our FlashVAN on a variety of classical statistical physics systems,  including the SK and EA
+models (Table.I). The experimental results show that FlashVAN achieves accurate reconstruction of the Boltzmann
+distribution and estimates key thermodynamic quantities such as the free energy and ground-state energy.
+
+
+                                                          1.    Sherrington–Kirkpatrick model
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+FIG. 2.FlashVAN efficiently gives accurate free energy and ground-state energy for the SK model.(a) Illustrated
+SK model with random interactionsJ        ij.  (b) Free-energy convergence for various system sizesNatβ= 0.5 relative to the
+thermodynamic limit (dashed).  (c) Efficiency comparison between traditional transformer-VAN and FlashVAN: runtime vs.
+batch  size  (top)  and  training  throughput  (bottom).   (d)  Ground-state  energy  trajectories  during  annealing  (N=  256)  for
+three  disorder  instances  (solid)  against  the  finite-size  corrections  (FSC)-derived  exact  value  (dashed).   The  inset  shows  the
+temperature  annealing  schedule.   (e)  Accuracy  versus  inverse  temperatureβ,  shown  by  the  variance  of  the  estimated  free
+energy forN= 30 andN= 256, while the inset reports the relative error|f−f                                      exact|/|f     exact|forN= 30.  (f) Extrapolation of
+ensemble-averaged ground-state energy versus size.  The cross (×) marks the RSB solution [49] at⟨e                 0⟩N=∞      =−0.763(2), with
+the fitted line by Eq. (7).
+
+   The SK model is a classical benchmark for spin-glass behavior, defined onNbinary spinsσ= (σ                        1,...,σN) with
+σi∈{±1}.  Its Hamiltonian is
+                                                                                   X
+                                                              H(σ) =−            1√N     Jijσiσj,                                                                 (6)
+                                                                                    i<j
+
+where the off-diagonal couplingsJ        ij  fori<jare independent and identically distributed Gaussian random variables
+with  mean  zero  and  unit  variance,  andJ   ij  =J ji  withJ    ii  =  0.   With  the  1/ √Nscaling,  the  energy  density  has
+a  well-behaved  thermodynamic  limit.   Owing  to  full  connectivity  and  strong  frustration,  the  SK  energy  landscape
+B    Application to spin glass systems                                                                                                                            7
+
+contains a profusion of local minima; accordingly, vanilla VANs often struggle to capture the long-range correlations
+and complex disorder structure present in this model.
+   We first evaluate variational fitting and free-energy estimation at a fixed nonzero temperature to test FlashVAN’s
+ability to approximate the Boltzmann distributionp(σ).  Fig.2b shows the convergence of the estimated free energy
+during training forN= 64,128,256.  AsNincreases,  the converged values move toward the thermodynamic-limit
+referenceF     ∞≈−1.5112.  We further compare the runtime and computational throughput of FlashVAN with a tradi-
+tional transformer-based VAN. As shown in Fig.2c, the transformer-VAN runtime increases rapidly with batch size,
+whereas FlashVAN remains nearly constant over the tested range.  Measured throughput (GFLOPs/s) is consistently
+higher for FlashVAN, with speedup increasing as the sequence length grows,  reaching up to 58.34×at a sequence
+length of 512.  These results indicate substantially improved GPU utilization for FlashVAN during both training and
+sampling (timing protocol is detailed in the Supplementary Information).
+   We next evaluate FlashVAN on the task of estimating the ground-state energy of the SK model.  Fig.2d shows
+the evolution of the estimated energy density forN= 256.  Following the annealing strategy described in Methods
+Sec.IV C 2,  the  temperature  is  gradually  decreased  toward  zero  during  training.   Consistent  with  this  schedule,
+the  optimization  transitions  from  a  high-temperature  regime  (where  entropy  contributes  more  strongly)  to  a  low-
+temperature  regime  where  the  objective  approaches  the  internal  energy,  and  the  estimate  stabilizes  near  the  final
+ground-state value obtained from finite-size scaling for this system size. Using the same training configuration (number
+of headsn     heads = 4, token embedding dimensiond                    token = 2, position embedding dimensiond                    pos = 254 and number of
+layersn  layers = 2), we test three independent disorder instances.  All three runs converge to consistent ground-state
+energy estimates close to the reference value.
+   Fig.2e summarizes the estimation accuracy across inverse temperaturesβ.  We report the variance of the estimated
+free energy Var[f] forN= 30 andN= 256, which remains below 10        −4    over the testedβrange.  ForN= 30, we
+additionally compute the exact free energyf             exact by exhaustive enumeration.  The inset of Fig.2e shows the relative
+error|f−f                 exact|/|f     exact|, which stays on the order of 10−6 ∼10 −4  .  These results indicate that FlashVAN provides
+accurate free-energy estimates from high to low temperatures within the evaluated regime.
+   For  disorder  ensembles  such  as  SK  and  EA,  the  disorder-averaged  ground-state  energy  density  admits  a  well-
+defined thermodynamic limit asN→∞.  In practice, this limit is approached in a systematic way through finite-size
+corrections (FSC). Denoting the thermodynamic-limit value by⟨e    0⟩N=∞     , a commonly used asymptotic form is [27]:
+
+                                                   ⟨e  0⟩N∼⟨e  0⟩N=∞     + ANω  +...,N→∞,                                                       (7)
+
+whereAis  a  constant  andω(>0)  is  the  correction  exponent.   While  additional  subleading  terms  or  alternative
+correction forms may be present,  checking whether finite-Ndata are consistent with this scaling provides a useful
+baseline for assessing how well a heuristic method extrapolates toward the large-Nregime.
+   As shown in Fig.2f, in the case of SK, the replica-symmetry-breaking (RSB) prediction provides the thermodynamic-
+limit ground state energy density⟨e    0⟩N=∞      =−0.763(2), marked by×. The FSC fit usesA≈0.70(1) and the correction
+exponentω= 2/3.  We train FlashVAN forN= 64,128,256, usingn= 3000, 726, 162 independent disorder instances,
+respectively (each generated by an independent draw ofJ  ij).  The resulting estimates follow the FSC trend closely,
+supporting the scalability of FlashVAN to larger system sizes.
+
+
+                                                       2.    Edwards–Anderson model in 2D
+
+   The EA Ising spin-glass model is defined in general dimensionDby
+
+                                                                 H=−  XJijσiσj,                                                                        (8)
+                                                                           ⟨ij⟩
+whereσ     i∈{±1}are Ising spins,  and the summation⟨ij⟩runs over all nearest-neighbor pairs on aD-dimensional
+lattice.  The couplingsJ    ij are independent Gaussian random variables with zero mean and unit variance.  For Gaussian
+disorder, the ground state is almost surely unique up to a global spin flip for any finite system.  Each specific realization
+of{J  ij}is referred to as an instance of the disorder.  In the following, we first present results for the 2D case, where
+the system size isN=L          2; results for the 3D case will be discussed in the next section.
+   To assess whether the learned model captures equilibrium properties of the EA spin glass, we analyze the overlap
+between two statistically independent replicas sampled at the same temperature for a fixed disorder instance.  The
+overlap (similarity) between two such configurationsσ                             1 andσ        2 is defined as:
+
+                                                                                      NX
+                                                          q=    1N σ1·σ 2 =  1N           σ1iσ2i.                                                                (9)
+                                                                                     i=1
+B    Application to spin glass systems                                                                                                                            8
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+FIG. 3.FlashVAN generates accurate ground-state energy and overlap distribution for the 2D EA model.(a)
+Illustrated  2D  EA  model,  where  spins  are  arranged  on  a  square  lattice  and  coupled  via  nearest-neighbor  interactions.   The
+couplingJ       ij can be ferromagnetic or antiferromagnetic.  (b) Probability distributions of the overlapq(defined in Eq. (9)).  The
+solid lines from FlashVAN match the dashed lines from PT and Kac-Ward formula [50].  (c) Residual energy per site versus
+system size L for open and periodic boundary conditions.  Data are averaged over 20 disorder instances.
+
+
+The overlap distributionp(q) is a sensitive diagnostic of spin-glass structure and has been widely used to characterize
+equilibrium behavior.  Fig.3b compares the overlap distributions obtained from FlashVAN with those generated by
+parallel tempering (PT) and Kac-Ward formula [50], which serve as high-quality equilibrium references, at temper-
+atureT=  0.31  for  four  representative  disorder  instances.   In  all  four  cases,  FlashVAN  accurately  reproduces  the
+complex,  multi-peaked  structure ofp(q),  indicating that  the learned  sampling  distribution  is consistent with  equi-
+librium statistics in the low-temperature regime.  Details of training and model architecture are in Supplementary
+Information, Section I.
+   We next evaluate the performance of FlashVAN in estimating the ground-state energy across different system sizes
+and boundary conditions. Specifically, we consider system sizes spanning fromL= 8 to 60, with either open or periodic
+boundary conditions.  For each instance, FlashVAN predicts the ground-state energye             pred0    , which is compared against
+the exact valuee        exact0       obtained usingMcGroundState[51].  Fig.3c reports the residual energyϵ                                                                        res =|e     pred0 −e    exact0 |.
+As shown, the residuals remain at the level of 10−5 ∼10 −3  , indicating FlashVAN’s consistent instance-wise accuracy.
+We observe a modest increase in the residuals for periodic boundary conditions at the largest system size, suggesting
+that periodic boundaries introduce a more challenging optimization landscape.  Nevertheless, the accuracy remains
+within the same order of magnitude over the evaluated range.
+   Recent transformer-based neural samplers have also been applied to 2D EA systems of comparable size, reaching
+64×64  spins  in  finite-temperature  Boltzmann-distribution  sampling  [52].   Compared  with  this  setting,  FlashVAN
+provides substantially shorter training times, as reported above, while covering both temperature-dependent overlap
+distributions and low-temperature ground-state energy estimates.
+
+
+                                                       3.    Edwards–Anderson model in 3D
+
+   We next consider the more challenging 3D EA model.  We use the overlap distributionp(q) as the benchmark to
+evaluate the performance of FlashVAN and compare it with other algorithms.  As shown in Fig.4b, we reproduce the
+setting as described in [37].  The gray histogram represents the equilibrium overlap distribution obtained from PT.
+FlashVAN achieves the best agreement with the PT reference across all four temperature points, ranging from the high-
+temperature regime (T= 1.92) down to the low-temperature regime (T= 0.1).  FlashVAN can faithfully represent
+B    Application to spin glass systems                                                                                                                            9
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+FIG. 4.Accurate ground state and overlap distribution across temperatures for the 3D EA model by FlashVAN.
+(a) Illustrated 3D EA model, where spins are coupled by random nearest-neighbor interactionsJ        ij. (b) The overlap distributions
+P(q)  at  four  representative  temperatures  for  system  sizeL=  10.   PA,  GA,  and  FlashVAN  are  in  different  columns,  where
+FlashVAN achieves consistently high accuracy across temperatures.  Black curves with shade are from PT [37] as baseline.  (c)
+Finite-size scaling of the ensemble-averaged ground-state energy,  for assessing the scalability of optimization heuristics [27].
+Open circles denote results by FlashVAN forN= 4         3,6 3,8 3,10 3,14 3 and 163, averaged overn= 1110,651,300,50,40,20 disorder
+instances, respectively.  Open squares denote the available PT benchmark results from [53].  The solid line shows the FSC fit
+with the thermodynamic-limit value from RSB [49].  The close agreement between the FlashVAN results and the FSC scaling
+curve demonstrates its scalability and high accuracy.
+
+
+highly  complex  probability  distributions  and  therefore  can  serve  as  a  high-quality  sampler.   Population  Annealing
+(PA) agrees with the reference distribution at most temperatures but breaks down at the lowest temperature, failing
+to reproduce the correct peak weights andq= 0 symmetry.  GA exhibits the opposite trend, with weaker agreement
+at intermediate temperatures but improved performance at low temperatures (results for PA and GA are from [37]).
+   The superior performance of FlashVAN can be attributed to the incorporation of local Monte Carlo updates and
+a modification of the training loss.  As described in MethodsIV C 1, the gradient takes the form of a score-function
+estimator  (REINFORCE  [48]).   However,  directly  applying  this  loss  to  estimate  the  overlap  distribution  at  low
+temperatures leads to mode collapse.  This behavior can be understood as arising from an objective that resembles
+the reverse KL divergence, which is known to be mode-seeking and therefore reduces exploration by concentrating
+probability mass on a limited set of configurations.
+   We introduce a simple yet effective loss function modification to mitigate this issue.  Specifically, the modified objec-
+tive interpolates between a reverse-KL-driven exploration term and a likelihood-based regularization term, stabilizing
+training at low temperatures.  Compared to the original loss gradient (Eq. (19)), the modified loss gradient is:
+
+                                                  MX    L(σ     (m)    )−
+                                 ∇θFq∝  1M                             L∇θ lnq  θ(σ  (m)    )−w·∇    θ lnq  θ(σ  (m)    ),                                (10)
+                                                 m=1
+
+wherewcontrols  the  relative  weight  of  the  additional  term−w·∇             θ lnq  θ(σ  (m)    ).   This  term  can  be  interpreted  as
+introducing  a  maximum-likelihood-type  regularization.   Another  important  modification  concerns  the  sampling  of
+these configurations:  instead of using the raw samples generated by FlashVAN, we refine the raw samples by using a
+short local Monte Carlo procedure [37] before evaluating the loss.
+   Together, these two changes constitute a form of teacher distillation, in which local Monte Carlo dynamics provide
+physically inspired guidance during training.  The added likelihood term guides the model toward assigning higher
+probability to physically relevant configurations,  while the original reverse-KL-like term maintains sufficient explo-
+ration.  With this improved training strategy, FlashVAN consistently reproduces the overlap distribution across all
+                                                                                                                                                 10
+
+four temperatures and achieves close agreement with the PT reference, outperforming both GA and PA. Additional
+results illustrating the role of these two changes are provided in Section IC of the Supplementary Information.
+  All results discussed above correspond to a system size ofN= 10        3.  To further assess the scalability of FlashVAN,
+we  perform  a  finite-size  scaling  analysis  of  the  ensemble-averaged  ground-state  energy  density,  following  the  same
+procedure  as  in  the  SK  case.   The  FSC  fit  (Eq.  (7))  uses  a  constantA≈1.641,  and  the  correction  component
+ω= 1−θ/d≈0.92, and the thermodynamic limit for the ensemble-averaged ground-state energy density⟨e                         0⟩N=∞  ≈
+−1.701.  As shown in Fig.4c, the average energy per spin computed by FlashVAN agrees well with the FSC fit across
+system sizes ranging from 43  to 163, demonstrating strong scalability to large three-dimensional spin-glass systems.
+For comparison, we also include the available PT benchmark results from [53].  The open squares denote PT results
+forN= 4         3,6 3,8 3, and 103, averaged over 2×10      5, 2×10      4, 3×10      3, and 1.3×10          3  disorder instances, respectively.
+The agreement of FlashVAN with both the FSC scaling curve and the available PT benchmarks supports its accuracy
+across system sizes.
+
+
+
+
+
+
+                                                            III.    DISCUSSION
+
+
+  We  have  developed  FlashVAN,  an  autoregressive  framework  that  integrates  physics-inspired  attention,  tailored
+positional  embeddings  and  hardware-efficient  acceleration.   In  particular,  FlashVAN  achieves  up  to  two  orders-of-
+magnitude  acceleration  over  vanilla  VANs  while  maintaining  high  accuracy  across  a  range  of  benchmark  models,
+including the Sherrington–Kirkpatrick and Edwards–Anderson systems.  It enables efficient single-GPU sampling at
+unprecedented  system  sizes  for  neural-network  approaches  to  spin-glass  systems,  while  the  validated  benchmarks
+reported here emphasize quantitative accuracy in thermodynamic observables, ground-state estimates, and represen-
+tative overlap-distribution diagnostics.
+  Our results suggest that scalability arises from combining physically inspired architectural design with a tailored
+training strategy.  Performance emerges from aligning model inductive biases with the structure of disordered systems,
+together with training procedures that stabilize learning in rugged energy landscapes.  Specifically, the combination
+of local Monte Carlo refinement and self-distillation proves essential under forward KL training,  especially in low-
+temperature regimes where the target distribution becomes highly structured.  Extending to larger or more frustrated
+systems may require improved sampling and refinement strategies to provide high-quality training signals, pointing
+to a continued interplay between Monte Carlo methods and learned generative models.
+  The neural networks and tensor networks [54] each excel in different aspects.  The tensor-network, such as matrix
+product states and projected entangled pair states,  have achieved remarkable success in one- and two-dimensional
+systems separately.  Their extension to high-dimensional or highly connected systems can be constrained by the rapidly
+increasing bond dimension.  Recent advances, including tensor network Markov chain Monte Carlo [55], alleviate this
+issue, yet remain tied to structured decompositions and lattice geometry.  Instead, FlashVAN naturally accommodates
+diverse interaction topologies and learns the probability distribution across a wide range of temperatures.  Hybridizing
+neural and tensor-network approaches, by leveraging the scalability of neural networks and the precision of tensor-
+network representations, offers a promising route for investigating more complex spin systems.
+  More broadly, this work underscores the value of combining physical principles with advances in large-scale language
+modeling.  Future work may explore adaptive sparsity patterns, improved optimization strategies, and more stringent
+benchmark  comparisons  based  on  distributional  observables.   In  particular,  upon  completing  this  manuscript,  we
+became aware of the recent large-scale Monte Carlo study [56], which provides new low-temperature benchmark data
+for the three-dimensional Edwards-Anderson spin glass, with high-statistics equilibrated simulations reachingL= 16.
+Their  results  offer  a  timely  and  complementary  reference  for  assessing  learned  neural-network  samplers  through
+overlap-distribution  observables.   The  finite-size  analysis  of  the  ensemble-averaged  ground-state  energy  in  Fig.4
+indicates the potential of FlashVAN to handle larger system sizes, and the representativeL= 10 overlap-distribution
+benchmarks  suggest  that  FlashVAN  can  capture  nontrivial  structure  inP(q)  beyond  thermodynamic  averages.   A
+systematic investigation comparing the method in [56] and the neural-network approach would be another natural
+and important direction for future work.  Beyond equilibrium classical spin systems, the present framework can also
+be extended to dynamical settings, including glassy dynamics [57] modeled by kinetically constrained models [19,58],
+and to quantum many-body problems.  These directions point toward a general paradigm in which physically grounded
+modeling and modern machine learning architectures jointly enable scalable and accurate solutions to large-size and
+strongly correlated systems.
+A    Detailed architectures in FlashVAN                                                                                                                      11
+
+                                                                  IV.    METHODS
+
+                                                 A.    Detailed architectures in FlashVAN
+
+   In this section, we present the pseudocode (Algorithm1) outlining the implementation steps of the FlashVAN used
+in this study, as described in the Results section.  Compared with conventional decoder-only transformer architectures,
+our design differs in two key aspects:  the physics-inspired attention mechanism and the use of concatenated positional
+embeddings.  The former is crucial for scaling FlashVAN to larger system sizes, while the latter significantly enhances
+the expressive capacity of FlashVAN.
+
+Algorithm 1FlashVAN
+ 1:Input configurationσ∈{−1,+1}                    N
+ 2:Concatenate Positional Embed:X←(x                1,...x N)∈R  d
+ 3:fori= 1,n      l do
+ 4: X←X+ MHA(LayerNorm(X))                                      ▷physics-inspired attention
+ 5: X←LayerNorm(X)
+ 6: X←X+ FFN(X)
+ 7:end for
+ 8:(z     1,...z N)←OutputHead(X)
+ 9:log[q(σ)]←    PNi=1  log(softmax(z        i)σi)
+
+
+
+                                     1.    Autoregressive factorization and the ordered Markov boundary
+
+   Consider an Ising model defined on a graphG= (V,E) with|V|=Nspins, whereE={(i,j) :i,j∈V,i̸=j}
+denotes the set of edges encoding pairwise interactions.  The Ising model naturally defines a Markov random field
+(MRF) whose joint distributionP(σ) follows the Boltzmann distribution.  Thelocal  Markov  propertyof the MRF
+states  that  each  spins   i  is  conditionally  independent  of  all  other  spins  given  its  immediate  neighbors  (itsMarkov
+blanket).
+   To enable autoregressive sampling we impose a fixed total ordering≺on the vertex setV(for example, a raster
+scan).  This ordering gives an exact factorization of the joint distribution via the chain rule:
+
+                                                                          NY
+                                                              P(σ) =          P(σ  i|σ≺i  ),                                                                  (11)
+                                                                         i=1
+
+whereσ   ≺i    denotes the configuration of all spins precedingiunder the ordering.  LetP         i ={j∈V:j≺i}be the set
+of “past” (already sampled) spins andF   i ={j∈V:j≻i}the set of “future” (not yet sampled) spins.  Because of
+the Markov properties of the underlying graph, the autoregressive conditionalP(σ   i|σ Pi) need not depend on the
+entire pastP   i.  One can therefore identify a minimal conditioning set, which we call theordered Markov boundary.
+   Given the ordering≺, the ordered Markov boundary of spini, denoted∂             ≺(i), is the minimal subset ofP   i such that
+si is conditionally independent of the remaining past givenσ  ∂≺(i)  :
+
+                                                              σi⊥⊥σ Pi\∂  ≺(i) |σ ∂≺(i) .                                                                  (12)
+
+Graphically,∂≺(i) consists of those past nodesj∈P      i that are either directly adjacent toiinG, or connected toiby a
+pathj→v                1→···→v  k→i, whose intermediate nodesv             1,...,vk all lie in the unsampled futureF     i.  Intuitively, only
+past nodes that can influenceithrough chains passing entirely via future nodes remain relevant after marginalizing
+outF   i.
+   Consequently, the autoregressive conditional depends only on the ordered Markov boundary:P(σ         i|σ Pi) =P(σ   i|
+σ∂≺(i)  ).  An explicit expression for the conditional is obtained by marginalizing over the future variablesF      i:
+                                                                         P
+                                                    P(σ  i|σ Pi) =     P    σFiP(σ  Pi,σi,σ Fi)
+
+                                                                           σi,σ FiP(σ  Pi,σi,σ Fi).                                                      (13)
+
+   In graphical-model language, marginalizing out a set of nodesF   i induces a new graph structure over the remaining
+nodesP   i∪{i}.  Specifically, marginalization fully connects the neighbors of any marginalized node, effectively creating
+“fill-edges”  across  the  boundary  separatingP         i  andF   i.   Therefore,  the  only  variables  inP  i  that  remain  directly
+B    Details of hardware acceleration                                                                                                                            12
+
+dependent ons  i after marginalizingF           i are those connected toivia paths throughF         i, or those directly adjacent toi.
+This set is exactly∂    ≺(i).
+  This observation has a direct algorithmic implication for autoregressive modelling and the construction of sparse
+attention patterns:  when sampling or predictingσ i in the chosen ordering, it suffices to condition on (or attend to)
+the  ordered  Markov  boundary∂   ≺(i).   Exploiting  this  minimal  dependency  yields  exact  autoregressive  conditionals
+while enabling a principled sparse attention design that reduces computation without sacrificing correctness.
+
+
+                                                   2.    Concatenated Positional Embedding
+
+  A key feature of FlashVAN is its special positional embedding scheme designed for spin sequences.  In the origi-
+nal transformer developed for natural language processing, attention captures relationships between tokens, whereas
+positional embeddings explicitly encode order because the architecture itself is position-invariant.  In this context, se-
+mantic dependencies play a far more dominant role than absolute positional information.  In fact, decoder-only models
+trained with causal masking can implicitly encode positional information, a mechanism referred to as NoPE [59].
+  However, this situation is fundamentally reversed in spin systems.  The spin configurationσdiffers greatly from
+natural language data.  Each spin can only take two possible states (+1 or -1), meaning the vocabulary size is merely
+2, vastly smaller than that of natural language.  More importantly, the spatial correlations between spins at different
+positions encode the essential physical properties of the system.  Therefore,  we hypothesize that,  unlike in natural
+language modeling, positional information is the central factor governing the representational power of transformer-
+based VANs.  To validate this hypothesis, we design a concatenated positional embedding,  which unifies the token
+embedding and positional embedding into a single vector.
+  Letd       token denote the token embedding dimension, andd   pos the positional embedding dimension, with the overall
+embedding dimensiond=d                          token +d    pos.  A spin configuration is represented as
+                                                              σ= (σ     1,σ2,...,σN),                                                                    (14)
+where eachσ i∈{+1,−1}indicates the spin state (up or down,d                         token = 2), andNis the number of spins.  For every
+spinσ   i in the configuration, we construct the model input vector using the concatenated positional embedding:
+                                                           si = Embed(σ   i)∈R  dtoken,
+
+                                                          pi = Embed(p   i)∈R  dpos,                                                              (15)
+
+                                                          xi = [s i ;p i ]∈R  d,
+where each row corresponds to the trainable embedding vector for the positioni.  The operator [·;·] denotes vector
+concatenation.
+  Under this embedding scheme, we intentionally amplify positional signals in FlashVAN while down-weighting spin
+embedding signals.  We also tested how our new concatenated positional embedding performs compared to the com-
+monly used absolute positional embedding method.  The results reveal that our concatenated positional embedding
+demonstrated the best performance on spin-system tasks.  Detailed experimental settings can be found in Supplemen-
+tary Information, Section IB.
+
+
+                                                  B.    Details of hardware acceleration
+
+  Apart from the architectural innovations, another major highlight of FlashVAN lies in its training efficiency.  By
+leveraging hardware-optimized CUDA kernels, FlashVAN can efficiently handle systems with 163 spins, a regime that
+is practically inaccessible to vanilla VANs.
+  Hardware  acceleration  is  incorporated  into  FlashVAN  in  two  main  ways.   First,  we  replace  the  standard  atten-
+tion  withFlashAttention-2[44],  an  efficient  attention  kernel  optimized  for  modern  GPU  architectures,  reducing
+memory overhead and improving computational efficiency.  Second, a KV cache is used during sampling to accelerate
+autoregressive generation, consistent with the common practice in LLM inference.
+
+
+                                                         1.    CUDA-kernel acceleration
+
+  Efficient  kernel  implementations  are  essential  for  practical  training,  yet  are  often  underutilized  in  existing  VAN
+implementations.   Modern  GPUs  are  highly  optimized  for  deep-learning  workloads,  providing  specialized  compute
+B    Details of hardware acceleration                                                                                                                            13
+
+units  such  as  Tensor  Cores  and  Tensor  Memory  Accelerators  (TMAs).   FlashVAN  is  designed  to  explicitly  take
+advantage of these hardware features.
+   In  transformer-based  models,  the  attention  matrix  computation  has  quadratic  complexity  with  respect  to  the
+sequence lengthL.  For largeL, explicitly materializing theL×Lattention matrix is both memory- and bandwidth-
+intensive.  However,  in practice,  the quantity of interest is the product Attn·V,  rather than the attention matrix
+itself.  Moreover, data movement between different levels of GPU memory is often the dominant cost in large-scale
+training.  Kernel designs that keep intermediate results in registers or shared memory, rather than repeatedly accessing
+global memory, can therefore yield substantial speed-ups.FlashAttention-2exploits these principles by tiling the
+attention computation with online softmax [60], streaming blocks of queries, keys and values through on-chip memory,
+and orchestrating compute to maximize arithmetic intensity.
+   By  integratingFlashAttention-2,  FlashVAN  achieves  an  approximate  36×speedup  for  the  combined  forward
+and backward passes compared with a baseline PyTorch implementation.  Moreover, the performance gap widens as
+the sequence length increases.  All measurements are conducted on identical hardware at a sequence length of 1024;
+further details are provided in the Supplementary Information, Section IIB.
+
+Algorithm 2KV cache sampling in FlashVAN.
+ 1:Input:batch sizeB, sequence lengthN, number of layersn                     ℓ
+ 2:Initialize token buffer sampless∈N          B×N
+ 3:Initialize KV caches{K             (ℓ) ,V (ℓ) }nℓℓ=1   as preallocated GPU tensors
+ 4:Initialize cache lengths len←0∈N        B
+ 5:fort= 1,Ndo
+ 6:    ift= 1then
+ 7:         x t←[0; ]                                                        ▷Start token (default:  0)
+ 8:    else
+ 9:         x t←[s      :,t−1     ]                                                    ▷previous sampled token
+10:   end if
+11:   h←Concatenate Positional Embedding(x           t,t)
+12:   forℓ= 1,n       ℓ do
+13:       h     norm←LayerNorm1     (ℓ)   (h)
+14:        (q       (ℓ)t ,k (ℓ)t ,v (ℓ)t   )←LinearQKV      (ℓ)   (h  norm)
+15:       o     (ℓ)t ←flash    attn  with   kvcache q(ℓ)t ,K (ℓ) ,V (ℓ) ,len,causal = True  
+16:       h←h+o                    (ℓ)t                                                      ▷self-attention residual
+17:       h←h+ FFN                (ℓ)  LayerNorm2(ℓ)   (h)                                       ▷feed-forward residual
+18:        Append (k       (ℓ)t ,v (ℓ)t   ) to caches:  (K  (ℓ) ,V (ℓ)   )←(K        (ℓ) ,V (ℓ)   )∪(k       (ℓ)t ,v (ℓ)t   )
+19:   end for
+20:   len←len + 1
+21:   z  t←OutputHead(h)
+22:   p  t←softmax(z         t)
+23:   s     :,t ∼Categorical(p            t)
+24:end for
+25:Map tokens to spins:σ←2·s−1
+26:Output:spin configurationsσ∈{−1,+1}                            B×N
+
+
+
+
+                                                                 2.    Sampling Strategy
+
+   As  discussed  in  the  Results  section,  during  each  training  iteration,  the  time  spent  on  sampling  dominates  the
+total  runtime;  thus,  accelerating  the  sampling  process  directly  translates  into  faster  overall  training.   In  a  com-
+mon transformer-based VAN, generating a spin configuration of lengthNproceeds autoregressively.  At generation
+stept,  the  model  computes  query,  key,  and  value  vectors  (q     t,k 0:t ,v 0:t  ).   At  the  next  step,t+1,  it  recomputes
+(q t+1 ,k 0:t+1  ,v 0:t+1    ).  It is evident thatk         0:t    andv       0:t    are identical to those computed in the previous step, leading to
+redundant computation that grows quadratically withN.
+   To mitigate this inefficiency, FlashVAN adopts a KV cache strategy, similar to that used in LLM inference [61,62].
+At each generation stept, the model only computes the new vectors (q     t,k t,v t) while reusing the cached (k  0:t−1  ,v 0:t−1      )
+from previous steps.  After the attention weights are updated through the softmax operation, the new key and value
+vectors  are  appended  to  the  cache,  forming  an  updated  set  (k  0:t ,v 0:t  )  for  subsequent  steps.   This  reuse  strategy
+effectively removes redundant computation across generation steps, reducing the complexity of sampling fromO(N            3)
+toO(N          2).  The detailed procedure is summarized in Algorithm2.  Although further optimizations are possible, the
+C    Details of training neural networks                                                                                                                       14
+
+present design demonstrates that hardware-aware caching can substantially accelerate both sampling and training,
+opening new directions for efficient VAN architectures.
+
+
+                                                   C.    Details of training neural networks
+
+                                                                   1.    Training strategy
+
+   In this section,  we describe the training strategy adopted for FlashVAN. As detailed in the Results section,  the
+model is trained to approximate the Boltzmann distribution by minimizing the KL divergence in Eq. (4), which leads
+to Eq. (5).  By multiplying both sides byβand differentiating, we obtain the following:
+                                                                      X
+                                                   β∇ θFq =∇ θ             qθ(σ) [βE(σ) + lnq       θ(σ)].                                                   (16)
+                                                                       σ
+Expanding the derivative gives
+                                    β∇ θFq =X          ∇θqθ(σ) (βE(σ) + lnq        θ(σ)) +q    θ(σ)∇   θ lnq  θ(σ) .                                  (17)
+
+                                                    σ
+Using the identity∇ θqθ(σ) =q    θ(σ)∇   θ lnq  θ(σ) and rewriting the summation as an expectation overq    θ, we obtain
+
+                                            β∇ θFq =E   σ∼q   θ(σ) ∇θ lnq  θ(σ) (βE(σ) + lnq        θ(σ)) .                                           (18)
+
+Similar to the policy gradient algorithm in reinforcement learning [48], the gradient is estimated as [8]:
+
+                                                                   MX   L(σ     (m)    )−
+                                                 ∇θFq∝  1M                              L∇θ lnq  θ(σ  (m)    ),                                                 (19)
+                                                                 m=1
+
+where{σ              (m) }Mm=1    areMspin configurations sampled fromq        θ,L(σ) =βE(σ) + lnq          θ(σ), and             Lis a baseline used to
+reduce the variance of the gradient estimator.  For the ground-state objective, we reparameterize the loss in terms
+of the temperatureT, yielding an equivalent formL(σ) =E(σ) +Tlnq                       θ(σ) up to a constant scaling.  As annealing
+proceeds andTdecreases, the entropy termTlnq           θ(σ) becomes progressively negligible, and the objective reduces to
+pure energy minimization.
+
+
+                                                                2.    Variational annealing
+
+   To obtain the ground state using a variational autoregressive network, an annealing strategy is helpful to progres-
+sively lower the temperature during training [34].  This gradual cooling process allows the model to transition from
+learning finite-temperature Boltzmann distributions to discovering the zero-temperature configuration that minimizes
+the energy.  As the temperature decreases (T↓,β↑), the entropy termTE          qθ[lnq  θ(σ)] gradually vanishes, and the
+objective reduces to:
+
+                                                              limT→0  Fq =E qθ[E(σ)]↘E                 0,
+
+whereE            0  =  minσE(σ)  is  the  ground-state  energy.   Thus,  by  annealing  the  temperatureTduring  training,  the
+objective transitions smoothly from learning finite-temperature free energy to identifying the zero-temperature ground
+state.  The annealing schedule implemented in FlashVAN is described below.  As visualized in Fig.1d, the schedule
+starts from an initial temperatureT              0 and gradually approaches the zero-temperature limit.  We define a sequence of
+nanneal temperature points{T  k}nannealk=0     , which follow a predefined schedulef(i) over the training stepsi:
+                                                  Ti =T    0,                   i≤n     warmup,
+                                         f(i) =                                i−n     warmup
+                                                  Ti =T    0−  T0                                ,  i>nwarmup.                                         (20)
+                                                                    nanneal           neq
+
+Here,n           warmup  denotes the number of training steps in the warm-up stage,n            eq  is the number of optimization steps
+performed at each temperature point.  The total number of training steps is thereforeN                  steps =n    warmup +n    eqnanneal.
+C    Details of training neural networks                                                                                                                       15
+
+For larger systems, the temperature schedule is implemented via a non-uniform discretization of{T   k}, with logarith-
+mic spacing allocating more points near the low-temperature regime, followed by a linear refinement near the final
+temperature.
+  For  the  3D  EA  experiments,  we  modify  this  estimator  as  described  in  Eq.  (10).   Samples  are  first  generated
+autoregressively fromq    θ and then refined by a short local Monte Carlo trajectory.  The refined configurations are used
+in the gradient estimate, together with the additional likelihood term weighted byw.  This procedure can be viewed
+as self-distillation:  local Monte Carlo acts as a local teacher that maps the model samples toward nearby physically
+relevant configurations, and the likelihood term trains FlashVAN to increase the probability of those refined samples.
+This stabilizes low-temperature training while preserving the variational free-energy component of the objective.
+
+
+
+                                                        3.    Comparison on optimizers
+
+  FlashVAN  adopts  the  Muon  optimizer  [63],  achieving  accelerated  convergence  and  superior  accuracy  on  spin-
+glass  tasks  (Supplementary  Figure  8).   While  the  conventional  Adam  optimizer  [64]  ensures  training  stability  via
+exponential  moving  averages  of  first  and  second  moments,  its  isotropic  scaling  may  not  fully  exploit  the  intrinsic
+geometry of transformer-based architectures.  Specifically, weight matrices in these models often exhibit a low-rank
+structure,  where  parameter  updates  are  concentrated  along  a  few  principal  directions.   Although  second-order  or
+natural-gradient methods [35,65,66] can theoretically address this directionality, they often rely on the estimation of
+a sample covariance matrixS.  These approaches not only introduce sampling noise and numerical instability under
+data-limited regimes but also impose prohibitive computational and memory overhead [67].
+  Muon circumvents these limitations by explicitly orthogonalizing the momentum matrix via Newton-Schulz itera-
+tions, thereby refining the geometry of matrix-valued updates.  LetM   t  denote the momentum matrix at iterationt
+(initializedM                      0 = 0) andL   t(W) be the loss evaluated on the mini-batch.  The updates are
+
+                                                        Mt =µM t−1    +∇L t Wt−1 ,
+                                                         Ot = Newton-Schulz(M   t),                                                             (21)
+                                                        Wt =W t−1 −η tOt,
+
+whereµandη         t represent the momentum coefficient and the learning rate, respectively.  SinceO    t has the same shape as
+Mt, it provides a structured (approximately orthogonalized) direction for updating the corresponding weight matrix
+Wt.  Crucially, the Newton-Schulz iteration relies solely on high-throughput operations, such as matrix addition and
+multiplication, thereby bypassing the sequential bottlenecks and numerical instability of singular value decomposition
+(SVD). In this work,  we employ an augmented version of the Muon optimizer.  Beyond the core orthogonalization
+step, we integrate weight decay to regularize the growth of parameter norms and implement RMS scale alignment to
+ensure consistent update magnitudes across disparate layer shapes [33].  A comprehensive comparison with standard
+optimizers is detailed in the Supplementary Information, Section III.
+  Data availability:The authors declare that the data supporting this study are available within the paper.
+  Code availability:.  A PyTorch implementation of the present algorithm can be found at the GitHub repository,
+which will be publicly available upon the acceptance of the manuscript.
+
+
+
+                                                              Acknowledgments
+
+  We thank Lei Wang, Yuliang Jin, Luciano Hugo Miranda Filho for their helpful communication.  This work is sup-
+ported by Project 12322501, 12575035 of the National Natural Science Foundation of China, and 2026NSFSCZY0124
+of the Natural Science Foundation of Sichuan Province.  The computational work is supported by the Center for HPC,
+University of Electronic Science and Technology of China.
+
+
+
+                                                            Author contributions
+
+  Y.T.,  P.Z.,  J.L.  had  the  original  idea  for  this  work.   L.Z.,  W.D.  and  J.L.  performed  the  study,  and  all  authors
+contributed to the preparation of the manuscript.
+C    Details of training neural networks                                                                                                                       16
+
+                                                                Competing interests
+
+   The authors declare no competing interests.
+
+
+                                                              Additional information
+
+   Supplementary  informationThe  online  version  contains  supplementary  material  available  at  [URL  will  be
+inserted by publisher].
+   Correspondence and requests for materialsshould be addressed to Ying Tang.
+   Reprints and permission informationis available online at [URL will be inserted by publisher].
+
+
+
+
+
+ [1]K. Binder and A. P. Young, Spin glasses:  Experimental facts, theoretical concepts, and open questions,Rev. Mod. Phys.
+     58, 801 (1986).
+ [2]M. M´ezard, G. Parisi, N. Sourlas, G. Toulouse, and M. Virasoro, Nature of the spin-glass phase,Phys. Rev. Lett.52, 1156
+     (1984).
+ [3]M.  J.  Schuetz,  J.  K.  Brubaker,  and  H.  G.  Katzgraber,  Combinatorial  optimization  with  physics-inspired  graph  neural
+     networks,Nat. Mach. Intell.4, 367 (2022).
+ [4]D. Sherrington and S. Kirkpatrick, 50 years of spin glass theory,Nat. Rev. Phys.7, 528 (2025).
+ [5]D. Sherrington and S. Kirkpatrick, Solvable model of a spin-glass,Phys. Rev. Lett.35, 1792 (1975).
+ [6]S. F. Edwards and P. W. Anderson, Theory of spin glasses,J. Phys. F5, 965 (1975).
+ [7]K. Binder, D. W. Heermann, and K. Binder,Monte Carlo Simulation in Statistical Physics, Vol. 8 (Springer, 1992).
+ [8]D. Wu, L. Wang, and P. Zhang, Solving statistical mechanics using variational autoregressive networks,Phys. Rev. Lett.
+     122, 080602 (2019).
+ [9]P. Mehta, M. Bukov, C.-H. Wang, A. G. Day, C. Richardson, C. K. Fisher, and D. J. Schwab, A high-bias, low-variance
+     introduction to machine learning for physicists,Phys. Rep.  (2019).
+[10]B. McNaughton, M. V. Miloˇsevi´c, A. Perali, and S. Pilati, Boosting monte carlo simulations of spin glasses using autore-
+     gressive neural networks,Phys. Rev. E101, 053312 (2020).
+[11]G.  Carleo  and  M.  Troyer,  Solving  the  quantum  many-body  problem  with  artificial  neural  networks,Science355,  602
+     (2017).
+[12]G. Carleo, I. Cirac, K. Cranmer, L. Daudet, M. Schuld, N. Tishby, L. Vogt-Maranto, and L. Zdeborov´a, Machine learning
+     and the physical sciences,Rev. Mod. Phys.91, 045002 (2019).
+[13]M. Hibat-Allah, M. Ganahl, L. E. Hayward, R. G. Melko, and J. Carrasquilla, Recurrent neural network wave functions,
+     Phys. Rev. Research2, 023358 (2020).
+[14]T. Westerhout, N. Astrakhantsev, K. S. Tikhonov, M. I. Katsnelson, and A. A. Bagrov, Generalization properties of neural
+     network approximations to frustrated magnet ground states,Nat. Commun.11, 1593 (2020).
+[15]D. Luo, Z. Chen, J. Carrasquilla, and B. K. Clark, Autoregressive neural network for simulating open quantum systems
+     via a probabilistic formulation,Phys. Rev. Lett.128, 090501 (2022).
+[16]G.  Carleo,  K.  Choo,  D.  Hofmann,  J.  E.  Smith,  T.  Westerhout,  F.  Alet,  E.  J.  Davis,  S.  Efthymiou,  I.  Glasser,  S.-H.
+     Lin, M. Mauri, G. Mazzola, C. B. Mendl, E. van Nieuwenburg, O. O’Reilly, H. Th´eveniaut, G. Torlai, F. Vicentini, and
+     A. Wietek, Netket:  A machine learning toolkit for many-body quantum systems,SoftwareX10, 100311 (2019).
+[17]D. Wu,  R. Rossi,  F. Vicentini,  N. Astrakhantsev,  F. Becca,  X. Cao,  J. Carrasquilla,  F. Ferrari,  A. Georges,  M. Hibat-
+     Allah, M. Imada, A. M. L˜A¤uchli, G. Mazzola, A. Mezzacapo, A. Millis, J. R. Moreno, T. Neupert, Y. Nomura, J. Nys,
+     O. Parcollet, R. Pohle, I. Romero, M. Schmid, J. M. Silvester, S. Sorella, L. F. Tocchio, L. Wang, S. R. White, A. Wietek,
+     Q. Yang, Y. Yang, S. Zhang, and G. Carleo, Variational benchmarks for quantum many-body problems,Science386, 296
+     (2024).
+[18]Y. Tang, J. Weng, and P. Zhang, Neural-network solutions to stochastic reaction networks,Nat. Mach. Intell.5, 376 (2023).
+[19]Y. Tang, J. Liu, J. Zhang, and P. Zhang, Learning nonequilibrium statistical mechanics and dynamical phase transitions,
+     Nat. Commun.15, 1117 (2024).
+[20]J. Weng,  X. Zhu,  J. Liu,  L. L¨u,  P. Zhang, and Y. Tang, Tracking large chemical reaction networks and rare events by
+     neural networks,arXiv:2512.10309  (2025).
+[21]M. Germain, K. Gregor, I. Murray, and H. Larochelle, Made: Masked autoencoder for distribution estimation, inProceedings
+     of the 32nd International Conference on Machine Learning, Proceedings of Machine Learning Research, Vol. 37, edited by
+     F. Bach and D. Blei (PMLR, Lille, France, 2015) pp. 881–889.
+[22]H. Larochelle and I. Murray, The neural autoregressive distribution estimator, inProceedings  of  the  Fourteenth  Interna-
+     tional  Conference  on  Artificial  Intelligence  and  Statistics, Proceedings of Machine Learning Research, Vol. 15, edited by
+     G. Gordon, D. Dunson, and M. Dud˜Ak (PMLR, Fort Lauderdale, FL, USA, 2011) pp. 29–37.
+[23]B.  Uria,  M.-A.  Cˆot´e,  K.  Gregor,  I.  Murray,  and  H.  Larochelle,  Neural  autoregressive  distribution  estimation,J.  Mach.
+     Learn. Res.17, 7184 (2016).
+C    Details of training neural networks                                                                                                                       17
+
+[24]S. Ciarella, J. Trinquier, M. Weigt, and F. Zamponi, Machine-learning-assisted monte carlo fails at sampling computation-
+     ally hard problems,Mach. Learn. Sci. Technol.  (2023).
+[25]L. M. Del Bono, F. Ricci-Tersenghi, and F. Zamponi, Nearest-neighbors neural network architecture for efficient sampling
+     of statistical physics models,Mach. Learn. Sci. Technol.6, 025029 (2025).
+[26]C.  Fan,  M.  Shen,  Z.  Nussinov,  Z.  Liu,  Y.  Sun,  and  Y.-Y.  Liu,  Searching  for  spin  glass  ground  states  through  deep
+     reinforcement learning,Nat. Commun.14, 725 (2023).
+[27]S. Boettcher, Deep reinforced learning heuristic tested on spin-glass ground states:  The larger picture,Nat. Commun.14,
+     5658 (2023).
+[28]C.  Fan,  M.  Shen,  Z.  Nussinov,  Z.  Liu,  Y.  Sun,  and  Y.-Y.  Liu,  Reply  to:  Deep  reinforced  learning  heuristic  tested  on
+     spin-glass ground states:  The larger picture,Nat. Commun.14, 5659 (2023).
+[29]J. Yuan, H. Gao, D. Dai, J. Luo, L. Zhao, Z. Zhang, Z. Xie, Y. Wei, L. Wang, Z. Xiao,et  al., Native sparse attention:
+     Hardware-aligned and natively trainable sparse attention,arXiv:2502.11089  (2025).
+[30]A. Vaswani, N. Shazeer, N. Parmar, J. Uszkoreit, L. Jones, A. N. Gomez,   L. Kaiser, and I. Polosukhin, Attention is All
+     You Need, inAdvances in Neural Information Processing Systems, Vol. 30 (2017).
+[31]T.  Dao,  D.  Y.  Fu,  S.  Ermon,  A.  Rudra,  and  C.  R´e,  FlashAttention:   Fast  and  memory-efficient  exact  attention  with
+     io-awareness, inAdvances in Neural Information Processing Systems, NeurIPS 2022, Vol. 35 (2022) pp. 16344–16359.
+[32]J. Shah, G. Bikshandi, Y. Zhang, V. Thakkar, P. Ramani, and T. Dao, FlashAttention-3:  Fast and accurate attention with
+     asynchrony and low-precision, inAdvances  in  Neural  Information  Processing  Systems, Vol. 37, edited by A. Globerson,
+     L. Mackey, D. Belgrave, A. Fan, U. Paquet, J. Tomczak, and C. Zhang (Curran Associates, Inc., 2024) pp. 68658–68685.
+[33]J. Liu, J. Su, X. Yao, Z. Jiang, G. Lai, Y. Du, Y. Qin, W. Xu, E. Lu, J. Yan,et  al., Muon is scalable for llm training,
+     arXiv:2502.16982  (2025).
+[34]M. Hibat-Allah, E. M. Inack, R. Wiersema, R. G. Melko, and J. Carrasquilla, Variational neural annealing,Nat. Mach.
+     Intell.3, 952 (2021).
+[35]J. Liu, Y. Tang, and P. Zhang, Efficient optimization of variational autoregressive networks with natural gradient,Phys.
+     Rev. E111, 025304 (2025).
+[36]I.  Biazzo,  D.  Wu,  and  G.  Carleo,  Sparse  autoregressive  neural  networks  for  classical  spin  systems,Mach.  Learn.:  Sci.
+     Technol.5, 025074 (2024).
+[37]L. M. Del Bono, F. Ricci-Tersenghi, and F. Zamponi, Demonstrating real advantage of machine learning–enhanced monte
+     carlo for combinatorial optimization,Proc. Natl. Acad. Sci. USA, e2534768123 (2026)123.
+[38]N. Bhattacharya, N. Thomas, R. Rao, J. Dauparas, P. K. Koo, D. Baker, Y. S. Song, and S. Ovchinnikov, Interpreting
+     potts  and  transformer  protein  models  through  the  lens  of  simplified  attention,  inPacific  Symposium  on  Biocomputing
+     (World Scientific, 2021) pp. 34–45.
+[39]R. Rende and L. L. Viteritti, Are queries and keys always relevant?  a case study on transformer wave functions,Mach.
+     Learn.:  Sci. Technol.6, 010501 (2025).
+[40]M. Fr´ıas-P´erez,  M. Mari¨en,  D. P. Garc´ıa,  M. C. Ba˜nuls, and S. Iblisdir, Collective monte carlo updates through tensor
+     network renormalization,SciPost Physics14, 123 (2023).
+[41]T. Chen,  E. Guo,  W. Zhang,  P. Zhang, and Y. Deng, Tensor network monte carlo simulations for the two-dimensional
+     random-bond ising model,Phys. Rev. B111, 094201 (2025).
+[42]T. Chen, J. Zhang, J. Liu, Y. Deng, and P. Zhang, Batchtnmc:  Efficient sampling of two-dimensional spin glasses using
+     tensor network monte carlo,arXiv:2509.19006  (2025).
+[43]J. Su, M. Ahmed, Y. Lu, S. Pan, W. Bo, and Y. Liu, RoFormer:  Enhanced transformer with rotary position embedding,
+     Neurocomput.568,10.1016/j.neucom.2023.127063(2024).
+[44]T. Dao, Flashattention-2:  Faster attention with better parallelism and work partitioning, inInternational Conference on
+     Learning Representations, Vol. 2024 (2024) pp. 35549–35562.
+[45]R.  Rende,  L.  L.  Viteritti,  L.  Bardone,  F.  Becca,  and  S.  Goldt,  A  simple  linear  algebra  identity  to  optimize  large-scale
+     neural network quantum states,Commun. Phys.7, 260 (2024).
+[46]K. Sprague and S. Czischek, Variational monte carlo with large patched transformers,Commun. Phys.7, 90 (2024).
+[47]A. Van de Walle, M. Schmitt, and A. Bohrdt, Many-body dynamics with explicitly time-dependent neural quantum states,
+     Mach. Learn.:  Sci. Technol.6, 045011 (2025).
+[48]R. J. Williams, Simple statistical gradient-following algorithms for connectionist reinforcement learning,Mach. Learn.8,
+     229 (1992).
+[49]M. M´ezard, G. Parisi, and M. A. Virasoro, Spin glass theory and beyond (World Scientific, Singapore, 1986).
+[50]M. Kac and J. C. Ward, A combinatorial solution of the two-dimensional ising model,Phys. Rev.88, 1332 (1952).
+[51]J.  Charfreitag,  M.  J¨unger,  S.  Mallach,  and  P.  Mutzel,  McSparse:  Exact  solutions  of  sparse  maximum  cut  and  sparse
+     unconstrained binary quadratic optimization problems, in2022  Proceedings  of  the  Symposium  on  Algorithm  Engineering
+     and Experiments (ALENEX)(2022) pp. 54–66.
+[52]P. Bia las, P. Korcyl, T. Stebel, A. Stefa´nski, and D. Zapolski, Sampling two-dimensional spin systems with transformers,
+     arXiv:2604.27738  (2026).
+[53]F. Rom      ˜A¡, S. Risau-Gusman, A. Ramirez-Pastor, F. Nieto, and E. Vogel, The ground state energy of the edwards-anderson
+     spin glass model with a parallel tempering monte carlo algorithm,Physica A: Statistical Mechanics and its Applications
+     388, 2821 (2009).
+[54]S.-J. Ran, E. Tirrito, C. Peng, X. Chen, L. Tagliacozzo, G. Su, and M. Lewenstein,Tensor Network Contractions:  Methods
+     and Applications to Quantum Many-Body Systems(Springer Nature, 2020).
+C    Details of training neural networks                                                                                                                       18
+
+[55]T. Chen, J. Liu, Y. Deng, and P. Zhang, Tensor network markov chain monte carlo: Efficient sampling of three-dimensional
+     spin glasses and beyond,arXiv:2509.23945  (2025).
+[56]C. Chilin, E. Marinari, V. Mart´ın-Mayor, G. Parisi, J. J. Ruiz-Lorenzo, and D. Yllanes, On the true low-energy excitations
+     of the three-dimensional spin glass,arXiv:2606.07197  (2026).
+[57]F. Ritort and P. Sollich, Glassy dynamics of kinetically constrained models,Adv. Phys.52, 219 (2003).
+[58]H.-J. Zhou, K-core attack, equilibrium k-core, and kinetically constrained spin system,Chin. Phys. B33, 066402 (2024).
+[59]A. Kazemnejad, I. Padhi, K. Natesan Ramamurthy, P. Das, and S. Reddy, The impact of positional encoding on length gen-
+     eralization in transformers, inAdvances in Neural Information Processing Systems, Vol. 36, edited by A. Oh, T. Naumann,
+     A. Globerson, K. Saenko, M. Hardt, and S. Levine (Curran Associates, Inc., 2023) pp. 24892–24928.
+[60]M. Milakov and N. Gimelshein, Online normalizer calculation for softmax,arXiv preprint arXiv:1805.02867  (2018).
+[61]R. Pope, S. Douglas, A. Chowdhery, J. Devlin, J. Bradbury, J. Heek, K. Xiao, S. Agrawal, and J. Dean, Efficiently scaling
+     transformer inference, inProceedings of Machine Learning and Systems, Vol. 5, edited by D. Song, M. Carbin, and T. Chen
+     (Curan, 2023) pp. 606–624.
+[62]W.  Kwon,  Z.  Li,  S.  Zhuang,  Y.  Sheng,  L.  Zheng,  C.  H.  Yu,  J.  Gonzalez,  H.  Zhang,  and  I.  Stoica,  Efficient  memory
+     management for large language model serving with pagedattention, inProceedings  of  the  29th  Symposium  on  Operating
+     Systems Principles, SOSP ’23 (Association for Computing Machinery, New York, NY, USA, 2023) pp. 611–626.
+[63]K. Jordan,  Y. Jin,  V. Boza,et  al., Muon:  An optimizer for hidden layers in neural networks,https://kellerjordan.
+     github.io/posts/muon/(2024).
+[64]D. P. Kingma and J. Ba, Adam:  A method for stochastic optimization,arXiv:1412.6980  (2014).
+[65]S.-i. Amari, Natural gradient works efficiently in learning,Neural Comput.10, 251 (1998).
+[66]J. Martens and R. Grosse, Optimizing neural networks with kronecker-factored approximate curvature, inProceedings of
+     the  32nd  International  Conference  on  Machine  Learning, Proceedings of Machine Learning Research, Vol. 37, edited by
+     F. Bach and D. Blei (PMLR, Lille, France, 2015) pp. 2408–2417.
+[67]F.  Kunstner,  P.  Hennig,  and  L.  Balles,  Limitations  of  the  empirical  fisher  approximation  for  natural  gradient  descent,
+     inAdvances  in  Neural  Information  Processing  Systems,  Vol.  32,  edited  by  H.  Wallach,  H.  Larochelle,  A.  Beygelzimer,
+     F. d'Alch´e-Buc, E. Fox, and R. Garnett (Curran Associates, Inc., 2019).
+Supplementary Information:  Scalable Physics-Inspired Transformers for Spin Glasses
+
+
+
+
+
+                                                         CONTENTS
+
+ I. Model and architecture details                                                                       2
+    A. From the ordered Markov boundary to physics-inspired sparse attention                            2
+    B. Positional encodings: concatenated PE vs. additive PE                                           3
+    C. Local Monte Carlo with self-distillation                                               4
+    D. Model configurations and training settings                                                   5
+
+II. Hardware and implementation details                                                           6
+    A. Hardware and software environment                                                              6
+    B. FlashAttention vs. naive attention: runtime and sequence length effects                          7
+
+III. Optimizer comparison                                                                              8
+    A. Adam, natural-gradient descent, and Muon                                                   8
+    B. Learning-rate grids, warmup schedules, and cosine decay settings                              10
+
+IV. Comparison with classical baselines                                                          11
+    A. Configurations for MADE                                                                       11
+    B. Comparison of accuracy and wall-clock time                                                   13
+
+    References                                                                                       14
+                                                                                                                                             2
+
+  The Supplementary Information provides technical specifications, experimental protocols, and additional analyses to
+support reproducibility. SectionIdescribes the model architecture, including the physics-inspired sparse attention
+mechanism derived from the ordered Markov boundary, positional encoding strategies, and the self-distilled local
+Monte Carlo training scheme. SectionIIpresents hardware and implementation details, with emphasis on the runtime
+characteristics and scaling behavior of  FlashAttention-2 [1]. SectionIIIexamines optimization strategies and their
+associated learning-rate schedules. SectionIVcompares the proposed method with classical baselines, evaluating both
+predictive accuracy and computational cost.
+
+
+
+                                       I.  MODEL AND ARCHITECTURE DETAILS
+
+                     A.  From the ordered Markov boundary to physics-inspired sparse attention
+
+  Based on the theoretical guarantee of autoregressive screening (main text, Section IVA1), we now map the concept
+of the ordered Markov boundary ∂≺(i)to the concrete architectural design of our transformer model. Consider a
+D-dimensional lattice of linear size L containing N =LD spins. When processed by a decoder-only transformer, the
+D-dimensional spatial structure is flattened into a 1D sequence using an ordering≺, such as a standard raster scan
+ordering. As established, predicting σi requires only the spins within ∂≺(i). Physically, this ordered Markov boundary
+represents the topological frontier that separates the sampled region Pi from the unsampled region Fi. Because
+interactions in the Ising Hamiltonian are local, the “fill-edges” generated by marginalizing the future spins Fi only
+propagate along this physical frontier. Consequently, the boundary ∂≺(i)comprises a cross-sectional cut of the lattice.
+For a 2D lattice, this cut consists of roughly L spins corresponding to the current row and the immediately preceding
+row. In fact, the maximum index distance dmax is strictly bounded by: dmax = maxj∈∂   ≺(i)  (i−j    ) =O(LD−1     ). For
+a 1D system, dmax = 1, for a 2D system, dmax =O(L), and for a 3D system, dmax =O(L2). Thus, all necessary
+information to exactly computeP(σ                   i|σ Pi)is completely contained within a local 1D sequence window of this size.
+  The standard full causal attention calculates an attention matrix Aij for all past tokens j≺i  , incurring anO(N 2)
+computational overhead. While a fully connected transformer might theoretically learn that attention weights should
+decay such that Aij→ 0for j < i−d     max, forcing the model to infer this structural decay is inefficient and risks
+capturing spurious, unphysical long-range correlations.
+  Motivated by these observations and the localization properties of the system, our physics-inspired sparse attention
+explicitly incorporates the constraints into the model architecture. By applying a sliding window attention mask of
+widthW≥d                    max, we enforce a strict structural sparsity:
+
+                                                        Aij = 0 for i−j >W                                   (S1)
+
+This theoretically grounded truncation reduces the attention complexity fromO(N 2)to O(NW ). Crucially, this
+banded sparsity pattern aligns well with hardware-optimized kernels, such as FlashAttention, enabling the massive
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 1:Runtime comparison between physics-inspired sparse attention and full causal attention.(a)
+Autoregressive sampling runtime and (b) log-probability evaluation and backward pass runtime as a function of
+sequence length, for sparse attention and full causal attention.
+B  Positional encodings: concatenated PE vs. additive PE                                                 3
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 2:Effect of sparse attention on the overlap distribution  p(q).Comparison between sparse attention
+and full causal attention in FlashVAN for four disorder instances at temperature T  = 0.31. Both variants accurately
+reproduce the multi-peaked structure of p(q)and show close agreement with the Kac-Ward solution [ 2] and parallel
+tempering (PT).
+
+
+acceleration required to scale physical simulations to previously inaccessible lattice sizes. This alignment enables both
+computational efficiency and physical fidelity, which we validate through numerical experiments.
+  We first examine the computational scaling on the 1D Ising model. For long sequences (L> 4096), full attention
+becomes computationally prohibitive, whereas sparse attention scales efficiently with the window size (Supplementary
+Fig.1). We then evaluate the physical accuracy on the 2D Edwards–Anderson (EA) model via the overlap distribution
+p(q). As shown in Supplementary Fig.2, sparse attention closely matches full causal attention and reference methods,
+accurately reproducing the multi-peaked structure ofp(q)across different disorder instances.
+
+
+                                B.  Positional encodings: concatenated PE vs. additive PE
+
+  To evaluate positional encodings, we compare concatenated positional embeddings (concatenated PE), which
+FlashVAN uses by default, with additive positional embeddings (Add PE) in three controlled experiments; the
+experimental traces appear in Supplementary Figures3–5. All comparisons keep the model architecture and training
+hyperparameters identical; only the form of the positional encoding or the token/position embedding split is varied.
+When the total embedding dimension dmodel is fixed, the allocation between token and positional components strongly
+affects performance at large system sizes, as illustrated in Supplementary Fig.3. For small systems (for example
+N = 30,  dmodel = 32), free-energy convergence is largely insensitive to the position-to-token ratio; by contrast, for large
+systems (for example N = 256,   dmodel = 256), configurations that allocate excessive capacity to token embeddings
+exhibit degraded convergence and higher final free energy. Given the binary nature of the spin variables, a minimal
+token embedding (dtoken = 2) suffices in practice (in the absence of patching) and frees capacity for positional encoding
+as system size grows.
+B  Positional encodings: concatenated PE vs. additive PE                                                 4
+
+  In addition to allocation effects, concatenated PE yields more stable training trajectories and modestly faster
+convergence than Add PE, with this advantage most pronounced in low-temperature regimes where Add PE can
+exhibit oscillatory behavior (Supplementary Fig.4). Evaluation of learned distributions via the overlap    p(q)on hard
+2D EA instances shows that, when training converges, both schemes recover the correct multi-modal structure and
+match reference methods (Kac-Ward formula [2], PT [3]), as shown in Supplementary Fig.5.
+  Based on these empirical findings, we recommend allocating minimal dimensionality to token embeddings for binary
+spins (e.g.d         token = 2) and using concatenated PE for improved stability and scalability to large system sizes.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 3:Effect of the positional-to-token embedding ratio on free energy convergence.The total em-
+bedding dimension dmodel is held constant, and Ratio is defined as dpos/dtoken. (a) Free-energy convergence trajec-
+tories for the SK model at system size N = 30under different Ratio values. (b) Corresponding results for  N = 256.
+Columns correspond to different random seeds.
+
+
+
+
+                                          C.  Local Monte Carlo with self-distillation
+
+  To further clarify the origin of FlashVAN’s strong performance in the 3D EA model, we perform an ablation
+study of the overlap distribution p(q)at four representative temperatures, T  = 1.92,0  .77,0  .29, and0    .10. The gray
+histogram denotes the equilibrium reference distribution obtained from PT. The three columns compare different
+training strategies within FlashVAN: LMC with self-distillation, LMC without self-distillation, and a baseline variant
+in which both LMC updates and self-distillation are removed.
+  As shown in Fig.6, the closest agreement with the PT reference is obtained only when both LMC and self-distillation
+are included. In this case, FlashVAN reproduces the overlap distribution consistently across the full temperature range,
+including the low-temperature regime where the distribution becomes highly structured and difficult to learn. When
+self-distillation is removed while retaining LMC updates, visible deviations from the PT benchmark already appear,
+especially at lower temperatures. When both LMC and self-distillation are removed, the discrepancy becomes even
+more pronounced, and the learned distribution fails to correctly capture the overall structure of the PT reference.
+  These results show that the performance reported in the main text relies crucially on the improved training strategy
+rather than on the model architecture alone. The two ingredients play complementary roles. The short LMC procedure
+refines the generated configurations before evaluating the loss and therefore provides a more physically informed
+C  Local Monte Carlo with self-distillation                                                               5
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 4:Comparison of two absolute positional-embedding (PE) schemes.Green and red denote Add PE
+and concatenated PE, respectively; dashed lines indicate reference energies. (a) Free-energy convergence trajectories
+for the Sherrington–Kirkpatrick (SK) model at N = 20under a fixed random seed, shown for inverse temperatures
+β  =  1, 2.5, 4, 5. (b) Free-energy convergence for the SK model at N  =  256at   β  =  0.5. (c) Energy convergence
+during ground-state search in the 2D EA model.
+
+
+training signal. In this sense, LMC serves as a strong teacher that guides the model toward physically relevant
+configurations. At the same time, the additional self-distillation term stabilizes training by encouraging the model to
+assign higher probability to these refined samples, thereby counterbalancing the tendency of the original objective to
+collapse onto a limited set of modes, particularly at low temperatures. Together, these two ingredients constitute a
+self-distillation-based training strategy that is essential for stabilizing learning and for enabling FlashVAN to recover
+the correct overlap distribution in the challenging low-temperature regime.
+  For all results shown in Fig.6, we use the same model architecture, with    nlayers  = 2, dtoken  = 64,  dpos  = 192,
+nheads  = 2, and patch size(2   , 2, 2). Each model is trained for a total of 7000 steps. At the highest temperature
+T  = 1.92, the model is trained directly at the target temperature without annealing. For the lower temperatures
+T  = 0.77,0  .29, and0    .10, we use an annealing schedule consisting of 5000 warmup steps at  T  = 1.92, followed by 2000
+training steps while annealing to the target temperature.
+
+
+
+                                         D.  Model configurations and training settings
+
+  This section lists the model definitions used in our experiments, the default hyperparameter settings, and the
+methods for measuring parameter counts and training time. It also provides details on the concrete configurations and
+training durations for different system sizes (Supplementary Tables1–5).
+  Symbols used throughout are defined in Supplementary Table1. Default FlashVAN settings are listed in Supple-
+mentary Table2; typical values include    nlayers = 2, nheads = 4, dtoken = 2, the Muon optimizer [ 4] with η = 10−3 , a
+cosine-decay learning-rate schedule with 300 warmup steps, and the annealing protocol reported in the table. For the
+EA model, the input spin configuration on an LD lattice is partitioned into non-overlapping patches of size2      D. Each
+patch is mapped to a token, reducing the input sequence length from LD to( L/2)D, thereby improving computational
+efficiency.
+  To extend the approach to larger 2D EA systems (L≥    48), we adopt an extended configuration to improve scalability
+while maintaining a comparable parameter count. Specifically, a2 × 2patching scheme is used, increasing the token
+dimension from dtoken = 2to16, and enabling a more efficient representation of local spin configurations. In addition,
+D  Model configurations and training settings                                                            6
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 5:Comparison of Add and concatenated positional embeddings via the overlap distribution
+p(q).Curves show  p(q)for four disorder instances at temperature T  =  0.31. Kac-Ward formula and PT are in-
+cluded as reference distributions.
+
+
+the loss function incorporates both a reverse-KL-driven exploration term and a likelihood-based regularization term, as
+defined in Eq. (10). To further stabilize training at larger scales, we employ a two-stage procedure. An initial warm-up
+phase follows the standard FlashVAN setting, after which an annealing phase is performed using FlashVAN with 2D
+rotary positional encoding (RoPE) [5]. This design enables scaling to system sizes up to L = 60without a substantial
+increase in the number of trainable parameters.
+  Wall-clock timings in Supplementary Tables3–5follow a consistent protocol. The per-step time reports the average
+elapsed time for a single training step (forward pass, backward pass, and parameter update), while the total training
+time is measured from the start of training until completion on the GPU, excluding initialization and model-loading
+time. All timing experiments were repeated under the hardware environment specified in Supplementary SectionIIA.
+
+
+
+
+
+                                 II.  HARDWARE AND IMPLEMENTATION DETAILS
+
+
+                                            A.  Hardware and software environment
+
+  All experiments are conducted on a single NVIDIA H100 GPU (80 GB). To ensure reproducibility, we maintain a
+consistent software stack featuring Python 3.11, PyTorch 2.8.0, and FlashAttention v2. Mixed precision is strategically
+employed: attention kernels operate in FP16, whereas embeddings, feed-forward layers, and parameter updates remain
+in FP32 to strike a balance between throughput and numerical stability. Detailed environment specifications, including
+exact package builds and random seeds, are provided in our repository.
+A  Hardware and software environment                                                                  7
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 6:Ablation study for the overlap distribution  p(q)in the 3D EA model at L  =  10.The gray
+histogram denotes the PT reference. From left to right: FlashVAN trained with both LMC updates and self-
+distillation, with LMC only, and with neither LMC nor self-distillation. Rows are at temperatures T  = 1.92,0  .77,
+0.29, and0.10.
+
+
+
+
+                     B.  FlashAttention vs. naive attention: runtime and sequence length effects
+
+
+   FlashAttention substantially mitigates the runtime and memory overheads of transformer-based sampling for
+long sequences. We benchmark our FlashVAN against a baseline transformer-based VAN (transformer-VAN) that
+utilizes PyTorch’s naive attention implementation, which recomputes the full attention matrix at each generation
+step. In contrast, FlashVAN integrates FlashAttention kernels with a KV cache for efficient autoregressive sampling.
+Per-step runtimes are averaged over 500 training steps, with peak memory consumption recorded during the process
+(Supplementary Fig.7).
+   The computational complexity of a single full self-attention evaluation isO(N 2d), where N is the sequence length and
+d =dmodel is the hidden dimension. If autoregressive sampling naively recomputes all attention scores at each of the N
+generation steps, the end-to-end sampling cost becomes O(N 3d). FlashAttention does not alter these asymptotic costs
+for a single full attention evaluation, but its fused CUDA kernels and careful exploitation of on-chip memory greatly
+reduce memory traffic and constant factors, yielding substantial wall-clock speedups for the attention computation
+itself.
+   More importantly for sampling, FlashVAN combines FlashAttention with a KV cache so that key/value tensors
+computed for past positions are reused rather than recomputed. In practice, this reduces the sampling complexity from
+O(N 3d)to O(N 2d). The empirical traces in Supplementary Fig.7a show that FlashVAN achieves substantially lower
+per-step runtime than the transformer-VAN baseline as sequence length increases, with differences growing rapidly
+for longer sequences. Peak memory traces in Supplementary Fig.7b likewise show that FlashVAN uses less device
+memory than the naive implementation, although both implementations display steeply increasing memory demands
+with sequence length.
+B  FlashAttention vs. naive attention: runtime and sequence length effects                                   8
+
+Table 1: Definition of symbols used for model architecture and training hyperparameters.
+
+                               Symbol Description
+
+                               nlayers   Number of layers
+                               nheads   Number of attention heads
+                               dtoken   Token embedding dimension
+                               dpos    Positional embedding dimension
+                               dmodel  Total per-token embedding dimension,d                     model =d    token +d    pos
+                               nwarmup Number of warm-up (high-temperature) training steps
+                               nanneal  Number of temperature points during the annealing phase
+                               neq     Number of training steps per linear annealing temperature level
+                               Nbatch  Batch size
+                               η      Learning rate
+                               Np     Number of trainable parameters
+
+
+Table 2: General model and training settings for FlashVAN experiments. The annealing strategy is applied when
+searching for ground-state energies.
+
+                               Category Parameter            Default value
+
+                                          Architecture           FlashVAN
+                               Model      nlayers                              2
+                                          nheads                              4
+                                          dtoken                              2
+
+                                          Optimizer             Muon
+                                          Learning rate     η= 10       −3
+                               Training   Learning rate scheduler Cosine decay, 300 warmup steps
+                                          Annealing strategy   n  warmup = 1200, n     anneal = 500, n       eq = 5
+                                          Nbatch                             1024
+                                          Nsteps                              4000
+
+
+
+                                                  III.  OPTIMIZER COMPARISON
+
+                                          A.  Adam, natural-gradient descent, and Muon
+
+   We conduct a systematic comparison of three optimizer classes: first-order Adam [6], first-order Muon, and a
+quasi-second-order improved natural-gradient (NG) method [7] on two tasks: free-energy estimation for the Sherrington–
+Kirkpatrick (SK) model withN = 30and ground-state energy search for the 2D EA model. For the SK model (  N = 30;
+93,642 trainable parameters), a logarithmically spaced grid search identifies the optimal learning rates as10 −3  for
+Adam,10   −3  for Muon, and10  −2  for the NG method. Exact free energies across a range of inverse temperatures β are
+computed by enumeration and used as reference. As shown in Supplementary Fig.8a, all three optimizers achieve
+consistently low relative free-energy errors (below10 −3 ), with Muon producing the smallest relative error at most
+temperature points.
+   We extend the ground-state search procedure across multiple model scales for the 2D EA task. For intermediate-scale
+configurations (373,680 trainable parameters), the optimal learning rates are identified as10 −3  for Adam,10   −2  for
+Muon, and10  −1  for the NG method. In Supplementary Fig.8b, dashed lines represent reference ground-state energies
+sourced from a public online server [8]. At the larger scale (1,513,478 trainable parameters), the optimal learning rate
+shifts to10 −3  for both Adam and Muon, as illustrated in Supplementary Fig.8c.
+A  Adam, natural-gradient descent, and Muon                                                            9
+
+Table 3: Hyperparameters and wall-clock training time of FlashVAN on the SK model at different system sizesN.
+
+                             Parameter                 N= 30N= 64N= 128N= 256
+
+                             dpos                              62       62       126       254
+                             nheads                            2        2        4         4
+                             Wall-clock time per training step0.020 s      0.036 s      0.090 s       0.300 s
+                             Total wall-clock training time1.320 min  2.387 min  5.980 min  19.847 min
+
+
+Table 4: Hyperparameters and wall-clock training time of FlashVAN on the 2D EA model for different system sizes
+L, withn            layers = 2for all cases.
+
+                   Parameter                 L= 8  L= 16 L= 24  L= 32L= 48L= 60
+
+                   dpos                              62       126       254       318     144    176
+                   dtoken                             2        2         2         2       16     16
+                   nheads                            2        4         4         4        4      4
+                   nwarmup                         2000     2000      3000      3200    4500   4500
+                   nanneal                           100      120       220       240     2000   2000
+                   neq                               5        5         5         5        0      0
+                   Nbatch                          1024     1024      1024      1024    2048   2048
+                   Wall-clock time per training step0.014 s      0.049 s       0.224 s        0.382 s     1.273 s  2.596 s
+                   Total wall-clock training time0.581 min  2.182 min  11.766 min  28.337 min  3.000 h  4.830 h
+
+
+
+  Natural-gradient methods approximate second-order information and can accelerate convergence, but naive imple-
+mentations require inverting an Np×N    p matrix, with cubic time scaling in the number of parameters. The variant of
+NG used in this work circumvents this bottleneck by approximating the parameter-space inverse with an inversion
+carried out at the batch level (i.e., an Nbatch×N    batch matrix), thereby shifting the computational dependence from
+model dimensionality to batch size. This approach requires computing per-sample gradients and assembling batchwise
+matrices at each optimization step, which increases memory usage. Even so, as system size grows, the storage and
+construction of per-sample gradients cause rapidly increasing memory demands, even for fixed Nbatch. This remains a
+practical limitation of the method.
+  Taken together, Adam provides a computationally inexpensive and reliable baseline; the improved NG offers faster
+
+
+Table 5: Hyperparameters and wall-clock training time of FlashVAN on the 3D EA model for different system sizes
+L.
+
+                           Parameter                L= 4L= 6L= 8L= 10L= 14L= 16
+
+                           dpos                            30    126    124    96    192    192
+                           dtoken                           2      2      4     32     64     64
+                           nheads                           2      2      2      2      2      2
+                           nlayers                           3      3      3      2      2      2
+                           nwarmup                        2000   2000  10000  5000   5000   5000
+                           nanneal                         100    100    300   2000   2000   2100
+                           neq                             5      5      5      0      0      0
+                           Nbatch                         1024   1024   2048   2048   2048   2048
+                           Wall-clock time per training step0.028 s  0.052 s  0.132 s  0.179 s  0.819 s  1.290 s
+B  Learning-rate grids, warmup schedules, and cosine decay settings                                        10
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 7:Performance comparison between the transformer-based VAN (purple) and FlashVAN
+(green).(a) Mean per-step runtime for the combined forward and backward pass, averaged over 500 steps. (b)
+Peak GPU memory usage during training.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 8:Effect of optimizer choice on training convergence.Dashed lines indicate reference energies. (a)
+Relative free energy error|f−f       exact|/|f     exact| for the SK model (N = 30) as a function of inverse temperature β;
+the inset shows the standard deviation σ(f). Green, purple and pink curves denote the Muon, NG and Adam opti-
+mizers, respectively. (b) Energy convergence per site for the 2D EA model at L = 16. (c) Free-energy convergence
+for the SK model at N = 256. Under identical training and model configurations, NG could not be run at this scale
+due to GPU memory limitations.
+
+
+convergence and higher final accuracy but is constrained by increased memory and computational overhead; and Muon
+delivers the best trade-off in our experiments, achieving faster convergence and lower relative errors.
+
+
+                         B.  Learning-rate grids, warmup schedules, and cosine decay settings
+
+   For a fair comparison across optimizers, we conduct a systematic, logarithmically spaced grid search over initial
+learning rates, typically spanning10     −4  to10 −1 . Final choices are made by inspecting task-specific convergence and
+numerical stability (optimal values are reported above in SectionIIIA).
+   We adopt a two-stage learning-rate schedule consisting of an initial linear warmup followed by cosine annealing to
+enhancebothtrainingstabilityandfinalperformance. Specifically, thelearningrateisrampedlinearlyfrom10   −5  to10 −3
+over the first 300 steps using LinearLR, after which CosineAnnealingLR is applied with Tmax = 2700and    ηmin = 10−5 .
+If training proceeds beyond Tmax, the learning rate is maintained at ηmin. In fixed-temperature SK training, this
+warmup-plus-cosine schedule produces a small but consistent improvement in final accuracy (Supplementary Fig.9a).
+In that panel, dashed lines correspond to runs employing warmup plus cosine decay, while solid lines denote fixed-
+learning-rate runs, illustrating that the two-stage schedule aids in obtaining more accurate free-energy estimates in
+this regime.
+B  Learning-rate grids, warmup schedules, and cosine decay settings                                        11
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 9:Impact of learning rate scheduler on training convergence and accuracy.All panels compare a
+fixed learning rate of1 × 10−3  with a cosine learning rate scheduler using a warm-up phase of 300 steps. (a) Free-
+energy convergence for the SK model, showing training trajectories for N  =  64, 128, 256approaching the exact
+thermodynamic-limit value N→∞  . (b) Energy convergence per site for the 2D EA model at L = 32. (c) Residual
+energy per site as a function of system sizeL, comparing PBC and OBC.
+                                                               perfectly aligns
+
+
+
+  However, in the ground-state energy search task for the 2D EA model (Supplementary Figs.9b and9c), the same
+warmup-plus-cosine learning-rate schedule instead leads to degraded accuracy. We hypothesize that this effect is related
+to changes in temperature (inverse temperature β) during training: under an annealing protocol, each temperature
+decrease alters the target distribution, making the target distribution both sharper and shifted in location. The
+optimizer therefore needs to adjust parameters rapidly after each temperature change in order to track the new peaks.
+As the learning rate decreases monotonically during training, the optimizer may become overly conservative, making
+step sizes too small at critical moments and hindering fast convergence to new peaks. This issue is particularly
+pronounced in our setup, where we train for only five steps at each temperature and thus leave very little time for the
+optimizer to adapt. As a result, a globally monotone-decreasing learning-rate schedule often becomes too small at
+crucial moments, preventing the model from tracking the rapid changes in the target distribution and thereby reducing
+ground-state search accuracy.
+  Based on these observations, we adopt the following practical recommendations for experiments.  For fixed-
+temperature convergence tasks (for example, free-energy estimation of the SK model at fixed β), we recommend using
+a warmup-plus-cosine learning-rate schedule to improve final accuracy. By contrast, for ground-state search tasks that
+involve rapid temperature changes, we recommend caution when using a globally monotone-decreasing learning-rate
+schedule. Instead, consider more conservative or piecewise strategies.
+
+
+
+
+
+                                  IV.  COMPARISON WITH CLASSICAL BASELINES
+
+
+                                                   A.  Configurations for MADE
+
+
+  The Masked Autoencoder for Distribution Estimator (MADE) [9] utilizes a purely feedforward architecture featuring
+masked fully connected layers to enforce an autoregressive property. Specifically, for any node j in layer l and node i
+in the subsequent layer l + 1, the connection weight W lij is constrained when i≥j  , ensuring that each output depends
+only on previously generated variables. Owing to its architectural simplicity, the computational cost of MADE scales
+linearly with system size L, whereas its parameter count grows quadratically with network width and depth, as shown
+in Supplementary Table6. To enable training of larger systems on a single accelerator, we introduce patching in several
+configurations by partitioning spins into local blocks and modeling each block, thereby reducing the parameter count by
+roughly an order of magnitude in many settings. However, MADE’s reliance on localized representations and the lack
+of a global information-aggregation mechanism limit its ability to capture hierarchical structures in high-dimensional
+systems. Consequently, gains in parameter efficiency do not necessarily yield preserved representational capacity or
+accuracy.
+A  Configurations for MADE                                                                          12
+
+Table 6: Trainable parameter statistics of MADE.
+
+                        System size Net depth Net width Parameters (w/ patch) Parameters (w/o patch)
+
+                                          1         1             4096                 4096
+                                          2         1             4368                 8256
+                        L = 8             2         4            17472                33024
+                                          2         8            34944                66048
+                                          2        16            69888                132096
+                                          3         4            25728                164352
+
+                                          1         1           1048576              1048576
+                                          2         4           4457472              8392704
+                        L = 32            2        16          17829888             33570816
+                                          2        32          35659776                 –
+                                          3         4           6555648                 –
+
+
+Table 7: Trainable parameter statistics of FlashVAN.
+
+                             System sized       pos nheads Parameters (w/ patch) Parameters (w/o patch)
+
+                                            14    1           6544                 6950
+                             L = 8          30    1          24336                25286
+                                            62    4          93712                95750
+                                            94    8          208144               211270
+
+                                           126   1          397872                  –
+                             L = 32        254   4         1517104                 –
+                                           318   16         2347056                 –
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 10:Benchmarking the accuracy of MADE and FlashVAN on the 2D EA model.Panels (a) and
+(b) show the residual energy per site as a function of the number of trainable parameters. Each data point is aver-
+aged over five disorder instances. (a) System sizeL= 8. (b) System sizeL= 32.
+A  Configurations for MADE                                                                          13
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 11:Comparison of wall-clock training efficiency between MADE and FlashVAN.Panels (a) and
+(b) show the wall-clock time per training step as a function of the number of trainable parameters for system sizes
+L= 8andL= 32, respectively. Each data point is averaged over 1,000 training steps.
+
+
+                                       B.  Comparison of accuracy and wall-clock time
+
+   For the 2D EA ground-state estimation task, we evaluate both convergence accuracy and computational cost for
+MADE and FlashVAN. Supplementary Fig.10presents the relative error between estimated and exact energies,
+averaged over five disorder instances, as a function of the number of trainable parameters. At L = 8, FlashVAN
+attains an extremely low relative error (≈ 10−6 ), retaining high precision even under patching configurations. In
+contrast, MADE achieves comparable accuracy only in its unpatched form; once patched, its error deteriorates to
+10−1 , indicating that input compression degrades its ability to preserve key information. This limitation becomes more
+pronounced at L = 32: despite scaling to tens of millions of parameters, MADE fails to reach low-error solutions and
+is consistently outperformed by FlashVAN in both patched and unpatched regimes.
+   Supplementary Fig.11reports wall-clock metrics. Due to attention overhead, FlashVAN exhibits a slightly higher
+per-step time than MADE at equal parameter scales (the difference is on the order of0 .03seconds per step). Crucially,
+FlashVAN’s patching strategy reduces total parameter counts and overall training time while maintaining accuracy,
+delivering a better time-accuracy trade-off in medium-to-large problems such as L  =  32.  In summary, MADE
+offers attractive theoretical scaling but is limited by representational constraints in large-scale settings; FlashVAN’s
+combination of expressive attention and efficient compression yields superior practical scalability and final performance.
+B  Comparison of accuracy and wall-clock time                                                          14
+
+
+
+
+
+[1] T. Dao, Flashattention-2: Faster attention with better parallelism and work partitioning, inInternational Conference on
+    Learning Representations, Vol. 2024 (2024) pp. 35549–35562.
+[2]M. Kac and J. C. Ward, A combinatorial solution of the two-dimensional ising model,Phys. Rev.88, 1332 (1952).
+[3]E. Marinari and G. Parisi, Simulated tempering: a new monte carlo scheme,Europhys. Lett.19, 451 (1992).
+[4] J. Liu, J. Su, X. Yao, Z. Jiang, G. Lai, Y. Du, Y. Qin, W. Xu, E. Lu, J. Yan,et al., Muon is scalable for llm training,
+    arXiv:2502.16982 (2025).
+[5] J. Su, M. Ahmed, Y. Lu, S. Pan, W. Bo, and Y. Liu, RoFormer: Enhanced transformer with rotary position embedding,
+    Neurocomput.568,10.1016/j.neucom.2023.127063(2024).
+[6]D. P. Kingma and J. Ba, Adam: A method for stochastic optimization,arXiv:1412.6980 (2014).
+[7] J. Liu, Y. Tang, and P. Zhang, Efficient optimization of variational autoregressive networks with natural gradient,Phys. Rev.
+    E111, 025304 (2025).
+[8] McSparse, University of Bonn, Format descriptions — McSparse, http://mcsparse.uni-bonn.de/mcgroundstate/formats
+    .html(2026), accessed 15 Jan 2026.
+[9] M. Germain, K. Gregor, I. Murray, and H. Larochelle, Made: Masked autoencoder for distribution estimation, inProceedings
+   of the 32nd International Conference on Machine Learning, Proceedings of Machine Learning Research, Vol. 37, edited by
+    F. Bach and D. Blei (PMLR, Lille, France, 2015) pp. 881–889.

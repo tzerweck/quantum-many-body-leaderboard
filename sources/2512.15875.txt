@@ -1,0 +1,2025 @@
+Tree Tensor Networks Methods for Efficient Calculation of Molecular Vibrational
+Spectra
+
+        Shuo Sun      ,1, a)  Richard M. Milbradt      ,1  Stefan Knecht      ,2  Chandan Kumar        ,3  and
+        Christian B. Mendl       1, 4, b)
+
+
+
+        1)Technical  University  of  Munich,  CIT,  Department  of  Computer  Science,
+
+        Boltzmannstraße 3, 85748 Garching, Germany
+
+
+        2)Algorithmiq Ltd, Kanavakatu 3C, FI-00160 Helsinki, Finland
+
+
+        3)BMW Group, Munich
+
+
+
+        4)Technical  University  of  Munich,  Institute  for  Advanced  Study,
+
+        Lichtenbergstraße 2a, 85748 Garching, Germany
+
+
+        (Dated:  17 July 2026)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                     1
+        We develop and employ general Tree Tensor Networks (TTNs) to compute the vibra-
+        tional spectra for two model systems:  a set of 64-dimensional coupled oscillators and
+        acetonitrile.   We  explore  various  tree  architectures,  ranging  from  the  simple  linear
+        structure of Matrix Product States (MPS), to trees where only the leaf nodes carry
+        a physical leg—as commonly seen in the underlying ansatz of the Multilayer Multi-
+        configuration Time-Dependent Hartree (ML-MCTDH) method—and further to more
+        general trees in which all nodes are allowed to possess a physical leg.  In addition, we
+        implement  Locally  Optimal  Block  Preconditioned  Conjugate  Gradient  (LOBPCG)
+        methods and Inverse Iteration methods as eigensolvers.  Benchmarking runtime and
+        accuracy shows that all tested topologies can reach high accuracy.  For acetonitrile,
+        inverse-iteration refinement brings all 84 computed states below 1 cm−1 error, while
+        the fork-4 tree, a comb-like tree with four backbone nodes, provides the best over-
+        all  balance  between  accuracy  and  cost.   MPS  remains  computationally  attractive,
+        whereas more connected trees generally improve accuracy at fixed bond dimension.
+        All numerical simulations were performed using PyTreeNet,  a Python package de-
+        signed for flexible tensor network computations.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+a)Electronic mail:shuo.sun@tum.de
+
+b)Electronic mail:christian.mendl@tum.de
+
+
+                                                      2
+I.    INTRODUCTION
+
+
+Vibrational spectroscopies, such as IR and Raman spectroscopies, are widely used in chem-
+istry to characterize molecules.  However, interpreting such spectra is not always straight-
+forward, as the vibrational degrees of freedom scale as 3N− 6 (where N  is the number of
+nuclei), making numerical simulations crucial for structure and property determination.  In
+recent years, numerous methods have been developed to obtain vibrational spectra, such as
+VSCF1–4   , VCI5–8   , VCC9–12   , neural network methods13, and quantum simulation14–16    .  VSCF
+is  a  mean-field  theory  and  often  lacks  the  accuracy  required  for  the  desired  applications.
+More accurate wavefunction-based methods such as VCI and VCC can become difficult to
+apply as the system size and Hamiltonian complexity increase.  Neural network approaches
+offer a conceptually different framework, but their performance depends strongly on the cho-
+sen architecture and training strategy.  Quantum simulation methods also incur high costs
+when simulated classically or require quantum hardware beyond current near-term device
+capabilities.
+
+As a promising addition to the available methods, tensor network methods have made sig-
+nificant  progress  in  vibrational  spectra  calculations  in  recent  years17–30    .   However,  most
+implementations have used matrix product operators (MPOs) to represent the Hamiltonian.
+This approach limits the full potential of tensor network methods, as the molecules’ normal
+modes exhibit long-range interactions, while the MPO formalism primarily favors nearest-
+neighbor interactions.  This structural limitation is particularly problematic when focusing
+on higher-lying excited eigenstates,  where energy degeneracy becomes significant,  making
+accurate  eigenstate  computation  even  more  challenging.   To  this  end,  we  propose  in  this
+paper an approach that utilizes tree tensor network operators (TTNOs)31,32     to represent the
+Hamiltonian and likewise tree tensor network states (TTNSs)33,34    to represent the state func-
+tion for eigenvalue problem calculations, thereby fully leveraging tree structure connectivity.
+We implement the Locally Optimal Block Preconditioned Conjugate Gradient (LOBPCG)
+method and inverse iteration method within the tree tensor network framework to solve the
+eigenvalue  problem.   Using  a  64-dimensional  coupled-oscillator  model  and  acetonitrile35,36
+as  benchmarks,  we  compare  runtime  and  accuracy  across  different  tree  structures  (MPS,
+T-tree, leaf-only trees, fork trees, and the full T3NS topology; see AppendixBandFigure 9,
+Figure 10).  The calculations show that all topologies are viable, that increased connectiv-
+
+                                                       3
+ity can substantially improve accuracy, and that a moderately branched fork-4 tree offers
+the  best  accuracy–cost  trade-off  for  acetonitrile.   All  computations  were  performed  with
+PyTreeNet37.
+
+
+II.    METHODS
+
+
+In this section, we first briefly introduce tree tensor networks inSec. (II A).  We then discuss
+two well-known numerical eigenvalue algorithms inSec. (II B).  Finally, we combine these
+two  aspects  and  introduce  our  implementation  of  these  numerical  algorithms  within  the
+tensor network framework inSec. (II C).
+
+
+A.    Tree Tensor Network Operations
+
+1.    Introduction to Tensor Networks
+
+The field of tensor networks has seen significant research activity over the last two decades.
+It has been especially successful when applied to the numerical simulation of quantum sys-
+tems.  We will restrict this introduction to the concepts relevant to the present work.  For a
+deeper and pedagogical introduction, refer to38–41    , and for a general overview, see the recent
+reviews42–44    .  In general, a tensor is an element A∈ C×Ni=1Di, i.e., a multi-dimensional array
+whose entries are identified by a string of N  indices, where the ith index can take values in
+{1,...,Di}.  Intuitively, this is a generalization of vectors and matrices, where the entries
+are identified by one and two indices, respectively.  We will call N  the  degree  of a tensor,
+while we refer to the different indices on a tensor as legs.
+
+
+
+If a legi of a tensorA and a legi′ of a different tensorB have the same dimensionDi =Di′,
+we  can  contract  over  these  legs  by  summing  over  the  products  of  the  tensor  entries  with
+the  same  index  for  the  contracted  legs.   Let  us  emphasize  this  with  an  example,  where
+A∈ CD1×D2×D3  and B∈ CD2×D4×D5.  Here we can contract the second leg of A with the
+first leg of B, leading to a new tensor C∈ CD1×D3×D4×D5.  The entries of C are defined by
+
+                                                       D2X
+                                            Cjkℓm =         AjnkBnℓm.                                                 (1)
+                                                       n=1
+
+                                                        4
+                    Now,  a  tensor  network  is simply a collection of tensors and a record of the legs that are
+                    contracted.  To facilitate easier readability, a graphical notation for tensor networks is avail-
+                    able.  One can build this representation by depicting every tensor as a geometrical shape
+                    and attaching one line per leg.  Then, all lines representing contracted legs are connected to
+                    their corresponding partners.  For example,Eq. (1)can be depicted as
+
+
+
+
+                                                                                                 .                                           (2)
+
+
+
+                    We can also split a tensor.  To this end, we can reinterpret a tensor as a matrix by defining
+                    which legs should be the output and input legs of the matrix.  Then we can apply any desired
+                    matrix decomposition, the most common being the QR decomposition and the singular value
+                    decomposition (SVD). For example, we can obtain two tensors, sayA′ andB′, from a tensor
+                    C by first reshaping C into a matrix.  This is done by grouping some of its legs to form the
+                    ‘row’ indices and the remaining legs to form the ‘column’ indices.  After applying a matrix
+                    decomposition (e.g., SVD or QR), the resulting matrices can be reshaped back into tensors,
+                    effectively splitting the original tensorC into two or more tensors.  These two kinds of tensor
+                    manipulation allow us to represent an arbitrary quantum state as a tensor network, as we
+                    discuss in the next section.
+
+
+                    2.    Tensor Network States and Operators
+
+                    A quantum state|ψ⟩ generally has a large number of degrees of freedom scaling exponentially
+                    in system size.  For example, if we have a quantum system consisting of L smaller quantum
+                    systems, we can write the state as
+
+                                                          |ψ⟩ = X         Cs1,...,sL|s1,...,sL⟩,                                          (3)
+                                                                  s1,...,sL
+
+                    where{|sj⟩} is the basis of the local quantum system j.  Repeated tensor decompositions
+                    allow us to express the tensorC as a tensor network with an arbitrary underlying tree shape
+
+                                                |ψ⟩ = X         T (1){v1,i},s1...T (L){vL,i},sL|s1,s2,...,sL⟩,                              (4)
+                                                        v1,...,vMs1,...,sL
+
+                                                                            5
+   j          j      n
+ C    ℓ   =    A          B    ℓ
+k   m         k         m
+                           where  we  assumed  for  simplicity  of  notation  that  every  tensor  has  one  uncontracted  leg
+                           sj.  Here sj  indexes the  physical  (local system) degrees of freedom with dimension called
+                           the  physical  leg  dimension,  while v(j,i)  indexes  the  virtual  (internal)  degrees  of  freedom
+                           connecting tensors in the network. The dimension ofvi is denoted as virtual bond dimension.
+                           The total number of contracted legs in the tensor network is M  and{vj,i}⊂{v1,...,vM}
+                           are the contracted legs of tensorT (j).  The tensor network inEq. (4)is a         tree tensor network
+                           state (TTNS) if there are no loops in the network33.
+
+                           We can apply the analogous decomposition to a quantum operator acting on high-dimensional
+                           systems, yielding
+
+                                             ˆO = X        T (1){v1,i},p1,q1···T (L){vL,i},pL,qL|p1,p2,...,pL⟩⟨q1,q2,...,qL|.                (5)
+                                                   p1,...,pLq1,...,qL
+                                                   v1,...,vM
+
+                           This tensor network is called a  tree  tensor  network  operator  (TTNO)31  and differs from a
+                           TTNS mostly in that every site has two uncontracted physical legs rather than just one.  A
+                           graphical depiction of an example TTNS and TTNO based on the same tree is shown in
+                           Figure 1.
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                (a) TTNS                       (b) TTNO
+
+                           FIG. 1.  Examples of a TTNS and TTNO with the same tree topology, differing in the number of
+
+                           physical legs per tensor.  Adapted from C¸ akır  et  al., Phys.  Rev.  B, 112, 035101, 2025;  licensed
+
+                           under a Creative Commons Attribution (CC BY) license.
+
+
+
+                           3.    TTNO Construction
+
+
+                           To  construct  a  TTNO  representing  a  desired  system  Hamiltonian,  we  use  the  algorithm
+                           introduced in Ref.45, which improves upon the methods introduced in Refs.32and46.  The
+
+                                                                                    6
+
+       T (1)T (1)
+
+T (2)T (2)    T (3)T (3)
+
+       T (4)T (4)    T (5)T (5)
+algorithm starts from a Hamiltonian in the form
+
+
+
+                                                     NX     LO
+                                             H =        ci      A(j)i ,                                                    (6)
+                                                    i=1    j=1
+
+
+where A(j)i    is  an  operator  acting  on  the j-th  subsystem  (or  site).   We  denote  the  overall
+number of subsystems by L.  Once we have decided on a desired tree structure, we rewrite
+the  Hamiltonian  as  a  state  diagram.   State  diagrams  are  a  symbolic,  hypergraph-based
+representation of tensor network topologies.  Here, each path through the graph corresponds
+to a term in the Hamiltonian sum.  This intermediate representation allows us to exploit the
+tensor-product structure of the Hamiltonian to systematically combine repeated operators.
+To be more specific, the hyperedges hi,j, where j again denotes the subsystem, in the state
+diagram are labelled and correspond to the operator-valued elements of the TTNO tensors.
+On the other hand, the verticesvℓ,(j,j′) connected by the hyperedges each correspond to one
+index value ℓ of the virtual leg connecting j and j′ in the TTNO32.
+
+
+It is trivial to initialise the state diagram for all terms individually.  Combined into one big
+state diagram representing the Hamiltonian, they will be unconnected, though they contain
+superfluous  information.   Thus,  we  compress  the  state  diagrams  by  combining  equivalent
+parts  of  the  different  single-term  state  diagrams.   However,  this  is  a  non-trivial  task.   To
+approach this, we traverse the underlying tree structure and, for each edge, compress the
+corresponding set of verticesV  in the state diagram.  The compression occurs in multiple
+phases:  First, the state diagram is split into two partsU1 andU2 by removingV.  Now, any
+equivalent elements in each partUi  will be represented by one element.  We can obtain a
+labelled bipartite graph by reinstating the connectivity betweenU1  andU2  due to V ;  the
+labels correspond to the prefactors ci  of the terms.  We can find the optimal placement of
+new vertices via an application of a symbolic version of the Gaussian elimination algorithm
+on the label matrix of the bipartite graph45, followed by the minimum vertex cover algorithm
+on the result46.
+
+
+Once we compress the entire state diagram, it can be translated into a TTNO. To do so,
+one runs over all the labelled hyperedges hi,j.  The corresponding operator is then added to
+the tensorT [j] at the indices denoted by the vertices connected to hi,j32.
+
+                                                       7
+B.    Numerical Algorithms
+
+
+A variety of numerical approaches have been developed for computing vibrational excited
+states,  including  improved  relaxation17,  LOBPCG  and  inverse  iteration18,  DMRG19,20,23       ,
+FEAST22,  inexact Lanczos30,  state-averaged DMRG23,  state-averaged ML-MCTDH-based
+Lanczos29, as well as shift-and-invert, folded DMRG, and excited-state-specific DMRG21.
+
+
+In this work, we adapt and employ the LOBPCG and inverse iteration eigensolvers of Ref.18
+within the TTN framework.  Both methods rely on several TTN-specific operations, which
+are detailed inSec. (II C).  These include the evaluation of    H|x⟩, compression of sums of
+states  using  successive  randomized  compression  (SRC,Sec.  (II C 1)),  and  the  solution  of
+linear systems of the form H|y⟩ =|x⟩ via alternating least squares (ALS,Sec. (II C 3)).  In
+addition, LOBPCG requires the recompression of linear combinations of TTNSs, which can
+be carried out using either variational fitting (Sec. (II C 2)) or SRC.
+
+
+In the following, we first outline the general form of the eigensolvers and then describe their
+specialization to TTNs.
+
+
+
+
+1.    Locally Optimal Block Preconditioned Conjugate Gradient (LOBPCG)
+method
+
+Locally  Optimal  Block  Preconditioned  Conjugate  Gradient  (LOBPCG)  is  a  numerical
+method to solve eigenvalue problems47,48   .  It is a generalization of the conjugate gradient
+method, which is very efficient for large sparse matrices.  In this work, we adapt LOBPCG
+to  tree  tensor  networks.   The  core  idea  is  to  construct,  at  each  iteration,  a  search  sub-
+space spanned by the current approximate eigenvector, its residual, and the previous search
+direction, and then solve a Rayleigh–Ritz problem within this subspace.
+
+
+We begin by initializing the residual vector as r = Hx−λx, where x is the current state
+vector and λ is the Rayleigh quotient,
+
+
+                                                  λ = x†Hxx†x .                                                          (7)
+
+
+                                                      8
+In this work we use the three-term recurrence formulation of LOBPCG,
+
+                                                p(k) =βr(k) +γp(k−1)                                               (8a)
+
+                                             ˜x(k+1) =αx(k) +p(k)                                                    (8b)
+
+                                             x(k+1) =   ˜x(k+1)∥˜x(k+1)∥                                                         (8c)
+
+where the coefficients α, β, and γ are obtained by solving the small generalized eigenvalue
+problem
+                                                                                                  
+        x(k)H                       α =λ x(k)                    α.      (9)
+             r(k)         x(k)  r(k)  p(k)            β               r(k)     x(k)  r(k)  p(k)            β
+             p(k)                                     γ               p(k)                                 γ
+
+
+This method can also be implemented in a block manner, where we compute N  eigenvalues
+and eigenvectors simultaneously by constructing x(k),r(k), andp(k) for each eigenvector and
+solving a 3N× 3N  generalized eigenvalue problem.  This block formulation is particularly
+important  for  handling  near-degenerate  states  (as  mentioned  inSec.  (I)),  as  it  solves  for
+multiple eigenstates within the same subspace, preventing convergence to the same state.
+
+To accelerate convergence, we can apply a preconditioner M  to the residual vector, which
+is typically the inverse of the shifted Hamiltonian,
+
+                                         rprecond =Mr = (H−sI)−1r,                                          (10)
+
+where s is the shift value andI  is the identity matrix.  The preconditioned residual can be
+obtained by solving the linear system
+
+                                               (H−sI)rprecond =r.                                                 (11)
+
+In the tree tensor network framework, we solve this equation by iterating through the network
+nodes (called sweeps), optimizing one tensor at a time, as described inSec. (II C 3).
+
+The  pseudocode  of  the  single  and  block  LOBPCG  method  is  shown  inAlgorithm  1and
+Algorithm 2, respectively.  Note that at the start of the first iteration, the search directions
+are initialized asp(0) =r(0). For all subsequent iterations,p(i) is updated from the generalized
+eigenvector components according toEq. (8).
+
+                                                          9
+                                Algorithm1 LOBPCG for a Single State
+Input:  Matrix H, initial state vector x(0), shift for preconditioner s, max iterations Niter
+
+Output:  Converged state x and eigenvalue λ
+
+ 1:  Initialize: x←x(0), λ← x†Hxx†x
+
+ 2:  for i = 1 to Niter do
+
+ 3:       Compute residual: r←Hx−λx ▷ via successive randomized compression and variational
+
+    fitting
+
+ 4:       Apply preconditioner: r←Mr      ▷ SeeEq. (10), via alternating least squares (ALS)
+
+ 5:       Build subspace:S←{x,r,p}                          ▷ For i = 1, set p←r
+
+ 6:      if  orthogonalization required then
+
+ 7:             Orthogonalize all vectors inS against the constraint subspace     ▷ e.g., previously
+
+    computed lower-lying eigenstates
+
+ 8:      end if
+
+ 9:       Construct matrices:   ˜Hkl←s†kHsl,   ˜Mkl←s†ksl for sk,sl∈S
+
+10:       Solve generalized eigenvalue problem:   ˜Hv =λ ˜Mv, v = (α,β,γ)T
+
+11:       Update x, p from eigenvectors, λ← smallest eigenvalue               ▷ SeeEq. (8)
+
+12:  end for
+
+13:  return x, λ
+
+
+2.    Inverse Iteration method
+
+Inverse iteration is an iterative method to find the eigenvector and eigenvalue of a matrix
+close to a given shift value.  The basic idea is that
+
+                                            ˜x(i+1) = (H−sI)−1x(i)                                             (12a)
+
+                                            x(i+1) =   ˜x(i+1)∥˜x(i+1)∥                                                        (12b)
+
+where again s is the shift value andI  the identity matrix.  When s is not exactly one of
+the eigenvalues of H, we can obtain the updated eigenvector by solving the linear system
+(H−sI)x(i+1) = x(i) by sweeping through the tensor network, similar toEq. (11).  In this
+work, we found the solution of the linear system using the alternating least squares (ALS)
+method, which is described inSec. (II C 3).  The shift value can stay the same throughout
+the  iterations  and  may  also  be  updated  after  one  or  few  iterations.   In  this  project,  we
+
+                                                        10
+                           Algorithm2 Block LOBPCG for Multiple States
+Input:  Matrix H, initial state vectors{x(0)j }nj=1, shift for preconditioner s, max iterations Niter
+
+Output:  Multiple eigenstates{xj}nj=1 and eigenvalues{λj}nj=1      n
+ 1:  Initialize:{xj}nj=1←{x(0)                              x†jHxj
+                                  j }nj=1,{λj}nj=1←         x†jxj   j=1
+ 2:  for i = 1 to Niter do
+
+ 3:      for j = 1 to n do
+
+ 4:             Compute residual: rj←Hxj−λxj       ▷ via successive randomized compression,
+
+    variational fitting
+
+ 5:             Apply preconditioner: rj←Mrj  ▷ SeeEq. (10), via alternating least squares (ALS)
+
+ 6:           if  orthogonalization required then
+
+ 7:                  Orthogonalize xj, rj  and pj  against the constraint subspace
+
+ 8:           end if
+
+ 9:      end for
+
+10:       Build subspace:S←{xj}nj=1∪{rj}nj=1∪{pj}nj=1
+
+11:       Construct matrices:   ˜Hkℓ←s†kHsℓ,   ˜Mkℓ←s†ksℓ for sk,sℓ∈S
+
+12:       Solve generalized eigenvalue problem:   ˜Hv =λ ˜Mv
+
+13:      for j = 1 to n do
+
+14:             Update state: xj←Pnk=1vk,jsk
+
+15:     pj←P3nk=n+1vk,jsk                                    ▷ SeeEq. (8)
+
+16:      end for
+
+17:       Update eigenvalues:{λj}nj=1← smallest n eigenvalues
+
+18:  end for
+
+19:  return{xj}nj=1,{λj}nj=1
+
+
+
+
+
+
+cluster  eigenvalues  into  groups  and  use  block  inverse  iteration  to  solve  the  eigenproblem.
+Clustering is particularly important for near-degenerate eigenvalues where individual shifts
+might miss multiple closely spaced states.  We use the mean Rayleigh quotient of the group
+as the shift value and update the Rayleigh quotient in each iteration.  The pseudocode of
+the block inverse iteration method is described inAlgorithm 3.
+
+                                                        11
+                                  Algorithm3 Block Inverse Iteration
+Input:  Matrix H, initial state vectors{x(0)j }nj=1, max iterations Niter
+
+Output:  Multiple eigenstates{xj}nj=1 and eigenvalues{λj}nj=1   n
+ 1:  Initialize:{xj}nj=1←{x(0)                           x†jHxj
+                                j }nj=1,{λj}nj=1←         x†jxj  j=1
+ 2:  for i = 1 to Niter do
+ 3:       Update shift and Hamiltonian: s←  1        Pn
+                                                   n    j=1λj, Hshift←H−sI
+ 4:      for j = 1 to n do
+
+ 5:             Solve Hshiftyj =xj, update state: xj←yj/∥yj∥      ▷ Solve with ALSSec. (II C 3)
+
+ 6:      end for
+
+ 7:      if n> 1 then
+
+ 8:             Orthogonalize vectors by solving generalized eigenvalue problem
+
+ 9:              ˜Hkℓ←x†kHxℓ,  ˜Mkℓ =x†kxℓ,  ˜Hv =λ ˜Mv, xj←Pkvjkxk
+
+10:      end if
+
+11:  end for
+
+12:  return{xj}nj=1,{λj}nj=1
+
+
+C.    Implementation of LOBPCG and Inverse Iteration on Tree Tensor
+Networks
+
+1.    Successive Randomized Compression
+
+The successive randomized compression (SRC) method49 is used to approximate the product
+of a TTNO H  and a TTNS x.  It was originally developed for linear tensor networks, and
+we extend it here to arbitrary tree structures50.  The naive approach to applying a TTNO
+to a TTNS is to contract the local operator and state tensors explicitly and then compress
+the resulting network by an SVD sweep.  This procedure scales poorly with the TTNS and
+TTNO bond dimensions (see AppendixA). SRC avoids the most expensive parts of that
+direct contraction.
+
+
+SRC49 draws on ideas from randomized linear algebra51,52   .  For a large matrix A∈ CM×N,
+one approximates it as
+
+                                                    ˜A =QB,                                                          (13)
+
+                                                      12
+     where Q∈ CM×p  has orthonormal columns and B∈ Cp×N.  This is achieved by drawing
+     a random matrix Ω∈ CN×p, forming the sketch Y  = AΩ, computing its QR factorization
+     Y  =QR, and then setting B =Q†A.
+
+     In the tensor-network setting, the matrixA is never formed explicitly.  Instead, it represents
+     the TTNO–TTNS product.  The random matrix Ω is also represented implicitly as a Khatri–
+     Rao product of local random matrices,
+
+
+                                             Ω = Ω(1)⊙ Ω(2)⊙···⊙ Ω(L),                                           (14)
+
+
+     where⊙ denotes the columnwise Kronecker product.  For each site j in the tensor network,
+     a random matrix Ω(j) of size dj×χ is independently drawn, where dj  is the local physical
+     dimension andχ is the target bond dimension of the compressed output state.  Hereχ serves
+     as the sketching dimensionp introduced for the matrix case inEq. (13); in tensor networks,
+     it simultaneously sets the bond dimension of the compressed TTNS, and we therefore denoteh            i
+     it by χ throughout (includingTable IVand AppendixA). If Ω                                           (j) =c(j)1 ··· c(j)χ, then the
+     global  sketching  matrix  has  columns  Ω  =  [(c(1)1 ⊗···⊗c(n)1  )··· (c(1)χ ⊗···⊗c(L)χ  )].   This
+     structure is illustrated inFigure 2.
+
+
+
+
+
+
+
+
+     FIG.  2.   Khatri–Rao  product  of  matrices.   Each  column  of  Ω  is  the  Kronecker  product  of  the
+
+     corresponding columns of the local matrices Ω(j).
+
+
+     Operationally, one traverses the tree from the leaves toward the root.  At each node i, the
+     neighboring subtrees that have already been processed provide environment blocks.  These
+     blocks are obtained by contracting the corresponding TTNO and TTNS tensors with the
+     local random matrices Ω(j), as illustrated inFigure 3steps (2) and (3).  The resulting local
+     sketch plays the role of Y  = AΩ in the matrix formulation.  It is then orthogonalized to
+     produce the compressed tensor Q(i), which becomes the new tensor at node i; seeFigure 3
+     step(4).   In  this  way,  the  compressed  basis  is  constructed  without  explicitly  forming  the
+     enlarged TTNO–TTNS tensor at that node.
+
+                                                            13
+
+···
+                    FIG.  3.   Illustration  of  the  successive  randomized  compression  (SRC)  method.   Circle  tensors
+
+                    represent the state,  square tensors represent the operator,  ellipses are intermediate tensors,  and
+
+                    triangle tensors are orthogonal tensors.
+
+
+
+
+
+
+
+
+
+                    Next,  by  contracting  the  conjugate  transpose Q(i)†  with  the  TTNO  and  TTNS  tensors,
+                    we obtain the matrix B(i).  The same sketching-and-compression procedure is then applied
+                    recursively  to  this  residual  network.   Once  the  traversal  reaches  the  root,  all  remaining
+                    tensors are contracted directly.  The resulting tensor network provides an approximation to
+                    the product of the TTNO and TTNS.
+
+(1)                      (2)                      (3)                (4)    14        (5)
+
+
+
+
+                                                                         ≈
+
+
+        A
+                                    Ω                                                 B(1)                 Q(1)
+
+
+
+(6)                      (7)                      (8)                        (9)             (10)
+
+
+
+                                                                                ≈
+
+
+
+  B(1)                                                                                       B(2)              Q(2)   Q(1)
+
+
+
+(11)
+
+
+                       ≈
+2.    Variational Fitting
+
+
+Variational fitting is a method that can be used to compress the sum of multiple TTNSs, or
+multiple TTNOs applied to TTNSs, into a single TTNS ψ18,21,30       , i.e.,
+
+                                                 ψ≈X        ciOiϕi,                                                     (15)
+                                                        i
+where  the Oi  are  TTNOs, ϕi  are  TTNSs,  and ci  are  complex  coefficients.   When  the Oi
+are identity operators,  the aforementioned equation is equivalent to compressing the sum
+of multiple weighted TTNSs.  The idea behind this compression is to find the best fit by
+minimizing the difference between the compressed and uncompressed TTNSs:
+                                                 ψ−X             2
+                                            minψ              ciOiϕi                                            (16)
+                                                           i
+by iteratively updating theψ tensors.  At each nodej, we construct an effective Hamiltonian
+Heff,j  by  contracting  our  current  estimate  of  the  TTNS ψ  with  its  complex  conjugate ψ∗
+except for the tensorψj at nodej and its complex conjugate counterpart.  Then we need to
+solve the linear system
+                                          Heff,jyj =X       ciOeff,i,jϕi,j,                                              (17)
+                                                         i
+where yj  is  the  solution  tensor  at  the  current  site, Oi,j  is  the  local  TTNO  tensor  at  the
+current site, and ϕi,j  is the local TTNS tensor at the current site.  A graphical version of
+this  equation  for  MPS  is  depicted  inFigure  4.   The  above  linear  system  of  equations  is
+solved  using  the  MINRES  algorithm  from  SciPy53.   The  obtained  solution  tensor yj  then
+updates the currentψj tensor.  Since we perform one-site updates at a time, the virtual bond
+dimension of the solution tensor network state will not change.  To enable dynamic bond
+dimension updates, we further compute the local residuals after solving the linear system
+
+                                         r =Heff,jyj−X          ciOi,jϕi,j.                                            (18)
+                                                             i
+If the norm of this residual vector is larger than a given threshold, we apply a rank-revealing
+QR decomposition and expand the solution yj with the obtained Q.
+
+The ability to compress sums of TTNSs makes variational fitting useful inside the LOBPCG
+method.  We will next consider the alternating least squares approach and its adaptation to
+TTNs within the LOBPCG eigenvalue solver.
+
+                                                       15
+                        FIG.  4.   Variational  fitting.   Circle  tensors  are  the  given  state ϕi,  square  tensors  are  the  given
+
+                        operator Oi, and triangle tensors are the target state ψ.  The tensors in the shaded area on the
+                        left represent the effective Hamiltonian A.  The dashed triangle tensor is the solution of the linear
+
+                        system Ax =b.  The right-hand side represents the vector b after contraction.
+
+
+                        3.    Alternating least squares (ALS) method
+
+                        To solve the linear system Hψ  = ϕ in a tree tensor network framework,  i.e.,  where H  is
+                        represented as a TTNO andψ andϕ are TTNSs, we implement the alternating least squares
+                        (ALS) method.  ALS is an iterative method to solve local linear system equations.  Similar
+                        to variational fitting, we update our solution node by node.  For each node, we have a local,
+                        smaller system of linear equations to solve.  When updating node ϕj, we construct the local
+                        effective Hamiltonian Heff,j  by contracting all other nodes, effectively computing⟨ψ|H|ψ⟩,
+                        except for the current node ϕj  and its conjugate counterpart.  The effective right-hand side
+                        vector resembles the contraction of⟨ψ|ϕ⟩ but leaving out ψ∗j .  A graphical depiction of the
+                        equation to solve is shown inFigure 5.  Minres can find the local best fit for the current
+                        node,  denoted  ˜ψj.   We  then  replace  the  old  node  tensor ψj  with  the  new  solution  tensor
+                         ˜ψj  and  move  to  the  next  node.   This  iteration  over  all  nodes  in  the  tree  constitutes  one
+
+                        sweep;  multiple  sweeps  are  typically  required  for  convergence.   Since  this  method  is  only
+                        used  for  approximating  the  preconditioned  residual  vector  in  LOBPCG,  we  do  not  need
+                        to  fully  converge  the  solution.   In  practice,  running  two  sweeps  is  typically  sufficient  to
+                        obtain an accurate approximation.  For the inverse iteration method,  we can increase the
+                        accuracy by performing more sweeps.  The difference between variational fitting and ALS is
+                        in how the local effective Hamiltonian is constructed.  In variational fitting, the local effective
+                        Hamiltonian is constructed by contracting the bra ψ and the ketψ tensors with an identity
+                        operator,  i.e.,⟨ψ|I|ψ⟩,  whereas  in  ALS,  the  local  effective  Hamiltonian  is  constructed  by
+
+                                                                                16
+
+ψ   ···                                        ···              ···                                         ··· ϕi
+                                                     P ci
+I   ···                                        ···=             ···                                         ··· Oi
+
+ψ†  ···                                        ···              ···                                         ··· ψ†
+                        contracting⟨ψ|H|ψ⟩.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                        FIG. 5.  Alternating least squares.  Circle tensors are the given stateϕ, square tensors are the given
+                        operator H,  and triangle tensors are the target state ψ.  The tensors in the shaded area on the
+
+                        left represent the effective Hamiltonian A.  The dashed triangle tensor is the solution of the linear
+
+                        system Ax =b.  The right-hand side represents the vector b after contraction.
+
+
+                        III.    RESULTS
+
+                        In the following, we assess the numerical performance and accuracy of our TTN framework
+                        for  two  benchmark  systems  —  64-dimensional  coupled  oscillators  and  acetonitrile35,36     —
+                        and compare runtime and accuracy across different tree structures (MPS, T-tree, leaf-only
+                        tree20, fork-n tree, and the full T3NS34).  The corresponding tree structures are described in
+                        AppendixB. All computational codes and results are publicly available on GitHub (            https:
+                        //github.com/sunshuo987/vibcal).  Benchmark calculations were carried out on an Apple
+                        M4 processor with 10 cores and 16 GB of RAM; however, the actual simulations required
+                        substantially less memory.
+
+
+                        A.    64-dimensional coupled oscillators
+
+                        The vibrational Hamiltonian of bilinearly coupled oscillators is described by
+                                                              DX                          D−1X   DX
+                                                      H =         ωi   − ∂2             +           αijqiqj.                               (19)
+
+                                                             i=1  2       ∂q2i  +q2i       j=1  i>j
+                                                    q
+                        We set D = 64, ωj  =            j
+                                                       2, and αij  = 0.1, same as Refs.13,18, and54.  These parameters
+                        create a moderately coupled system that tests the ability of TTN methods to handle bilin-
+
+                                                                               17
+
+ψ   ···                                       ···              ···                                        ···  ϕ
+
+H   ···                                       ···       =      ···                                        ···  I
+
+ψ†  ···                                       ···              ···                                        ··· ψ†
+
+
+                         Ax                                                           b
+ear interactions.  The resulting Hamiltonian has 2080 unique terms (64 single-mode terms
+together with 64 = 2016 bilinear couplings), which nonetheless yields an optimized TTNO
+                   2
+with a maximum bond dimension of only 3 for both the MPS and T-tree topologies.  In this
+work, we use Hermite basis functions for which the kinetic term inEq. (19)is given by             55,56
+                                                        2
+                                       (−1)m−n       (xm−xn)2− 12          ,  m̸=n,
+                           Tmn =    1                                                                        (20)
+
+                                       6 (4N− 1− 2x2m),        m =n,
+and qm is a diagonal matrix with diagonal entries (x1,x2,...,xk), where xi are the roots of
+the Hermite polynomials.
+
+We  represent  both  the  state  and  the  Hamiltonian  using  MPS  and  T  tree  structures,  as
+illustrated in AppendixBFigure 8.  Each oscillator is assigned a physical basis size of 8,
+and the maximum virtual bond dimension of the states is set to 5.  We compute the lowest
+30  eigenstates  using  the  LOBPCG  algorithm.   Because  exact  energy  levels  are  available
+analytically for this model, it provides a clean benchmark of the quality of the tensor-network
+ansatz at fixed bond dimension.  The corresponding absolute errors are plotted inFigure 6.
+Both  MPS  and  T  tree  achieve  errors  below  10−2  cm−1  for  low-lying  states;  however,  for
+many states T tree yields smaller errors than MPS. This result demonstrates the improved
+accuracy  of  tree  tensor  network  representations  and  highlights  their  potential  advantages
+over one-dimensional MPS for capturing correlations in vibrational Hamiltonians.
+
+
+B.    Acetonitrile (CH3CN)
+
+Acetonitrile is a molecule with 12 vibrational modes (seeFig. (7a)) that has been studied ex-
+tensively in recent years18,20,28,35,36,57                 .  TheC3v symmetry of acetonitrile results in degenerate
+vibrational modes and strong anharmonic coupling between them, which poses significant
+challenges for standard eigensolvers.  In this work, we employed the conventional local basis
+sizes,  which  are{9, 7, 9, 9, 9, 9, 7, 7, 9, 9, 27, 27},  and  adopted  the  same  coupling  strengths
+reported in the literature13,57,58       .  The vibrational Hamiltonian of acetonitrile used in these
+references has the form
+                      X                 X                X                        X
+           H =−12          ωi ∂2∂q2i  + 12   ωiq2i  + 16      k(3)i,j,kqiqjqk +  124    k(4)i,j,k,ℓqiqjqkqℓ,       (21)
+                        i                 i              i,j,k                    i,j,k,ℓ
+
+                                                       18
+                           (a)                                                       (b)
+
+FIG. 6. (a) Convergence curves over six iterations for the lowest 30 eigenstates of the 64-dimensional
+
+coupled-oscillator model, computed using the MPS and T tree ansatz.  Color intensity encodes the
+energy level, with lighter shades corresponding to lower energies.  (b) Final absolute error for both
+
+structures.
+
+
+wherek(3) andk(4) are the cubic and quartic force constants, and indices i,j,k,ℓ represent
+the 12 vibrational modes.  This Hamiltonian has 311 unique terms (12 harmonic, 108 cubic,
+and 191 quartic terms).  Representing it as an optimized TTNO yields a maximum bond
+dimension of only 18–25 depending on the tree topology (e.g. 18 for the T-tree and fork-3
+structures and 25 for the full T3NS).
+
+
+We first applied the LOBPCG method to compute the lowest 84 eigenstates with a maximum
+virtual bond dimension of 12.  The preconditioner shift inEq. (10)was set to  s = 9 for all
+states.   To  obtain  a  sufficiently  accurate  preconditioned  residual,  we  solvedEq.  (11)by
+ALS using two sweeps, and the maximum number of Minres iterations per local solve was
+set  to  10.   For  all  states,  we  ran  five  outer  LOBPCG  iterations.   These  states  were  then
+used as initial guesses for inverse iteration in order to obtain higher-accuracy solutions.  For
+the  refinement  stage,  the  maximum  virtual  bond  dimension  was  increased  to  20,  and  we
+again performed five outer iterations.  States whose Rayleigh quotients differed by less than
+5 cm−1  were grouped into the same block.  We solvedEq. (12)with ALS using one sweep
+per outer iteration, and the maximum number of Minres iterations per local solve was set
+to 10 000 to ensure the local optimization converges (often convergence is reached with far
+
+                                                       19
+                                                           (a)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                           (b)
+
+FIG. 7.  (a) Motion of the 12 vibrational modes of acetonitrile (CH3CN).  (b) Final absolute error
+of the 84 eigenstates computed via MPS, T-tree,  leaf-only,  fork-3,  fork-4,  fork-6,  and full T3NS
+
+tensor network structures.  Lighter-colored markers correspond to the LOBPCG results, whereas
+
+darker markers show the inverse-iteration results obtained using the LOBPCG output as the initial
+state.
+
+
+
+
+                                                         20
+fewer  iterations).   After  each  iteration,  the  shift s  inEq.  (12)was  updated  to  the  mean
+Rayleigh quotient of the states in the corresponding block.  These settings were chosen to
+expose topology-dependent trends at moderate computational cost rather than to exhaust
+the variational space fully; larger bond dimensions or tighter inner solves would reduce the
+errors further.  Summary statistics are collected inTable I, while level-resolved signed errors
+are listed inTable IIandTable III.  As reference, we use the MPS energies with a maximum
+virtual bond dimension of 100 from Ref.20.  Although more accurate values are available in
+Ref.28, the larger physical basis used there makes a direct comparison less consistent with
+our setup.
+
+Comparisons between MPS and leaf-only tree topologies have been reported previously, for
+instance for acetonitrile in Ref.20and in a different context in Ref.59.  In the present work,
+we  extend  these  comparisons  to  a  broader  range  of  structures  within  a  single,  consistent
+code base.  Specifically, we systematically compare seven tensor network topologies:  MPS,
+T-tree,  leaf-only  tree20,  fork-3  tree60,61   ,  fork-4  tree,  fork-6  tree,  and  the  full  T3NS  tree34.
+Fork-n  trees  60  (also  known  as  comb  tensor  networks61)  consist  of n  auxiliary  backbone
+nodes connected in a chain, each of which supports a chain of physical nodes hanging off it.
+The corresponding structures are shown in AppendixB,Figure 9, andFigure 10.  Note that
+the physical basis sizes employed here are not sufficient to reach the sub-0.1 cm−1 accuracy
+reported in Ref.28.  With larger basis size, more highly branched leaf-only tree topologies
+can become more favorable in terms of runtime as discussed in AppendixA.
+
+The lighter symbols inFig. (7b)show that LOBPCG alone already yields a qualitatively
+correct spectrum across all seven topologies.  The errors grow with energy level, as expected
+from  the  increasing  density  of  states  and  stronger  mixing  among  excited  configurations.
+Several higher states remain near or above the 1 cm−1 tolerance line, but the mean absolute
+errors are already in the range 0.298–0.436 cm−1.  Among the LOBPCG calculations, fork-6
+gives the smallest mean absolute error (0.298 cm−1), followed closely by fork-4 (0.330 cm−1)
+and the leaf-only tree (0.332 cm−1).  The fastest topologies are MPS and T-tree.  Relative
+to  fork-4,  the  leaf-only  tree  is  about  30  %  slower  and  fork-6  about  44  %  slower,  which
+makes the accuracy–cost trade-off already visible at the LOBPCG stage.  This advantage
+of  branched  trees  is  especially  visible  in  congested  manifolds.   For  example,  in  the  1756–
+1760  cm−1  window  (levels  32–37),  the  fork-6  errors  are  about  0.27–0.50  cm−1,  compared
+
+                                                        21
+with  about  0.44–0.70  cm−1  for  MPS.  A  similar  pattern  appears  in  the  2111–2123  cm−1
+region (levels 58–68), where fork-6 consistently lowers the LOBPCG errors relative to the
+linear and weakly branched topologies.
+
+The darker symbols inFig. (7b)demonstrate the effect of inverse-iteration refinement.  For
+every topology and every one of the 84 states, the final error falls below 1 cm−1.  The worst
+remaining errors are only about 0.15–0.26 cm−1, depending on the topology, and the mean
+errors decrease by roughly one order of magnitude for all trees.  Fork-4 yields the smallest
+mean  absolute  error  (0.026  cm−1)  and,  together  with  fork-6,  the  largest  number  of  best-
+matched states in the state-by-state comparison.  Because fork-6 requires about 58 % more
+runtime than fork-4, and the leaf-only tree needs roughly twice as much time as fork-4, the
+fork-4  topology  offers  the  best  overall  balance  between  accuracy  and  computational  cost
+in  the  present  benchmark.   Moreover,  the  errors  within  nearly  degenerate  level  pairs  are
+usually very similar, which indicates that the block solvers treat the corresponding invariant
+subspaces consistently.  The high-lying 2119–2123 cm−1  manifold remains one of the more
+challenging parts of the spectrum even after refinement, yet fork-4 and fork-6 keep the errors
+there near 0.02–0.15 cm−1, whereas MPS remains in the broader 0.05–0.25 cm−1 range. Thus,
+the topology dependence is not washed out by inverse iteration; rather, refinement preserves
+the advantage of the more suitable trees while reducing the errors for all topologies.
+
+In bothTable IIandTable III, some energies appear negative.  This does not indicate higher
+accuracy than the reference values, but rather arises because certain states are not strictly
+orthogonal, with overlaps below 0.02. This artifact can be removed by solving the generalized
+eigenvalue problemHc =ESc, whereS is the overlap matrix, as in Ref.28.  T-tree and fork-
+3 display very similar accuracies, which is natural because contracting the two side auxiliary
+nodes of fork-3 into its central node yields a T-tree.  The T-tree nevertheless remains faster
+because it contains fewer tensors to optimize.  The leaf-only tree used here corresponds to
+the  optimized  topology  reported  in  Ref.20.   However,  this  optimization  is  performed  for
+a  single  target  state  and  therefore  does  not  necessarily  generalize  to  other  energy  levels.
+This  likely  explains  why  the  optimized  leaf-only  tree  achieves  adequate  accuracy  overall,
+while not showing a clear advantage over the other topologies and tending to require longer
+runtimes due to its larger number of nodes.  The unoptimized full T3NS is less competitive
+than the other branched topologies in this particular setup, but it still reaches a mean error
+
+                                                       22
+of 0.054 cm−1 after inverse iteration, confirming the robustness of the eigensolver framework
+across rather different trees.  The level-resolved data also show that no single topology is
+uniformly optimal:  different states prefer different trees, which is consistent with the fact
+that different vibrational excitations activate different correlation patterns. For instance, the
+leaf-only tree performs well for overtones ofν11, likely because it was optimized for the 10th
+excitation level (3ν11).  Conversely, fork-4 and fork-6 are more effective for the ν5,7,9 +nν11
+levels, as these structures provide closer connectivity between those specific modes.  Even
+so, the overall convergence across all seven topologies is encouraging.
+
+
+
+
+
+
+TABLE I. Summary of accuracy and runtime for the acetonitrile calculations.  The column “Num-
+ber of best-matched states” counts how many states attain the smallest absolute error for a given
+
+topology; ties are counted for all matching topologies.
+
+    Method           Tree Type      Number of best-matched                            Mean Error (cm−1)        Wall-clock
+
+                                                        states                                                              Time (s)
+
+   LOBPCG                MPS                             2                                       0.379                      647.176
+
+                        T-Tree                            2                                       0.346                      704.564
+                      Leaf-only                         21                                      0.332                     1602.970
+
+                        Fork-3                            6                                       0.355                      957.105
+
+                        Fork-4                           23                                      0.330                     1231.541
+                        Fork-6                           22                                      0.298                     1775.155
+
+                     Full T3NS                         7                                       0.436                     1268.846
+
+     Inverse             MPS                             5                                       0.048                     1946.084
+   Iteration            T-Tree                           12                                      0.037                     2478.980
+
+                      Leaf-only                         30                                      0.052                     7432.548
+
+                        Fork-3                            8                                       0.037                     2900.775
+                        Fork-4                           34                                      0.026                     3527.168
+
+                        Fork-6                           34                                      0.030                     5591.586
+
+                     Full T3NS                         4                                       0.054                     5232.781
+
+
+
+
+                                                                   23
+                          TABLE II: Reference zero-point vibrational energy (level 0)
+                          and excitation energies relative to the zero-point vibrational
+
+                          energy  (levels  1–83),  together  with  signed  errors  (in  cm−1)
+
+                          for acetonitrile obtained with LOBPCG at virtual bond di-
+                          mension 12.
+
+Level               Ref20(cm−1)       MPS        T Tree     Leaf-Only   Fork-3     Fork-4     Fork-6     Full T3NS
+
+0 (ZPE)             9837.407          0.026       0.024       0.017          0.024      0.015     0.015      0.037
+
+1 (ν11)             360.990           0.011       0.008       0.013          0.007      0.004      0.008       0.014
+
+2 (ν11)             360.990           0.012       0.008       0.015          0.008      0.005      0.008       0.016
+3 (2ν11)            723.179           0.028       0.025       0.023          0.025      0.011      0.019       0.034
+
+4 (2ν11)            723.179           0.031       0.026       0.023          0.026      0.012      0.019       0.037
+
+5 (2ν11)            723.825           0.096       0.078      0.037         0.081       0.072       0.075       0.142
+6 (ν4)              900.659           0.018       0.014       0.019          0.012       0.014      0.010      0.034
+
+7 (ν9)              1034.124          0.035       0.044       0.041          0.041       0.037      0.029      0.041
+
+8 (ν9)              1034.124          0.036       0.049       0.043          0.047       0.044      0.029      0.049
+9 (3ν11)            1086.552          0.041       0.040       0.036          0.040      0.017      0.029       0.049
+
+10 (3ν11)           1086.552          0.043       0.041       0.036          0.040      0.018      0.029       0.050
+
+11 (3ν11)           1087.774          0.198       0.165      0.100         0.164       0.147       0.158       0.282
+12 (3ν11)           1087.774          0.203       0.167      0.102         0.167       0.154       0.160       0.316
+
+13 (ν4 +ν11)        1259.809          0.006       0.009       0.019          0.012      0.004      0.008       -0.068
+
+14 (ν4 +ν11)        1259.809          0.014       0.011       0.026          0.013       0.012      0.010      0.026
+15 (ν3)             1388.967          0.434       0.281       0.284         0.272      0.337       0.329       0.499
+
+16 (ν9 +ν11)        1394.679          0.262       0.266       0.407          0.270       0.268      0.132      0.274
+
+17 (ν9 +ν11)        1394.679          0.269       0.271       0.439          0.281       0.278      0.134      0.312
+18 (ν9 +ν11)        1394.898          0.134       0.143       0.285          0.139       0.189      0.044      0.178
+
+19 (ν9 +ν11)        1397.680          0.410       0.282       0.331         0.279      0.336       0.318       0.506
+
+20 (4ν11)           1451.093          0.055       0.054       0.050          0.054      0.026      0.039       0.059
+21 (4ν11)           1451.093          0.055       0.054       0.053          0.054      0.026      0.040       0.062
+
+22 (4ν11)           1452.818          0.332       0.311      0.199         0.330       0.313       0.310       0.537
+
+                                                                                                         continued on next page
+
+
+                                                                24
+                                       TABLE II – continued from previous page
+
+Level               Ref20(cm−1)       MPS        T Tree     Leaf Only   Fork-3     Fork-4     Fork-6     Full T3NS
+
+23 (4ν11)           1452.818          0.341       0.320      0.201         0.337       0.321       0.313       0.557
+
+24 (4ν11)           1453.394          0.389       0.367      0.231         0.381       0.370       0.359       0.716
+
+25 (ν7)             1483.219          0.034       -0.049      -0.062         -0.045      -0.082      -0.050     -0.038
+26 (ν7)             1483.220          0.047       -0.047      -0.060         -0.042      -0.067      -0.049     0.025
+
+27 (ν4 + 2ν11)      1620.199          0.001      -0.011     0.020          -0.021      -0.033      -0.023      -0.113
+
+28 (ν4 + 2ν11)      1620.199          0.007      -0.003     0.027          -0.019      -0.032      -0.018      -0.066
+29 (ν4 + 2ν11)      1620.744          0.401       0.349       0.294          0.360       0.298       0.344      0.145
+
+30 (ν3 +ν11)        1749.519          0.633       0.466      0.402         0.457       0.476       0.489       0.656
+
+31 (ν3 +ν11)        1749.519          0.650       0.472      0.409         0.466       0.498       0.496       0.666
+32 (ν9 + 2ν11)      1756.412          0.521       0.526       0.659          0.525       0.519      0.269      0.524
+
+33 (ν9 + 2ν11)      1756.412          0.544       0.546       0.713          0.552       0.571      0.292      0.547
+
+34 (ν9 + 2ν11)      1757.119          0.442       0.426       0.523          0.454       0.422      0.297      0.450
+35 (ν9 + 2ν11)      1757.119          0.447       0.470       0.533          0.483       0.447      0.301      0.469
+
+36 (ν9 + 2ν11)      1759.760          0.667       0.527       0.503          0.562       0.544      0.485      0.736
+
+37 (ν9 + 2ν11)      1759.760          0.704       0.570       0.527          0.578       0.563      0.502      0.770
+38 (2ν4)            1785.177          -0.149      -0.153      -0.130         -0.168     -0.094     -0.170      -0.104
+
+39 (5ν11)           1816.786          0.069       0.072       0.065          0.072      0.038      0.052       0.080
+
+40 (5ν11)           1816.786          0.070       0.073       0.067          0.073      0.038      0.053       0.081
+41 (5ν11)           1818.938          0.609       0.585      0.425         0.604       0.555       0.572       0.885
+
+42 (5ν11)           1818.939          0.611       0.594      0.443         0.615       0.561       0.583       0.916
+
+43 (5ν11)           1820.016          0.739       0.733      0.503         0.733       0.704       0.749       0.970
+44 (5ν11)           1820.016          0.751       0.748      0.504         0.741       0.740       0.751       1.227
+
+45 (ν7 +ν11)        1844.245          0.254       0.235       0.200          0.250      0.120      0.143       0.313
+
+46 (ν7 +ν11)        1844.316          0.346       0.366       0.295          0.373      0.161      0.214       0.402
+47 (ν7 +ν11)        1844.317          0.353       0.491       0.305          0.491      0.197      0.287       0.407
+
+48 (ν7 +ν11)        1844.676          0.317       0.530       0.200          0.523      0.119      0.220       0.311
+
+49 (ν4 +ν9)         1931.514          0.051       0.030       0.048         0.004      0.033       0.040       0.091
+                                                                                                          continued on next page
+
+
+                                                                25
+                                       TABLE II – continued from previous page
+
+Level               Ref20(cm−1)       MPS        T Tree     Leaf Only   Fork-3     Fork-4     Fork-6     Full T3NS
+
+50 (ν4 +ν9)         1931.514          0.073       0.055       0.056         0.014      0.055       0.062       0.137
+
+51 (ν4 + 3ν11)      1981.815          -0.123      -0.124     -0.056       -0.152      -0.126      -0.150      -0.346
+
+52 (ν4 + 3ν11)      1981.815          -0.114      -0.114     -0.037       -0.131      -0.123      -0.138      -0.293
+53 (ν4 + 3ν11)      1982.818          0.667       0.651       0.549          0.678       0.567       0.627      0.183
+
+54 (ν4 + 3ν11)      1982.818          0.693       0.681       0.615          0.708       0.592       0.638      0.501
+
+55 (2ν9)            2057.044          0.188       0.202       0.166          0.201       0.230      0.136      0.252
+56 (2ν9)            2065.265          0.121       0.131       0.112          0.132      0.093      0.100       0.161
+
+57 (2ν9)            2065.265          0.171       0.181       0.131          0.165       0.246      0.102      0.234
+
+58 (ν3 + 2ν11)      2111.364          0.887       0.676      0.624         0.703       0.691       0.678       0.886
+59 (ν3 + 2ν11)      2111.364          0.908       0.710      0.632         0.715       0.701       0.691       0.933
+
+60 (ν3 + 2ν11)      2112.281          1.391       1.059      0.768         1.005       0.973       0.902       1.162
+
+61 (ν9 + 3ν11)      2119.307          0.809       0.770       0.923          0.815       0.809      0.454      0.752
+62 (ν9 + 3ν11)      2119.307          0.815       0.788       0.941          0.818       0.826      0.477      0.757
+
+63 (ν9 + 3ν11)      2120.521          0.940       0.909       0.982          0.938       0.974      0.685      0.945
+
+64 (ν9 + 3ν11)      2120.521          0.968       0.951       1.032          1.017       1.036      0.703      0.966
+65 (ν9 + 3ν11)      2120.889          0.938       0.980       0.876          0.958       0.970      0.611      0.973
+
+66 (ν9 + 3ν11)      2122.816          0.946       0.794       0.828          0.806       0.818      0.766      1.002
+
+67 (ν9 + 3ν11)      2122.816          1.067       0.880       0.843          0.944       0.878      0.780      1.057
+68 (ν9 + 3ν11)      2123.282          1.451       1.272      1.023         1.265       1.322       1.191       1.424
+
+69 (2ν4 +ν11)       2142.444          -0.430      -0.459      -0.387         -0.520      -0.338      -0.478     -0.333
+
+70 (2ν4 +ν11)       2142.444          -0.379      -0.452      -0.326         -0.493      -0.335      -0.465     -0.274
+71 (6ν11)           2183.617          0.089       0.093       0.085          0.096      0.055      0.069       0.104
+
+72 (6ν11)           2183.617          0.092       0.093       0.085          0.098      0.056      0.071       0.104
+
+73 (6ν11)           2186.117          1.012       0.926      0.809         1.018       0.928       0.934       1.338
+74 (6ν11)           2186.117          1.018       0.956       0.943          1.026      0.933      0.952       1.389
+
+75 (6ν11)           2187.618          1.282       1.235      0.932         1.345       1.266       1.249       1.596
+
+76 (6ν11)           2187.618          1.308      1.271      1.510          1.376       1.295       1.275       1.953
+                                                                                                          continued on next page
+
+
+                                                                26
+                                      TABLE II – continued from previous page
+
+Level              Ref20(cm−1)       MPS        T Tree     Leaf Only   Fork-3     Fork-4     Fork-6     Full T3NS
+
+77 (6ν11)          2188.119          1.432       1.375      1.279         1.437       1.372       1.431       1.990
+
+78 (ν7 + 2ν11)     2206.608          0.029       0.080       0.233          0.095       -0.029      0.119      -0.026
+
+79 (ν7 + 2ν11)     2206.615          0.201       0.145       0.287         0.114      0.117       0.197       0.302
+80 (ν7 + 2ν11)     2206.757          0.130       0.062       0.200          0.032      0.025      0.180       0.215
+
+81 (ν7 + 2ν11)     2206.758          0.219       0.158       0.216         0.099      0.196       0.254       0.256
+
+82 (ν7 + 2ν11)     2207.541          0.225       0.255       0.257          0.360      0.141      0.218       0.577
+83 (ν7 + 2ν11)     2207.541          0.248       0.266       0.277          0.383      0.198      0.242       0.610
+
+
+
+                         TABLE III: Reference zero-point vibrational energy (level 0)
+                         and excitation energies relative to the zero-point vibrational
+
+                         energy (levels 1–83), together with signed errors (in cm−1) for
+
+                         acetonitrile  obtained  with  inverse  iteration  at  virtual  bond
+                         dimension 20.
+
+Level              Ref20(cm−1)       MPS        T Tree     Leaf-Only   Fork-3     Fork-4     Fork-6     Full T3NS
+
+0 (ZPE)            9837.407          0.000      0.001      0.000         0.001      0.000     0.000      0.006
+
+1 (ν11)            360.990           0.001     0.001     0.001        0.001     0.001     0.001      0.004
+
+2 (ν11)            360.990           0.001     0.001     0.001        0.001     0.001     0.001      0.006
+3 (2ν11)           723.179           0.002     0.002      0.003         0.002     0.002     0.002      0.009
+
+4 (2ν11)           723.179           0.002     0.002      0.003         0.002     0.002     0.002      0.010
+
+5 (2ν11)           723.825           0.007       0.004      0.003         0.004       0.004       0.005       0.015
+6 (ν4)             900.659           0.005      0.001     -0.001      0.001      0.006       0.003       0.008
+
+7 (ν9)             1034.124          0.003      0.002      -0.013        -0.002    0.002     0.002      0.007
+
+8 (ν9)             1034.124          0.003       0.002      0.001         0.002       0.002       0.002       0.010
+9 (3ν11)           1086.552          0.003       0.003       0.003          0.003      0.002     0.002      0.011
+
+10 (3ν11)          1086.552          0.004      0.003      0.004         0.003     0.003     0.003      0.013
+
+11 (3ν11)          1087.774          0.013       0.007      0.003         0.007       0.006       0.009       0.022
+12 (3ν11)          1087.774          0.013       0.007       0.009          0.007      0.006      0.009       0.022
+
+                                                                                                       continued on next page
+
+
+                                                              27
+                                       TABLE III – continued from previous page
+
+Level               Ref20(cm−1)       MPS        T Tree     Leaf Only   Fork-3     Fork-4     Fork-6     Full T3NS
+
+13 (ν4 +ν11)        1259.809          0.013       0.005      0.002         0.004       0.010       0.008       0.023
+
+14 (ν4 +ν11)        1259.809          0.014       0.005      0.003         0.005       0.010       0.033       0.024
+
+15 (ν3)             1388.967          0.061       0.027       0.066          0.031      0.026      0.033       0.083
+16 (ν9 +ν11)        1394.679          0.021       0.019       0.083          0.018       0.015      0.008      0.029
+
+17 (ν9 +ν11)        1394.679          0.035       0.029       0.087          0.018       0.016      0.008      0.030
+
+18 (ν9 +ν11)        1394.898          -0.014      -0.005      0.045          0.009       0.006      0.004      0.020
+19 (ν9 +ν11)        1397.680          0.070       0.038       0.083          0.037      0.028      0.041       0.095
+
+20 (4ν11)           1451.093          0.004      0.003      0.004         0.003     0.003     0.003      0.013
+
+21 (4ν11)           1451.093          0.004       0.004       0.005          0.004      0.003     0.003      0.013
+22 (4ν11)           1452.818          0.021       0.012      0.004         0.012       0.010       0.014       0.032
+
+23 (4ν11)           1452.818          0.021       0.012      0.004         0.012       0.011       0.015       0.032
+
+24 (4ν11)           1453.394          0.024       0.014      0.004         0.013       0.011       0.015       0.036
+25 (ν7)             1483.219          0.006       0.008       0.004          0.012       -0.005     -0.001     -0.047
+
+26 (ν7)             1483.220          0.007       0.033       0.003          0.042      0.001      0.002       0.010
+
+27 (ν4 + 2ν11)      1620.199          0.023       0.011      0.003         0.011       0.020       0.015       0.036
+28 (ν4 + 2ν11)      1620.199          0.024       0.011      0.004         0.012       0.021       0.015       0.037
+
+29 (ν4 + 2ν11)      1620.744          0.044       0.026      0.002         0.028       0.032       0.034       0.059
+
+30 (ν3 +ν11)        1749.519          0.103      0.040      0.099          0.058       0.048       0.060       0.101
+31 (ν3 +ν11)        1749.519          0.106       0.084       0.111          0.067       0.064      0.062      0.123
+
+32 (ν9 + 2ν11)      1756.412          0.039       0.038       0.157          0.039       0.034      0.015      0.042
+
+33 (ν9 + 2ν11)      1756.412          0.040       0.041       0.174          0.041       0.039      0.015      0.043
+34 (ν9 + 2ν11)      1757.119          0.047       0.034       0.110          0.034       0.024      0.021      0.051
+
+35 (ν9 + 2ν11)      1757.119          0.048       0.040       0.112          0.043       0.034      0.022      0.052
+
+36 (ν9 + 2ν11)      1759.760          0.121       0.078       0.127          0.077      0.060      0.073       0.144
+37 (ν9 + 2ν11)      1759.760          0.124       0.080       0.131          0.079      0.061      0.080       0.150
+
+38 (2ν4)            1785.177          -0.041      -0.052      -0.057         -0.051      -0.039      -0.048     -0.030
+
+39 (5ν11)           1816.786          0.006       0.005       0.006          0.005      0.004     0.004      0.016
+                                                                                                          continued on next page
+
+
+                                                                28
+                                       TABLE III – continued from previous page
+
+Level               Ref20(cm−1)       MPS        T Tree     Leaf Only   Fork-3     Fork-4     Fork-6     Full T3NS
+
+40 (5ν11)           1816.786          0.006       0.005       0.006          0.005      0.004     0.004      0.016
+
+41 (5ν11)           1818.938          0.030       0.019      0.005         0.019       0.017       0.021       0.042
+
+42 (5ν11)           1818.939          0.029       0.018      0.007         0.018       0.016       0.020       0.043
+43 (5ν11)           1820.016          0.033       0.019      0.005         0.020       0.018       0.021       0.050
+
+44 (5ν11)           1820.016          0.034       0.022      0.005         0.022       0.018       0.024       0.051
+
+45 (ν7 +ν11)        1844.245          0.079       0.076       0.096          0.078      0.010      0.045       0.086
+46 (ν7 +ν11)        1844.316          0.092       0.099       0.052          0.093      0.012      0.059       0.084
+
+47 (ν7 +ν11)        1844.317          0.093       0.100       0.098          0.093      0.014      0.071       0.141
+
+48 (ν7 +ν11)        1844.676          0.080       0.108       0.094          0.080      0.013      0.046       -0.048
+49 (ν4 +ν9)         1931.514          0.023      0.001      0.008          0.009       0.016       0.019       0.035
+
+50 (ν4 +ν9)         1931.514          0.024       0.015      0.009         0.026       0.017       0.026       0.039
+
+51 (ν4 + 3ν11)      1981.815          0.035       0.022      0.006         0.022       0.028       0.024       0.051
+52 (ν4 + 3ν11)      1981.815          0.036       0.023      0.007         0.023       0.029       0.025       0.053
+
+53 (ν4 + 3ν11)      1982.818          0.076       0.048      0.003         0.049       0.052       0.061       0.090
+
+54 (ν4 + 3ν11)      1982.818          0.078       0.048      0.003         0.050       0.053       0.061       0.090
+55 (2ν9)            2057.044          0.019      0.015     0.015         0.016      0.015      0.016       0.036
+
+56 (2ν9)            2065.265          0.011       0.010       0.009          0.011      0.008     0.008      0.025
+
+57 (2ν9)            2065.265          0.015       0.013       0.038          0.018       0.011      0.009      0.027
+58 (ν3 + 2ν11)      2111.364          0.171       0.129       0.173          0.125       0.101      0.097      0.151
+
+59 (ν3 + 2ν11)      2111.364          0.189       0.130       0.174          0.126       0.111      0.097      0.162
+
+60 (ν3 + 2ν11)      2112.281          0.215       0.164       0.151          0.168      0.116      0.141       0.215
+61 (ν9 + 3ν11)      2119.307          0.051       0.051       0.209          0.052       0.046      0.022      0.055
+
+62 (ν9 + 3ν11)      2119.307          0.052       0.053       0.210          0.055       0.050      0.023      0.056
+
+63 (ν9 + 3ν11)      2120.521          0.122       0.126       0.187          0.121       0.111      0.074      0.118
+64 (ν9 + 3ν11)      2120.521          0.132       0.130       0.199          0.134       0.125      0.082      0.124
+
+65 (ν9 + 3ν11)      2120.889          0.079       0.063       0.144          0.069       0.066      0.030      0.065
+
+66 (ν9 + 3ν11)      2122.816          0.178       0.124       0.170          0.125      0.091     0.091      0.157
+                                                                                                          continued on next page
+
+
+                                                                29
+                                     TABLE III – continued from previous page
+
+Level              Ref20(cm−1)      MPS        T Tree     Leaf Only   Fork-3     Fork-4     Fork-6     Full T3NS
+
+67 (ν9 + 3ν11)     2122.816         0.184       0.124       0.179          0.159      0.094      0.095       0.177
+
+68 (ν9 + 3ν11)     2123.282         0.249       0.194       0.185          0.198      0.150      0.151       0.255
+
+69 (2ν4 +ν11)      2142.444         -0.032      -0.052      -0.063         -0.050      -0.035      -0.044     -0.021
+70 (2ν4 +ν11)      2142.444         -0.031      -0.050      -0.037         -0.048      -0.032      -0.043     -0.012
+
+71 (6ν11)          2183.617         0.008       0.007       0.009          0.007      0.006     0.006      0.019
+
+72 (6ν11)          2183.617         0.008       0.007       0.009          0.007      0.006     0.006      0.020
+73 (6ν11)          2186.117         0.041       0.026      0.008         0.027       0.023       0.029       0.052
+
+74 (6ν11)          2186.117         0.041       0.026      0.008         0.027       0.023       0.029       0.053
+
+75 (6ν11)          2187.618         0.054       0.035      0.010         0.036       0.030       0.039       0.069
+76 (6ν11)          2187.618         0.055       0.038      0.010         0.038       0.031       0.041       0.072
+
+77 (6ν11)          2188.119         0.057       0.040      0.010         0.042       0.035       0.043       0.078
+
+78 (ν7 + 2ν11)     2206.608         0.128       0.116       0.100          0.112      0.043      0.134       0.115
+79 (ν7 + 2ν11)     2206.615         0.128       0.130       0.146          0.108      0.084      0.130       0.115
+
+80 (ν7 + 2ν11)     2206.757         -0.010      -0.006      0.057          -0.013      -0.050     -0.002    -0.002
+
+81 (ν7 + 2ν11)     2206.758         0.008      -0.002     0.137          0.016       0.026       0.049       0.027
+82 (ν7 + 2ν11)     2207.541         0.019       0.073       0.058          0.035      0.008      -0.009      0.064
+
+83 (ν7 + 2ν11)     2207.541         0.088       0.094       0.067          0.075      0.015      0.063       0.105
+
+
+
+
+
+IV.    CONCLUSIONS
+
+In this work, we developed and benchmarked a generalized tree tensor network framework
+for vibrational spectroscopy in which both the Hamiltonian and the wavefunction are rep-
+resented as trees,  i.e.,  as a TTNO and a TTNS, respectively.  Within this framework,  we
+implemented and combined block LOBPCG and block inverse iteration methods.  This ap-
+proach achieves sub-wavenumber accuracy for two representative benchmark systems — a
+64-dimensional bilinearly coupled oscillator model and acetonitrile as a real molecular sys-
+tem — demonstrating the capability to solve chemical physics problems with strong coupling
+and near-degeneracies.
+
+                                                            30
+For the coupled-oscillator model, T tree systematically improves on MPS at the same bond
+dimension, which is consistent with the all-to-all coupling pattern of the Hamiltonian.  For
+acetonitrile, inverse iteration reduces the mean errors from the 0.298–0.436 cm−1 range of the
+initial LOBPCG results to 0.026–0.054 cm−1 across all tested topologies, and all 84 computed
+states end below 1 cm−1  error.  Among the tested trees,  the fork-4 topology provides the
+most  favorable  overall  compromise  between  accuracy  and  runtime.   The  results  therefore
+show that increased tree connectivity is clearly beneficial, but that moderate branching is
+more effective here than simply adding as many auxiliary tensors as possible.
+
+
+An important aspect of this work is the systematic comparison of tensor network topologies
+within  a  common  TTNO/TTNS  implementation.   This  enables  us  to  examine  the  effect
+of topology in a controlled setting, while minimizing the influence of differences in code or
+algorithmic details.  The results suggest that the choice of topology is an important practical
+factor in vibrational tensor-network calculations.
+
+
+All implementations used in this work are available as open-source code in the PyTreeNet
+ecosystem.   The  repository  containing  the  TTNO/TTNS  eigensolvers,  input  files  for  the
+oscillator and acetonitrile benchmarks, and scripts to reproduce the figures is publicly avail-
+able  at  https://github.com/sunshuo987/vibcal.   This  enables  full  reproducibility  and
+provides a platform for further developments,  such as automated tree-structure optimiza-
+tion,  improved  preconditioners,  and  the  computation  of  transition  intensities  for  IR  and
+Raman spectra.
+
+
+
+
+ACKNOWLEDGMENTS
+
+Shuo Sun acknowledges funding by the BMW Group.
+
+
+The research is part of the Munich Quantum Valley,  which is supported by the Bavarian
+state government with funds from the Hightech Agenda Bayern Plus.
+
+
+We also like to thank the Munich Center for Quantum Science and Technology (MCQST)
+for support.
+
+                                                     31
+AUTHOR DECLARATIONS
+
+
+Conflict of Interest Statement
+
+The authors have no conflicts to disclose.
+
+
+Author Contributions
+
+S. Sun:  Conceptualization (lead); Investigation (lead); Methodology (lead); Software (lead);
+Validation  (lead);  Writing  –  original  draft  (lead).    R.  M.  Milbradt:   Conceptualization
+(equal);  Software  (lead);  Investigation  (equal);  Methodology  (equal);  Writing  –  original
+draft  (equal).   S.  Knecht:   Conceptualization  (equal);  Methodology  (equal);  Supervision
+(equal); Writing – review & editing (equal).  C. Kumar:  Conceptualization (equal); Funding
+acquisition (equal); Supervision (equal); Writing - review & editing (equal).  C. B. Mendl:
+Conceptualization (equal); Funding acquisition (equal); Supervision (lead); Writing - review
+& editing (equal).
+
+
+DATA AVAILABILITY STATEMENT
+
+The data that supports the findings of this study are openly available at https://github.
+com/sunshuo987/vibcal.
+
+
+Appendix A: Scaling of Tree Tensor Networks Methods
+
+
+This appendix lists the tensor scaling of the TTNS-TTNO application methods mentioned.
+We considerDO to be the maximum bond dimension in the TTNO,DS the maximum bond
+dimension of the TTNS, χ the desired bond dimension of the TTNS after the application,
+andd the maximum physical dimension.  Note thatκ is the maximum number of neighbours
+a node can have in a given tree.  Thus κ = 2 for MPS andκ = 3 for T3NS. The scalings are
+listed inTable IV.
+
+In tree topologies where physical nodes can appear on internal (non-leaf) nodes—such as
+full T3NS and fork-n trees—each such node carries both a physical leg (of dimensiond) and
+up to two virtual legs (of dimension Ds), resulting in tensors of size d×D2s.  In contrast,
+
+                                                   32
+          TABLE IV. The scaling for the different methods and different tree structures.
+        Tree                         General                            MPS                       T3NS
+                     κ−1X
+                         dDκ−j+1S   DjOχj +d2DSDκOχκ−1        dD2SDOχ +d2DSD2Oχ          dD3SDOχ +dD2SD2Oχ2
+        SRC           j=1
+                       +d2DSDOχ2κ−2                           +d2DSDOχ2                  +d2DSDOχ4
+
+       Direct
+
+   Contraction            d2DκSDκO +d2DSDOχ2κ−2              d2D2SD2O +d2χ2DSDO         d2D3SD3O +d2χ4DSDO
+                          κX
+Variational fitting          d2D2(κ−j+1)S     DjO +d2D2κS        d2D4SDO +d2D4S             d2D6SDO +d2D6S
+                         j=1
+                          κX
+        ALS                  d2D2(κ−j+1)S     DjO +d2D2κS        d2D4SDO +d2D4S             d2D6SDO +d2D6S
+                         j=1
+
+leaf-only  trees  place  physical  legs  exclusively  on  leaf  nodes,  each  connected  to  only  one
+virtual leg, leading to tensors of size d×Ds.  The internal branching nodes then contribute
+tensors of size up to D3s.  Moreover, leaf-only trees generally require a substantially larger
+number  of  internal  branching  nodes,  often  comparable  to  the  number  of  physical  nodes,
+whereas full T3NS and fork-n trees require significantly fewer such nodes.  Consequently, for
+systems requiring large local basis sizes d, the computational cost of full T3NS and fork-n
+trees increases more rapidly than that of leaf-only trees.  On the other hand, whend remains
+moderate, the larger number of internal branching nodes can become a limiting factor for
+the efficiency of leaf-only trees.
+
+
+Appendix B: Tree structure used in the vibrational spectra calculations
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                    33
+                                       (a) MPS structure                                            (b) T tree structure
+
+                   FIG. 8.  Tensor network structures used for the 64-dimensional coupled harmonic oscillator calcu-
+
+                   lations:  (a) MPS, and (b) T tree structure.  The blue circles denote nodes carrying physical legs,
+                   while the gray circles represent auxiliary tensor nodes.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                              34
+
+11     ···2      223     ···     6223      63···    6444
+
+
+                           45
+
+                            ...
+
+
+                           64
+                                                                                                                              (a) MPS structure
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                                                                             (b) T Tree structure
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                                                                           (c) Leaf-only structure
+
+                                                                           FIG. 9.  Tensor network structures used for the acetonitrile (CH3CN) vibrational spectra calcula-
+
+                                                                           tions:  (a) MPS, (b) T tree tensor network, and (c) leaf-only tree.  The blue circles denote nodes
+
+                                                                           carrying physical legs, while the gray circles represent auxiliary tensor nodes.  Panel (c) was gen-
+
+                                                                           erated by the authors based on the leaf-only tree structure reported in Ref.20.
+
+
+
+
+
+
+
+
+
+
+                                                                                                                                     35
+
+                                                       11        22       33        44       5        65        76       87       98       10       11        12
+
+
+                                                                                             9
+
+
+                                                                                            10
+
+                  1                                                           3             11             12
+                                                                                            11
+
+5      6                     7       8      9      10      2       4
+                                                                                            12
+                                                      (a) Fork-3 structure               (b) Fork-4 structure                           (c) Fork-6 structure
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                                                   (d) Full T3NS structure
+
+                                                   FIG. 10.  Tensor network structures used for the acetonitrile (CH3CN) vibrational spectra calcu-
+
+                                                   lations:  (a) fork-3,  (b) fork-4,  (c) fork-6 and (d) full T3NS tree.  The blue circles denote nodes
+                                                   carrying physical legs, while the gray circles represent auxiliary tensor nodes.  Panels (a)–(c) were
+
+                                                   generated by the authors and were motivated by previously reported fork-tree, also known as comb-
+
+                                                   tree, structures.60,61     Panel (d) was generated by the authors and was inspired by the T3NS tree
+                                                   structure reported in Ref.34.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                                                             36
+
+                               1
+
+
+                               111      534       957     107        9       11
+    2                 5                 8                11
+                               222      645      1068     118       10       12
+
+
+                               33       76       119      12
+3       4        6        7        9        10           12
+                               4        8        12
+REFERENCES
+
+
+
+
+ 1J. M. Bowman, “The self-consistent-field approach to polyatomic vibrations,”Accounts of
+
+  Chemical Research 19, 202–208 (1986).
+
+ 2G. M. Chaban,  J. O. Jung, and R. B. Gerber, “Ab initio calculation of anharmonic vi-
+
+  brational  states  of  polyatomic  systems:  Electronic  structure  combined  with  vibrational
+  self-consistent field,”The Journal of Chemical Physics         111, 1823–1829 (1999).
+
+ 3K.  Yagi,  T.  Taketsugu,  K.  Hirao,  and  M.  S.  Gordon,  “Direct  vibrational  self-consistent
+
+  field method:  Applications to H2O and H2CO,”The Journal of Chemical Physics            113,
+  1005–1017 (2000).
+
+ 4T. K. Roy and R. B. Gerber, “Vibrational self-consistent field calculations for spectroscopy
+
+  of biological molecules:  New algorithmic developments and applications,”Physical Chem-
+  istry Chemical Physics 15, 9468–9492 (2013).
+
+ 5G. Rauhut, “Configuration selection as a route towards efficient vibrational configuration
+
+  interaction calculations,”The Journal of Chemical Physics                    127, 184109 (2007).
+
+ 6D. B´egu´e, N. Gohaud, C. Pouchan, P. Cassam-Chena¨ı, and J. Li´evin, “A comparison of
+
+  two  methods  for  selecting  vibrational  configuration  interaction  spaces  on  a  heptatomic
+  system:  Ethylene oxide,”The Journal of Chemical Physics         127, 164115 (2007).
+
+ 7M. Neff and G. Rauhut, “Toward large scale vibrational configuration interaction calcula-
+
+  tions,”The Journal of Chemical Physics          131, 124129 (2009).
+
+ 8T.  Mathea,  T.  Petrenko,  and  G.  Rauhut,  “Advances  in  vibrational  configuration  inter-
+
+  action theory-part 2:  Fast screening of the correlation space,”Journal of Computational
+  Chemistry 43, 6–18 (2022).
+
+ 9O. Christiansen, “Vibrational coupled cluster theory,”The Journal of Chemical Physics
+
+  120, 2149–2159 (2004).
+
+10P. Seidler and O. Christiansen, “Automatic derivation and evaluation of vibrational cou-
+
+  pled cluster theory equations,”The Journal of Chemical Physics                 131, 234109 (2009).
+
+11P. Seidler, M. Sparta, and O. Christiansen, “Vibrational coupled cluster response theory:
+
+  A general implementation,”The Journal of Chemical Physics            134, 054119 (2011).
+
+12B. Thomsen, K. Yagi, and O. Christiansen, “Optimized coordinates in vibrational coupled
+
+  cluster calculations,”The Journal of Chemical Physics                    140, 154102 (2014).
+
+13Q. Zhang,  R.-S. Wang, and L. Wang, “Neural canonical transformations for vibrational
+
+                                                      37
+  spectra of molecules,”The Journal of Chemical Physics                 161, 024103 (2024).
+
+14P.  J.  Ollitrault,  A.  Baiardi,  M.  Reiher,  and  I.  Tavernelli,  “Hardware  efficient  quantum
+
+  algorithms for vibrational structure calculations,”Chemical science              11, 6842–6855 (2020).
+
+15S.  Malpathak,  S.  D.  Kallullathil,  I.  Loaiza,  S.  Fomichev,  J.  M.  Arrazola,  and  A.  F.  Iz-
+
+  maylov, “Trotter simulation of vibrational hamiltonians on a quantum computer,”Journal
+  of Chemical Theory and Computation 22, 95–119 (2025).
+
+16M. Majland,  R. B. Jensen,  P. Ettenhuber,  I. Shaik,  N. T. Zinner, and O. Christiansen,
+
+  “Fault-tolerant quantum computations of vibrational wave functions,”Journal of Chemical
+  Theory and Computation 22, 30–51 (2025).
+
+17H. Wang, “Iterative calculation of energy eigenstates employing the multilayer multicon-
+
+  figuration  time-dependent  hartree  theory,”The  Journal  of  Physical  Chemistry  A    118,
+  9253–9261 (2014).
+
+18M. Rakhuba and I. Oseledets, “Calculating vibrational spectra of molecules using tensor
+
+  train decomposition,”The Journal of Chemical Physics             145, 124101 (2016).
+
+19A. Baiardi, C. J. Stein, V. Barone, and M. Reiher, “Vibrational density matrix renormal-
+
+  ization group,”Journal of Chemical Theory and Computation           13, 3764–3777 (2017).
+
+20H.  R.  Larsson,  “Computing  vibrational  eigenstates  with  tree  tensor  network  states
+
+  (TTNS),”The Journal of Chemical Physics               151, 204102 (2019).
+
+21A. Baiardi, C. J. Stein, V. Barone, and M. Reiher, “Optimization of highly excited matrix
+
+  product states with an application to vibrational spectroscopy,”The Journal of Chemical
+  Physics 150, 094113 (2019).
+
+22A. Baiardi, A. K. Kelemen, and M. Reiher, “Excited-state dmrg made simple with feast,”
+
+  Journal of Chemical Theory and Computation 18, 415–430 (2021).
+
+23H. R. Larsson, M. Schr¨oder, R. Beckmann, F. Brieuc, C. Schran, D. Marx, and O. Vendrell,
+
+  “State-resolved infrared spectrum of the protonated water dimer:  revisiting the character-
+  istic proton transfer doublet peak,”Chemical Science        13, 11119–11125 (2022).
+
+24N. Glaser, A. Baiardi, and M. Reiher, “Flexible DMRG-based framework for anharmonic
+
+  vibrational  calculations,”Journal  of  Chemical  Theory  and  Computation          19,  9329–9343
+  (2023).
+
+25N. Glaser, A. Baiardi, A. Z. Lieberherr, and M. Reiher, “Vibrational entanglement through
+
+  the lens of quantum information measures,”The Journal of Physical Chemistry Letters
+  15, 6958–6965 (2024).
+
+                                                      38
+26H. R. Larsson and A. Viel, “2500 vibronic eigenstates of the NO3 radical,”Physical Chem-
+
+  istry Chemical Physics 26, 24506–24523 (2024).
+
+27H. R. Larsson, “A tensor network view of multilayer multiconfiguration time-dependent
+
+  Hartree methods,”Molecular Physics      122, e2306881 (2024).
+
+28H. R. Larsson, “Benchmarking vibrational spectra:  5000 accurate eigenstates of acetoni-
+
+  trile  using  tree  tensor  network  states,”The  Journal  of  Physical  Chemistry  Letters            16,
+  3991–3997 (2025).
+
+29H. Hoppe and U. Manthe, “Eigenstate calculation in the state-averaged (multi-layer) multi-
+
+  configurational time-dependent hartree approach,”The Journal of Chemical Physics     160,
+  034104 (2024).
+
+30M. Rano and H. R. Larsson, “Computing excited eigenstates using inexact lanczos methods
+
+  and tree tensor network states,”The Journal of Chemical Physics           163, 164110 (2025).
+
+31F. Fr¨owis, V. Nebendahl, and W. D¨ur, “Tensor operators:  Constructions and applications
+
+  for long-range interaction systems,”Physical Review A       81, 062337 (2010).
+
+32R. M. Milbradt,  Q. Huang, and C. B. Mendl, “State diagrams to determine tree tensor
+
+  network operators,”SciPost Physics Core             7, 036 (2024).
+
+33Y.-Y. Shi, L.-M. Duan, and G. Vidal, “Classical simulation of quantum many-body systems
+
+  with a tree tensor network,”Physical Review A        74, 022320 (2006).
+
+34K. Gunst, F. Verstraete, S. Wouters, O. Legeza, and D. Van Neck, “T3ns:  Three-legged
+
+  tree tensor network states,”Journal of Chemical Theory and Computation           14, 2026–2033
+  (2018).
+
+35P.  Carbonniere,  D.  Begue,  A.  Dargelos,  and  C.  Pouchan,  “Construction  of  an  accurate
+
+  quartic  force  field  by  using  generalised  least-squares  fitting  and  experimental  design,”
+  Chemical Physics 300, 41–51 (2004).
+
+36A. Leclerc and T. Carrington, “Calculating vibrational spectra with sum of product basis
+
+  functions without storing full-dimensional vectors or matrices,”The Journal of Chemical
+  Physics 140, 174111 (2014).
+
+37R.  M.  Milbradt,  Q.  Huang,  and  C.  B.  Mendl,  “PyTreeNet:  A  python  library  for  easy
+
+  utilisation of tree tensor networks,”arXiv:2407.13249  (2024).
+
+38U. Schollw¨ock, “The density-matrix renormalization group in the age of matrix product
+
+  states,”Annals of Physics           326, 96–192 (2011).
+
+39G.  Evenbly,  “A  practical  guide  to  the  numerical  implementation  of  tensor  networks  i:
+
+
+                                                      39
+  Contractions, decompositions, and gauge freedom,”Frontiers in Applied Mathematics and
+  Statistics 8, 806549 (2022).
+
+40J. C. Bridgeman and C. T. Chubb, “Hand-waving and interpretive dance: An introductory
+
+  course on tensor networks,”J. Phys. A: Math. Theor.         50, 223001 (2017).
+
+41P. Silvi, F. Tschirsich, M. Gerster, J. J¨unemann, D. Jaschke, M. Rizzi, and S. Montangero,
+
+  “The tensor networks anthology:  Simulation techniques for many-body quantum lattice
+  systems,”SciPost Physics Lecture Notes , 8 (2019).
+
+42R.  Or´us,  “Tensor  networks  for  complex  quantum  systems,”Nature  Reviews  Physics              1,
+
+  538–550 (2019).
+
+43J. I. Cirac,  D. P´erez-Garc´ıa,  N. Schuch, and F. Verstraete, “Matrix product states and
+
+  projected  entangled  pair  states:  Concepts,  symmetries,  theorems,”Reviews  of  Modern
+  Physics 93, 045003 (2021).
+
+44M. C. Ba˜nuls, “Tensor network algorithms:  A route map,”Annual Review of Condensed
+
+  Matter Physics 14, 173–191 (2023).
+
+45H. C¸akır,  R. M. Milbradt, and C. B. Mendl, “Optimal symbolic construction of matrix
+
+  product  operators  and  tree  tensor  network  operators,”Physical  Review  B             112,  035101
+  (2025).
+
+46W. Li, J. Ren, H. Yang, H. Wang, and Z. Shuai, “Optimal tree tensor network operators
+
+  for tensor network simulations:  Applications to open quantum systems,”The Journal of
+  Chemical Physics 161, 054116 (2024).
+
+47A. V. Knyazev, “Toward the optimal preconditioned eigensolver:  Locally optimal block
+
+  preconditioned  conjugate  gradient  method,”SIAM  journal  on  scientific  computing      23,
+  517–541 (2001).
+
+48A. Stathopoulos and K. Wu, “A block orthogonalization procedure with constant synchro-
+
+  nization requirements,”SIAM Journal on Scientific Computing      23, 2165–2182 (2002).
+
+49C.  Cama˜no,  E.  N.  Epperly,  and  J.  A.  Tropp,  “Successive  randomized  compression:   A
+
+  randomized algorithm for the compressed mpo-mps product,”Quantum          10, 2022 (2026).
+
+50R.  M.  Milbradt,   S.  Sun,   C.  B.  Mendl,   J.  Gray,  and  G.  K.  L.  Chan,  “Efficient
+
+  application  of  tensor  network  operators  to  tensor  network  states,”arXiv     (2026),
+  10.48550/ARXIV.2601.19650.
+
+51N. Halko, P. G. Martinsson, and J. A. Tropp, “Finding structure with randomness:  Prob-
+
+  abilistic algorithms for constructing approximate matrix decompositions,”SIAM Review
+
+                                                     40
+  53, 217–288 (2011).
+
+52R. Murray, J. Demmel, M. W. Mahoney, N. B. Erichson, M. Melnichenko, O. A. Malik,
+
+  L. Grigori, P. Luszczek, M. Derezi´nski, M. E. Lopes, T. Liang, H. Luo, and J. Dongarra,
+  “Randomized numerical linear algebra: A perspective on the field with an eye to software,”
+  arXiv  (2023), 10.48550/arXiv.2302.11474.
+
+53P.  Virtanen,  R.  Gommers,  T.  E.  Oliphant,  M.  Haberland,  T.  Reddy,  D.  Cournapeau,
+
+  E. Burovski, P. Peterson, W. Weckesser, J. Bright, S. J. van der Walt, M. Brett, J. Wilson,
+  K. J. Millman, N. Mayorov, A. R. J. Nelson, E. Jones, R. Kern, E. Larson, C. J. Carey,
+  ˙I.  Polat,  Y.  Feng,  E.  W.  Moore,  J.  VanderPlas,  D.  Laxalde,  J.  Perktold,  R.  Cimrman,
+
+  I. Henriksen, E. A. Quintero, C. R. Harris, A. M. Archibald, A. H. Ribeiro, F. Pedregosa,
+  P.  van  Mulbregt,  and  SciPy  1.0  Contributors,  “SciPy  1.0:  Fundamental  algorithms  for
+  scientific computing in Python,”Nature Methods    17, 261–272 (2020).
+
+54P.  S.  Thomas  and  T.  Carrington,  “Using  nested  contractions  and  a  hierarchical  tensor
+
+  format  to  compute  vibrational  spectra  of  molecules  with  seven  atoms,”The  Journal  of
+  Physical Chemistry A 119, 13074–13091 (2015).
+
+55D. Baye and P. H. Heenen, “Generalised meshes for quantum mechanical problems,”Jour-
+
+  nal of Physics A: Mathematical and General 19, 2041–2059 (1986).
+
+56S.  Dolgov,  B.  Khoromskij,  I.  Oseledets,  and  D.  Savostyanov,  “Computation  of  extreme
+
+  eigenvalues in higher dimensions using block tensor train format,”Computer Physics Com-
+  munications 185, 1207–1216 (2014).
+
+57G. Avila and T. Carrington, “Using nonproduct quadrature grids to solve the vibrational
+
+  schr¨odinger equation in 12d,”The Journal of Chemical Physics        134, 054126 (2011).
+
+58D.  Begue,  P.  Carbonniere,  and  C.  Pouchan,  “Calculations  of  vibrational  energy  levels
+
+  by using a hybrid ab initio and dft quartic force field:  Application to acetonitrile,”The
+  Journal of Physical Chemistry A 109, 4611–4616 (2005).
+
+59W.  Li,  J.  Ren,  and  J.  Yan,  “A  further  comparison  of  mps  and  ttns  for  nonadiabatic
+
+  dynamics of exciton dissociation,”Journal of Chemical Theory and Computation            22, 62–77
+  (2025).
+
+60D. Bauernfeind, M. Zingl, R. Triebl, M. Aichhorn, and H. G. Evertz, “Fork tensor-product
+
+  states:  Efficient multiorbital real-time dmft solver,”Physical Review X      7, 031013 (2017).
+
+61N.  Chepiga  and  S.  R.  White,  “Comb  tensor  networks,”Physical  Review  B          99,  235426
+
+  (2019).
+
+                                                      41

@@ -1,0 +1,963 @@
+             Density Matrix Renormalization Group with Tensor Processing Units
+
+                             Martin  Ganahl,1, 2  Jackson  Beall,1, 2  Markus  Hauru,2, 3  Adam  G.M.
+                             Lewis,1, 2  Jae  Hyeon  Yoo,2, 4, 5  Yijian  Zou,2, 6  and  Guifre  Vidal2, 4, 7
+                                                    1SandboxAQ,  Palo  Alto,  CA,  USA
+                                        2Sandbox@Alphabet,  Mountain  View,  CA  94043,  USA
+                         3The  Alan  Turing  Institute,  96  Euston  Road,  London,  England,  NW1  2DB,  UK
+                                    4X,  the  Moonshot  Factory,  Mountain  View,  CA  94043,  USA
+                                            5Google  Core,  Mountain  View,  CA  94043,  USA
+                  6Stanford  Institute  for  Theoretical  Physics,  Stanford  University,  Palo  Alto,  CA  94305,  USA
+                                       7Google  Quantum  AI,  Mountain  View,  CA  94043,  USA
+                                                           (Dated:  April 13, 2022)
+                  Google’s Tensor Processing Units (TPUs) are integrated circuits speciﬁcally built to accelerate
+               and scale up machine learning workloads.  They can perform fast distributed matrix multiplications
+               and therefore be repurposed for other computationally intensive tasks.  In this work we demonstrate
+               the use of TPUs for accelerating and scaling up the density matrix renormalization group (DMRG),
+               a powerful numerical approach to compute the ground state of a local quantum many-body Hamilto-
+               nian.  The cost of DMRG scales with system size N as O(ND3), where the so-called bond dimension
+               D regulates how expressive the underlying matrix product state (MPS) variational ansatz is.  We
+               consider lattice models in two spatial dimensions, with square lattices of size 10× 10 (free fermions)
+               and 20× 20 (transverse ﬁeld Ising model), for which the required MPS bond dimension is known to
+               scale at least as exp(√N).  Using half of a TPU v3 pod (namely 1,024 TPU v3 cores) we reached an
+               unprecedentedly large bond dimension D = 216 = 65,536, for which optimizing a single MPS tensor
+               took about 2 minutes.
+
+
+                    I.    INTRODUCTION                                      consequence of this area law.
+                                                                               Such  applications  of  DMRG  in d >  1  dimensions,
+  The Density Matrix Renormalization Group (DMRG)                           while  exceedingly  diﬃcult  and  computationally  expen-
+[1, 2]  algorithm  is  the  gold  standard  method  for  com-               sive,  are  also  tremendously  important  in  order  to  ac-
+puting ground-states and low-lying excited states of one-                   count for exotic quantum eﬀects that other, less expen-
+dimensional (1d) local Hamiltonians [3–8]. Since its orig-                  sive methods fail to capture.  Recent years have seen a
+inal formulation, the DMRG method and its descendants                       growing eﬀort to understand how modern computer ar-
+[9–15] have been applied to a wide variety of problems,                     chitectures, in particular HPC clusters, can be used to
+both in one and higher dimensions, ranging from quan-                       speed  up  such  computations  [26, 55–59].   In  this  work
+tum chemistry [16–29] to material science [30–32], quan-                    we show that Googles’s Tensor Processing Units (TPUs)
+tum  computing  [33–41]  and  machine  learning  [42–49].                   [60,61], originally developed for machine learning work-
+Tensor network methods,  of which DMRG is the most                          loads but more recently applied to other computational
+successful incarnation, hold the promise of revolutioniz-                   tasks [62–70], can be leveraged to perform, within hours,
+ing these ﬁelds.                                                            large scale DMRG calculations of 2d quantum systems
+  DMRG is an optimization method over a matrix prod-                        that  would  otherwise  take  many  months  to  ﬁnish  on
+uct state (MPS) [50–54], which is a powerful variational                    conventional shared memory hardware with up to a few
+ansatz in the form of a one-dimensional tensor network.                     dozens of CPU cores.  We demonstrate the approach in
+For a system size N  (where N  denotes e.g.  the number                     2d square lattice models of sizes 10× 10 and 20× 20.  To
+of  sites  in  a  lattice  model  or  the  number  of  electronic           the best of our knowledge,  the largest bond dimension
+orbitals  in  a  molecule)  the  MPS  is  made  of N  tensors               employed, D = 216  = 65,536, sets a new record.  (This
+and the computational cost of DMRG scales asO(ND3).                         was achieved using only 1024 TPU v3 cores, namely half
+Here,  the  so-called  bond  dimension D  determines  how                   of a TPU v3 pod, and without exploiting internal sym-
+much quantum entanglement the MPS is capable of ac-                         metries in the MPS representation, and therefore there is
+counting for, and may depend on the system size, that                       signiﬁcant room for further increasing D, see discussion
+is D  = D(N).   For  instance,  to  accurately  represent  a                section).  These results herald a new age of DMRG and,
+generic wavefunction, the bond dimension must grow as                       more  generally,  tensor  network  methods,  with  the  po-
+D  = exp(N),  making the MPS optimization as expen-                         tential to transform the computational landscape in all
+sive as a direct,  brute-force ground state computation.                    research areas where such techniques are applied, from
+Fortunately, most ground states of local Hamiltonians in                    condensed matter to quantum chemistry, materials sci-
+d spatial dimension contain restricted amounts of entan-                    ence and machine learning.
+glement according to the so-called area law  (with possi-                      The paper is organized as follows: in Sect.IIwe review
+ble logarithmic corrections).  Both the incredible success                  some relevant aspects of the DMRG algorithm, the MPS
+of DMRG for one-dimensional systems and its challenges                      ansatz and the entanglement area law;  in Sect.IIIwe
+in higher dimensions can be understood to be a direct                       then brieﬂy describe TPUs; in Sect.IVwe introduce the
+                                                                                                                                               2
+
+strategy used to distribute DMRG on TPUs, including                       Each  tensor Mk  has  (possibly  complex)  components
+data distribution, a necessary out-of-core approach, and                  [Mk]ikαk−1αk, where each indexαk takesDk diﬀerent val-
+distributed  tensor  contractions;  in  Sect.Vwe  present                 ues (that is,αk = 1, 2,··· ,Dk).  In other words, for each
+benchmark results using two models on a square lattice:                   value of ik∈{1, 2,··· ,q},  tensor Mk  deﬁnes a matrix
+free  fermions  and  the  transverse  ﬁeld  Ising  model;  we             [Mk]ik  of size Dk−1×Dk  with matrix elements labeled
+conclude  the  paper  with  a  summary  and  discussion  in               by indices αk−1  and αk.  Following a common practice,
+Sect.VI. We also include AppendicesA-Cwith addi-                          we will refer to the index ik  labeling the local basis of
+tional technical details of our DMRG implementation.                      states as a  physical  index, and to the indices αk−1  and
+                                                                          αk as bond indices.  The bond indicesα0 andαN  will be
+                                                                          chosen  to  have  dimensions D0  = DN  =  1,  so  that  for
+ II.    DENSITY MATRIX RENORMALIZATION                                    ﬁxed value of the physical indices i1 and iN, [M1]i1  and
+                             GROUP                                        [MN]iN  are not matrices but vectors (of dimension D1
+                                                                          and DN−1 and components [M1]i11α1  and [M2]iNαN−11, re-
+  In this section we present a brief review of the Density                spectively).  Given the aboveN tensors, the MPS ansatz
+Matrix  Renormalization  Group  (DMRG)  algorithm  [1]                    assumes that theqN  wavefunction amplitudes in (1) can
+and the matrix product state (MPS) ansatz [50], as well                   be written as
+as other relevant background material.                                           ψi1i2···iN  =∑[M1]i11α1[M2]i2α1α2··· [M2]iNαN−11    (4)
+  We  consider  a  lattice  system  made  of N  sites,  with
+each  site  described  by  a  vector  space  of  ﬁnite  dimen-                                  {α}
+sion q  and  orthonormal  basis {|i⟩}, i   =   1, 2,··· ,q.                                  = [M1]i1· [M2]i2· ... · [M2]iN,           (5)
+For  instance,  with q  =  2,  each  site  is  represented  by            where  in  the  ﬁrst  line  we  have  written  explicitly  both
+a  two-dimensional  vector  space  with  orthonormal  ba-                 all the indices of each tensor and the sum over the ma-
+sis {|1⟩,|2⟩},  corresponding  e.g.    to  empty/occupied                 trix indices{α} =α1,α2,··· ,αN−1, whereas in the sec-
+fermionic states{|0⟩,|1⟩} if each site represents a spin-                 ond line we regarded each [Mk]ik as a matrix (except for
+less fermionic degree of freedom, or to spin up/spin down                 [M1]i1 and [MN]iN , which are vectors) and used the ma-
+states{|↑⟩,|↓⟩} if each site represents a spin- 12  quantum               trix product symbol ‘·’ to represent matrix-matrix mul-
+spin degree of freedom, as in the two examples used later                 tiplication  (respectively,  matrix-vector  multiplication).
+on  in  this  paper.   The  many-body  wavefunction  of  the              Notice that the name ‘matrix product state’ of this vari-
+lattice system then reads                                                 ational ansatz comes from the fact that it expresses the
+             |ψ⟩ = ∑          ψi1i2···iN|i1i2···iN⟩,            (1)       wavefunction amplitudes as the matrix product (5).
+                                                                             Intuitively, the MPS ansatz assumes that the state|ψ⟩
+                     i1i2···iN                                            has a restricted amount of entanglement.  Indeed, the so-
+where ψi1i2···iN  denotes qN  (possibly  complex)  ampli-                 called bond dimensionDk limits how much entanglement
+tudes and|i1i2···iN⟩ stands for the product basis|i1⟩⊗                    the ansatz can represent between two parts of the sys-
+|i2⟩⊗···⊗|iN⟩ for the qN-dimensional vector space of                      tem, namely between a part containing the ﬁrst k sites
+theN sites.  Similarly, the local many-body Hamiltonian                   (from site 1 to site k) and another part containing the
+expressed in the same basis reads                                         rest of sites (from site k + 1 to site N).  In particular,
+                                                                          the larger the bond dimensionDk is, the more entangle-
+ H = ∑         Hi1j1i2j2···iNjN|i1i2···iN⟩⟨j1j2···jN|,  (2)               ment the MPS can account for between these two parts,
+                                                                          and thus the more capable the ansatz is to represent en-
+        {i},{j}                                                           tangled many-body wavefunctions.  On the other hand,
+although a more natural, eﬃcient expression is as a sum                   tensor Mk  contains q×Dk−1×Dk  variational parame-
+of  local  terms.    Our  goal  is  to  compute  an  accurate             ters, so that the cost of storing the MPS grows with the
+approximation  to  the  ground  state|ψGS⟩  of  the  lattice              bond dimensions.  Quite often, the bond dimension Dk
+HamiltonianH, without explicitly storing the wavefunc-                    is chosen according to the rule
+tion amplitudes in (1), which would incur in a computa-                                          qk        for    1≤k<k1
+tional cost exponential in the system size N.                                         Dk =      D         for k1≤k≤k2                      (6)
+                                                                                                 qN−k    for k2 <k≤N− 1,
+                                                                          namely such that it grows exponentially withk for small
+          A.    Matrix Product Decompositions                             k  until it reaches some maximum allowed bond dimen-
+                                                                          sionD, and similarly withN−k for largek<N.  Given
+  For  that  purpose,  one  can  use  the  Density  matrix                a choice of maximum bond dimensionD,k1 above is sim-
+Renormalization  Group  (DMRG)  algorithm  [1],  which                    ply the smallest site index such thatD<qk1, whereask2
+is a variational method in the space of matrix product                    is the largest site index such that D <qN−k2.  In many
+states (MPSs) [50].  The MPS ansatz consists of a col-                    applications the above prescription implies that most of
+lection of N order-3 tensors                                              the  MPS  tensors  have  size q×D2.   Then  the  memory
+                                                                          space  required  to  store  the  MPS  scales  with  the  bond
+                     {M1,M2, ··· , MN}.                       (3)         dimension D and system size N  as O(ND2).
+                                                                                                                                                 3
+
+  The MPS ansatz comes with so-called gauge freedom                         In  the  following  we  will  outline  the  main  steps  of  the
+[71–73],  in  that  the  amplitudes     ψi1i2···iN  are  invariant          DMRG algorithm, which aims at obtaining|ψ⋆MPS⟩, and
+under  the  simultaneous  change  [Mk]ik →  [Mk]ik· Qk                      refer the reader to the literature [1,72] for more details.
+and  [Mk+1]ik+1 → Q−1k · [Mk+1]ik+1,  where Qk  is  any                        Starting from some initial state|ψMPS⟩ given by a set
+invertibleDk×Dk matrix andQ−1k   is its inverse.  Indeed,                   of MPS tensors{Mk} in (3), the DMRG algorithm at-
+the double replacement is easily seen to leave the matrix                   tempts to minimize the energy E(|ψMPS⟩) in (13) by it-
+product [Mk]ik· [Mk+1]ik+1  invariant in (5), so that the                   eratively  optimizing  one  MPS  tensor  at  a  time.   More
+wavefunction  amplitudes  are  not  changed.   Using  this                  concretely,  we  ﬁrst  optimize  the  tensor  on  site n  =  1,
+gauge freedom,  we can bring the MPS (3) into the so-                       then the tensor on siten = 2, etc, all the way to the ten-
+called central gauge [71,72] with respect to site    n,                     sor on siten =N, in what is known as a forward sweep.
+           {A1, ··· ,An−1,Cn,Bn+1, ··· ,BN},          (7)                   That is followed by a backward sweep, progressing from
+                                                                            the last site to the ﬁrst one.  For a given siten, the opti-
+where letters A and B  are used to denote MPS tensors                       mization proceeds as follows.  First, the MPS is written
+that satisfy the following orthogonality constraints:                       in the central canonical form for that site, namely as in
+            ∑    ([Ak]ik)†· [Ak]ik =           1  ∀k<n,           (8)       Eq.  (7).  Then the central tensor  Cn  is replaced with a
+                                                                            new tensor C′n  that is chosen in a way as to optimally
+             ik                                                             lower E(|ψMPS⟩) while keeping the rest of MPS tensors
+            ∑[Bk]ik·([Bk]ik)† =           1  ∀k>n.           (9)            constant.   This  is  accomplished  by  diagonalizing  a  lin-
+                                                                            ear  operator  using  a  Krylov-space  method  such  as  the
+             ik                                                             Lanczos  method  (see  Fig.1and  text  below  for  more
+The central tensor Cn above does not satisfy any of the                     details).
+two  relations.   The  central  form  is  important  in  order                 The  DMRG  algorithm  proceeds  with  forward  and
+to both simplify, and provide numerical stability to, the                   backward sweeps until either the energy E(|ψMPS⟩) has
+MPS optimization procedure, as brieﬂy reviewed below.                       converged  to  some  desired  accuracy,  or  a  maximum
+  The system’s HamiltonianH in (2) can similarly be ex-                     sweep number has been reached.  Although ideally one
+pressed in matrix product operator (MPO) [74–78] form,                      would like to obtain the optimal MPS ground state ap-
+given in terms of a sequence of N  order-4 tensors                          proximation|ψ⋆MPS⟩ in Eq.  (14), in practice it is under-
+                      {H1,H2,··· , HN},                      (10)           stood  that  one  must  settle  for  a  reasonably  converged
+                                                                            MPS  ground  state  approximation,  also  denoted|ψ⋆MPS⟩
+where each tensor Hk has components [Hk]mikjkmk−1mk.  For                   in the rest of this paper.
+ﬁxed  values  of  the  physical  indices ik  and jk,  we  can
+think of [Hk]ikjk as aD′k−1×D′k matrix.  We again refer
+toik andjk} as physical indices and tomk−1 andmk as                                 C.    Computational Cost and Area Law
+MPO bond  indices.  The Hamiltonian coeﬃcients in (2)
+can then be written as                                                         For  simplicity,  from  now  on  we  assume  a  uniform
+Hi1j1i2j2···iNjN  =∑[H1]i1j1                                                MPS  bond  dimension D.   Optimizing  a  central  tensor
+                               1m1[H2]i2j2m1m2··· [HN]iNjNmN−11     (11)    Cn → C′n  (e.g.   using  Lanczos)  as  well  as  shifting  the
+                      {m}                                                   central  canonical  form  (7)  from  site  n  to  site n + 1
+                   = [H1]i1j1· [H2]i2j2· ... · [HN]iNjN.      (12)          (which  can  be  accomplished  using  a  polar,  QR  or  sin-
+Importantly, in this case the MPO representation is not                     gular  value  decomposition  [79])  both  have  a  computa-
+used as a variational ansatz for the HamiltonianH, but                      tional cost O(D3), leading to a total cost per optimiza-
+as a convenient way of exactly representing it.                             tion sweep that scales with bond dimension D and sys-
+                                                                            tem  size N  as O(ND3).   It  is  important  to  emphasize
+                                                                            the linear scaling inN at ﬁxedD, as opposed to the ex-
+          B.    Variational Energy Optimization                             ponential  scaling incurred in a brute-force ground-state
+                                                                            computation using the qN  amplitudes in (1).  However,
+  The exact ground state|ψGS⟩ of HamiltonianH is the                        in order to achieve some desired accuracy with an MPS
+state|ψ⟩  that  minimizes  the  expectation  value  of  the                 computation, the bond dimensionD may need to be ad-
+energy, as given by E(|ψ⟩)≡⟨ψ|H|ψ⟩/⟨ψ|ψ⟩.  Accord-                          justed  as  a  function  of  the  system  size N,  that  is,  in
+ingly, an MPS approximation|ψ⋆                                              general D =D(N), in which case the scaling of compu-
+                                        MPS⟩ to the ground state            tational resources may no longer be linear in N.
+|ψGS⟩ is obtained by minimizing the energy                                     In  order  to  gain  further  insight  into  computational
+                 E(|ψMPS⟩) =⟨ψMPS|H|ψMPS⟩                                   costs, a useful rule of thumb is to think that the bond
+                                    ⟨ψMPS|ψMPS⟩                  (13)       dimension D  must  grow  exponentially  with  the  entan-
+over the set of states|ψMPS⟩ that can be written as an                      glement  entropy S  [80–82]  of  the  target  ground  state
+                                                                            |ψGS⟩ for half of the system, that is D∼ exp(S).  For a
+MPS (for some ﬁxed choice of bond dimensions{Dk}),                          generic (non-local) HamiltonianH, the half-system en-
+                |ψ⋆                                                         tropy of the ground state is expected to grow linearly in
+                   MPS⟩ = arg  min|ψMPS⟩E(|ψMPS⟩).              (14)        the system size, S≈N, scaling known as entanglement
+                                                                                                                                                4
+
+volume law.  In this case, the bond dimension must grow                    DMRG scales exponentially as exp(√N) and exp(N 2/3)
+exponentially with system size, D∼ exp(N), and using                       in d = 2, 3 dimensions.  In spite of this unfavorable scal-
+an MPS representation is not computationally advanta-                      ing, DMRG is actively used in restricted d > 1 geome-
+geous with respect to a brute-force computation.  Luck-                    tries  such  as  thin  two-dimensional  strips  and  cylinders
+ily, ground states of local Hamiltonians often have a more                 [90–102] and small three-dimensional molecules [29,103–
+forgiving scaling of entanglement entropyS with system                     110].  In such cases,  the massive computational cost of
+size N, known as the entanglement area law  [80,82–89]                     running DMRG constitutes the main roadblock to study-
+(sometimes with a logarithmic correction), which justi-                    ing larger systems.  As we show in this work using Tensor
+ﬁes  the  use  of  an  MPS  representation  and  the  DMRG                 Processing Units, specialized hardware originally devel-
+algorithm.                                                                 oped to accelerate and scale up machine learning work-
+  Speciﬁcally,  in a d-dimensional cubic lattice made of                   loads can be repurposed to also accelerate and scale up
+N =Ld sites, the half-system entropy of a state obeying                    DMRG computations, signiﬁcantly increasing the bond
+the area law  scales as                                                    dimension D  that  can  be  aﬀorded.   This  allows  us  to
+
+                              d−1                                          use DMRG to more accurately address larger systems in
+            S∼Ld−1 =N           d           (area law)             (15)    d> 1 dimensions.
+
+or, in the presence of a logarithmic correction, as
+
+
+                   d−1                                                           III.    TPU CORES, BOARDS AND PODS
+          S∼N        d × logN     (log.  correction).       (16)
+
+The above rule of thumb then indicates that the required                      Tensor Processing Units (TPUs) are application spe-
+MPS bond dimension should scale, respectively, as                          ciﬁc  integrated  circuits  (ASICs)  developed  by  Google
+              (                                                            speciﬁcally for large scale machine learning applications
+                   d−1                                                     [60,61].  However, in recent times a growing number of
+   D∼ exp       N   d )                     (area law)      (17)
+              (                                                            papers  have  demonstrated  their  applicability  to  accel-
+                   d−1
+   D∼ exp       N   d )  × poly(N)     (log.  correction). (18)            erating and scaling up other computationally intensive
+                                                                           tasks,  including  large-scale  dense  linear  algebra  opera-
+  In d = 1 dimensions, the ground state typically obeys                    tions  [64],  the  simulation  of  quantum  circuits  [67, 68],
+an area law if the local Hamiltonian has a ﬁnite energy                    brute-force ground state computation and dynamics sim-
+gap.  In this case S∼N 0 suggests that a constant bond                     ulation  in  quantum  many-body  systems  [62, 63, 66],
+dimension D,  independent  of  the  system  size N,  may                   and  quantum  chemistry  electronic  structure  computa-
+suﬃce to accurately approximate the ground state|ψGS⟩                      tions using density functional theory [65,69,70].  In this
+with an MPS, resulting in overall computational cost lin-                  work we focus on TPUs of third generation, denoted v3
+ear inN.  For gapless Hamiltonians ind = 1 dimensions,                     in the following.  [After completion of our work, TPUs of
+the ground state often exhibits a logarithmic correction                   fourth generation, with increased compute power, were
+to the area law, S∼ log(N), resulting in a polynomial                      made available. The results presented in this work can be
+bond dimension D∼ poly(N) and thus also a compu-                           straightforwardly generalized to TPU v4.]  In the third
+tational  cost  that  grows  as  some  power  of  the  system              generation, eight TPU v3 cores form a TPU board, and
+size N.  We conclude that DMRG is eﬃcient for ground                       up to 256 TPU v3 boards can be connected into a TPU
+states of d = 1 systems.                                                   pod (with 2048 TPU v3 cores).
+  In d = 2, 3 dimensions, ground states of gapped and                         A  single  TPU  v3  core  is  equipped  with  two  matrix-
+gapless local Hamiltonians often obey the entanglement                     multiply  units  (MXUs)  and  16  GB  of  on-chip,  high-
+area law, with some gapless systems (e.g.  systems with                    bandwidth  memory  (HBM).  An  MXU  is  a  systolic  ar-
+a  Fermi  surface  of  dimension d− 1)  also  display  loga-               ray  that  can  multiply  matrices  of  size  128× 128  na-
+rithmic  corrections.   For  such  systems,  the  above  rule              tively,  using  multiplication  of  ﬂoating  numbers  in  half
+of thumb indicates that DMRG has cost that scales at                       precision (speciﬁcally, in brain ﬂoat  16 format, or bf16)
+least as exp(√N) and exp(N 2/3) ind = 2, 3 dimensions,                     and  accumulation  in  single  precision  (fp32).   Using  6
+respectively.   Notice  that,  in  spite  of  this  exponential            passes through the MXU, a single TPU core can however
+scaling of computational costs (in a fractional power of                   also deliver over 10 TFLOPS of single precision (fp32)
+N), DMRG still has signiﬁcant advantage with respect                       matrix-matrix multiplication.
+to the exp(N) scaling of a brute-force computation.                           At the next level we ﬁnd a TPU board, which is actu-
+  While the area law (with possible logarithmic correc-                    ally the smallest available conﬁguration, with eight TPU
+tions in certain critical systems) has mostly been inves-                  v3  cores  and  one  controlling  host  CPU  machine.   The
+tigated in regularly structured lattice models, we expect                  eight cores are arranged into a 2d torus and, importantly,
+it to also roughly apply to more generic systems,  such                    each core is connected to its neighbors through a fast In-
+as large molecules in d = 3 dimensions, where DMRG is                      ter  Core  Interconnect  (ICI)  communication  link  (with
+used in the context of quantum chemistry [16–29].                          656GB/s bandwidth [61]).  A TPU board has a total of
+  In  conclusion,  DMRG  is  eﬃcient  in d  =  1  dimen-                   128 GB of HBM and can yield up to about 80 TFLOPS
+sions,  where  it  is  ﬁrmly  established  as  the  method  of             of single precision matrix-matrix multiplication [64].
+choice  to  compute  ground  states.   On  the  other  hand,                  Finally,  up  to  256  TPU  boards  (that  is,  up  to  2048
+                                                                                                                                                5
+
+TPU cores) can be joined into a TPU v3 pod, where the
+cores are again arranged on a 2d torus and directly con-
+nected to nearest neighbors with ICI links, with a total
+of 32 TB of HBM and near 20 PFLOPS of single preci-
+sion matrix-matrix multiplication [64].  One can also use
+a  slice  of  a  pod  containing  an  intermediate  number  of
+TPU cores.  For instance,  in Fig.4we provide perfor-
+mance results and estimates for slices with 32, 128, 512
+and 2048 cores.  The largest TPU conﬁguration we used                      Figure 1.  Left:  Matrix distribution pattern on TPU cores.
+in this work consisted in half a pod (that is, 1024 cores).                The ﬁgure shows the distribution pattern of a D× D matrix
+  TPUs can be programmed using XLA [111], an opti-                         on 8 available TPU cores, arranged into a 4× 2 torus.  Each
+mized graph compiler that translates from roughly C-like                   colored panel has shape D/4× D/2.  Right:  Tensor network
+commands called HLOs to roughly assembly-like equiv-                       diagram for a key tensor contraction in the DMRG algorithm,
+alents called LLOs.  The HLOs themselves may be writ-                      where one site MPS tensor (regarded as an eﬀective vector
+ten directly, but are usually instead “traced” from any of                 wavefunction  for  a  given  site)  is  multiplied  by  three  other
+several higher-level languages.  For the DMRG work pre-                    tensors (corresponding to an eﬀective Hamiltonian for that
+                                                                           site).
+sented in this paper, we wrote the code with Jax [112],
+a NumPy like interface to XLA, following the single in-
+struction multiple data (SIMD) paradigm.                                   stored in the high bandwidth memory of the correspond-
+                                                                           ing TPU core.  Since in SIMD code each matrix panel is
+                                                                           expected to have the same size,  matrix dimensions are
+                  IV.    DMRG ON TPUS                                      chosen  appropriately  such  that  they  can  be  evenly  di-
+                                                                           vided by the grid-shape of the TPU cluster.  The moti-
+  The  performance  of  our  large-scale  implementation                   vation to distribute data in this way will become clear be-
+of  DMRG  on  multi-core  TPU  conﬁgurations  is  based                    low, where tensor contractions are reduced to sequences
+on three main points:  (i) individual MPS tensors (and                     of distributed matrix-matrix multiplications.
+other  auxiliary  tensors)  are  distributed  through  the
+available  TPU  cores;   (ii)  an  out-of-core  approach  is
+adopted  in  order  to  more  eﬃciently  use  the  16  GB  of                                B.    Out-of-core approach
+high bandwidth memory on each TPU core; (iii) tensor
+contractions are accelerated through parallelization.                         The memory  required to store  the  MPS tensors and
+                                                                           the  left  and  right  environment  Hamiltonian  tensors
+                                                                           scales as O(ND2q) and O(ND2D′), respectively, where
+                    A.    Data distribution                                N  is the number of sites,D the MPS bond dimension,q
+                                                                           the physical index dimension and D′ the MPO bond di-
+                                                                           mension.  For large DMRG computations, these memory
+  The  largest  data  objects  in  a  DMRG  simulation  are                requirements can quickly become prohibitive, when com-
+(a)  the N  order-3  MPS  tensors Mn  that  contain  the                   pared to the total available HBM on TPUs. For example,
+variational  parameters  of  the  ansatz  and  (b)  two  sets              for a system of two-level quantum degrees of freedom on
+of N  auxiliary tensors Ln  and Rn, called left and right                  each  site  (local  dimension q  =  2)  on  a  square  lattice
+environment  Hamiltonian  tensors  [1, 72],  which  given                  made of a 10× 10 grid (number of sitesN = 100) with a
+a  choice  of  central  site n,  represent  a  contraction  of             local Hamiltonian consisting only of a nearest neighbor
+MPS  and  MPO  tensors  for  all  sites k < n  and  for  all               fermionic hopping term (MPO bond dimensionD′ = 22)
+sites k > n, respectively.  In components, we can write                    and  with  an  MPS  bond  dimension D  =  216  =  65,536,
+[Mn]iαβ, [Ln]mαβ, [Rn]mα,β, where Greek letters are used to                the minimally required memory using single precision (4
+denote  “large”  indices,  such  as  the  MPS  bond  indices,              bytes  per  fp32)  grows  to  about  32TB,  which  therefore
+with  size D  that  in  our  implementation  could  poten-                 already exhausts the maximally available 32TB HBM of
+tially be scaled up to D∼ 105, whereas Roman letters                       an entire TPU v3 pod.
+are used to denote “small” indices, namely the physical                       On  the  other  hand,  at  any  given  time  of  a  DMRG
+index i  taking q  values  for q  =  2  in  the  examples  be-             optimization  sweep  only  a  small  number  of  such  ten-
+low, and the MPO bond dimension D′, which in those                         sors are really required for processing on the TPUs.  We
+examples grows up to D′∼ 100.                                              have therefore adopted an out-of-core approach,  where
+  LetT denote any of these order-3 tensors, with compo-                    the bulk of the data is stored on hard drives (which are
+nents [T ]iαβ.  In our implementation, we regard tensor T                  readily and cheaply available). For one optimization step
+as a collection{Ti=1,Ti=2,···} of large matrices, where                    of the DMRG algorithm, the necessary data is read from
+each  matrix Ti  has  components  [Ti]αβ  given  by  [T ]iαβ.              hard-drive into the HBM of the TPUs, where the rele-
+Each  matrix Ti  is  then  distributed  across  all  available             vant  optimization  step  is  executed,  then  the  result  is
+TPU cores in a checkerboard fashion, as shown in Fig.                      written back to the hard drive.  To minimize the idling
+1for the case of eight TPU cores.  Each matrix panel is                    time of the TPUs, we utilize three simultaneous threads
+                                                                                                                                                6
+
+to perform DMRG optimization on the TPUs, and read-
+ing and writing of data from and to the disk.                                          Algorithm 1 Contraction algorithm
+                                                                            1:  function contract(i, v, L, R, C)
+                                                                            2:       M  = zeros  like(C)    ⊿ Container for storing the ﬁnal
+                                                                                contraction result
+           C.    Distributed tensor contractions                            3:      for n=0. . . len(i)-1 do
+                                                                            4:            a, b, c, d = i[n]
+                                                                            5:            T  = SUMMA(SUMMA(L[c, ...], C[a, ...]), R[d, ...])
+  To  illustrate  how  tensor  contractions  are  performed                 6:            M[b, ...]+= v[n]*T               ⊿ Accumulate matrix
+in a distributed way,  let us consider the contraction of                       multiplications
+the  tensor  network  shown  in  the  right  panel  of  Fig.1,              7:      end for
+which  is  the  bottleneck  operation  in  the  DMRG  algo-                 8:      return M
+rithm.  Given a site n, the tensor network contains the                     9:  end function
+central MPS tensor Cn  for that site, as well as the left
+and right environment Hamiltonian tensors Ln  and Rn
+and  the  MPO  tensor Hn.   Conceptually,  we  can  think                                           V.    RESULTS
+of the contraction of this tensor network as correspond-
+ing to a “vector-matrix” multiplication, if we regard the                     In order to benchmark our distributed implementation
+central MPS tensorCn as representing a “vector” (an ef-                    of DMRG on TPUs, we computed an MPS approxima-
+fective wavefunction on site n) and the remaining three                    tion|ψ⋆
+tensors as representing a “matrix” (an eﬀective Hamilto-                   2d  square  lattice  models.   The  ﬁrst  one  is  a  model  ofMPS⟩  to  the  ground  state|ΨGS⟩  of  two  diﬀerent
+nianHeff on siten).  This eﬀective “vector-matrix” mul-                    free spinless fermions on a lattice of size 10× 10, which
+tiplication needs to be performed several times as part of                 can also be solved eﬃciently using the free fermion for-
+the Lanczos tridiagonalization (which aims to compute                      malism, so that we have the exact solution to compare
+the ground state of the eﬀective HamiltonianHeff on site                   against.  Its ground state displays a logarithmic correc-
+n as part of a single DMRG optimization step).                             tion to the area law, making this model extremely chal-
+  In  order  to  proceed,  we  ﬁrst  preprocess  the  MPO                  lenging from a DMRG perspective.  The second model
+tensor Hn,  with  components  [Hn]ijαβ  which  often  van-                 is  the  transverse  ﬁeld  Ising  model  on  a  lattice  of  size
+ish  (sparse  MPO),  into  a  list  of  non-zero  components               20× 20, for which we do not have an exact solution, but
+v  ={v1,v2,...}  and  their  corresponding  multi-indices                  other techniques can be used.  The ground state of this
+p ={(a1,b1,c1,d1), (a2,b2,c2,d2)...} s.t. Makbkckdk  =vk                   model obeys an area law.  This makes it less computa-
+  The tensor network contraction is then performed by                      tionally demanding for DMRG, allowing us to consider
+looping  over  all  elements  in  the  lists,  see  Algorithm1.            a larger lattice.
+Notice that for each non-zero value in v, we must per-                        The two models analyzed in this section are already
+form two matrix-matrix multiplications involving matri-                    well understood.  We have chosen them mostly for two
+ces from tensors Ln, Cn  and Rn.  As explained above,                      reasons.  On the one hand, they are challenging from a
+each  of  these  matrices  has  been  suitably  distributed                DMRG perspective and, as such, can be used to mean-
+among  the  TPU  cores.    Then  we  multiply  them  us-                   ingfully illustrate the use of very large bond dimension,
+ing the scalable universal matrix multiplication algorithm                 as  made  available  by  TPUs.   On  the  other  hand,  such
+(SUMMA) algorithm [113], following a TPU implemen-                         models  are  often  also  used  to  benchmark  other  meth-
+tation discussed in [64].  Each iteration of the loop pro-                 ods, including quantum monte carlo [114] and numerical
+duces a diﬀerent distributed matrix,  which is weighted                    linked-cluster expansions [115] or other tensor network
+by the corresponding weight vk and added to one of the                     algorithms such as those based on a tree tensor network
+q  matrices  that  will  constitute  the  ﬁnal  order-3  tensor            (TTN) [116], the multi-scale entanglement renormaliza-
+with the result of the tensor network contraction.                         tion ansatz (MERA) [117,118] and projected entangled
+  This  approach  is  particularly  appealing  for  highly                 pair states (PEPS) [119].  Benchmarking DMRG on the
+sparse MPO tensors, as one typically ﬁnd when the MPO                      same models (although for diﬀerent system sizes) enables
+is encoding a local Hamiltonian of a lattice model.  For                   useful comparisons.
+dense MPO matrices, as e.g. appearing in some quantum
+chemistry applications of DMRG, a vectorized approach                                         A.    Free fermion model
+can be more eﬃcient.
+  Another  important  step  in  the  DMRG  algorithm  is                      We  ﬁrst  consider,  on  a  10× 10  square  lattice  with
+tensor orthogonalization [72], which is traditionally im-                  N = 100 sites, the nearest neighbor Hamiltonian
+plemented using a QR decomposition or a singular value
+decomposition.  In this work we chose to perform orthog-                                    HSF =−∑          ˆc†i ˆcj +µ∑   ˆc†i ˆci               (19)
+onalization using instead a polar decomposition (which,                                                 ⟨i,j⟩            i
+in a so-called two-site DMRG approach can also be used
+for optimal tensor truncation).  Further implementation                    with  ˆci  (anti-commuting) fermionic annihilation opera-
+details can be found in the Appendix.                                      tors andµ the chemical potential.  This model describes
+                                                                                                                                               7
+
+a system of non-interacting/free electrons that can hop
+from each site to its nearest neighboring ones, where the
+value ofµ can be tuned to determine the number of elec-
+trons in the ground state (e.g. N/2 = 50 particles for
+µ = 0).  Using the free fermion formalism, the quadratic
+Hamiltonian (19) can be numerically diagonalized with
+computational cost that scales just asO(N 3), instead of
+the generic O(exp(N)) of a brute-force diagonalization.
+This is in contrast with the interacting case (e.g.  if we
+added quartic terms to the above Hamiltonian),  where
+the free fermion formalism can no longer be used.  Here,
+the ground-state energy from theO(N 3) diagonalization
+will be used to assess the accuracy of the DMRG result.
+  It is important to emphasize that, despite the lack of
+interactions, computing the ground-state of Hamiltonian
+(19) is still a formidable challenge from the perspective
+of the DMRG algorithm.  Indeed,  for suﬃciently small
+value of|µ| this Hamiltonian is seen to describe a system
+with a one-dimensional Fermi surface,  which results in
+the presence of a large number of gapless excitations.  As
+such, its ground state|ψGS⟩ displays a logarithmic cor-
+rection to the area law [80,86], implying that an accurate
+MPS approximation|Ψ⋆MPS⟩ requires a bond dimension
+D  expected to scale faster than O(exp(√N)),  see Eqs.
+(16) and (18) for     d = 2.  This is the strongest scaling of
+ground state entanglement (and bond dimension D) ob-
+served to naturally occur in condensed matter systems in
+d = 2 dimensions.  Thus, as far as DMRG is concerned,                     Figure 2.  Top:  Convergence of the DMRG ground state en-
+this non-interacting/free lattice model is not easier than                ergy towards the exact value as a function of bond dimension
+a strongly interacting/strongly correlated lattice model.                 D  for  a  2d  system  of  spinless  free  fermions  on  a  10×  10
+  Fig.2presents the DMRG approximations    E(|ψ⋆                          square lattice.  Bottom:  Convergence of the relative error in
+                                                               MPS⟩)
+for the ground-state energyE(|ψGS⟩) forµ = 0 (half ﬁll-                   energy for the same system.
+ing).   The  Hamiltonian  was  encoded  in  an  MPO  with
+bond dimension D′ = 22.  The top panel shows the con-                     symmetry  group,  we  can  ensure  that  the  MPS  repre-
+verged DMRG energy as a function of the bond dimen-                       sentation is exactly symmetric with the correct number
+sionD.  The red line denotes the numerically exact value                  NGS  of  particles,N|ψMPS⟩  = NGS|ψMPS⟩.   In  addition,
+obtained  from  a O(N 3)  diagonalization.   The  bottom                  this  confers  each  MPS  tensor  a  block-sparse  structure
+panel in Fig.2shows the evolution of the relative error                   that signiﬁcantly reduces the number of variational pa-
+of  this  energy  as  a  function  of  bond  dimension D.   At            rameters to be optimized, as well as the required com-
+D = 216 the approximation achieves a relative accuracy                    putational cost.
+of less than one part in a million.  Note that simulations                   Our current distributed implementation of DMRG on
+were carried out in single precision,  limiting the maxi-                 TPUS does not enforce or exploit the above model’s in-
+mum  achievable  accuracy  to  about  10−7.   To  the  best               ternal U(1) symmetry.  Our goal here is to benchmark
+of our knowledge, these are the largest DMRG compu-                       the performance of DMRG in a way that the results are
+tations  (in  terms  of  bond-dimension)  to  date.   Results             representative of a more general 2d lattice model, where
+for D = 216  = 65,536 were obtained within roughly 23                     such internal symmetry may not be present (see e.g.  our
+hours on a slice of a TPU v3 pod made of 1,024 cores.                     next example).  We foresee nevertheless no obstruction
+We used seven sweeps and a Krylov dimension of 10 for                     to incorporating particle conservation in our current im-
+the sparse diagonalization required for optimizing each                   plementation.
+tensor.
+  A remark regarding internal symmetries in the MPS
+representation is in order.  HamiltonianHSF  commutes                                   B.    Transverse ﬁeld Ising model
+with  the  particle  number  operatorN  = ∑i ˆc†i ˆci,  indi-
+cating  particle  number  preservation,  an  internal  U(1)
+symmetry generated byN .  Thus its ground state|ψGS⟩                         As a second benchmark, we have also considered the
+also has a well-deﬁned particle number NGS,N|ψGS⟩ =                       transverse ﬁeld Ising model,
+NGS|ψGS⟩.   This  can  be  exploited  in  DMRG  [73, 120–
+123].  Indeed, by specializing the MPS tensors   Mk to be                                  HTFI =−∑         ˆσzi ˆσzj +B∑    ˆσxi               (20)
+themselves invariant/co-variant under the Abelian U(1)                                                 ⟨i,j⟩              i
+                                                                                                                                               8
+
+                                                                           ing other methods [114,115,117,118].  Accordingly, the
+                                                                           bond dimension D required for an accurate approxima-
+                                                                           tion|ψ⋆MPS⟩ scale asO(exp(√N)), see Eqs.  (15) and (17)
+                                                                           for d = 2.  This is still a very challenging computations
+                                                                           for DMRG, but the milder scaling of the entanglement
+                                                                           entropy (compared to the free fermion model above) al-
+                                                                           lows us to consider a larger lattice.
+                                                                             Fig.3shows  the  DMRG  approximation    E(|ψ⋆MPS⟩)
+                                                                           for the (unknown) ground state energy E(|ψGS⟩) of the
+                                                                           transverse  ﬁeld  Ising  Hamiltonian  (20)  on  a  20  by  20
+                                                                           square lattice, at a near-critical magnetic ﬁeld strength
+                                                                           of B = 3.0 and exactly encoded in an MPO with bond
+                                                                           dimension D′ = 22.  The plot shows how the converged
+                                                                           DMRG energy per site appears to saturate to a constant
+                                                                           as we increase the bond dimension D, in clear analogy
+Figure  3.   Convergence  of  the  DMRG  ground  state  energy             with Fig.2for the spinless fermion model, where such
+per  site  as  a  function  of  bond  dimension D  for  the  critical      saturation was to the correct value of the ground state
+transverse ﬁeld Ising model on a 20×20 lattice, leading to an              energy.  While this model cannot be solved analytically,
+energy density of−3.18197(2).  For comparison,  Ref.  [119]                results  from  numerical  studies  using  e.g.   Monte-Carlo
+obtained the values -3.17210(1) and -3.18243(1) for the en-                or  tensor  network  methods  [119]  are  available,  albeit
+ergy  density  using  a  PEPS  simulation  on  an  11× 11  and             not at the exact same system size.  At bond dimension
+21× 21 lattices, respectively.                                             D  = 215  = 32,768 our simulations already reached the
+                                                                           maximum level of achievable accuracy within single pre-
+                                                                           cision arithmetic.
+
+
+
+                                                                                              C.    Scaling of runtimes
+
+                                                                             Finally,  Fig.4shows  measured  and  estimated  run-
+                                                                           times, for ﬁxed MPO bond dimension D′ = 22 and as a
+                                                                           function of the MPS bond dimension D, for the update
+                                                                           of a single MPS tensor.  These times include the time to
+                                                                           perform the Lanczos tridiagonalization, the orthogonal-
+                                                                           ization of the optimized tensor,  and the update of one
+                                                                           left or right block Hamiltonian.
+                                                                             At ﬁxed TPU conﬁguration (ﬁxed color in the plot),
+                                                                           the runtimes are seen to scale with the MPS bond dimen-
+Figure 4.  Measured and estimated runtimes per DMRG opti-                  sion D as D3.  On the other hand, if every time that we
+mization step (including Lanczos update, tensor orthogonal-                double the bond dimension we quadruple the number of
+ization and update of the eﬀective environment Hamiltonian)                TPU cores (see data points forD = 215, 216, 217 and 218
+on diﬀerent TPU cluster sizes.  The solid line is proportional             for 32, 128, 512 and 2048 cores, respectively), then the
+to the expected D3 scaling of the DMRG algorithm.                          runtimes  grow  approximately  only  linearly  in D.   The
+                                                                           type of scaling is key to reaching unprecedentedly large
+                                                                           bond dimensions with aﬀordable run times.
+on  a  20× 20  square  lattice  with N  =  400  sites.   Here
+ˆσxi  and  ˆσzi  are Pauli matrices and B  the magnetic ﬁeld                        VI.    SUMMARY AND DISCUSSION
+strength. This model represents a system of spin- 12 quan-
+tum spin degrees of freedom with ferromagnetic interac-
+tion ˆσzi ˆσzj  between nearest neighbor spins and subject to                We have presented an implementation of the DMRG
+an external transverse magnetic ﬁeld.  This model is in-                   algorithm on Google’s Tensor Processing Units (TPUs).
+variant under spin-ﬂip transformations (internal Z2 sym-                   Our  implementation  leverages  the  distributed  acceler-
+metry)  generated  by  the  unitary  operator U  = ∏i ˆσxi ,               ated  hardware  and  high-bandwidth  memory  of  a  TPU
+which we again do not enforce or exploit in our DMRG                       cluster to perform DMRG simulations at unprecedented
+implementation. The model has a quantum critical point                     scale, speed and accuracy.  We benchmarked the imple-
+forBc≈ 3.04, and thus we expect the ground state|ψGS⟩                      mentation on two problems that are notoriously diﬃcult
+at or near this value of the magnetic ﬁeld to be robustly                  from a DMRG perspective, namely a system of spinless
+entangled.  Since there is no Fermi surface, the ground                    fermions on a 10× 10 square lattice known to display a
+state entanglement entropy scales as an area law with-                     logarithmic correction to the area law,  and the (near-)
+out logarithmic corrections, as previously conﬁrmed us-                    critical transverse ﬁeld Ising model on a 20× 20 lattice.
+                                                                                                                                                   9
+
+We performed simulations with bond dimensions of up                          eight A100 or H100 GPUs) could be utilized in a similar
+to D  =  216,  to  the  best  of  our  knowledge  the  largest               way to reach even larger bond dimensions.
+ever simulated bond dimension so far.  We obtained con-                        It  is  worth  pointing  out  that  MPS  algorithms  simi-
+verged results at these bond dimensions in just less than                    lar to DMRG form also the basis for more sophisticated
+a  day.   We  estimate  that  such  simulations  would  take                 tensor networks approaches like e.g.  projected entangled
+months on standard shared-memory hardware with up to                         pair states for 2d quantum lattice systems [12], and the
+a few dozens of CPU cores, using highly eﬃcient, com-                        availability of fast, large-scale MPS algorithms hence di-
+piled  code.   Our  results  show  that  compute  clusters  of               rectly  impacts  not  only  DMRG  but  the  ﬁeld  of  tensor
+hardware  accelerators  can  be  leveraged  very  eﬃciently                  network algorithms as a whole.
+for  tensor  network  computations.   For  our  demonstra-                     In   conclusion,   the   large-scale   implementation   of
+tion we used TPUs, but we would like to emphasize that                       DMRG  with  TPUs  presented  in  this  paper  may  have
+similar results can be obtained with a cluster of tightly                    profound  impacts  in  ﬁelds  such  as  condensed  matter
+connected Graphic Processing Units (GPUs).                                   physics   [90,  102],   quantum   chemistry   [16–29]   and
+  There are several obvious ways to further improve the                      material  science  [30–32]  to  machine  learning  [42–49],
+performance of our implementation of DMRG on TPUs.                           where  MPS  and  tensor  network  algorithms  are  either
+On  the  one  hand,  at  an  algorithmic  level,  we  already                well established or rapidly gaining traction.
+mentioned that one can exploit the internal symmetries
+of a model (e.g.  internal U(1) symmetry corresponding                                    VII.    ACKNOWLEDGMENTS
+to particle number conservation in the 2d free fermion
+model  (19)).   Incorporating  the  internal  U(1)  symme-
+try  into  our  implementation  of  DMRG  will  lead  to  a                    The authors would like to thank  ¨Ors Legeza and Steve
+substantial reduction of variational parameters and run                      White  for  useful  discussions  and  comments.   The  au-
+times for the same (eﬀective) bond dimension.  At ﬁxed                       thors also want to thank the JAX team for their contin-
+TPU conﬁguration, we expect to then be able to further                       uous support, in particular Skye Wanderman-Milne and
+increase the maximal bond dimension D by perhaps up                          Jake Bradbury.  This research was supported with Cloud
+to∼ 5−10×. On the other hand, the largest TPU conﬁg-                         TPUs from Google’s TPU Research Cloud (TRC). Sand-
+uration used in this work was made of 1024 cores, or half                    box@Alphabet was a team within the Alphabet family
+a TPU v3 pod.  Using a full TPU v3 pod with 2048 cores                       of companies, which includes Google, Verily, Waymo, X,
+would result in a roughly 2× faster computation at ﬁxed                      and others.  G.V. is a CIFAR fellow in the Quantum In-
+bond dimension D.  Alternatively, it would allow us to                       formation Science Program, a Distinguished Invited Pro-
+increase the largestD by a factor√2.  While conducting                       fessor at the Institute of Photonic Sciences (ICFO), and a
+our  simulations,  Google  announced  the  fourth  genera-                   Distinguished Visiting Research Chair at Perimeter In-
+tion of TPUs, which are currently available.  A TPU v4                       stitute.   Research  at  Perimeter  Institute  is  supported
+pod (with 8192 TPU v4 cores) would allow for an addi-                        by the Government of Canada through the Department
+tional 2× increase of the maximal bond dimension D at                        of Innovation, Science and Economic Development and
+comparable runtimes.  On the other hand, a superpod of                       by the Province of Ontario through the Ministry of Re-
+NVIDIA’s DGX nodes (with each DGX node containing                            search, Innovation and Science.
+
+
+
+
+
+  [1]S.  R.  White,  Density  matrix  formulation  for  quan-                  [7]B. Pirvu, J. Haegeman, and F. Verstraete, Matrix prod-
+      tum renormalization groups,Phys. Rev. Lett.           69, 2863               uct  state  based  algorithm  for  determining  dispersion
+      (1992).                                                                      relations of quantum spin chains with periodic bound-
+  [2]S.  R.  White,  Density-matrix  algorithms  for  quantum                      ary conditions,Physical Review B                85, 035130 (2012),
+      renormalization groups,Physical Review B   48, 10345                         publisher:  American Physical Society.
+      (1993).                                                                  [8]J. Haegeman,  B. Pirvu,  D. J. Weir,  J. I. Cirac,  T. J.
+  [3]K. A. Hallberg, Density-matrix algorithm for the calcu-                       Osborne, H. Verschelde, and F. Verstraete, Variational
+      lation of dynamical properties of low-dimensional sys-                       matrix product ansatz for dispersion relations,Physical
+      tems,Physical Review B        52, R9827 (1995).                              Review B 85, 100408 (2012).
+  [4]T.  D.  K¨uhner  and  S.  R.  White,  Dynamical  correla-                 [9]T.  Nishino,  Density  Matrix  Renormalization  Group
+      tion functions using the density matrix renormalization                      Method for 2D Classical Models,Journal of the Physi-
+      group,Physical Review B          60, 335 (1999).                             cal Society of Japan 64, 3598 (1995).
+  [5]E.        Jeckelmann,        Dynamical        density-matrix             [10]T.  Nishino  and  K.  Okunishi,  Corner  Transfer  Matrix
+      renormalization-group     method,  Physical     Review                       Renormalization Group Method,Journal of the Physi-
+      B 66, 045114 (2002).                                                         cal Society of Japan 65, 891 (1996).
+  [6]T. Barthel,  U. Schollw¨ock, and S. R. White, Spectral                   [11]G. Vidal, Eﬃcient Classical Simulation of Slightly En-
+      functions in one-dimensional quantum systems at ﬁnite                        tangled Quantum Computations,Physical Review Let-
+      temperature using the density matrix renormalization                         ters 91, 147902 (2003).
+      group,Physical Review B          79, 245101 (2009).                     [12]F.  Verstraete  and  J.  I.  Cirac,  Renormalization  algo-
+                                                                                   rithms  for  Quantum-Many  Body  Systems  in  two  and
+                                                                                                                                                         10
+
+     higher dimensions,arXiv:cond-mat/0407066  (2004).                           [30]M. Ganahl, M. Aichhorn, H. G. Evertz, P. Thunstr¨om,
+[13]G. Vidal, Entanglement Renormalization,Physical Re-                                K. Held, and F. Verstraete, Eﬃcient DMFT impurity
+     view Letters 99, 220405 (2007).                                                   solver  using  real-time  dynamics  with  matrix  product
+[14]G.  Vidal,  A  class  of  quantum  many-body  states  that                         states,Physical Review B          92, 155132 (2015).
+     can be eﬃciently simulated,Physical Review Letters ,                        [31]M. Ganahl, P. Thunstr¨om, F. Verstraete, K. Held, and
+     110501 (2008).                                                                    H. G. Evertz, Chebyshev expansion for impurity mod-
+[15]I. P. McCulloch, Inﬁnite size density matrix renormal-                             els using matrix product states,Physical Review B          90,
+     ization group, revisited,arXiv:0804.2509  (2008).                                 045144 (2014).
+[16]S. R. White and R. L. Martin, Ab initio quantum chem-                        [32]D. Bauernfeind, M. Zingl, R. Triebl, M. Aichhorn, and
+     istry  using  the  density  matrix  renormalization  group,                       H.  G.  Evertz,  Fork  Tensor-Product  States:   Eﬃcient
+     The Journal of Chemical Physics 110, 4127 (1999).                                 Multiorbital Real-Time DMFT Solver,Physical Review
+[17]G.  K.-L.  Chan  and  S.  Sharma,  The  Density  Matrix                            X 7, 031013 (2017).
+     Renormalization  Group  in  Quantum  Chemistry, An-                         [33]M. B. Hastings, An area law for one-dimensional quan-
+     nual Review of Physical Chemistry 62, 465 (2011).                                 tum systems,Journal of Statistical Mechanics:  Theory
+[18]S. Wouters and D. Van Neck, The density matrix renor-                              and Experiment 2007, P08024 (2007).
+     malization group for ab initio quantum chemistry,The                        [34]F. Verstraete, V. Murg, and J. Cirac, Matrix product
+     European Physical Journal D 68, 272 (2014).                                       states, projected entangled pair states, and variational
+[19]S.  Szalay,  M.  Pfeﬀer,  V.  Murg,  G.  Barcza,  F.  Ver-                         renormalization group methods for quantum spin sys-
+     straete,  R. Schneider, and O. Legeza, Tensor product                             tems,Advances in Physics        57, 143 (2008).
+     methods  and  entanglement  optimization  for  ab  initio                   [35]C.  Huang,  F.  Zhang,  M.  Newman,  X.  Ni,  D.  Ding,
+     quantum chemistry,International Journal of Quantum                                J. Cai, X. Gao, T. Wang, F. Wu, G. Zhang, H.-S. Ku,
+     Chemistry 115, 1342 (2015).                                                       Z. Tian,  J. Wu,  H. Xu,  H. Yu,  B. Yuan,  M. Szegedy,
+[20]M.  Reiher,DMRG  in  Quantum  Chemistry:  From  its                                Y. Shi, H.-H. Zhao, C. Deng, and J. Chen, Eﬃcient par-
+     relation to traditional methods to n-orbital density ma-                          allelization of tensor network contraction for simulating
+     trices and beyond, Presentation at Oxford.                                        quantum computation,Nature Computational Science
+[21]R.  Olivares-Amaya,  W.  Hu,  N.  Nakatani,  S.  Sharma,                           1, 578 (2021).
+     J. Yang, and G. K.-L. Chan, The ab-initio density ma-                       [36]S.  Bravyi,  M.  Suchara,  and  A.  Vargo,  Eﬃcient  algo-
+     trix renormalization group in practice,The Journal of                             rithms for maximum likelihood decoding in the surface
+     Chemical Physics 142, 034102 (2015).                                              code,Physical Review A     90, 032326 (2014).
+[22]T. Yanai,  Y. Kurashige,  W. Mizukami,  J. Chalupsk´y,                       [37]A. J. Ferris and D. Poulin, Tensor Networks and Quan-
+     T.  N.  Lan,  and  M.  Saitow,  Density  matrix  renormal-                        tum  Error  Correction,Physical  Review  Letters                 113,
+     ization group for ab initio Calculations and associated                           030501 (2014).
+     dynamic correlation methods:  A review of theory and                        [38]C.  T.  Chubb  and  S.  T.  Flammia,  Statistical  mechan-
+     applications,International Journal of Quantum Chem-                               ical  models  for  quantum  codes  with  correlated  noise,
+     istry 115, 283 (2015).                                                            Annales de l’Institut Henri Poincar´e D 8, 269 (2021).
+[23]G. K.-L. Chan, A. Keselman, N. Nakatani, Z. Li, and                          [39]A. S. Darmawan and D. Poulin, Linear-time general de-
+     S. R. White, Matrix Product Operators, Matrix Prod-                               coding algorithm for the surface code,Physical Review
+     uct  States,  and  ab  initio  Density  Matrix  Renormal-                         E 97, 051302 (2018).
+     ization Group algorithms,arXiv:1605.02611 [cond-mat,                        [40]I. L. Markov and Y. Shi, Simulating Quantum Compu-
+     physics:physics, physics:quant-ph]  (2016).                                       tation by Contracting Tensor Networks,SIAM Journal
+[24]S. R. White and E. M. Stoudenmire, Multi-sliced Gaus-                              on Computing 38, 963 (2008).
+     slet  Basis  Sets  for  Electronic  Structure,Physical  Re-                 [41]S.    Boixo,    S.    V.    Isakov,    V.    N.    Smelyanskiy,
+     view B 99, 081110 (2019).                                                         and   H.   Neven,   Simulation   of   low-depth   quantum
+[25]A.  Baiardi  and  M.  Reiher,  The  density  matrix  renor-                        circuits   as   complex   undirected   graphical   models,
+     malization  group  in  chemistry  and  molecular  physics:                        arXiv:1712.05384 [quant-ph]  (2018).
+     Recent developments and new challenges,The Journal                          [42]X. Gao, Z.-Y. Zhang, and L.-M. Duan, A quantum ma-
+     of Chemical Physics 152, 040903 (2020).                                           chine  learning  algorithm  based  on  generative  models,
+[26]J.  Brabec,  J.  Brandejs,  K.  Kowalski,  S.  Xantheas,                           Science Advances 4, eaat9004.
+     O.   Legeza,   and   L.   Veis,   Massively   parallel   quan-              [43]S. Cheng, L. Wang, T. Xiang, and P. Zhang, Tree Ten-
+     tum  chemical  density  matrix  renormalization  group                            sor Networks for Generative Modeling,Physical Review
+     method,arXiv:2001.04890  [cond-mat,  physics:physics,                             B 99, 155131 (2019).
+     physics:quant-ph]  (2020).                                                  [44]E.  M.  Stoudenmire  and  D.  J.  Schwab,  Supervised
+[27]G.  Barcza,  V.  Iv´ady,  T.  Szilv´asi,  M.  V¨or¨os,  L.  Veis,                  Learning   with   Quantum-Inspired   Tensor   Networks,
+     A. Gali, and O. Legeza, DMRG on top of plane-wave                                 arXiv:1605.05775 [cond-mat, stat]  (2017).
+     Kohn-Sham  orbitals:    case  study  of  defected  boron                    [45]E. M. Stoudenmire, Learning relevant features of data
+     nitride,arXiv:2006.04557  [cond-mat,  physics:physics]                            with multi-scale tensor networks,Quantum Science and
+     (2020).                                                                           Technology 3, 034003 (2018).
+[28]Y. Qiu and S. R. White, Hybrid gausslet/Gaussian ba-                         [46]I.  Glasser,  N.  Pancotti,  and  J.  I.  Cirac,  From  proba-
+     sis sets,arXiv:2103.02734 [physics]  (2021).                                      bilistic graphical models to generalized tensor networks
+[29]J.  J.  Goings,  A.  White,  J.  Lee,  C.  S.  Tautermann,                         for  supervised  learning,arXiv:1806.05964  [cond-mat,
+     M. Degroote, C. Gidney, T. Shiozaki, R. Babbush, and                              physics:quant-ph, stat]  (2019).
+     N.  C.  Rubin,  Reliably  assessing  the  electronic  struc-                [47]T. Vieijra, L. Vanderstraeten, and F. Verstraete, Gen-
+     ture of cytochrome P450 on today’s classical computers                            erative modeling with projected entangled-pair states,
+     and tomorrow’s quantum computers,arXiv:2202.01244                                 arXiv:2202.08177 [cond-mat, physics:quant-ph]  (2022).
+     [physics, physics:quant-ph]  (2022).
+                                                                                                                                                          11
+
+[48]C.  Roberts,   A.  Milsted,   M.  Ganahl,   A.  Zalcman,                      [63]M.  Hauru,   A.  Morningstar,   J.  Beall,   M.  Ganahl,
+     B.  Fontaine,  Y.  Zou,  J.  Hidary,  G.  Vidal,  and  S.  Le-                     A. Lewis, and G. Vidal, Simulation of quantum physics
+     ichenauer,   TensorNetwork:    A   Library   for   Physics                         with  Tensor  Processing  Units:    brute-force  compu-
+     and  Machine  Learning,arXiv:1905.01330  [cond-mat,                                tation  of  ground  states  and  time  evolution  (2021),
+     physics:hep-th, physics:physics, stat]  (2019).                                    arXiv:2111.10466 [quant-ph].
+[49]Z.-Y. Han, J. Wang, H. Fan, L. Wang, and P. Zhang,                            [64]A.  G.  M.  Lewis,  J.  Beall,  M.  Ganahl,  M.  Hauru,
+     Unsupervised Generative Modeling Using Matrix Prod-                                S.  B.  Mallick,  and  G.  Vidal,  Large  Scale  Distributed
+     uct States,Physical Review X       8, 031012 (2018).                               Linear Algebra With Tensor Processing Units (2021),
+[50]M. Fannes, B. Nachtergaele, and R. F. Werner, Finitely                              arXiv:2112.09017 [quant-ph].
+     correlated states on quantum spin chains,Communica-                          [65]R.   Pederson,    J.   Kozlowski,    R.   Song,    J.   Beall,
+     tions in Mathematical Physics 144, 443 (1992).                                     M.    Ganahl,    M.    Hauru,    A.    G.    Lewis,    S.    B.
+[51]I. Aﬄeck, T. Kennedy, E. H. Lieb, and H. Tasaki, Rig-                               Mallick,  V.  Blum,  and  G.  Vidal,  Tensor  Processing
+     orous results on valence-bond ground states in antifer-                            Units as Quantum Chemistry Supercomputers (2022),
+     romagnets,Physical Review Letters                59, 799 (1987).                   arXiv:2202.01255 [physics].
+[52]S.        ¨Ostlund and S. Rommer, Thermodynamic Limit of                      [66]R. Shillito, A. Petrescu, J. Cohen, J. Beall, M. Hauru,
+     Density Matrix Renormalization,Physical Review Let-                                M.   Ganahl,    A.   G.   M.   Lewis,    G.   Vidal,   and
+     ters 75, 3537 (1995).                                                              A.  Blais,  Dynamics  of  Transmon  Ionization  (2022),
+[53]S. Rommer and S.       ¨Ostlund, Class of ansatz wave func-                         arXiv:2203.11235 [quant-ph].
+     tions for one-dimensional spin systems and their rela-                       [67]E. Gustafson, B. Holzman, J. Kowalkowski, H. Lamm,
+     tion to the density matrix renormalization group,Phys-                             A. C. Y. Li,  G. Perdue,  S. Boixo,  S. Isakov,  O. Mar-
+     ical Review B 55, 2164 (1997).                                                     tin, R. Thomson, et al., Large scale multi-node simula-
+[54]J.  Dukelsky,  M.  A.  Mart´ın-Delgado,  T.  Nishino,  and                          tions of Z2 gauge theory quantum circuits using Google
+     G. Sierra, Equivalence of the variational matrix prod-                             Cloud platform (2021),arXiv:2110.07482 [quant-ph].
+     uct  method  and  the  density  matrix  renormalization                      [68]Martin Ganahl et al., Tensor Processing Units for Sim-
+     group applied to spin chains,Europhysics Letters         43,                       ulating Quantum Circuits, in preparation.
+     457 (1998), publisher:  IOP Publishing.                                      [69]Ruyi Song et al., Accelerated quantum chemistry cal-
+[55]H. Zhai and G. K.-L. Chan, Low communication high                                   culations  with  Tensor  Processing  units:  from  Biology
+     performance  ab  initio  density  matrix  renormalization                          to Materials Science,  in preparation.
+     group  algorithms,The  Journal  of  Chemical  Physics                        [70]John  Kozlowski  et  al.,  Full  protein  density  functional
+     154, 224116 (2021).                                                                theory with Tensor Processing Units, in preparation.
+[56]Y.  Motoyama,   T.  Okubo,   K.  Yoshimi,   S.  Morita,                       [71]J.  I.  Cirac,  D.  P´erez-Garc´ıa,  N.  Schuch,  and  F.  Ver-
+     T. Kato, and N. Kawashima, TeNeS: Tensor Network                                   straete, Matrix product states and projected entangled
+     Solver for Quantum Lattice Systems,arXiv:2112.13184                                pair states:  Concepts, symmetries, theorems,Reviews
+     [cond-mat, physics:physics]  (2021).                                               of Modern Physics 93, 045003 (2021).
+[57]R. Levy, E. Solomonik, and B. K. Clark, Distributed-                          [72]U.   Schollw¨ock,   The   density-matrix   renormalization
+     Memory  DMRG  via  Sparse  and  Dense  Parallel  Ten-                              group  in  the  age  of  matrix  product  states,Annals  of
+     sor  Contractions,SC20:  International  Conference  for                            Physics 326, 96 (2011).
+     High  Performance  Computing,  Networking,  Storage                          [73]I. P. McCulloch, From density-matrix renormalization
+     and Analysis , 1 (2020).                                                           group  to  matrix  product  states,Journal  of  Statisti-
+[58]H. Ueda, K. Okunishi, S. Yunoki, and T. Nishino, Cor-                               cal Mechanics:  Theory and Experiment 2007, P10014
+     ner  transfer  matrix  renormalization  group  analysis  of                        (2007).
+     the two-dimensional dodecahedron model,Physical Re-                          [74]M.  Zwolak  and  G.  Vidal,  Mixed-State  Dynamics  in
+     view E 102, 032130 (2020).                                                         One-Dimensional Quantum Lattice Systems:  A Time-
+[59]C. Nemes, G. Barcza, Z. Nagy, O. Legeza, and P. Szol-                               Dependent Superoperator Renormalization Algorithm,
+     gay,  The  density  matrix  renormalization  group  algo-                          Physical Review Letters 93, 207205 (2004).
+     rithm  on  kilo-processor  architectures:    Implementa-                     [75]F. Verstraete, J. J. Garc´ıa-Ripoll, and J. I. Cirac, Ma-
+     tion and trade-oﬀs,Computer Physics Communications                                 trix Product Density Operators:  Simulation of Finite-
+     185, 1570 (2014).                                                                  Temperature and Dissipative Systems,Physical Review
+[60]N.  Jouppi,   D.  Yoon,   G.  Kurian,   S.  Li,   N.  Patil,                        Letters 93, 207204 (2004).
+     J.  Laudon,  C.  Young,  and  D.  Patterson,  A  domain-                     [76]B. Pirvu, V. Murg, J. I. Cirac, and F. Verstraete, Ma-
+     speciﬁc  supercomputer  for  training  deep  neural  net-                          trix product operator representations,New Journal of
+     works,Communications of the ACM        63, 67 (2020).                              Physics 12, 025012 (2010).
+[61]N.  P.  Jouppi,   C.  Young,   N.  Patil,   D.  Patterson,                    [77]L.   Michel   and   I.   P.   McCulloch,   Schur   Forms   of
+     G. Agrawal, R. Bajwa, S. Bates, S. Bhatia, N. Boden,                               Matrix   Product   Operators   in   the   Inﬁnite   Limit,
+     A. Borchers, et al., In-datacenter performance analysis                            arXiv:1008.4667 [cond-mat]  (2010).
+     of a tensor processing unit, in Proceedings  of  the  44th                   [78]C. Hubig, I. P. McCulloch, and U. Schollw¨ock, Generic
+     Annual  International  Symposium  on  Computer  Archi-                             construction   of   eﬃcient   matrix   product   operators,
+     tecture, ISCA ’17 (Association for Computing Machin-                               Physical Review B 95, 035129 (2017).
+     ery, New York, NY, USA, 2017) p. 1–12.                                       [79]G. H. Golub and C. Reinsch, Singular value decompo-
+[62]A.  Morningstar,   M.  Hauru,   J.  Beall,   M.  Ganahl,                            sition and least squares solutions,Numerische Mathe-
+     A.  G.  M.  Lewis,  V.  Khemani,  and  G.  Vidal,  Simu-                           matik 14, 403 (1970).
+     lation  of  quantum  many-body  dynamics  with  Tensor                       [80]G.  Vidal,  J.  I.  Latorre,  E.  Rico,  and  A.  Kitaev,  En-
+     Processing  Units:   Floquet  prethermalization  (2021),                           tanglement in Quantum Critical Phenomena,Physical
+     arXiv:2111.08044 [quant-ph].                                                       Review Letters 90, 227902 (2003).
+                                                                                                                                                          12
+
+ [81]I. Peschel, Calculation of reduced density matrices from                    [101]Y. C. He, D. N. Sheng, and Y. Chen, Chiral Spin Liquid
+       correlation functions,Journal of Physics A: Mathemat-                            in a Frustrated Anisotropic Kagome Heisenberg Model,
+       ical and General 36, L205 (2003).                                                Physical Review Letters 112, 137202 (2014).
+ [82]J. I. Latorre, E. Rico, and G. Vidal, Ground state en-                      [102]Simons Collaboration on the Many-Electron Problem,
+       tanglement in quantum spin chains,Quantum Informa-                               J. P. F. LeBlanc, A. E. Antipov, F. Becca, I. W. Bu-
+       tion & Computation 4, 48 (2004).                                                 lik, G. K.-L. Chan, C.-M. Chung, Y. Deng, M. Ferrero,
+ [83]L.  Bombelli,  R.  K.  Koul,  J.  Lee,  and  R.  D.  Sorkin,                       T. M. Henderson, C. A. Jim´enez-Hoyos, E. Kozik, X.-
+       Quantum  source  of  entropy  for  black  holes,Physical                         W.  Liu,  A.  J.  Millis,  N.  V.  Prokofev,  M.  Qin,  G.  E.
+       Review D 34, 373 (1986).                                                         Scuseria, H. Shi, B. V. Svistunov, L. F. Tocchio, I. S.
+ [84]M. Srednicki, Entropy and area,Physical Review Let-                                Tupitsyn, S. R. White, S. Zhang, B.-X. Zheng, Z. Zhu,
+       ters 71, 666 (1993).                                                             and  E.  Gull,  Solutions  of  the  Two-Dimensional  Hub-
+ [85]L.  Amico,  R.  Fazio,  A.  Osterloh,  and  V.  Vedral,  En-                       bard  Model:   Benchmarks  and  Results  from  a  Wide
+       tanglement in many-body systems,Reviews of Modern                                Range of Numerical Algorithms,Physical Review X                 5,
+       Physics 80, 517 (2008).                                                          041041 (2015).
+ [86]M.  M.  Wolf,  Violation  of  the  entropic  area  law  for                 [103]G. K.-L. Chan and M. Head-Gordon, Highly correlated
+       Fermions,Physical Review Letters             96, 010404 (2006).                  calculations with a polynomial cost algorithm:  A study
+ [87]D.   Gioev   and   I.   Klich,   Entanglement   Entropy   of                       of the density matrix renormalization group,The Jour-
+       Fermions  in  Any  Dimension  and  the  Widom  Conjec-                           nal of Chemical Physics 116, 4462 (2002).
+       ture,Physical Review Letters        96, 100503 (2006), pub-               [104]G.  K.-L.  Chan  and  M.  Head-Gordon,  Exact  solution
+       lisher:  American Physical Society.                                              (within  a  triple-zeta,  double  polarization  basis  set)
+ [88]I. Peschel and V. Eisler, Reduced density matrices and                             of  the  electronic  Schr¨odinger  equation  for  water,The
+       entanglement entropy in free lattice models,Journal of                           Journal of Chemical Physics 118, 8551 (2003).
+       Physics  A:  Mathematical  and  Theoretical 42,  504003                   [105]O. Legeza, J. R¨oder, and B. A. Hess, QC-DMRG study
+       (2009), publisher:  IOP Publishing.                                              of  the  ionic-neutral  curve  crossing  of  LiF, Molecular
+ [89]J. Eisert,  M. Cramer, and M. B. Plenio, Colloquium:                               Physics 101, 2019 (2003).
+       Area  laws  for  the  entanglement  entropy, Reviews  of                  [106]O. Legeza,  J. R¨oder, and B. A. Hess, Controlling the
+       Modern Physics 82, 277 (2010).                                                   accuracy  of  the  density-matrix  renormalization-group
+ [90]S.  Yan,  D.  A.  Huse,  and  S.  R.  White,  Spin-Liquid                          method: The dynamical block state selection approach,
+       Ground State of the S = 1/2 Kagome Heisenberg An-                                Physical Review B 67, 125114 (2003).
+       tiferromagnet,Science                    332, 1173 (2011).                [107]G. K.-L. Chan, M. K´allay, and J. Gauss, State-of-the-
+ [91]E.  Stoudenmire  and  S.  R.  White,  Studying  Two-                               art density matrix renormalization group and coupled
+       Dimensional Systems with the Density Matrix Renor-                               cluster  theory  studies  of  the  nitrogen  binding  curve,
+       malization Group,Annual Review of Condensed Matter                               The Journal of Chemical Physics 121, 6110 (2004).
+       Physics 3, 111 (2012).                                                    [108]G.  Moritz,  B.  A.  Hess,  and  M.  Reiher,  Convergence
+ [92]S. R. White and D. J. Scalapino, Density Matrix Renor-                             behavior  of  the  density-matrix  renormalization  group
+       malization Group Study of the Striped Phase in the 2D                            algorithm for optimized orbital orderings,The Journal
+       t-J Model,Physical Review Letters      80, 1272 (1998).                          of Chemical Physics 122, 024107 (2005).
+ [93]S. R. White and D. J. Scalapino, Hole and pair struc-                       [109]G. Moritz, A. Wolf, and M. Reiher, Relativistic DMRG
+       tures  in  the  t-J  model,Physical  Review  B      55,  6504                    calculations  on  the  curve  crossing  of  cesium  hydride,
+       (1997).                                                                          The Journal of Chemical Physics 123, 184105 (2005).
+ [94]S. R. White and D. J. Scalapino, Energetics of Domain                       [110]O. Weser, L. Freitag, K. Guther, A. Alavi, and G. L.
+       Walls in the 2D t-J Model,Physical Review Letters      81,                       Manni, Chemical insights into the electronic structure
+       3227 (1998).                                                                     of Fe(II) porphyrin using FCIQMC, DMRG, and gener-
+ [95]T. Tohyama, C. Gazza, C. T. Shih, Y. C. Chen, T. K.                                alized active spaces,International Journal of Quantum
+       Lee,  S.  Maekawa,  and  E.  Dagotto,  Stripe  stability  in                     Chemistry 121, e26454 (2021).
+       the extended t-J model on planes and four-leg ladders,                    [111]  https://tensorflow.org/xla, accessed:  2021-10-01.
+       Physical Review B 59, R11649 (1999).                                      [112]J.  Bradbury,  R.  Frostig,  P.  Hawkins,  M.  J.  Johnson,
+ [96]S. R. White and D. J. Scalapino, Competition between                               C. Leary, D. Maclaurin, G. Necula, A. Paszke, J. Van-
+       stripes and pairing in a t-J model,Physical Review B                             derPlas,  S.  Wanderman-Milne,  and  Q.  Zhang,JAX:
+       60, R753 (1999).                                                                 composable  transformations  of  Python+NumPy  pro-
+ [97]A. P. Kampf, D. J. Scalapino, and S. R. White, Stripe                              grams,  (2018).
+       orientation  in  an  anisotropic  t-J  model,Physical  Re-                [113]R.  A.  Van  De  Geijn  and  J.  Watts,  SUMMA:  scal-
+       view B 64, 052509 (2001).                                                        able universal matrix multiplication algorithm,Concur-
+ [98]S. R. White and D. J. Scalapino, Phase separation and                              rency:  Practice and Experience 9, 255 (1997).
+       stripe formation in the two-dimensional t-J model:  A                     [114]S.  Inglis  and  R.  G.  Melko,  Entanglement  at  a  two-
+       comparison of numerical results,Physical Review B           61,                  dimensional  quantum  critical  point:  a  T=0  projector
+       6320 (2000).                                                                     quantum  Monte  Carlo  study, New  Journal  of  Physics
+ [99]M. Q. Weng, D. N. Sheng, Z. Y. Weng, and R. J. Bursill,                            15, 073048 (2013).
+       Spin-liquid  phase  in  an  anisotropic  triangular-lattice               [115]A. B. Kallin, K. Hyatt, R. R. P. Singh, and R. G. Melko,
+       Heisenberg model:  Exact diagonalization and density-                            Entanglement at a Two-Dimensional Quantum Critical
+       matrix  renormalization  group  calculations,Physical                            Point:  A Numerical Linked-Cluster Expansion Study,
+       Review B 74, 012407 (2006).                                                      Physical Review Letters 110, 135702 (2013).
+[100]L. Cincio and G. Vidal, Characterizing topological or-                      [116]A.  Milsted,  M.  Ganahl,  S.  Leichenauer,  J.  Hidary,
+       der by studying the ground states of an inﬁnite cylinder,                        and   G.   Vidal,   TensorNetwork   on   TensorFlow:    A
+       Physical Review Letters 110, 067208 (2013).                                      Spin   Chain   Application   Using   Tree   Tensor   Net-
+                                                                                                                                                      13
+
+      works,arXiv:1905.01331   [cond-mat,   physics:hep-th,
+      physics:physics, stat]  (2019).
+[117]L. Cincio, J. Dziarmaga, and M. M. Rams, Multiscale
+      Entanglement Renormalization Ansatz in Two Dimen-
+      sions:  Quantum Ising Model,Physical Review Letters
+      100, 240603 (2008).
+[118]G. Evenbly and G. Vidal, Entanglement Renormaliza-
+      tion in Two Spatial Dimensions,Physical Review Let-
+      ters 102, 180406 (2009), publisher:  American Physical
+      Society.
+[119]M. Lubasch, J. I. Cirac, and M.-C. Ba˜nuls, Algorithms
+      for ﬁnite Projected Entangled Pair States,Physical Re-
+      view B 90, 064425 (2014).
+[120]S. Singh, H.-Q. Zhou, and G. Vidal, Simulation of one-
+      dimensional quantum systems with a global SU(2) sym-
+      metry,New Journal of Physics  12, 033029 (2010).
+[121]S. Singh, R. N. C. Pfeifer, and G. Vidal, Tensor network
+      decompositions in the presence of a global symmetry,
+      Physical Review A 82, 050301 (2010).
+[122]S. Singh and G. Vidal, Tensor network states and al-
+      gorithms in the presence of a global SU(2) symmetry,
+      Physical Review B 86, 195114 (2012).
+[123]P.  Schmoll,  S.  Singh,  M.  Rizzi,  and  R.  Or´us,  A  pro-
+      gramming guide for tensor networks with global SU(2)
+      symmetry,Annals of Physics  419, 168232 (2020).
+[124]Y. Nakatsukasa and N. J. Higham, Backward stability
+      of  iterations  for  computing  the  polar  decomposition,
+      SIAM Journal on Matrix Analysis and Applications 33,
+      460 (2012).
+[125]A.  H.  R.  Palser  and  D.  E.  Manolopoulos,  Canonical
+      puriﬁcation of the density matrix in electronic-structure
+      theory,Phys. Rev. B  58, 12704 (1998).
+                                                                                                                                             14
+
+         Appendix A: Tensor orthogonalization                                The polar decomposition can be obtained by ﬁrst nor-
+                                                                          malizing M  into X0 so that its largest singular value is
+  A crucial step in the DMRG method is the orthogonal-                    upper-bounded by 1, namely
+ization of an optimized MPS tensorM with components                                                               √
+Miαβ.  That refers to either one of the following decom-                         X0 =M/z,  z =||M|| =                tr (M†·M),        (A8)
+positions:
+                                                                          and then converging the Newton-Schultz iteration:
+         [M]iαβ =∑[A]iαγ[R(l)]γβ    (left orth.)(A1)                                                     (3                   )
+                      γ                                                                  Xi+1 =Xi·                              .            (A9)
+                                                                                                           2     1 − 12X†i·Xi
+         [M]iαβ =∑[R(r)]αγ[B]iγβ    (right orth.)(A2)
+                      γ                                                   It is easily veriﬁed that each iteration step Eq.A9applies
+where tensorsA andB satisfy the left and right isometric                  the polynomial P (x) =  32x−  12x3 to the (renormalized)
+constraint  in  Eq.8and  Eq.9,  respectively,  which  we                  singular values of M, while preserving its left and right
+rewrite here in components as                                             singular  vectors.    Iterative  application λi+1  = P (λi)
+       ∑    ([A]iγα)∗ [A]iγβ =δαβ,    (left isometry)                     maps initial real numbers λ0  in the interval (0, 1] to 1,
+                                                    (A3)                  in the limit i→∞ (when a singular value x is not too
+        i,γ                                                               small, the iteration will turn it into 1 quadratically, that
+        ∑          ([B]iβγ)∗ =δαβ.    (right isometry)                    is  with  a  deviation  from  1  that  is  suppressed  quadrat-
+            [B]iαγ                                   (A4)                 ically in the number of iterations).  Eq.A9hence con-
+        i,γ                                                               verges to the polar factorU ofX0 (and thus ofM) [124].
+In the following we will focus on the left orthogonaliza-                 We can then also obtain H fromM  andU  simply using
+tion, Eqs.  (A1) and (A3).  The right orthogonalization                   H =U†·M.
+in Eqs.  (A2) and (A4) can be obtained similarly.  For the                   It is instructive to relate the polar decomposition to
+rest of this Appendix we regard tensor M  as a matrix,                    the  SVD  of M,  given  by M  = W·S·V ,  where S  is
+deﬁned to have coeﬃcients                                                 a diagonal matrix with the singular values and W  and
+                                                                          V  are unitary (or isometric) matrices.  The unitary (or
+                       [M](iα)β = [M]iαβ,                      (A5)       isometric) and Hermitian factors U  and H then read
+
+where we joined tensor indices i andα into a single ma-                                    U =W·V,  H =V†·S·V,            (A10)
+
+trix index (iα) (notice that prior to that joining i and                  where we used that
+α, index i was changed from an upper index to a lower
+index, which is a trivial change in our setting).  This cor-                    M =W·S·V  = (W·V )· (V†·S·V ) =U·H.
+responds to a so-called reshaping operation, which turns                  We note that the case of singular values which are identi-
+tensor M  into a matrix (also denoted M!)  according to
+Eq.  (A5).  Notice that matrix   M  is in general rectangu-               cally zero can be approximately addressed by adding to
+lar.  For instance, at constant MPS bond dimension D,                     M  a diagonal constant perturbation of magnitude equal
+it has shape (qD)×D, where q is the dimension of the                      to machine precision ϵ.
+vector space describing one site of the lattice, so that it                  Iteration Eq.A9requires only matrix multiplications,
+has q× more rows than columns.  Our goal is to obtain                     transpositions,  matrix  addition  and  complex  conjuga-
+D orthonormal columns, in the sense of Eq.  (A3).                         tion as fundamental operations.  In the distributed set-
+  Two popular approaches to orthonormalizeM are the                       ting,  we  implement  the  ﬁrst  two  using  the  well-known
+use of either a QR decomposition or a singular value de-                  SUMMA  algorithm  [113]  for  distributed  matrix  multi-
+composition (SVD) ofM.  A TPU distributed version of                      plications (SUMMA can also handle the case of multi-
+QR or SVD was not available to us at the time we im-                      plication of transposed matrices).  Matrix addition and
+plemented DMRG. We were able to implement instead                         matrix  complex  conjugation  of  distributed  matrices  is
+a  TPU  distributed version  of the  polar  decomposition,                trivial in that it can be carried out locally on each core.
+which requires mostly distributed matrix-matrix multi-
+plications  and  additions.   The  polar  decomposition  of
+M  re-expresses this matrix as a product of an isometric                                Appendix B: Tensor truncation
+(qD)×D matrixU and a positive semi-deﬁnite hermitian
+D×D matrix H, i.e.
+                                                                             Another operation of central importance in some im-
+                           M =U·H.                            (A6)        plementations of DMRG (and, more generally, in many
+                                                                          other tensor networks algorithms) is truncation of a ma-
+We  can  then  obtain  tensor A  and  matrix R(l)  in  Eqs.               trix, namely rank reduction by retaining only its largest
+(A1) and (A3) from      U  and H simply according to                      singular  values.   In  DMRG,  this  is  needed  in  the  con-
+                                                                          text of a two-site update.  The DMRG implementation
+          [A]iαβ = [U](iα)β,        [R(l)]αβ = [H]αβ.      (A7)           described in this paper corresponds to a one-site update
+                                                                                                                                                  15
+
+                                                                             is,
+ Algorithm 2 Newton-Schultz iteration for the polar                                   [ ˜W]
+                            factor of M                                                     αγ = [W ]αγ    for all α,  1≤γ≤m′,     (B4)
+ 1:  function polar      factor(M)                                                     [ ˜V]
+ 2:       z =‖M‖
+ 3:       M← M/z                                                                             γβ = [V ]γβ     for all β,  1≤γ≤m′.     (B5)
+ 4:       q = M.shape[0]                                                     We can similarly deﬁne a truncated singular value matrix
+ 5:       converged = False                                                  ˜S, of size m′×m′, as the diagonal matrix that contains
+ 6:      while not converged do                                              the m′ singular values sα organized in decreasing order,
+ 7:            T = zeroslike(M[0, ...])                                      such that
+ 8:           for i=0. . . q− 1 do
+ 9:                 T +=SUMMA(M[i, ...],M[i, ...],                                         [ ˜S]γγ = [S]γγ =sγ,    1≤γ≤m′.          (B6)
+10:                                          hermA=True,      ⊿ Hermitian
+    transpose of A                                                           Matrix  ˜M =  ˜W· ˜S· ˜V  can then be seen to be the rank-m′
+11:                                          hermB=False)                    best approximation to M, in that the diﬀerence matrix
+12:           end for
+13:           for i=0. . . q− 1 do                                           ∆ ≡ M−   ˜M  has  the  smallest  possible  norm||∆||  =
+                                                                             √
+14:                 M[i,...]←  32M[i,...]  - 12SUMMA(M[i,...], T )              tr (∆· ∆†).
+15:           end for                                                           Our goal is to produce two matricesF  andG, withm′
+16:             converged = CHECK      UNITARITY(M)                          columns and rows, respectively, such that their product
+17:      end while                                                           equates   ˜M, that is
+18:      return M
+19:  end function                                                                                          ˜M =F·G.                            (B7)
+
+                                                                             In a tensor network algorithm, the pairF,G corresponds
+                                                                             to  adjacent  tensors  where  the  bond  index  connecting
+and does not require tensor truncations, but here we ex-                     them has been truncated (e.g. two adjacent MPS tensors
+plain how to implement them for completeness.                                during a two-site update in DMRG). An obvious way to
+  Consider a matrixM  and its singular value decompo-                        obtainF  andG is from the SVD ofM, by choosing e.g.
+sition (SVD),                                                                F  =  ˜W  and G =  ˜S· ˜V .  However, here we are interested
+                                                                             in  obtaining F  and G  without  resorting  to  an  SVD  of
+                          M =W·S·V,                         (B1)             matrix M.
+                                                                                Remarkably, the above task can be achieved with the
+whereW  andV  are unitary (or isometric) matrices and                        polar  decomposition  which,  as  described  in  the  previ-
+S is a diagonal matrix with the singular valuessα ofM in                     ous appendix, can be implemented using a small set of
+its diagonal, that is [S]αα =sα, organized in decreasing                     simple matrix operations: matrix-matrix multiplications
+order s1≥s2≥···≥sm≥ 0.  In components, the SVD                               and additions, as well as matrix transposition and com-
+reads                                                                        plex conjugation.  Next we describe how.
+                                                                                As a ﬁrst step, we use the polar decomposition to ob-
+                              m∑                                             tain  the  isometric  and  positive  semi-deﬁnite  factors U
+                 [M]αβ =         [W ]αγ sγ  [V ]γβ,              (B2)        and H  of matrix M  in Eq.  (A6).  By construction,   H
+                             γ=1                                             has the singular values sα  of M  as its eigenvalues.  As
+                                                                             a  second  step,  we  compute  the  polar  decomposition  of
+  Before proceeding further, we note here that in tensor                     H−            1 δ.   Let U′  and H′  be  resulting  the  unitary  and
+network algorithms, the matrix M  to be truncated will                       positive semi-deﬁnite factors,
+often  result  from  reshaping  a  higher-order  tensor  (e.g.                                       H−         1 δ =U′·H′.                       (B8)
+an order-4 tensor assigned to two adjacent sites of a lat-
+tice in a two-site DMRG update).  However, the speciﬁc                       In general, the polar decompositionZ =X·|Z| of a Her-
+origin of M  is not important in our discussion below.                       mitian  matrix Z  with  (real)  eigenvalues zα  is  given  in
+  Aδ-truncated singular value decomposition ofM cor-                         terms of a unitary matrixX and a positive semi-deﬁnite
+responds to the SVD of another matrix   ˜M  obtained by                      matrix|Z| with very simple structure:  both X  and|Z|
+keeping only the singular values sα ofM  that are larger                     have  the  same  eigenvectors  as Z;  moreover,  for  the α-
+than δ.  Suppose that there are m′ (with m′≤m) such                          th  common  eigenvector, |Z|  has  as  eigenvalue  the  ab-
+singular values.  Then   ˜M  is deﬁned through                               solute value|zα| of the corresponding eigenvalues zα  of
+                                                                             Z,  whereas X  has  as  eigenvalue σα  =±1,  where  the
+                              m′∑                                            sign is such that zα = σα|zα|.  In other words, the uni-
+                 [ ˜M]αβ =       [ ˜W ]αγ sγ  [ ˜V ]γβ,              (B3)    tary factorU′ in (B8) must have   m′ eigenvalues +1 (for
+                             γ=1                                             the m′  eigenvectors  of H−             1 δ  with  positive  eigenval-
+                                                                             ues sα−δ > 0) and the rest of eigenvalues must be−1
+where  ˜W  and  ˜V  are obtained fromW  andV  by keeping                     (for the eigenvectors of H−          1 δ  with negative eigenval-
+only their ﬁrst m′ columns and rows, respectively.  That                     ues sα−δ < 0).  In particular, we can use U′  to deﬁne
+                                                                                                                                            16
+
+two projectorsP+ andP− onto the positive and negative                        A similar approach based on the McWeeny iteration
+subspaces of H−           1 δ  (equivalently,  the subspaces of H         can be used to truncate to a ﬁxed number of singular val-
+with sα >δ and with sα <δ) by                                             ues, instead of truncating singular values below a certain
+                                                                          threshold δ [125].
+                         P± =                1 ±U′2  ,                          (B9)
+
+and use them in turn to deﬁne projectionsH>δ andH<δ                                    Appendix C: subspace iteration
+of matrix H  onto its sα > δ  subspace and sα < δ  sub-
+space,                                                                       Consider am×m Hermitian matrixP  that is a rank-
+        H>δ≡P+·H·P+,  H>δ≡P−·H·P−,  (B10)                                 m′ projector, namely such that
+
+such that H =H>δ +H<δ.  We can thus write                                                   P·P  =P,     tr(P ) =m′,                 (C1)
+
+              M =U·H =U·H>δ +U·H<δ,         (B11)                         where we also assume that P  is rank deﬁcient, meaning
+where the ﬁrst termU·H>δ =U·P+·H corresponds to                           m′ < m.  Our goal is to ﬁnd an isometric matrix C  of
+the largest m′ singular values sα of M.  In other words,                  shape m×m′ such that we can write P  as the product
+we have obtained the best rank-m′ approximation   ˜M  to                                             P  =C·C†.                            (C2)
+M
+                         ˜M =U·P+·H.                      (B12)                Algorithm 3 Subspace iteration for an m×m
+                                                                                        projector matrix P  with rank-m′
+However, we have not yet reduced the number of columns                     1:  function subspace(P)
+of U.  For that purpose,  we must ﬁnd an isometry C+                       2:       m′ = Tr P
+with m′ columns such that                                                  3:       C = RANDOM (m, m′)         ⊿ Initial guess of shape
+                                                                              m× m′
+                          P+ =C+C†                                         4:       X = P @C  ⊿ use e.g.  SUMMA in distributed setting
+                                       +.                         (B13)    5:       C = POLAR     FACTOR (X)    ⊿ polar decomposition
+That  is,  we  need  to  ﬁnd  an  orthonormal  basis  for  the                instead of QR decomposition
+m′-dimensional  column  space  of  the  rank-m′  projector                 6:      return C
+                                                                           7:  end function
+P+.  We achieve this using a slight modiﬁcation of the
+standard, QR-based subspace-iteration method to avoid
+the use of a QR decomposition (see SectionC). Then we
+have                                                                      For that purpose we can use Alg.3.  It is a specializa-
+     ˜M =U·P+·H =U·C+·C†                                                  tion  (for  a  rank-deﬁcient  projector P )  of  the  subspace
+                                       +·H =  ˜U·  ˜H,     (B14)          iteration  method  that  can  more  generally  be  used  to
+where matrices                                                            compute the ﬁrst n dominant eigenvectors of a matrix.
+                                                                          Speciﬁcally, we modiﬁed the standard subspace iteration
+                 ˜U≡U·C+,      ˜H≡C†+·H,             (B15)                method in two ways:  (1) since P 2  = P ,  a single itera-
+                                                                          tion is suﬃcient (so we skip looping over steps 4 and 5);
+have m′  columns  and  rows,  respectively,  and  therefore               (2) we use a polar decomposition (easier to implement
+qualify as matrices F  and G in the truncated decompo-                    on a distributed TPU setting) instead of the usual QR
+sition (B7).                                                              decomposition.

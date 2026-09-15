@@ -1,0 +1,2363 @@
+             Efficient Matrix Product State Learning in
+                                        Logarithmic Depth
+
+
+
+
+                        Chia-Ying Lin∗            Nai-Hui Chia†            Shih-Han Hung‡
+
+
+                                                       Abstract
+
+           Learning the closest matrix product state (MPS) representation of a quantum state
+           is known to enable useful tools for quantum machine learning and analysis of
+           complex quantum systems. In this work, we study the problem of learning MPS in
+           the following setting: given many copies of an input MPS, the task is to recover
+           a classical description of the state.  The best known polynomial-time algorithm,
+           introduced by [LCLP10, CPF+10], requires linear circuit depth and eO(n     5) samples,
+           and has seen no improvement in over a decade. The combination of linear circuit
+           depth and large sample complexity, neither known to be optimal, renders existing
+           algorithms impractical for near-term quantum devices with limited resources.
+           We introduce parallel disentangling algorithms for MPS learning. For exact MPS
+           learning, our algorithm runs in polynomial time and uses circuit depthO(logn)
+           and sample complexity eO(n     3), improving both the depth and the dependence on
+           the system sizen. The key idea is to exploit the bounded-rank structure of reduced
+           states on middle blocks of an MPS and organize the disentangling operations in a
+           tree structure.
+           We further extend the algorithm to closest MPS learning, improving the sample
+           complexity dependence onn fromn9 ton7 and complement the algorithms with an
+           Ω(n)        product-state lower bound. We also investigate MPS learning under hardware
+           constraints, including restricted measurements and geometric connectivity. Under
+           the Learning Parity with Noise (LPN) assumption, we show computational hard-
+           ness for learning an MPS(2) family with non-adaptive single-qubit measurements.
+           Finally, we show that our algorithm can be implemented with depth O(qn     1/q  )
+           on aq-dimensional hypercubic lattice, giving an asymptotic reduction in depth.
+           Together, our work provides a complete characterization of the quantum resources
+           needed for efficient MPS learning.
+
+1    Introduction
+
+Matrix product state is a fundamental family of quantum states defined as follows:
+Definition 1(Matrix Product State with Bond Dimension D (MPS(D))). Let  n∈N      and letd∈N
+be the local dimension of each site (for qubits,d= 2  ). Ann-site matrix product state (MPS)4 of bondPd−1h i
+dimensionD is a pure state|ψ⟩  =   Pd−1i1=0                   i2=0···Pd−1in=0 Tr      A[1]i1A[2]i2···A [n]in |i 1i2...in⟩ ,
+where for each sitek∈{1,...,n}          and each physical indexik∈{0,...,d−1}           ,A[k]ik  is a complex
+matrix of sizeD×D. The integerDis called thebond dimensionof the MPS.
+
+   ∗Department of Physics and Astronomy, Rice University, USA. Email: cl207@rice.edu.
+   †Ken Kennedy Institute and Smalley-Curl Institute, Rice University, USA. Email: nc67@rice.edu.
+   ‡Department of Electrical Engineering and Center for Quantum Science and Engineering, National Taiwan University,
+Taiwan. Email: shihhanh@ntu.edu.tw.
+   4We adopt the periodic boundary condition (PBC) convention throughout, in which all local tensors are square matrices
+and the physical amplitudes are obtained by taking a trace over the virtual indices. Open-boundary MPS can be embedded into
+this framework by a standard padding construction.
+
+
+Preprint.
+Matrix Product States (MPS) exhibit several noteworthy properties. First, when the bond dimensionD
+is small, ann-site qudit MPS requires onlyO(dnD     2) parameters, in contrast to theO(d  n) parameters
+needed for a general quantum state. This compressibility in description makes MPS a natural target
+for efficient learning, testing, and synthesis algorithms. Moreover, for any bipartition of the MPS
+with open boundary conditions, the Schmidt rank of|ψ⟩     across the cut is at mostD. This means the
+bond dimension directly characterizes the degree of entanglement: for instance,D= 1    corresponds
+to a product state with no entanglement, while if the bond dimension equals the full Hilbert space
+dimension, the MPS representation can express all possible quantum states.
+Matrix product states (MPS) play an increasingly important role not only in quantum many-body
+physics, but also in machine learning and quantum computing.  In machine learning, MPS and
+closely related tensor-train models have been used as structured, parameter-efficient representations
+of high-dimensional data, with applications to neural-network compression, supervised learning, high-
+order feature modeling, and generative modeling  [NPOV15, SS16, NTO16, HWF+18, SAOB22].
+They have also appeared in quantum machine learning as tensor-network architectures that can
+be  mapped  to  variational  quantum  circuits    [RKR23].    From  a  quantum  computing  perspec-
+tive, MPS provide a natural class of variational ansatz states for quantum algorithms, including
+ground-state energy estimation and combinatorial optimization [CPGSV21, WRV+24, KNR+25].
+Their  importance  is  also  deeply  rooted  in  quantum  many-body  physics.   In  particular,  ground
+states  of  gapped  one-dimensional  local  Hamiltonians  are  known  to  satisfy  an  entanglement
+area law and are therefore provably well approximated by matrix product states with bounded
+bond dimension   [Has07, ALV12, AKLV13, LVV15, SW22].   This connection bridges physical
+Hamiltonian  systems  with  computationally  tractable  descriptions,  enabling  efficient  numerical
+and algorithmic methods for representing, preparing, and optimizing low-energy quantum states
+[Whi92, DKSV04, Vid04, VPC04, OV08]. Beyond these applications, recent developments suggest
+that MPS and related tensor-network structures also intersect with quantum cryptography and quan-
+tum complexity theory [ABF+22]. Thus, understanding the sample complexity, circuit depth, and
+computational complexity of learning MPS is a timely and fundamental problem, with implications
+across machine learning, quantum algorithms, many-body physics, and quantum information theory.
+In this work, we focus on learning the classical description of an input quantum state which is
+promised to be an MPS with a specified bond dimension. This problem is known asMPS learning.
+From the perspective of learning theory, MPS learning is a quantum analogue of learning a structured,
+low-dimensional representation of a high-dimensional object. The unknown state lives in a Hilbert
+space of dimension exponential inn, but the target representation has onlyO(ndD     2) parameters.
+From a computational-complexity perspective, MPS provides a succinct representation for many
+quantum states with low entanglement;  the relatively low parameter count, O(dnD     2) for bond
+dimension D,  admits the possibility of polynomial-time learning algorithms,  in contrast to the
+exponential complexity of general quantum state learning.MPS learningis also of significant
+practical and theoretical interest: for example, efficient algorithms or provable hardness results can
+be leveraged to certify whether the quantum hardware prepares correct quantum states, to construct
+cryptographic primitives, and to analyze properties of ground states and Hamiltonians.
+The best known algorithms for MPS learning were introduced in [CPF+10, LCLP10].  However,
+these algorithms are improper:  the output MPS may have a bond dimension strictly larger than
+that of the input state, and the existence of efficient proper MPS learning algorithm is still an open
+question [AA23].  This means existing MPS learning algorithms cannot directly serve as testing
+algorithms. The first efficient MPS testing algorithm was recently given in [SW22]. Furthermore,
+in realistic scenarios where the provided quantum states are likely to be affected by noise due to
+hardware imperfections or environmental factors, there is growing interest in learning algorithms
+robust to the noise. Along this line, [BBK+25] proposes an algorithm that can learn the closest MPS
+approximation in the presence of noise.  Recently, an alternative line of work [QJG+24] studied
+quantum state tomography for matrix product operator (MPO) states using Haar-random projective
+measurements. Their main result shows that, given ann-qudit MPO of bond dimensionr, one can
+stably recover the ground-truth state fromO(nd     2r2) random measurement settings and a total of
+O(n     3d2r2/ϵ2) samples via a constrained least-squares minimization, achievingϵ-closeness in the
+Frobenius norm. Although this establishes a theoretical possibility of learning MPS/MPO states with
+polynomial sample complexity, the approach relies on Haar-random basis measurements, which are
+not efficiently implementable on quantum hardware.
+
+
+
+
+                                                           2
+                                   Table 1: Summary of the main results and comparisons to previous works. Here,n is the number of
+                                   qudits,dis the local dimension,Dis the bond dimension, andϵis the target error.
+
+
+                                   Despite the fundamental importance and broad applicability of MPS learning, our understanding of
+                                   its computational complexity remains limited, and the algorithmic frontier has seen little progress
+                                   over the past decade. The best-known algorithm uses eO(n     5) copies of samples [LCLP10]5, while
+                                   the strongest known lower bound, derived from product-state learning lower bounds, stands at only
+                                   Ω(n)          6.  This leaves a substantial and largely unexplored gap between the achievable upper and
+                                   lower bounds.  In addition, existing algorithms are typically formulated for matrix product states
+                                   with open boundary conditions (OBC), and therefore do not directly extend to states with periodic
+                                   boundary conditions.  Moreover, all existing algorithms require linear circuit depth, which poses
+                                   a severe obstacle for near-term quantum devices, where limited gate fidelity renders deep circuits
+                                   prohibitively noisy. Bridging these gaps and designing shallow-depth, noise-resilient algorithms for
+                                   MPS learning is therefore an open and pressing problem, carrying significant implications for both
+                                   quantum algorithm design and practical deployment on emerging quantum hardware.
+                                   Along this line, we are driven by the following question:
+
+                                    Can we design new MPS learning algorithms whose sample complexity substantially narrows the
+                                                      gap to the known lower bounds, while achieving shallow circuit depth?
+
+                                   Our results.We answer the above questions affirmatively. We introduce a parallel disentangling
+                                   algorithm for exact MPS learning, reducing the circuit depth fromO(n)        toO(logn)             and the sample
+                                   complexity from eO(n     5) to eO(n     3). We also extend the algorithm to closest MPS learning, reducing
+                                   the sample complexity from eO(n     9) to eO(n     7). Our algorithms improve the dependence on the system
+                                   size, at the cost of a worse dependence on the bond dimensionD; see Table 1.  This tradeoff is
+                                   meaningful in many applications where MPS and tensor-network representations are useful for
+                                   succinctly representing high-dimensional data because the bond dimension is small. We complement
+                                   these algorithms with anΩ(n)sample-complexity lower bound.
+                                   Finally, we study MPS learning under hardware constraints. We show that our algorithm has depth
+                                   O(qn     1/q  ) on aq-dimensional hypercubic lattice, asymptotically improving previous approaches.
+                                   We also prove, assuming LPN, that no efficient algorithm can learn the MPS(2) family using only
+                                   non-adaptive single-qubit measurements. Together, these results characterize the quantum resources
+                                   needed for efficient MPS learning. Table 1 summarizes our results and comparisons with prior work.
+
+                                   2    Logarithmic-depth algorithms for MPS learning
+
+                                   Definition 2(Quantum State Learning Problem). Let            C  be a class of quantum states onn qubits.
+                                   The learner has access to independent copies of an unknown stateρ∈C     . The goal is to output, with
+                                   high probability, a classical description of a hypothesis state ˆρ   such that dist(ρ,ˆρ)≤ϵ,                     whereϵ>0
+                                   specifies the allowed error in the chosen distance measure dist(·,·)           . Typical examples include the
+                                   trace distance, where the goal is∥ρ−ˆρ∥            1≤ϵ   , and the fidelity, where the goal isF(ρ,ˆρ)≥1−ϵ                     .  7
+
+                                   We focus on the class C= MPS(D),            the set ofn-qudit matrix product states with bond dimension
+                                   at mostD. We measure the quality of the output by fidelity. In particular, when the algorithm outputs
+                                   a pure hypothesis state|       ˆϕ⟩, the fidelity guarantee takes the form⟨           ˆϕ|ρ|     ˆϕ⟩≥1−ϵ.
+
+                                       5The original work does not provide a detailed complexity analysis; we follow analysis in [BBK+25] to get the complexity.
+                                       6See Theorem 4 and Section  F for a formal proof.
+                                       7Common  accuracy  metrics  in  quantum  state  learning  include  trace  distance  and  fidelity.    Fidelity F(ρ,σ)   =
+                                    Trp√ρσ√ρ2 measures state overlap, with larger values indicating greater similarity.
+
+
+                                                                                                     3
+
+          Problem                                  Prior work                                          This work
+     Exact MPS learning        eO(n    5D2/ϵ4)samples, depthO(n)[CPF                  +10, LCLP10]eO(n    3D6/ϵ4)samples, depthO(logn)(Theorem 1)
+    Closest-MPS learning                 eO(n    9D8/ϵ8)samples [BBK  +25]                 eO(n    7D12/ϵ12)samples (Theorem 2)
+     2-dimensional lattice               depthO(n)[CPF                 +10, LCLP10]            depthO(     √n)(Theorem 3)
+q-dimensional hypercubic lattice         depthO(n)[CPF                 +10, LCLP10]          depthO(qn             1/q )(Corollary 3.1)
+  Product-state lower bound                             –                                     Ω(nd/ϵ)copies (Theorem 4)
+   Restricted measurements                              –                          LPN-hard for MPS(2)(Theorem 5 and Corollary 5.1)
+Theorem 1.Given access to copies of an  n-qudit matrix product stateρ with bond dimensionD
+and parametersϵ,δ∈(0,1)         , Algorithm 2 outputs a description state|ˆϕ⟩  , such that, with probability
+1−δ     ,⟨ˆϕ|ρ|     ˆϕ⟩ ≥1−ϵ.            The algorithm requiresN=O(     D6·d 4·n 3·log(n/δ)
+                                                                                  (logdD)   3ϵ4     ) copies ofρ and runs in
+time poly D,n, 1ϵ,log(  1δ ), and outputs|           ˆϕ⟩through a quantum circuit of depthO(logn).
+To prove Theorem 1, we introduce the parallel disentangling MPS learning algorithm (Algorithm 2).
+We provide a high-level proof sketch below and defer the complete proof to Appendix B.
+The previous algorithms [LCLP10, BBK+25] exploit the fact that, for an MPS(D)             , any single cut
+(say between sites l and l+ 1 ) induces reduced density matrices of rank at most D on the two
+resulting segments{1,...,l}      and{l+ 1,...,n}        . In contrast, if we isolate a middle block by making
+two cuts, then the reduced density matrix of that block has rank at mostD2. This allows us to go
+beyond disentangling only one leftmost qudit at a time. Indeed, as long as the block sizek satisfies
+dk−1 ≥D    2, we can apply disjoint disentangling unitaries to multiple blocks in parallel, thereby
+disentangling the leftmost qudit of each block simultaneously.
+Our parallel disentangling algorithms starts with the following two observations: (1) Any partition of
+the middle block and the rest has Schmidt rank at mostD2, which allows us to disentangle multiple
+qudits simultaneously within a single layer.  (2) By organizing the disentangling procedure into a
+binary tree, the circuit depth can be reduced toM=O(log(n)), instead of linearO(n).
+To preserve the rank-D2 constraint in each layer, the blocks must be chosen consistently across layers:
+if a current-layer block contains any qudit inherited from a previous-layer block, then it must contain
+all qudits inherited from that block. Equivalently, no block from one layer is split across multiple
+blocks in the next layer. This ensures that, after the disentangling unitaries from earlier layers are
+applied, each current-layer block still satisfies the same Schmidt-rank constraint, since its qudits
+have not been mixed with the rest of the system. This consistency condition naturally induces a tree
+structure.  Since the tomography cost scales with the block size, we use a binary tree to keep the
+blocks as small as possible, choosing block size2p, whered         p≥D    2.
+Due to the binary tree structure, the circuit depth is reduced from linear inn toM=O(logn)                   .
+This makes the circuit significantly shallower, which is especially important for near-term quantum
+devices where deep circuits are highly susceptible to noise.  The tree structure also improves the
+error accumulation. At layerj, the errors from the 2M−j       disjoint blocks contribute 2p2M−j  ·2η
+to the error passed to the next layer. Therefore, the total accumulated fidelity error is bounded byp p
+1−F(|ϕ⟩,|ϕ        n−k+1  ⟩)≤2  PMj=1              2M−j  ·2η=O                2M·2η         =O  √nη. Thus, to achieve
+final error at mostϵ, it suffices to choose the tomography precisionη=O(ϵ           2/n).       Using optimal
+tomography algorithms, the sample complexity for each block is thenO(n     2/ϵ4). Since the algorithm
+performs tomography onO(n)blocks in total, the overall sample complexity becomesO(n                                  3/ϵ4).
+
+Algorithm 1Disentangling unitary construction
+
+Input:A numberD                          2 and a description of ay-qudit density matrixˆσ∈C          dy×d y such thatd   y≥D    2.
+Output:A description of a Disentangling UnitaryUfor the stateˆσ.
+Procedure:
+  1:Perform the spectral decomposition ofˆσ:
+                                                               rX
+                                                       ˆσ=         ai|ˆϕi⟩⟨ˆϕi|,
+                                                             i=1
+     wherer≤d       y and{|      ˆϕi⟩}ri=1  are orthonormal eigenvectors ofˆσcorresponding to non-zero
+     eigenvaluesa         1≥a   2≥···≥a r≥0.
+  2:Let|ϕ    i⟩=|     ˆϕi⟩fori= 1,...,D           2 and extend{|ϕ      i⟩}D2i=1  to a complete orthonormal basis
+     {|ϕ i⟩}dyi=1  of(C  d)⊗y    by choosing arbitrary orthonormal vectors|ϕ     i⟩fori=D            2 + 1,...,d y.
+  3:Setp        := 2⌈log  dD⌉.
+  4:Let{|a            1,...,ay−p ⟩}ai∈{0,...,d−1}                 be the standard basis for the firsty−pqudits, and let
+     {|j⟩}  dpj=1   be an arbitrary orthonormal basis for the remainingPdppqudits.                                       , where
+  5:  Define the unitaryU= Pd−1a1,...,ay−p    =0             j=1  (|a   1,...,ay−p ⟩⊗|j⟩)  
+ϕidx(a       1,...,ay−p  ,j)
+     the index mapping is defined byidx(a            1,...,ay−p  ,j) =j+d     p·Py−pl=1 aldy−p−l   .
+
+
+                                                                 4
+  6:returnthe unitaryU.
+
+Algorithm 2Parallel disentangling MPS learning
+
+Input:Copies of an unknown matrix product statesρ∈C            dn×d n with bond dimensionD, error
+parameterϵand failure probabilityδ.
+Output:A description of a quantum state|                    ˆϕ⟩∈(C)   ⊗n   .
+Procedure:
+  1:Setp        := 2⌈log  dD⌉and letMbe the smallest positive integerM      ′ such that2   M′p≥n. n−2   M−1  p⌉,s   1 :=Mod n−2   M−1  p,p,k 1 := 2ℓ  1p−p+s           1.
+  2:Setℓ        1 :=⌈    1p
+  3:Define the supportB                1i  set for thei-th disentangling unitaries in the first layer:
+                              {2(i−1)p+ 1,...,2ip}                                   if1≤i<ℓ                                     1
+
+                   B1i  :=    {2(ℓ      1−1)p+ 1,...,k            1}                                   ifi=ℓ          1
+                                  {k  1 + 1 + (i−ℓ       1−1)p,...,k       1 + (i−ℓ       1)p}  ifℓ         1 <i≤2  M−1   .         (1)
+                                                s1    whenj= 1,i=ℓ                   1
+
+  4:Define a functionf(j,i) =                   0    whenj= 1,i>ℓ                1      .
+                                                   p    otherwise
+
+  5:Let(ρ          0)′ =ρandB            1 =S2M−1i=1   B1i .
+  6:forifrom1toℓ                       1 do
+  7:      Letσ         1i  = TrB1\B  1i [(ρ   0)′]and letˆσ        1i  be the output of the tomography with error
+      η=    (√2−1)     2ϵ2                     δ/nonO(              D2·d 2p  log(n/δ)
+                 2M+5        and failure probability                                     η2         )copies ofσ      1i .
+  8:      Use Algorithm 1 to generate the disentangling unitaryU                1i  from a description of a
+      (p+f(1,i))-qudit stateˆσ                             1i  and an integerD      2.
+  9:      Let  eB1i  be the lastpqudits inB            1i .
+10:end for                                                      |0 f(1,i)  ⟩⟨0 f(1,i)  |
+11:LetU           1 =Nℓ1i=1 U1i  andP       1 =Nℓ1i=1                                       B1i\ eB1i⊗I   eB1i .
+12:ApplyU                1 to all copies of(ρ     0)′ and project ontoP        1 to get copies ofP 1U1(ρ  0)′(U  1)†P 1 ;
+      (ρ  1)′ = TrSℓ1i=1 B1i\ eB1i
+
+13:Let  eB1i  =B    1i  forℓ     1 <i≤2  M−1      .
+14:forjfrom2toMdo
+15:    LetB     j =S2M−j+1i=1   eBj−1i     .
+16:    forifrom1to2          M−j       do
+17:          LetB     ji  = eBj−12i−1  ∪ eBj−12i      andσ   ji  = TrBj\B j
+                                                                                     i [(ρ j−1    )′].
+18:              Let ˆσ j                                                                               2−1)     2ϵ2
+                         i  be the output of the tomography with errorη=    (√2M+5        and failure probability
+      δ/nonO(      D2·d 2p  log(n/δ)
+                                η2         )copies ofσ  ji .
+19:              Use Algorithm 1 to generate the disentangling unitaryUji  from a description of 2p  -qudit
+      stateˆσ    ji  and an integerD      2.
+20:          Let  eBji  be the lastpqudits inB     ji .
+21:    end for                                                             |0 f(j,i) ⟩⟨0 f(j,i) |
+22:    LetU     j =N2M−ji=1  Uji  andP   j =N2M−ji=1                                                  Bj
+                                                                                                        i\ eBji⊗I   eBji .
+23:    ApplyU       j to all copies of(ρ  j−1    )′ and project ontoP    j to get copies ofPjUj(ρ j−1    )′(U j)†Pj ;
+      (ρ j)′ = TrS2M−j
+                         i=1    Bji\ eBji
+24:end for
+25:Let(ˆρ     M)′ be the output of the tomography with errorτ=ϵ/4and failure probabilityδ/non
+      O(  D2·d 2p  log(n/δ)
+                    τ2         )copies of(ρ   M)′ and let|    ˆψ⟩be the top eigenvector of(ˆρ    M)′.N2M−j
+26:returnthe state|             ˆϕ⟩   := (U  1)†···(U M)† NMj=1                     i=1 |0 f(j,i) ⟩Bj                          .
+                                                                                                           i\ eBji⊗| ˆψ⟩
+
+We further consider the task of learning when the target stateρ is not necessarily an exact MPS of
+bond dimensionD, and may even be mixed. Our goal is to output a state|ˆϕ⟩   such that its fidelity
+
+
+                                                                          5
+withρ is within additive errorϵ of the best achievable fidelity achievable among all MPS of that bond
+dimension. This problem can be viewed as the agnostic version of MPS learning.
+Definition 3(Closest MPS Learning Problem). Let                 MPS(D)              denote the set ofn-qudit pure matrix
+product states with bond dimension at mostD. The learner is given access to independent copies of
+an arbitraryn-qudit stateρ, which is not promised to belong to MPS(D)              and may be mixed. Given
+accuracy and confidence parametersϵ,δ∈(0,1)         , the goal is to output, with probability at least 1−δ     ,
+a classical description of a hypothesis state|       ˆϕ⟩such that⟨          ˆϕ|ρ|     ˆϕ⟩≥max  |ϕ⟩∈MPS(D)    ⟨ϕ|ρ|ϕ⟩−ϵ.
+Theorem 2.Given access to copies of an  n-qudit stateρ, as well as parametersϵ,δ∈(0,1)         , and
+a bond dimension parameterD.  Algorithm 4 in Appendix C outputs a description of a state|ˆϕ⟩  ,
+such that, with probability 1−δ     ,⟨ˆϕ|ρ|     ˆϕ⟩ ≥max  |ϕ⟩∈MPS   D12n7d4(lnd)       7 logn (D)   ⟨ϕ|ρ|ϕ⟩−ϵ              . The algorithm requires
+N=O                                 δ       copies ofρand runs in time poly   D,n, 1
+           ϵ12[ln(lnd)+ln(nD                      2/ϵ2)]7                                        ϵ,log(  1δ ), to output|          ˆϕ⟩.
+
+
+Proof sketch.The proof follows the same learning framework as in Theorem 1, with one additional
+truncation step to handle the fact thatρ need not be an exact bond-dimension-D MPS. In the exact
+setting, the reduced states on the relevant blocks have rank at most D2;  in the agnostic setting,
+they may have full rank. Algorithm 4 therefore increases the block size to 2p= 2⌈log    d(1/η)⌉          and
+truncates each reduced state to its dominant eigenspace above thresholdη.  Since the eigenvalues
+of a reduced density matrix sum to one, this dominant subspace has dimension at most 1/η  , giving
+an effective low-rank substitute for the exact MPS rank constraint.  With a suitable choice ofη in
+terms ofϵ,n, andD, the truncation and estimation errors remain controlled throughout the algorithm,
+yielding⟨            ˆϕ|ρ|     ˆϕ⟩≥max  |ϕ⟩∈MPS(D)    ⟨ϕ|ρ|ϕ⟩−ϵ. The full proof is deferred to Appendix D.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 1:  Comparison of circuit structures for MPS tomography. (A) Previous algorithms [LCLP10,
+BBK+25] use a sequential circuit structure. (B) Our Algorithm 2 produces a tree-like circuit structure,
+shown here forn= 29   andp= 2  . Each rectangle represents a unitaryUji , withj denoting the layer
+andi the unitary index within that layer. The vertical lines are qudits ordered from left to right, and
+time flows downward. The brackets mark the first-layer supports B1i , and the labeled wires mark the
+surviving sets eBji  carried to the next layer.
+
+In the case where the target state is an MPS(D), the output state of our algorithm can be described by
+a circuit that consists ofO(n)        unitaries, each of size (d  2D4)×(d       2D4). The total parameters in this
+circuit representation will beO(nd     4D8). This is an improper learning algorithm, as in prior work:
+converting the circuit description into an explicit one-dimensional MPS representation may increase
+the bond dimension. Nevertheless, the output remains succinct and can be used to efficiently prepare
+the hypothesis state.
+
+
+                                                                6
+3    Implementation on Nearest-Neighbor Lattices
+
+The logarithmic-depth implementation of Algorithm 2 assumes an abstract circuit model in which
+the required qudits can be acted on jointly regardless of their geometric locations. In many realistic
+quantum architectures, however, gates are constrained by an underlying interaction geometry and
+can only be applied between neighboring qudits. It is therefore natural to ask how the depth of our
+construction changes under such locality constraints.
+In this section, we show that the circuit generated by Algorithm 2 can still be implemented efficiently
+on nearest-neighbor architectures. In particular, when the qudits are arranged on a two-dimensional
+square  lattice,  the  circuit  admits  an  implementation  with  depth O( √n)  .   More  generally,  on  a
+q-dimensional hypercubic lattice, the depth becomesO(qn                       1/q  ).
+Theorem 3.If quantum gates are restricted to nearest-neighbor interactions on a square lattice, the
+depth of the quantum circuit generated by Algorithm 2 isO( √n).
+
+Proof sketch.  View each patch ofp qudits as one coarse-grained lattice site and arrange then/p
+patches on a square lattice of side lengthpn/p. As illustrated in Figure 2, we impose a recursive
+2×2       block structure on the lattice,  where in each subblock the bottom-right corner is chosen
+as the anchor that survives to the next coarser level.  At each level, two successive iterations of
+Algorithm 2 are implemented by first applying the disentangling unitaries horizontally and then
+vertically, so that within every 2×2      group only the anchor site remains active. Under nearest-neighbor
+connectivity, before each such disentangling step we use nearest-neighbor SWAP gates to route the
+qubits within each block to bring the relevant pair of active sites adjacent; if the current block has
+side lengthL, this requires depthO(L)       . Since all blocks at the same level are disjoint, these SWAP
+operations can be performed in parallel across blocks. Hence the coarse-grained depth is bounded √
+byPO(log(n/p))               n/p     =O(  pn/p)      . Since each coarse-grained site is a physical patch ofp
+       j=1     O           2j−1
+qudits occupying area Θ(p)       , routing within a patch contributes an additional factorO( √p)  . Thus the
+total physical depth isO( √n). We defer the full routing details to Appendix E.
+Corollary  3.1.Suppose  quantum  gates  are  restricted  to  nearest-neighbor  interactions  on  a   q-
+dimensional hypercubic lattice. Then the quantum circuit generated by Algorithm 2 can be imple-
+mented with depthO    qn1/q .
+
+Proof sketch.  The proof is a directq-dimensional analogue of Theorem 3. View each patch ofp qubits
+as one lattice site and arrange then/p patches on aq-dimensional hypercubic lattice of side length
+(n/p)         1/q  .  We impose a recursive 2q-ary block structure:  at each level, every block is partitioned
+into 2q subblocks, and the maximal-coordinate corner of each subblock is chosen as the anchor that
+survives to the next coarser level. Each level is implemented by applying the disentangling operations
+successively along theq coordinate directions, using nearest-neighbor SWAP gates to route active
+sites within each block; if the current block side length isL, this costs depthO(qL)       , while disjoint
+blocks are processed in parallel.  Summing over the geometrically decreasing side lengths gives
+PO(log(n/p))          q (n/p)         1/q =O  qn1/q . The full proof is deferred to Appendix E.
+   j=1     O              2j−1   p1/q
+
+4    Lower bounds and hardness for learning MPS
+
+We prove a sample-complexity lower bound for MPS learning by considering product states, namely
+MPS(1). To the best of our knowledge, this is the first lower bound of this form for the problem.
+Theorem  4.For  integer  n≥1      , d≥2     ,  and ϵ∈[0,2/3]             ,  consider  learning  a  product  state
+ρ= Nni=1 ρi, where eachρi is a state on ad-dimensional Hilbert space. Any quantum algorithm
+that outputs a product stateF(ρ,ˆρ)≥1−ϵmust use at leastˆρsatisfyingΩ(nd/ϵ)copies ofρ.
+
+Proof sketch.  It suffices to prove the lower bound for pure product states.  We argue by reduction
+from single-qudit state tomography.  The known tomography lower bound says that learning an
+arbitraryd-dimensional quantum state to fidelity at least 1−ϵ  ′ requires Ω(d/ϵ ′) copies. If there were
+an algorithm that learnedn-qudit product states to fidelity at least 1−ϵ      usingo(nd/ϵ)             copies, then
+
+
+                                                              7
+Figure 2: Illustration of the recursive block struc-              Figure  3:   Quantum  circuit  for  generating  an
+ture on a 2M/2 ×2 M/2   square lattice withM=                     LPN-hard  MPS(2)  family.    The  odd-indexed
+4.  At level j, each block of size 2M/2−(j−1)   ×                 qubits are initialized to|0⟩    and put into a uniform
+2M/2−(j−1)             is  partitioned  into  four  subblocks,    superposition overx= (x    1,...,xℓ)∈{0,1}    ℓ
+each of size 2M/2−j  ×2 M/2−j      . In each subblock,            by Hadamard gates. The circuit then sequentially
+the bottom-right site is designated as the anchor                 computes the prefix parities zi  = Lij=1 xjsj.
+ eBM−2ji         (circled).  These anchors form a coarser         For each i < ℓ, a final Hadamard gate makes
+lattice for the next level.                                       wi  uniformly  random  and  independent  of  the
+                                                                  other measured outputs.  On the last parity reg-
+                                                                  ister,  where zℓ  =⟨x,s⟩(mod 2)        ,  a  rotation
+                                                                  R=R   y(2 arcsin(√τ))   is applied so that the
+                                                                  measured  bit  satisfies wℓ  =⟨x,s⟩⊕e           with
+                                                                  e∼Bernoulli(τ)            .   Thus  each  measurement
+                                                                  sample (x,w ℓ) is distributed as a Search-LPNτ,ℓ
+                                                                  sample.
+
+
+by embedding a single unknownd-dimensional state into one tensor factor of an otherwise known
+product state, one could learn a single-qudit state to accuracyϵ′ =ϵ/n    usingo(d/ϵ ′) copies. This
+would contradict the tomography lower bound, and therefore product-state learning requires Ω(nd/ϵ)
+copies. We defer the formal proof to Appendix F.
+
+We next prove a computational hardness result for learning MPS under non-adaptive single-qubit
+measurements.  We show that efficiently learning MPS(2) in this model would imply an efficient
+algorithm for Search-LPN (Definition 13) and thus falsify the LPN assumption (Assumption 1).
+Theorem 5.Assume the    LPNτ,ℓ assumption holds for some constantτ∈(0,1/2−γ)                    , whereγ >0
+is non-negligible. Let{|ψ s⟩:s∈{0,1}      ℓ} be the family of MPS(2) states defined in Figure 3. Then
+there is no polynomial-time algorithm that, using only computational-basis single-qubit measurements
+on poly(ℓ)    copies of|ψ s⟩, outputs a classical description of a hypothesis statebρ   from whichbρ   can be
+efficiently prepared8 andF(bρ,|ψ        s⟩⟨ψ s|)≥1−ϵwith non-negligible probability.
+
+Proof sketch.  By the construction in Figure 3, measuring one copy of|ψ s⟩ in the computational basis
+produces a uniformly randomx∈Z  ℓ2 and uniformly randomw1,w2,...,wℓ−1 ∈Z   2 together with a
+bitwℓ =⟨x,s⟩⊕e          , wheree∼Bernoulli(τ)                        .  Note that, for each measured copy, the pair (x,w ℓ)
+gives exactly one Search-LPNτ,ℓ sample with secrets, whilew1,w2,...,wℓ−1     are uniformly random
+binary strings independent ofx andwℓ. Then, we show thats can be efficiently recovered from the
+classical description that efficiently preparesbρ  . Therefore, if a polynomial-time learner could recover
+s fromq= poly(ℓ)      such samples with non-negligible probability, then it would solve Search-LPNτ,ℓ
+with non-negligible probability. This contradicts the Search-LPNτ,ℓ assumption. Therefore no such
+learner exists. The formal proof is deferred to Appendix G.
+
+Finally, we show the following Corollary and defer the proof to Appendix G.
+
+   8To the best of our knowledge, all existing MPS learning algorithms, including those presented in this work, share this
+property. Specifically, they produce classical descriptions from which polynomial-sized quantum circuits can be efficiently
+generated to prepare the corresponding states
+
+
+                                                               8
+Corollary 5.1.Assume the       LPNτ,ℓ assumption holds forτ∈(0,1/2−γ)                    , whereγ >0    is non-
+negligible. Then there is no polynomial-time non-adaptive algorithm that, using only single-qubit
+measurements on poly(ℓ)     copies of|ψ s⟩, outputs a classical description of a hypothesis state bρ
+from whichbρ   can be efficiently prepared and such thatF(bρ,|ψ     s⟩⟨ψ s|)≥1−ϵ            with non-negligible
+probability.
+
+
+4.1    Discussion and open questions
+
+We introduce a parallel disentangling algorithm for exact MPS learning, reducing the circuit depth
+from O(n)        to O(logn)              and the sample complexity from eO(n     5) to eO(n     3).   We also extend the
+algorithm to closest MPS learning, reducing the sample complexity from eO(n     9) to eO(n     7).  Our
+algorithms improve the dependence on the system size n [LCLP10, CPF+10, BBK+25],  at the
+cost  of  a  worse  dependence  on  the  bond  dimension D  (and ϵ  for  closest  MPS  learning).   Our
+parallel disentangling algorithms run in polynomial time; for comparison, a sample-efficient but
+time-inefficient approach in [QJG+24] achieves O(n     3D2/ϵ2) copies but relies on Haar-random
+measurements. We also establish a sample-complexity lower bound of Ω(n/ϵ)           for learning product
+states.  Together, our algorithms and lower bound provide the first systematic view of the sample-
+complexity landscape for efficient MPS learning.
+The main tradeoff in our algorithms is that the improved dependence on the system sizen comes
+at the cost of a worse dependence on the bond dimensionD.  This tradeoff is meaningful from a
+learning-theoretic perspective:  the bond dimension is a model-complexity parameter, and tensor-
+network methods are most useful in the low-complexity regime whereD is small compared with
+the full Hilbert-space dimension. Quantitatively, our algorithm wins previous ones wheneverD=
+o(√n)  .9 In particular, for any subpolynomial bond dimensionD=n   o(1)  , our sample complexity is
+asymptotically smaller inn. This is precisely the regime in which tensor-network methods serve as
+compact models for high-dimensional quantum states. It includes constant-bond-dimension families,
+such as GHZ states, W states, AKLT states, and one-dimensional cluster states, as well as one-
+dimensional gapped ground states that admit inverse-polynomial-accuracy MPS approximations with
+subpolynomial bond dimension for fixed spectral gap [AKLV13].
+We also consider implementing our algorithms on quantum devices that have constraints on con-
+nectivity and measurements.  In particular, we show that even with connectivity constraints, our
+algorithm can still outperform existing algorithms in depth and sample complexity; on the other
+hand, we showed that there exists no polynomial-time algorithm if the learner can only apply non-
+adaptive single-qubit measurement under the LPN assumption.  These results provide a detailed
+characterization of needed quantum resources for MPS learning.
+A gap still remains between our upper bound and lower bounds; closing it is the main open question.
+Promising directions include:
+
+        •  Closing the gap inn.Can we design an efficient algorithm with sample complexity O(n)       ,
+           or else prove anΩ(n         3)lower bound?
+
+        •  Closing the gap inD. The best known lower bound is  Ω(√D)    via MPS testing [SW22,
+           ABF+22]. Can we obtain a tighter lower bound specific to MPS learning?
+
+        •  Proper learning.All existing algorithms, including ours, fail to output a one-dimensional
+           tensor-network representation with bond dimension exactlyD.  Is there an efficient algo-
+           rithm that achieves this, or can we prove a no-go theorem under plausible computational
+           assumptions? (See also the open problem in [AA23].)
+
+Our algorithms have potential applications to quantum machine learning. MPS and related tensor-
+network models have been used as expressive but structured ansatz classes for high-dimensional
+data. In this light, logarithmic-depth MPS learning can be viewed as a step toward resource-efficient
+procedures for extracting compact tensor-network descriptions from quantum data.
+
+
+
+   9Prior work usesO(n      5D2/ϵ4) samples, whereas our algorithm usesO(n      3D6/ϵ4) samples. Thus, comparing the leading
+polynomial dependencies, our algorithm has better sample complexity wheneverD=o(   √n).
+
+
+                                                            9
+References
+     [AA23]  Anurag Anshu and Srinivasan Arunachalam. A survey on the complexity of learning
+               quantum states.arXiv preprint arXiv:2305.20069, 2023.
+
+     [AA24]  Anurag Anshu and Srinivasan Arunachalam. A survey on the complexity of learning
+               quantum states.Nature Reviews Physics, 6(1):59–69, 2024.
+
+ [ABF+22]  Scott Aaronson,  Adam Bouland,  Bill Fefferman,  Soumik Ghosh,  Umesh Vazirani,
+               Chenyi  Zhang,  and  Zixin  Zhou.    Quantum  pseudoentanglement.arXiv  preprint
+               arXiv:2211.00747, 2022.
+
+ [AKLV13]  Itai Arad, Alexei Kitaev, Zeph Landau, and Umesh Vazirani.  An area law and sub-
+               exponential algorithm for 1d systems.arXiv preprint arXiv:1301.1162, 2013.
+
+   [ALV12]Itai Arad, Zeph Landau, and Umesh Vazirani. Improved one-dimensional area law for
+               frustration-free systems.Physical Review B—Condensed Matter and Materials Physics,
+               85(19):195145, 2012.
+
+ [BBK+25]  Ainesh Bakshi, John Bostanci, William Kretschmer, Zeph Landau, Jerry Li, Allen Liu,
+               Ryan O’Donnell, and Ewin Tang. Learning the closest product state. InProceedings of
+               the 57th Annual ACM Symposium on Theory of Computing, pages 1212–1221, 2025.
+
+  [CPF+10]  Marcus Cramer, Martin B Plenio, Steven T Flammia, Rolando Somma, David Gross,
+               Stephen D Bartlett, Olivier Landon-Cardinal, David Poulin, and Yi-Kai Liu. Efficient
+               quantum state tomography.Nature communications, 1(1):149, 2010.
+
+[CPGSV21]  J. Ignacio Cirac, David Perez-Garcia, Norbert Schuch, and Frank Verstraete.  Matrix
+               product states and projected entangled pair states:  Concepts, symmetries, theorems.
+               Reviews of Modern Physics, 93(4):045003, 2021.
+
+ [DKSV04]  Andrew John Daley, Corinna Kollath, Ulrich Schollwöck, and Guifré Vidal.  Time-
+               dependent density-matrix renormalization-group using adaptive effective hilbertspaces.
+               Journal of Statistical Mechanics: Theory and Experiment, 2004(04):P04005, 2004.
+
+    [Has07]  Matthew B. Hastings. An area law for one-dimensional quantum systems.Journal of
+               statistical mechanics: theory and experiment, 2007(08):P08024, 2007.
+
+  [HHJ+16]  Jeongwan Haah, Aram W. Harrow, Zhengfeng Ji, Xiaodi Wu, and Nengkun Yu. Sample-
+               optimal tomography of quantum states. InProceedings of the forty-eighth annual ACM
+               symposium on Theory of Computing, pages 913–925, 2016.
+
+[HWF+18]  Zhao-Yu Han, Jun Wang, Heng Fan, Lei Wang, and Pan Zhang. Unsupervised generative
+               modeling using matrix product states.Physical Review X, 8(3):031012, 2018.
+
+ [KNR+25]  Andrew D King, Alberto Nocera, Marek M Rams, Jacek Dziarmaga, Roeland Wiersema,
+               William Bernoudy, Jack Raymond, Nitin Kaushal, Niclas Heinsdorf, Richard Harris,
+               et al. Beyond-classical computation in quantum simulation.Science, 388(6743):199–
+               204, 2025.
+
+  [LCLP10]  Olivier Landon-Cardinal, Yi-Kai Liu, and David Poulin. Efficient Direct Tomography
+               for Matrix Product States, 2010.
+
+   [LVV15]  Zeph Landau, Umesh Vazirani, and Thomas Vidick.  A polynomial time algorithm
+               for the ground state of one-dimensional gapped local hamiltonians.Nature Physics,
+               11(7):566–569, 2015.
+
+ [NPOV15]  Alexander Novikov, Dmitrii Podoprikhin, Anton Osokin, and Dmitry P Vetrov.  Ten-
+               sorizing neural networks.Advances in neural information processing systems, 28,
+               2015.
+
+   [NTO16]  Alexander Novikov, Mikhail Trofimov, and Ivan Oseledets.  Exponential machines.
+               arXiv preprint arXiv:1605.03795, 2016.
+
+
+                                                        10
+     [OV08]  Roman Orus and Guifre Vidal. Infinite time-evolving block decimation algorithm be-
+               yond unitary evolution.Physical Review B—Condensed Matter and Materials Physics,
+               78(15):155117, 2008.
+    [OW16]  Ryan O’Donnell and John Wright.  Efficient quantum tomography.  InProceedings
+               of the forty-eighth annual ACM symposium on Theory of Computing, pages 899–912,
+               2016.
+     [Pie12]  Krzysztof Pietrzak.  Cryptography from learning parity with noise.  InInternational
+               Conference on Current Trends in Theory and Practice of Computer Science, pages
+               99–114. Springer, 2012.
+  [QJG+24]  Zhen Qin, Casey Jameson, Zhexuan Gong, Michael B Wakin, and Zhihui Zhu. Quan-
+               tum state tomography for matrix product density operators.IEEE Transactions on
+               Information Theory, 70(7):5030–5056, 2024.
+   [RKR23]  Hans-Martin Rieser, Frank Köster, and Arne Peter Raulf. Tensor networks for quantum
+               machine learning.Proceedings of the Royal Society A: Mathematical, Physical and
+               Engineering Sciences, 479(2275), 2023.
+ [SAOB22]  Richik Sengupta,  Soumik Adhikary,  Ivan Oseledets,  and Jacob Biamonte.   Tensor
+               networks in machine learning.European Mathematical Society Magazine, (126):4–12,
+               2022.
+      [SS16]  Edwin Stoudenmire and David J Schwab.  Supervised learning with tensor networks.
+               Advances in neural information processing systems, 29, 2016.
+     [SW22]  Mehdi Soleimanifar and John Wright. Testing matrix product states. InProceedings
+               of the 2022 Annual ACM-SIAM Symposium on Discrete Algorithms (SODA), pages
+               1679–1701. SIAM, 2022.
+     [Vid04]  Guifré Vidal.  Efficient simulation of one-dimensional quantum many-body systems.
+               Physical review letters, 93(4):040502, 2004.
+   [VPC04]  Frank Verstraete, Diego Porras, and J Ignacio Cirac. Density matrix renormalization
+               group and periodic boundary conditions: A quantum information perspective.Physical
+               review letters, 93(22):227205, 2004.
+    [Whi92]  Steven R White.   Density matrix formulation for quantum renormalization groups.
+               Physical review letters, 69(19):2863, 1992.
+[WRV+24]  Dian Wu, Riccardo Rossi, Filippo Vicentini, Nikita Astrakhantsev, Federico Becca,
+               Xiaodong  Cao,  Juan  Carrasquilla,  Francesco  Ferrari,  Antoine  Georges,  Mohamed
+               Hibat-Allah, et al. Variational benchmarks for quantum many-body problems.Science,
+               386(6719):296–301, 2024.
+    [Yue23]  Henry Yuen. An improved sample complexity lower bound for (fidelity) quantum state
+               tomography.Quantum, 7:890, January 2023.
+
+Appendix A: Background Knowledge
+
+A.1    Matrix Product State
+
+Definition 4.Consider a quantum system consisting of  n sites, each associated with a local Hilbert
+spaceC    d. A generic state in the global Hilbert space(C     d)⊗n    can be written as
+
+                                          dX
+                           |ψ⟩=                  ci1i2···i  n |i 1⟩⊗|i 2⟩⊗···⊗|i n⟩,
+                                   i1,i2,...,in=1
+where the coefficientsci1i2···i  n are complex amplitudes. In the MPS representation, these amplitudes
+are expressed as products of matrices. Specifically, a state|ψ⟩is an MPS with bond dimension  Dif
+
+                                      ci1i2···i  n = Tr  A[1]i1A[2]i2···A [n]in,
+
+
+                                                         11
+where for each sitej, the tensors{A  [j]i }di=1   areD×D        complex matrices (with the first and last
+possibly rectangular if open boundary conditions are used). The parameterD is referred to as the
+bond dimension of the MPS, and controls the amount of entanglement that the state can carry.
+
+MPS  admit  a  natural  graphical  interpretation  in  terms  of  tensor  networks.   Each  tensor A[j]    is
+represented as a node with one physical index (corresponding to the local dimensiond) and two
+virtual indices (corresponding to the bond dimensionD). Connecting the virtual indices along the
+chain yields a one-dimensional tensor network, and contracting all virtual indices reproduces the
+global state.  This representation makes it clear that, for a fixed bond dimension D, the number
+of parameters required to specify an MPS grows only linearly with the system sizen, rather than
+exponentially as in the full Hilbert space. More precisely, each site tensor containsd·D    2 complex
+entries (except at the boundaries for open boundary conditions),  so a chain of n sites requires
+approximately
+                                         Number of parameters∼ndD                       2.
+This shows that the bond dimensionD controls both the expressiveness of the MPS and the amount
+of entanglement it can represent,  while the linear scaling with n allows efficient description of
+one-dimensional quantum states.
+Lemma A.1.Let  |ψ⟩     be a Matrix Product State (MPS) onn sites with periodic boundary conditions
+and bond dimensionD. For any blockB          j ofkcontiguous sites, the reduced density matrix
+                                                ρj = Tr[n]\B   j(|ψ⟩⟨ψ|)
+
+has rank at mostD        2.
+
+Proof.  Let C:= [n]\B    j denote the complement of the block. Represent the periodic MPS|ψ⟩     by
+contracting local tensors around the ring. Cutting the ring at the two virtual bonds that border the
+contiguous block Bj exposes two virtual indices (one on each cut), denoted byα,β∈{1,...,D}          .
+By contracting all physical indices inside Bj while leaving the two boundary virtual indices open,
+we obtain vectors
+                                         {|Φ αβ⟩Bj∈H  Bj :α,β∈[D]}.
+Similarly, contracting all tensors in the complement C  (with the two virtual indices open) gives
+vectors
+                                          {|E βα⟩C∈H  C  :α,β∈[D]}.
+Thus the global state can be written as
+
+                                                     DX
+                                        |ψ⟩ =             |Φ αβ⟩Bj⊗|E βα⟩C.
+                                                  α,β=1
+
+Taking the partial trace overCyields
+
+                                                       DX
+                     ρj = TrC (|ψ⟩⟨ψ|) =                        ⟨E β′α′|E βα⟩|Φ αβ⟩Bj⟨Φ α′β′|.
+                                                  α,β,α′,β′=1
+Therefore, the support ofρj is contained in span{|Φ     αβ⟩:α,β∈[D]}             , which has dimension at most
+D2. Hence
+                                                    rank(ρ    j)≤D     2,
+as claimed.
+Lemma A.2.Let       [n] ={1,2,...,n}                 denote the set of sites, and let Bj⊆[n]        be a contiguous block
+of qudits. Denote by HBj  and H[n]\B   j  the Hilbert spaces associated with Bj and its complement,
+respectively. Let|ψ⟩∈H     Bj⊗H   [n]\B   j  be a Matrix Product State (MPS) onn sites with periodic
+boundary conditions and bond dimensionD. LetUBj  andU[n]\B   j  be unitary operators acting on
+Bj and its complement, respectively. Then
+                                            h                                                        i
+                      ρ′Bj := Tr[n]\B   j    (U Bj⊗U   [n]\B   j)|ψ⟩⟨ψ|(U    †Bj⊗U †[n]\B   j)
+
+has rank at mostD        2.
+
+
+                                                             12
+Proof.WriteC:= [n]\B            j. For any operatorXonH                Bj⊗H  C , the partial trace satisfies
+                             TrC(I Bj⊗U  C )X(I     Bj⊗U †C ) = TrC [X],                                              (2)
+                             TrC(U Bj⊗I  C )X(U  †Bj⊗I  C ) =U  Bj TrC [X]U  †Bj.                              (3)
+Applying (2)–(3) toX=|ψ⟩⟨ψ|yields
+                                ρ′Bj =U  BjρBjU†Bj,   ρBj := TrC|ψ⟩⟨ψ|   .
+Hence rank(ρ   ′Bj) = rank(ρ       Bj).  By Lemma A.1, we know thatρBj  has rank at mostD2.  Since
+unitary conjugation preserves rank, it follows that
+                                            rank(ρ   ′Bj) = rank(ρ   Bj)≤D     2.
+
+
+
+A.2    Quantum State Learning Problem Statement
+
+The task of learning quantum states can be phrased in a general framework. A learning algorithm,
+often referred to as thelearner, is provided with multiple identical copies of an unknown quantum
+stateρ. It is assumed thatρ belongs to a known family of states C , which specifies the scope of the
+learning task.  By performing measurements, the learner gathers information aboutρ and aims to
+produce a classical description of a hypothesis state ˆρ   that approximatesρ with respect to a chosen
+accuracy measure.  The formulation naturally involves three components:  the class of candidate
+statesC, the measurement strategies available to the learner, and the metric used to assess accuracy.
+Performance is quantified in terms ofsample complexity, the number of copies of    ρ that are required,
+andtime complexity, the total amount of quantum or classical computation needed.
+Definition 5(Quantum State Learning Problem). Let            C  be a class of quantum states onn qubits.
+The learner has access to independent copies of an unknown stateρ∈C     . The goal is to output, with
+high probability, a classical description of a hypothesis stateˆρsuch that
+                                                        dist(ρ,ˆρ)≤ϵ,
+whereϵ>0    specifies the allowed error in the chosen distance measure dist(·,·)           . Typical examples
+include the trace distance,  where the goal is∥ρ−ˆρ∥            1 ≤ϵ   ,  and the fidelity,  where the goal is
+F(ρ,ˆρ)≥1−ϵ.                                  10
+The most general setting corresponds tofull quantum state tomography, where the class of candidate
+states C  is the set of alln-qubit states, and the goal is to reconstruct an unknownρ∈C      up to small
+trace distance.  Because the dimension of the Hilbert space grows exponentially withn, this task
+requires exponentially many copies of the state in the worst case. The optimal bounds for the sample
+complexity of Quantum State Tomography is finally obtained by [HHJ+16] and [OW16].
+Theorem 6(Theorem 1 in [  AA24]). The sample complexity of quantum state tomography up to trace
+distanceδ isO  4nδ2. If the state is promised to have rankr, then the sample complexity of quantum.
+state tomography up to infidelity11ϵis eΘ  2nrϵ
+This limitation motivates the study of whether more structured families of states can be learned
+efficiently. Here, one can consider restricting the class of candidate states C  to specific families, such
+as stabilizer states,t-doped stabilizer states, product states, matrix product states, or Gibbs states at
+certain temperature regimes, with the goal of reconstructing an unknownρ∈C      up to small trace
+distance (or high fidelity).
+In  this  work,  we  focus  on  learning  matrix  product  states  (MPS)  with  a  given  bond  dimension.
+Following the framework of the general Quantum State Learning Problem,  we define the MPS
+learning problem as follows.
+
+  10Two commonly used metrics for accuracy in quantum state learning are thetrace distanceand thefidelity.  The trace
+                                       hp                     i
+distance is defined as∥ρ−σ∥           1 = Tr(ρ−σ)   †(ρ−σ)      , and quantifies the maximal statistical distinguishability between
+ρandσ. A smaller trace distance indicates higher similarity.√
+  The fidelity is defined asF(ρ,σ) =    Trp          ρσ√ρ2, and measures the overlap between two quantum states.  A
+larger fidelity indicates higher similarity.  These two quantities are closely related by the Fuchs–van de Graaf inequalities:
+1− pF(ρ,σ)≤              12∥ρ−σ∥           1 ≤ p1−F(ρ,σ).               Hence, bounding the trace distance and bounding the fidelity are
+essentially equivalent up to constant factors.
+  11The infidelity is defined as1−F.
+
+
+                                                                13
+Definition 6(Matrix Product State Learning Problem). Let                   MPS(D)              denote a class ofn-qubit states
+that can be represented as matrix product states of bond dimension at mostD. The learner has access
+to independent copies of an unknown stateρ∈MPS(D)                 . The goal is to output, with high probability,
+a classical description of a hypothesis state|       ˆϕ⟩such that
+                                                       ⟨ˆϕ|ρ|     ˆϕ⟩≥1−ϵ
+The learner’s performance is measured in terms of the number of copies ofρ used (sample complexity)
+and the total computational cost (time complexity).
+
+A.3    State Tomography
+
+Lemma A.3(Rank-constrained sub-normalized tomography). Let    ρ be a quantum state onr qudits
+of local dimension d, and suppose that rank(ρ)≤D                  2.  Let Π  =|0  i⟩⟨0 i|⊗I ⊗(r−i)          and define
+µ= Tr[Πρ]. Letη,δ>0. Then there exists an algorithm that, using
+                                                       µD2dr−i
+                                                    O          η2       log1δ
+
+copies ofρ, produces an estimate ˆσ   ofσ:= ΠρΠ        such that∥σ−ˆσ∥             1≤η    with failure probability at
+mostδ. Moreover, the algorithm runs in timepoly(d         r−i  ,1/η,log(1/δ)).
+
+Proof.  Takem copies ofρ and perform the two-outcome measurement{Π,I−Π}              on each copy.
+The numberm′ of successful outcomes Π is distributed as Binomial(m,µ)                    , with expectationµm.
+Each successful trial produces the normalized stateρ|  Π  := ΠρΠ/µ        .  We estimateσ=µρ|        Π by
+ˆσ:=   m′m  ˆρ|     Π, whereˆρ|               Π is an estimate ofρ|      Π. Then
+                                                               1≤µ
+            ∥σ−ˆσ∥             1 =µ ρ|  Π−(m ′/(µm)) ˆρ|               Π ∥ρ|     Π−ˆρ|        Π∥1 +|1−m   ′/(µm)|      .
+
+To ensure∥σ−ˆσ∥             1≤η   , it suffices that∥ρ|     Π−ˆρ|        Π∥1≤η/(2µ)            and|1−m  ′/(µm)|≤η/(2µ)                      ,
+each holding with failure probability at mostδ/2.
+For the first requirement, the algorithm then traces out the firsti qudits and performs tomography
+on the remaining (r−i)        -qudit states with errorη/(2µ)         and failure probabilityδ/2.     Note that the
+state on which we perform tomography has rank at mostD2. By the result of O’Donnell and Wright
+[OW16], there exists an algorithm that, with failure probability at mostδ/2  , produces an estimate
+ˆρ|     Π within trace distanceη/(2µ)using
+                                                      D2dr−i  µ2
+                                                  O           η2        log 1δ
+
+post-selected copies. Therefore, it suffices thatm′≥cD    2dr−i  µ2 log(1/δ)/η          2 for some constantc.
+For the second requirement, Hoeffding’s inequality yields
+
+                                    Prm′−µm ≥ η2m ≤2 exp                      −η22 m      .
+
+Hence, ifm= Ω  η−2   log(1/δ)  , then with probability at least 1−δ/2        we have|1−m  ′/(µm)|≤
+η/(2µ).
+Combining the two requirements and applying a union bound, we find that the trace-norm error
+is at mostη except with probabilityδ.  Since in expectationµm copies survive the measurement µD2dr−i
+Π, we need to start withm=O                         η2      log 1δ    copies ofρ.  Finally, the reconstruction can be
+implemented inpoly(d  r−i  ,1/η,log(1/δ))time, establishing the claimed runtime bound.
+Lemma A.4(Sub-normalized tomography). Let    ρ be a quantum state onr qudits of local dimension
+d. Let Π =|0  i⟩⟨0 i|⊗I ⊗(r−i)          and defineµ= Tr[Πρ]          . Letη,δ>0   . Then there exists an algorithm
+that, using                                             µd2(r−i)
+                                                    O          η2      log1δ
+
+copies ofρ, produces an estimate ˆσ   ofσ:= ΠρΠ        such that∥σ−ˆσ∥             1≤η    with failure probability at
+mostδ. Moreover, the algorithm runs in timepoly(d         r−i  ,1/η,log(1/δ)).
+
+
+                                                                 14
+Proof.  The argument follows the same structure as the previous proof, except that we now invoke the
+sample complexity result in [OW16] for general state without any rank constraint: for arbitrary states
+ρ∈C  d×d    , given parametersϵ,δ∈(0,1)         , their result guarantees thatO               d2           copies suffice to
+                                                                                             η2 log 1δ
+obtain anϵ-accurate estimate through the state tomography in the standard trace distance with failure
+probability at mostδ. This suffices to establish the claim.
+
+Appendix B: Correctness of Algorithm 2
+
+In this section, we prove the correctness of our algorithm. Letρ be ann-qudit unknown state that is
+guaranteed to be a matrix product state of bond dimensionD. Takingρ as input, Algorithm 2 aims to
+learn and output a description of a state|       ˆϕ⟩that is sufficiently close toρ.
+To analyze the correctness of the algorithm, we rely on several structural properties of matrix product
+states. In particular, due to the binary tree construction in Algorithm 2, each reduced density matrix
+σji  is guaranteed to have rank at mostD2, as established in Lemma A.1 and A.2. These facts will
+serve as the foundation for the sequence of lemmas following Lemma B.1. We set
+                                                      p := 2⌈log  dD⌉
+to account for the number of qudits required to support a density matrix of rank at mostD2. This
+strategy in turn reduces the sample complexity required to learn a description of the unknown
+MPS(D). In contrast, for the agnostic setting—where the input is not assumed to be an MPS and
+may even be a mixed state—we will later adopt a different strategy.
+Definition 7(Step-wise Reconstructed State). Let            (ρ  0)′ =ρ    be the initial state before any iteration
+(see line 8 in Algorithm 2). Define
+                                                     ρ0 := (ρ  0)′ =ρ.
+For eachj= 1,...,M, define the cumulative unitary
+                                                 Ej :=U  jUj−1 ···U  1.
+Let (ρ j)′ denote the subnormalized post-measurement state of the remaining qudits afterj iterations
+of Algorithm 2. Define                                   " jO                  #
+
+                                         ρj := (E j)†            Pa⊗(ρ  j)′      Ej,
+                                                           a=1
+whereP a andU   j are as in Algorithm 2.
+We callρj thestep-wise reconstructed statecorresponding to the     j-th layer of the circuit, representing
+the state that would have been reconstructed had the algorithm stopped after thej-th iteration (i.e.,
+line 20).
+Definition 8(Level- j transformed and projected states). Fix     j∈{1,...,M}          . For any pure state|ϕ⟩
+on ann-qudit system define thelevel-jtransformed state
+                                                     |ϕ j⟩ :=E  j|ϕ⟩,
+whereE j is the cumulative unitary introduced above. Define thelevel-jprojector
+
+                                                                  jO
+                                                     Π(j)    :=      Pa,
+                                                                a=1
+withP    a as in Algorithm 2. Thelevel-jprojectionof|ϕ               j⟩isΠ     (j) |ϕ j⟩.
+Π(j) |ϕ j⟩has the product form
+                                                                                 
+                                                    jO 2M−aO
+                               Π(j) |ϕ j⟩=                    |0 f(a,b)  ⟩Bab\ eBab⊗|ψ j⟩,
+
+                                                  a=1   b=1
+we call|ψ j⟩∈H  eBj
+                        1⊗···⊗H   eBj2M−j      theprojected (residual) state of |ϕ⟩    at levelj. By convention,
+we define the projected state at level0to be the input state itself,|ψ          0⟩ :=|ϕ⟩.
+
+
+                                                              15
+Fact B.1.For any state|ϕ⟩and for eachj= 0,...,M,we have⟨ϕ|ρ                  j|ϕ⟩=⟨ψ     j|(ρ j)′|ψ j⟩.
+Definition  9(Top-Eigenspace Wji   of  the  Estimated  Reduced  State). Fix     j∈ {1,...,M}           and
+i∈{1,...,2   M−j }. Let                                                (ρ j−1    )′
+                                                 σji   =  TrBj\B j
+                                                                     i
+be the reduced state obtained by tracing out all qudits in Bj\B ji  (see Algorithm 2). Let ˆσ ji  denote
+the estimation ofσ  ji  produced by the tomography procedure.
+We defineWji  to be the subspace spanned by the eigenvectors of ˆσ ji  corresponding to itsdp largest
+eigenvalues. We then denote byΠ  Wj                                                          i .
+                                               i  the orthogonal projector ontoW    j
+Fact B.2.Let   Uj andPj as operators from Algorithm 2. By the definition ofWji  and ΠWj
+                                                                                                                      i , we have
+                                        (U j)†PjUj = ΠWj
+                                                                  1⊗···⊗Π Wj2M−j  .
+Fact B.3.For each   j= 1,...,M    , the orthogonal complement of ΠWj
+                                                                                                1⊗···⊗Π Wj2M−j       can be
+decomposed as                                                                                                 
+                       2M−jO             2M−jX   i−1O          !                                  2M−jO
+                 I−           ΠWj                       ΠWj        ⊗    IBj                ⊗             IBj  ,
+                                   k  =                      k              i−Π Wji                          k
+                       k=1                i=1      k=1                                           k=i+1
+whereI Bj                                                                 i .
+             i  denotes the identity operator on the quditB    j
+Here, we adopt the convention that the tensor product over an empty index set (i.e., when the upper
+limit is less than the lower limit) is defined to be the identity operator on the trivial (one-dimensional)
+Hilbert space.
+Lemma B.1.Let   σ be a density matrix with rank(σ)≤D                  2, and let ˆσ   be a rank-n density matrix,
+wheren≥D      2.  LetW  be the span of the largestD2 eigenvectors of ˆσ  , and let ΠW  denote the
+orthogonal projector ontoW. If these two matrices satisfy∥σ−ˆσ∥                                    1≤η, then
+                                                  Tr(I−Π   W )σ ≤2η.
+
+Proof.Write the spectral decomposition ofˆσas
+                                                            nX
+                                                     ˆσ=        ˆσ i|v i⟩⟨v i|,
+                                                           i=1
+with eigenvalues sorted in descending order ˆσ  1≥ˆσ      2≥···≥ˆσ  n≥0   .  Define the best rank-D2
+approximation ofˆσas
+                                                             D2X
+                                                   ˆσ  tr =      ˆσ i|v i⟩⟨v i|.
+                                                            i=1
+By the Eckart–Young–Mirsky theorem,  ˆσ  tr  minimizes the trace norm error among all rank-D2
+matrices. Sinceσhas rank at mostD                     2,
+                                              ∥ˆσ    tr−ˆσ∥        1≤∥σ−ˆσ∥             1≤η.
+Note that∥I−Π      W∥∞ = 1. We compute
+                        Tr[(I−Π    W )σ] = Tr (I−Π   W )(σ−ˆσ)     + Tr(I−Π   W )ˆσ .
+For the first term, by Hölder (duality of Schatten norms), Tr(I−Π   W )(σ−ˆσ)    ≤∥I−Π   W∥∞∥σ−ˆσ∥             1≤η.
+
+
+For the second term we use positivity ofˆσ−ˆσ              tr (indeedˆσ−ˆσ                        tr =Pi>D2 ˆσ i|v i⟩⟨v i|⪰0) to get
+                               Tr[(I−Π    W )ˆσ] = Tr  ˆσ−ˆσ          tr =∥ˆσ−ˆσ                tr∥1≤η.
+Combining the two estimates yields
+                                             Tr[(I−Π    W )σ]≤η+η= 2η,
+as desired.
+
+
+                                                                16
+Lemma B.2.Fix   j∈{1,...,M}          .   For each i =  1,...,2  M−j      ,  let HBj
+                                                                                                     i  be the Hilbert space
+associated with Bji , where Bji  is defined in Algorithm 2. LetWji ⊆H  Bj
+                                                                                                 i  be a subspace defined in
+Definition 9, and let ΠWj                                                                 i . Let Bj :=S2M−jk=1   Bjk be the
+                                 i  denote the orthogonal projector ontoWj
+collection of all qudits under consideration at stepj. Let (ρ j−1    )′ denote the state on HBj  defined
+in Algorithm 2, and let|φ⟩     be a unit vector in the same Hilbert space. Define the product projector
+ΠWj :=N2M−ji=1    ΠWj
+                            i.Suppose that
+
+                                                   (I−Π   Wj)|φ⟩=|φ⟩,
+
+and that for eachi= 1,...,2   M−j      ,
+                                        h                               (ρ j−1    )′i
+                                     Tr   (I−Π   Wj                                     ≤2η.
+                                                      i ) Tr (B j\B ji)
+
+Then
+                                               ⟨φ|(ρ   j−1    )′|φ⟩≤2η2     M−j  .
+
+
+Proof.  According to Fact B.3, any unit vector|φ⟩     satisfying (I−Π   Wj)|φ⟩=|φ⟩               can be decomposed
+as
+
+                                                               2M−jX
+                                                      |φ⟩=             |φ i⟩,
+                                                                 i=1
+where                                                                                            
+                                    i−1O          !                                  2M−jO
+                         |φ i⟩ :=           ΠWj       ⊗    IBj                ⊗             IBj  |φ⟩,
+                                                 k             i−Π Wji                          k
+                                      k=1                                           k=i+1
+
+and we setp  i :=∥|φ  i⟩∥2, so thatP2M−ji=1  pi = 1.
+With this decomposition, we have
+
+
+                         2M−jX                            2M−jX
+⟨φ|(ρ   j−1    )′|φ⟩=           ⟨φ i|(ρ j−1    )′|φ i⟩+           ⟨φ i|(ρ j−1    )′|φ k⟩
+                          i=1                             i,k=1
+                                                           i̸=k
+
+    2M−jX                                         2M−jX  √                   p
+ =         pi ⟨φ i|∥⟨φ i|∥(ρ j−1    )′ |φ i⟩∥|φ i⟩∥ +       pipk ⟨φ i|∥⟨φ i|∥   (ρ j−1    )′p(ρ j−1    )′ |φ k⟩∥|φ k⟩∥
+     i=1                                          i,k=1
+                                                   i̸=k
+    2M−jX                                         2M−jX  √             ⟨φ i|   p                 p
+ ≤         pi ⟨φ i|∥⟨φ i|∥(ρ j−1    )′ |φ i⟩∥|φ i⟩∥ +       pipk     ∥⟨φ i|∥       (ρ j−1    )′     (ρ j−1    )′ |φ k⟩∥|φ k⟩∥
+     i=1                                          i,k=1
+                                                   i̸=k
+    2M−jX                                         2M−jX           s                                  s
+ =         pi ⟨φ i|                                      √pipk          ⟨φ i|                              ⟨φ k|
+
+     i=1       ∥⟨φ i|∥(ρ j−1    )′ |φ i⟩∥|φ i⟩∥ + i,k=1               ∥⟨φ i|∥(ρ j−1    )′ |φ i⟩∥|φ i⟩∥   ∥⟨φ k|∥(ρ j−1    )′ |φ k⟩∥|φ k⟩∥.
+                                                   i̸=k
+                                                                                                                                 (4)
+
+For eachi, since   |φ i⟩∥φ i∥ is supported on the subspace where theB  ji -part lies in(W  ji )⊥, we have
+
+                        ⟨φ i|                          h                                           i
+                                                         (I−Π   Wj                                    ≤2η.
+                       ∥φ i∥(ρ j−1    )′|φ i⟩∥φ i∥≤Tr                i ) Tr(B j\B ji)[(ρ j−1    )′]
+
+                                                                17
+Now, let’s substitute it back to Equation (4):
+                                                                                            
+
+                                                        2M−jX                2M−jX  √       
+                        ⟨φ|(ρ   j−1    )′|φ⟩≤2η               pi + 2η                  pipk
+
+                                                         i=1                   i,k=1
+                                                                               i̸=k                  
+
+                                                            2M−jX  √           2M−jX  √
+                                             = 2η+ 2η                 pi               pk−√pi
+
+                                                             i=1               k=1
+                                                                             2                
+                                                                 2M−jX  √              2M−jX
+                                             = 2η+ 2η                   pk      −         pi
+
+                                                                  k=1                   i=1
+                                             ≤2η+ 2η    2M−j  −1 
+                                             = 2η2  M−j  ,                                                                               (5)
+where in the last inequality we use the Cauchy–Schwarz inequality.
+
+Lemma B.3.Fix   j∈{1,...,M}          .  For eachi= 1,...,2  M−j      , let HBj
+                                                                                                i  denote the Hilbert space
+associated with Bji , where Bji  is defined in Algorithm 2.  LetWji ⊆H  Bj
+                                                                                                   i  be a subspace defined
+in Definition 9, and denote by ΠWj                                                           i .  Let Bj  :=S2M−jk=1   Bjk be
+                                              i  the orthogonal projector ontoWj
+the set of all qudits under consideration at stepj. Let (ρ j−1    )′ denote the state on HBj  defined in
+Algorithm 2, and letρ  j be the state given in Definition 7.
+Suppose that, for eachi= 1,...,2   M−j      , the tomography procedure succeeds in the sense that
+                                        h                               (ρ j−1    )′i
+                                    Tr   (I−Π   Wj                                     ≤2η.
+                                                     i ) Tr (B j\B ji)
+Then, for any pure state|ϕ⟩∈(C       d)⊗n   ,
+                                   ⟨ϕ|ρ  j−1 |ϕ⟩−⟨ϕ|ρ    j|ϕ⟩  ≤2 p           2η2  M−j   .
+
+
+Proof.According to Definition 7 and 8, we can express the fidelity⟨ϕ|ρ           j|ϕ⟩as
+                                               "  jO         !             #
+                 ⟨ϕ|ρ  j|ϕ⟩=⟨ϕ|(E       j)†              Pa      ⊗(ρ  j)′    Ej|ϕ⟩
+                                                    a=1
+                                                    "  jO         !            #
+                              =⟨ϕ  j−1 |(U j)†                Pa     ⊗(ρ  j)′     Uj|ϕ j−1 ⟩
+                                                        a=1
+                                            j−1O        !                                  j−1O       !
+                              =⟨ϕ  j−1 |           Pa      (U j)†Pj⊗(ρ  j)′Uj                   Pa     |ϕ j−1 ⟩
+                                              a=1                                            a=1
+                              =⟨ψ  j−1 |(U j)†Pj⊗(ρ  j)′Uj|ψ j−1 ⟩                                                   (6)
+In  Algorithm  2,  we  define  (ρ j)′   =   TrS2M−j                          PjUj(ρ j−1    )′(U j)†Pj  where Pj   =
+
+                                                             i=1    Bji\ eBji
+N2M−j       |0 f(j,i) ⟩⟨0 f(j,i) |
+   i=1                             Bji\ eBji⊗I   eBji  is a zero-state projection operators acting on a collection of
+quditsS2M−ji=1   Bji\ eBji  . In other words, we have the relation:
+
+                                         Pj⊗(ρ  j)′ =P  jUj(ρ j−1    )′(U j)†Pj.                                            (7)
+Use Equation (7) and Fact B.2, we can rewrite the fidelity⟨ϕ|ρ        j|ϕ⟩as
+
+           ⟨ϕ|ρ  j|ϕ⟩=⟨ψ     j−1 |Π Wj
+                                           1⊗···⊗Π Wj2M−j     (ρ j−1    )′ ΠWj1⊗···⊗Π Wj2M−j  |ψ j−1 ⟩        (8)
+
+                                                                18
+For brevity, we denoteΠ     Wj :=N2M−ji=1    ΠWj
+                                                           i.Then together with Fact B.1, this implies
+⟨ϕ|ρ  j−1 |ϕ⟩−⟨ϕ|ρ    j|ϕ⟩  =⟨ψ j−1 |(ρ j−1    )′|ψ j−1 ⟩−⟨ψ j−1 |Π Wj(ρ j−1    )′ ΠWj|ψ j−1 ⟩
+
+                                    ≤⟨ψ j−1 |(ρ j−1    )′ (I−Π   Wj)|ψ j−1 ⟩ +⟨ψ j−1 |(I−Π    Wj)(ρ j−1    )′ ΠWj|ψ j−1 ⟩
+                                    ≤|ψ j−1 ⟩(ρ j−1    )′ (I−Π   Wj)|ψ j−1 ⟩ +ΠWj|ψ j−1 ⟩(ρ j−1    )′ (I−Π   Wj)|ψ j−1 ⟩
+                                    ≤2 (ρ j−1    )′ (I−Π   Wj)|ψ j−1 ⟩                                                         (9)
+
+Let|eφ⟩= (I−Π         Wj)|ψ j−1 ⟩and define the normalized vector|φ⟩             := |eφ⟩∥|eφ⟩∥       . Then
+
+                        2(ρ j−1    )′ (I−Π   Wj)|ψ j−1 ⟩ = 2(ρ j−1    )′|φ⟩ |eφ⟩
+                                                                   ≤2 |eφ⟩  p⟨φ|[(ρ    j−1    )′]2|φ⟩
+                                                                   ≤2 |eφ⟩  p⟨φ|(ρ   j−1    )′|φ⟩
+                                                                   ≤2 p⟨φ|(ρ   j−1    )′|φ⟩                                     (10)
+Notice that(I−Π      Wj)|φ⟩=|φ⟩. By Lemma B.2, we conclude that
+                       ⟨ϕ|ρ  j−1 |ϕ⟩−⟨ϕ|ρ    j|ϕ⟩ ≤2 p⟨φ|(ρ   j−1    )′|φ⟩≤2  p2η2  M−j                            (11)
+
+
+
+Theorem(Restatement of Theorem 1). Given access to copies of an    n-qudit matrix product stateρ
+with bond dimensionD and parametersϵ,δ∈(0,1)         , Algorithm 2 outputs a description of a state
+|ˆϕ⟩, such that, with probability1−δ,
+
+                                                      ⟨ˆϕ|ρ|     ˆϕ⟩ ≥1−ϵ
+The algorithm requiresN=O(     D6·d 4·n 3·log(n/δ)
+                                              (logdD)   3ϵ4     ) copies ofρ and runs in time poly D,n, 1ϵ,log(  1δ ).
+
+Proof.From Lemma A.1 and Lemma A.2, it follows that each reduced density matrix
+                                                  σji  = TrBj\B j
+                                                                     i [(ρ j−1    )′]
+defined in Algorithm 2 has rank at mostD2. Suppose that the state tomography procedure succeeds
+for allσji  throughout the algorithm.  Then, for eachσji , the tomography produces an estimate ˆσ ji
+satisfying
+                                              ∥σ j                       2−1)      2ϵ2
+                                                 i−ˆσ  ji∥1 ≤  (√        2M+5    .
+In the next step, Algorithm 2 invokes Algorithm 1 to select theD2 largest eigenvectors from the
+estimated density matrix ˆσ ji  and constructs a disentangling unitary accordingly. LetfWji  denote the
+subspace spanned by theD      2 largest eigenvectors. From Lemma B.1, we know that
+                                             h                    i          2−1)      2ϵ2
+                                          Tr   (I−Π    fWj       i   ≤ (√
+                                                           i )σ j            2M+4    .
+SincefWji  is contained in the space spanned by thedp largest eigenvectors of ˆσ ji , we havefWji ⊆W  ji ,
+whereW     ji  is defined in Definition 9. Equivalently, their orthogonal complements satisfy
+
+                                                      (W ji )⊥⊆( fWji )⊥
+Therefore, it follows that                   h                    i
+                                          Tr   (I−Π   Wj             ≤ (√2−1)      2ϵ2
+
+                                                           i )σ ji           2M+4    .
+Let|ϕ⟩∈(C      d)⊗n    be a pure state on ann-qudit system. Applying Lemma B.3, we get
+                                     ⟨ϕ|ρ  j−1 |ϕ⟩−⟨ϕ|ρ    j|ϕ⟩  ≤  (√2−1)ϵ
+                                                                                   2√2j  .
+
+                                                                 19
+Using the triangular inequality, we derive
+                                 ⟨ϕ|ρ      0|ϕ⟩−⟨ϕ|ρ    M|ϕ⟩  ≤         MX   (√2−1)ϵ
+
+                                                                           j=1      2√2j ≤ ϵ2,
+
+which implies
+                                                 ⟨ϕ|ρ  M|ϕ⟩≥⟨ϕ|ρ|ϕ⟩−      ϵ2.                                                  (12)
+
+Recall thatρ0 :=ρ    by Definition 7. For any state|ϕ⟩∈(C    d)⊗n   , we define its level-j projected states
+|ψ j⟩∈H  eBj
+               1⊗···⊗H   eBj2M−j      through Definition 8. By Fact B.1, we have
+
+                                             ⟨ϕ|ρ  M|ϕ⟩=⟨ψ     M|(ρ M)′|ψ M⟩.                                             (13)
+                                                                                             N2M−j
+On the other hand, for the reconstructed state|ˆϕ⟩= (E   j)† NMj=1                               i=1 |0 f(j,i) ⟩Bj                      ,
+                       NM        N2M−j                                                           N2M−j                i\ eBji⊗| ˆψ⟩
+since (ρ M)′  =             j=1      i=1 ⟨0 f(j,i) |Bj              EMρ(E  M)† NMj=1                 i=1 |0 f(j,i) ⟩Bj             , we
+                                                          i\ eBji                                                         i\ eBji
+have
+                                                   ⟨ˆϕ|ρ|     ˆϕ⟩=⟨       ˆψ|(ρ  M)′| ˆψ⟩                                                   (14)
+If the final tomography on (ρ M)′ succeeds, it yields an estimate (ˆρ M)′ such that∥(ρ  M)′−(ˆρ  M)′∥1≤
+ϵ/4. By Hölder’s inequality for Schattenp-norms, for any state|φ⟩∈H                        eBM1  ,
+                                         ⟨φ|(ρ   M)′|φ⟩−⟨φ|(ˆρ     M)′|φ⟩ ≤ϵ/4.                                        (15)
+
+Applying this bound gives
+
+ ⟨ ˆψ|(ρ  M)′| ˆψ⟩≥⟨   ˆψ|(ˆρ   M)′| ˆψ⟩−ϵ/4≥⟨ψ      M|(ˆρ M)′|ψ M⟩−ϵ/4≥⟨ψ     M|(ρ M)′|ψ M⟩−ϵ/2. (16)
+
+Here, we use Equation (15) in the first and last inequalities, while the second step follows from the
+fact that| ˆψ⟩    is the largest eigenvector of (ˆρ M)′. Combining with Equations (13) and (14), we obtain
+
+                                                 ⟨ˆϕ|ρ|     ˆϕ⟩≥⟨ϕ|ρ    M|ϕ⟩−  ϵ2.                                                  (17)
+
+Together with Equation (12), the desired inequality is established:
+
+                                                   ⟨ˆϕ|ρ|     ˆϕ⟩≥⟨ϕ|ρ|ϕ⟩−ϵ                                                    (18)
+
+Notice that this inequality holds for any pure state|ϕ⟩∈(C    d)⊗n   . In particular, by choosing|ϕ⟩    to be
+our target MPS(D) state, we obtain the maximal fidelity⟨ϕ|ρ|ϕ⟩= 1.
+Next, we compute the sample complexity of Algorithm 2.  From Lemma A.3, taking the dimen-
+sion dr−i      to be d2p  , the error parameter to be η=     (√2−1)     2ϵ2
+                                                                              2M+5       , and the failure probability to be
+δ/n,  we can perform tomography on each sub-normalized state σj                                                             )
+                                                                                               i  using O(  D2·d 2p  log(n/δη2         )  =
+O(  D2·d 2p·2 2M   log(n/δ)
+               ϵ4            ) copies of sample and runtime that is polynomial in the same parameters. In
+total, the algorithm (line 12 and 25) performs sub-normalized tomographyPMj=1  2M−j      = 2M−1
+times.  Recall thatd2p ≤D    4d4 and 2M ≤2n/p     .  As a result, the tomography on allσji  requires
+O(  D2·d 2p·2 3M ·log(n/δ)                             )
+                ϵ4             ) =O(   D6·d 4·n 3·log(n/δ(logdD)   3ϵ4     )copies of sample.
+The last call of tomography takes the dimensiondr−i     to bedp, the error parameter to beη=ϵ/4         ,
+and the failure probability to beδ/n. The copies of sample needed for the last call of tomography is
+O(  D2·d p log(n/δ)                                 )
+            ϵ2         )<O(  D2·d 2p·2 2M   log(n/δϵ4            )copies of sample. The overall algorithm then requires
+                                                 O( D6·d 4·n 3·log(n/δ)
+                                                             (logdD)    3ϵ4        )
+copies ofρand runs inpoly(n,D,1/ϵ,log(1/δ))time.
+
+
+                                                                   20
+Appendix C: Learning the closest matrix product states
+
+In this section, we consider the learning task where the target stateρ is not necessarily an exact matrix
+product state (MPS) of bond dimensionD, as assumed in the previous sections, and may even be a
+mixed state. We define the maximum fidelity betweenρ and and the set MPS(D)              of MPS of bond
+dimensionDas
+                                                         max|ϕ⟩∈MPS
+                                                     (D)    ⟨ϕ|ρ|ϕ⟩.
+Our goal is to output a description of state|ˆϕ⟩   such that, given an error parameterϵ>0    and access
+to copies ofρ, this state is close enough to the closest matrix product state of bond dimensionD in
+terms of fidelity
+                                          ⟨ˆϕ|ρ|     ˆϕ⟩≥   max|ϕ⟩∈MPS
+                                                          (D)    ⟨ϕ|ρ|ϕ⟩−ϵ.
+We remark that this task is slightly different from the standard notion ofagnostic learning. In the
+problem statement of agnostic learning, besides an error parameter ϵ >0    and access to copies
+ofρ, the learner should also given additional informationδ that promises⟨ϕ|ρ|ϕ⟩≥δ               for some
+|ϕ⟩∈MPS(D)                   . In other words, learners could also useδ to design their algorithm. Since our setting
+does not require such additional information, we refer to our algorithm as the learning of the closest
+matrix product state, rather than agnostic learning of matrix product states.
+
+Algorithm 3Disentangling unitary construction (thresholdη)
+
+Input:A thresholdη≥0and a description of ay-qudit density matrixˆσ∈C                          dy×d y.
+Output:A description of a Disentangling UnitaryUfor the stateˆσ(constructed from eigenvectors
+whose eigenvalues exceedη).
+Procedure:
+  1:Perform the spectral decomposition ofˆσ:
+
+                                                                rX
+                                                        ˆσ=        ai|ˆϕi⟩⟨ˆϕi|,
+                                                              i=1
+     wherer≤d       y.
+  2:Define the index set of selected eigenvalues:
+                                               S :={i∈{1,...,r}|a      i >η}.
+
+  3:Letm        :=|S|. Note thatm<1/ηbecauseˆσis trace1.
+  4:Reindex the selected eigenvectors as{|ϕ    i⟩}mi=1 , where|ϕ     i⟩ :=|   ˆϕsi⟩fors   i∈S.
+  5:Extend{|ϕ        i⟩}mi=1  to a full orthonormal basis{|ϕ     i⟩}dyi=1  of(C  d)⊗y    by choosing arbitrary
+     orthonormal vectors for indicesi=m+ 1,...,d          y.
+  6:Sett        :=⌈log  dm⌉.
+  7:Let{|a            1,...,ay−t ⟩}ai∈{0,...,d−1}                 be the standard basis for the firsty−tqudits, and let
+     {|j⟩}  dtj=1   be an arbitrary orthonormal basis for the remainingtqudits. Define the unitary
+
+                                       d−1X        dtX                                                        ,
+                          U=                           (|a   1,...,ay−t ⟩⊗|j⟩)  
+ϕidx(a       1,...,ay−t  ,j)
+                                  a1,...,ay−t    =0j=1
+
+     where the index mapping is defined byidx(a            1,...,ay−t  ,j) =j+d     t·Py−tl=1 aldy−t−l   .
+  8:returnthe unitaryU.
+
+Algorithm 4Learning the closest matrix product states
+
+Input:Copies of an unknown matrix product statesρ∈C            dn×d n such that there exists matrix
+product state with bond dimension at mostDwith fidelityθwithρ, error parameterq
+ϵ=           64nD    2                                                                                 δ.
+         (√2−1)     2mdm  for some large enough integerm(see Remark 1), and failure probability
+Output:A description of a quantum state|                    ˆϕ⟩∈(C)   ⊗n   .
+Procedure:
+
+
+                                                                 21
+ 1:Definepimplicitly by the relationp=⌈log                d(1/η)⌉, whereη                    :=  (√2−1)     2ϵ2p
+                                              l                                       m                       64D    2n    .
+ 2:Solve forpto obtainp=                          1         lnd·           64nD    2      (see Appendix H for derivation).
+                                                lnd W                 (√2−1)     2ϵ2
+ 3:SetMbe the smallest positive integerM     ′ such that2   M′p≥n. n−2   M−1  p⌉,s   1 :=Mod n−2   M−1  p,p,k 1 := 2ℓ  1p−p+s           1.
+ 4:Setℓ        1 :=⌈    1p
+ 5:Define the supportB                1i  set for thei-th disentangling unitaries in the first layer:
+                               {2(i−1)p+ 1,...,2ip}                                   if1≤i<ℓ                                     1
+
+                   B1i  :=     {2(ℓ      1−1)p+ 1,...,k            1}                                   ifi=ℓ          1
+                                  {k  1 + 1 + (i−ℓ       1−1)p,...,k       1 + (i−ℓ       1)p}  ifℓ         1 <i≤2  M−1   .       (19)
+
+ 6:Define a function                                              
+                                                                     s1    whenj= 1,i=ℓ                   1
+                                                  f(j,i) =        0    whenj= 1,i>ℓ                1       .
+                                                                     p    otherwise
+
+ 7:Let(ρ          0)′ =ρ.
+ 8:LetB         1 =S2M−1i=1   B1i .
+ 9:forifrom1toℓ                       1 do
+10:    Letσ           1i  = TrB1\B  1i [(ρ   0)′].
+11:    Letˆσ             1i  be the output of the tomography with errorηand failure probability       δ/non
+     O     d4p              copies ofσ    1i .
+            η2  lognδ
+12:    Use Algorithm 3 to generate the disentangling unitaryU                  1i  from a description of a
+     (p+f(1,i))-qudit stateˆσ                             1i  and a parameterη.
+13:    Let  eB1i  be the lastpqudits inB            1i .
+14:end for
+15:LetU           1 =Nℓ1i=1 U1i . |0 f(1,i)  ⟩⟨0 f(1,i)  |
+16:LetP           1 =Nℓ1i=1                                  B1i\ eB1i⊗I   eB1i .
+
+17:ApplyU                1 to all copies of(ρ     0)′ and project ontoP        1 to get copies of
+                                           (ρ  1)′ = TrSℓ1i=1 B1i\ eB1i        P 1U1(ρ  0)′(U  1)†P 1 ;
+
+
+
+18:Let  eB1i  =B    1i  forℓ     1 <i≤2  M−1      .
+19:forjfrom2toMdo
+20:    LetB     j =S2M−j+1i=1   eBj−1i     .
+21:    forifrom1to2          M−j       do
+22:          LetB     ji  = eBj−12i−1  ∪ eBj−12i     .
+23:          Letσ     ji  = TrBj\B j
+                                             i [(ρ j−1    )′].
+24:          Letˆσ     j  i  be the output of the tomography with errorηand failure probabilityδ/non
+     O     d4p              copies ofσ  j
+            η2  lognδ                         i .
+25:              Use Algorithm 3 to generate the disentangling unitaryUji  from a description of 2p  -qudit
+     stateˆσ    ji  and a parameterη.
+26:          Let  eBji  be the lastpqudits inB     ji .
+27:    end for
+28:    LetU     j =N2M−ji=1  Uj |0 f(j,i) ⟩⟨0 f(j,i) |i .
+
+29:    LetP     j =N2M−ji=1                                          Bj
+                                                                        i\ eBji⊗I   eBji .
+30:    ApplyU       j to all copies of(ρ  j−1    )′ and project ontoP    j to get copies of
+                                        (ρ j)′ = TrS2M−j                       PjUj(ρ j−1    )′(U j)†Pj ;
+
+                                                            i=1    Bji\ eBji
+31:end for
+32:Let(ˆρ     M)′ be the output of the tomography with errorτ=ϵ/4and failure probability                δ/non
+     O     d2p              copies of(ρ  M)′.
+            τ2  lognδ
+
+                                                                          22
+33:Let|         ˆψ⟩be the top eigenvector of(ˆρ    M)′.
+34:returnthe state|             ˆϕ⟩   := (U  1)†···(U M)† NM         N2M−j                                   .
+                                                                j=1     i=1 |0 f(j,i) ⟩Bji\ eBji⊗| ˆψ⟩
+Remark 1.In the construction above, the integermis introduced via the relation
+
+                                                 mdm =     64nD     2(√2−1)      2ϵ2,
+
+which ensures that the self-consistent equation in Algorithm 4: line 1 (or Equation (42) in Appendix
+I) admits the unique integer solutionp=m     . The admissible range ofm is not arbitrary, however.
+Since the accuracy parameter must satisfy 0<ϵ≤1       , the equality above implies the constraint (see
+Appendix I for more a detailed discussion)
+
+                                                  mdm ≥    64nD     2(√2−1)      2.
+
+This condition guarantees that the chosen ϵ lies within the valid range.  On the other hand, the
+algorithm operates on ann-qudit system, so in order to make our algorithm efficient, we require that
+                                                     m= Θ(log  dn).
+In other words, if one wants an accuracy ofϵ= Θ(1/poly(n))               but happens to choose a specificϵ
+that makes the self-consistent equation unsolvable (see Appendix I for the discussion on the existenceq
+condition for an integer solution p), one can always find another value ϵ′  =                                   64nD    2
+                                                                                                            (√2−1)     2mdm  =
+Θ(1/poly(n))              for somem= Θ(log  dn)    such thatϵ′ < ϵ, which ensures that the self-consistent
+equation becomes solvable.
+
+Appendix D: Correctness of Algorithm 4
+
+Definition 10(Step-wise Reconstructed State). Let              (ρ  0)′ =ρ    be the initial state before any iteration
+(see line 9 in Algorithm 4). Define
+                                                     ρ0 := (ρ  0)′ =ρ.
+For eachj= 1,...,M, define the cumulative unitary
+                                                 Ej :=U  jUj−1 ···U  1.
+Let (ρ j)′ denote the subnormalized post-measurement state of the remaining qudits afterj iterations
+of Algorithm 4. Define                                    " jO                 #
+
+                                         ρj := (E j)†            Pa⊗(ρ  j)′       Ej,
+                                                            a=1
+whereP a andU   j are as in Algorithm 4.
+We callρj thestep-wise reconstructed statecorresponding to the     j-th layer of the circuit, representing
+the state that would have been reconstructed had the algorithm stopped after thej-th iteration (i.e.,
+line 21).
+Definition 11(Level-  j transformed and projected states). Fix     j∈{1,...,M}          . For any pure state
+|ϕ⟩on ann-qudit system define thelevel-jtransformed state
+                                                      |ϕ j⟩ :=E  j|ϕ⟩,
+whereE j is the cumulative unitary introduced above. Define thelevel-jprojector
+
+                                                                  jO
+                                                     Π(j)    :=       Pa,
+                                                                a=1
+withP    a as in Algorithm 4. Thelevel-jprojectionof|ϕ               j⟩isΠ     (j) |ϕ j⟩.
+Π(j) |ϕ j⟩has the product form                                                    
+
+                                                    jO  2M−aO
+                               Π(j) |ϕ j⟩=                    |0 f(a,b)  ⟩Bab\ eBab⊗|ψ j⟩,
+
+                                                  a=1    b=1
+
+                                                              23
+we call|ψ j⟩∈H  eBj
+                        1⊗···⊗H   eBj2M−j      theprojected (residual) state of |ϕ⟩    at levelj. By convention,
+we define the projected state at level0to be the input state itself,|ψ          0⟩ :=|ϕ⟩.
+Fact D.1.For any state|ϕ⟩and for eachj= 0,...,M,we have⟨ϕ|ρ                 j|ϕ⟩=⟨ψ     j|(ρ j)′|ψ j⟩.
+Definition 12(Top-Eigenspace  Wji  of the Estimated Reduced State). Fix     j∈{1,...,M}           and
+i∈{1,...,2   M−j }. Let                                            (ρ j−1    )′
+                                              σji   =  TrBj\B j
+                                                                  i
+be the reduced state obtained by tracing out all qudits in Bj\B ji  (see Algorithm 4). Let ˆσ ji  denote
+the estimation ofσ  ji  produced by the tomography procedure.
+We defineWji  to be the subspace spanned by the eigenvectors of ˆσ ji  corresponding to its eigenvalues
+exceedingη. We then denote byΠ         Wj                                                 i .
+                                             i  the orthogonal projector ontoW    j
+Fact D.2.Let  Uj andPj as operators from Algorithm 4. By Definition 12 ofWji  and ΠWj
+                                                                                                                 i , we have
+                                      (U j)†PjUj = ΠWj
+                                                               1⊗···⊗Π Wj2M−j  .
+Fact D.3.For each  j= 1,...,M    , the orthogonal complement of ΠWj
+                                                                                            1⊗···⊗Π Wj2M−j       can be
+decomposed as                                                                                            
+                     2M−jO             2M−jX   i−1O         !                                2M−jO
+                I−          ΠWj                       ΠWj       ⊗    IBj               ⊗            IBj  ,
+                                 k  =                      k            i−Π Wji                          k
+                      k=1               i=1      k=1                                         k=i+1
+whereI Bj                                                                  i .
+            i  denotes the identity operator on the qudit setB  j
+Here, we adopt the convention that the tensor product over an empty index set (i.e., when the upper
+limit is less than the lower limit) is defined to be the identity operator on the trivial (one-dimensional)
+Hilbert space.
+Lemma D.1(Monotonicity of Step-wise Reconstructed States). For each      j= 1,...,M    , letρj be
+the step-wise reconstructed state defined in Definition 10. Then the sequenceρ1,...,ρM  satisfies the
+operator monotonicity property:
+                                        ρj⪯ρ j−1  ,    for allj= 2,...,M.
+That is, each reconstructed stateρj is dominated by the previous stateρj−1     in the semidefinite order.
+
+Proof.In line 32 in algorithm 4, we define                     PjUj(ρ j−1    )′(U j)†Pj,
+                               (ρ j)′ = TrS2M−j
+                                               i=1    Bji\ eBji
+wherePj =N2M−j              |0 f(j,i) ⟩⟨0 f(j,i) |
+                    i=1                           Bji\ eBji⊗I   eBji  is a zero-state projection operators acting on a
+collection of quditsS2M−ji=1   Bji\ eBji  . In other words, we have the relation:
+                                       Pj⊗(ρ  j)′ =P  jUj(ρ j−1    )′(U j)†Pj.                                          (20)
+Using the general property of post-selection (i.e., for any PVM element Π, ΠρΠ⪯ρ           ), we obtain the
+operator inequality:
+                                           Pj⊗(ρ  j)′⪯U  j(ρ j−1    )′(U j)†.
+Tensoring both sides withNj−1  jO    a=1 Pa, we have:!    j−1O       !
+
+                                    Pa      ⊗(ρ  j)′⪯            Pa      ⊗U  j(ρ j−1    )′(U j)†.
+                               a=1                          a=1
+Next, apply the conjugation map (E j)†(·)E  j, whereEj =U  jUj−1 ···U  1. Using the definition of
+ρj−1    ,                                       " j−1O        !                           #
+
+                             ρj−1     = (E j)†            Pa     ⊗U  j(ρ j−1    )′(U j)†    Ej,
+                                                     a=1
+we conclude
+                                                        ρj⪯ρ j−1  .
+
+
+
+                                                              24
+Lemma D.2(Lemma B.9 in [   BBK+25]). Let  ρ,σ be unnormalized mixed states satisfying∥ρ−σ∥          1≤
+η. LetW  be the span of all eigenvectors ofσ with eigenvalues exceedingη. Then, letting ΠW  denote
+orthogonal projection ontoW, we have that∥(I−Π            W )†ρ(I−Π    W )∥∞≤2η.
+Lemma D.3.Fix  j∈{1,...,M}          .   For each i =  1,...,2  M−j      ,  let HBj
+                                                                                                    i  be the Hilbert space
+associated with Bji . LetWji ⊆H  Bj
+                                                i  be a subspace, and let ΠWji  denote the orthogonal projector
+ontoWji .  Let Bj  :=S2M−jk=1   Bjk be the collection of all qudits under consideration at stepj.  Let
+(ρ j−1    )′ be a density matrix on the Hilbert space associated with Bj, and let|φ⟩     be a unit vector in
+the same Hilbert space that has Schmidt rank at mostD2 across any bipartition of Bji  and Bj\B ji .
+Define the product projectorΠ     Wj :=N2M−ji=1    ΠWj
+                                                                  i.Suppose that
+                                                   (I−Π   Wj)|φ⟩=|φ⟩,
+and that for eachi= 1,...,2   M−j      ,
+                             (I−Π   Wj                    (ρ j−1    )′ (I−Π   Wj    ∞≤2η.
+
+
+                                           i ) Tr (B j\B ji)                          i )
+Then
+                                             ⟨φ|(ρ   j−1    )′|φ⟩≤2ηD          2 2M−j  .
+
+Proof.  According to Fact D.3, any unit vector|φ⟩     satisfying (I−Π   Wj)|φ⟩=|φ⟩               can be decomposed
+as
+                                                               2M−jX
+                                                      |φ⟩=            |φ i⟩,
+                                                                i=1
+where we define                                                                                 
+                                    i−1O          !                                 2M−jO
+                         |φ i⟩ :=          ΠWj       ⊗     IBj               ⊗             IBj  |φ⟩,                      (21)
+                                                k              i−Π Wji                          k
+                                      k=1                                           k=i+1
+
+and we setp  i :=∥|φ  i⟩∥2, so thatP2M−ji=1  pi = 1.
+With this decomposition, we have
+
+                         2M−jX                            2M−jX
+⟨φ|(ρ   j−1    )′|φ⟩=           ⟨φ i|(ρ j−1    )′|φ i⟩+          ⟨φ i|(ρ j−1    )′|φ k⟩
+                          i=1                             i,k=1
+                                                           i̸=k
+
+    2M−jX                                         2M−jX  √                  p
+ =         pi ⟨φ i|∥⟨φ i|∥(ρ j−1    )′ |φ i⟩∥|φ i⟩∥ +       pipk ⟨φ i|∥⟨φ i|∥   (ρ j−1    )′p(ρ j−1    )′ |φ k⟩∥|φ k⟩∥
+     i=1                                          i,k=1
+                                                   i̸=k
+
+    2M−jX                                         2M−jX  √             ⟨φ i|   p                p
+ ≤         pi ⟨φ i|∥⟨φ i|∥(ρ j−1    )′ |φ i⟩∥|φ i⟩∥ +       pipk    ∥⟨φ i|∥       (ρ j−1    )′      (ρ j−1    )′ |φ k⟩∥|φ k⟩∥
+     i=1                                          i,k=1
+                                                   i̸=k
+    2M−jX                                         2M−jX           s                                 s
+ =         pi ⟨φ i|                                      √pipk          ⟨φ i|                             ⟨φ k|
+     i=1       ∥⟨φ i|∥(ρ j−1    )′ |φ i⟩∥|φ i⟩∥ + i,k=1              ∥⟨φ i|∥(ρ j−1    )′ |φ i⟩∥|φ i⟩∥   ∥⟨φ k|∥(ρ j−1    )′ |φ k⟩∥|φ k⟩∥.
+                                                   i̸=k
+                                                                                                                              (22)
+
+Next, since|φ⟩     has Schmidt rank at mostD2 across any bipartition of Bji  and Bj\B ji . Hence for
+eachiwe can write
+                                                      D2X
+                                            |φ⟩=          |α l⟩Bj
+                                                                  i⊗|β l⟩Bj\B ji ,
+                                                     l=1
+
+                                                                25
+where{|α l⟩} and{|β  l⟩} are vectors in the respective subsystems. Since in Equation 21 the operator
+IBj
+   i−Π Wji  acts only on the|α l⟩Bji  components while the other projectors act only on the|β l⟩Bj\B ji
+components, it follows that each|φ    i⟩inherits the same Schmidt rank bound, i.e.,rank(|φ         i⟩)≤D       2.
+Therefore,  the  normalized  state |φ i⟩∥φ i∥  can  be  expressed  as  a  superposition  of  at  most D2  prod-
+uct terms across the bipartition (B ji,B j\B ji ).  More precisely, there exist orthonormal vectors
+{|ξ  l(W j         l=1  in(W  ji )⊥ and unit vectors{|µ      l⟩Bj\B j        l=1  such that
+       i )⊥⟩Bji}D2                                                        i}D2
+
+
+
+                                     |φ i⟩      D2X  √
+                                                        ql|ξ l(W j
+                                    ∥φ i∥ =                      i )⊥⟩Bji⊗|µ l⟩Bj\B ji ,
+                                                l=1
+
+
+
+whereql≥0   ,PD2l=1 ql = 1, and∥|ξ l(W j
+                                                     i )⊥⟩∥=∥|µ   l⟩∥= 1   for alll.  For brevity, we henceforth
+omit explicit tensor symbols and subsystem labels when the context is clear, writing|ξ l(W j
+                                                                                                                       i )⊥⟩|µ l⟩
+instead of|ξ  l(W j
+                   i )⊥⟩Bji⊗|µ l⟩Bj\B ji .
+Substituting this decomposition into the expression above yields
+
+
+
+ ⟨φ i|
+∥φ i∥(ρ j−1    )′|φ i⟩∥φ i∥
+     D2X                                                         D2X   √
+ =       ql⟨ξ l(W j                         (W j                          qlqm⟨ξ l(W j                           (W j
+                   i )⊥|⟨µ l|(ρ j−1    )′|ξ l  i )⊥⟩|µ l⟩+                              i )⊥|⟨µ l|(ρ j−1    )′|ξ m  i )⊥⟩|µ m⟩.
+    l=1                                                        l,m=1
+                                                                m̸=l
+                                                                                                                              (23)
+
+
+
+For the first term, note that
+
+
+
+
+
+       D2X                                                        D2X                              (ρ j−1    )′|ξ l
+            ql⟨ξ l(W j                        (W j                     ql⟨ξ l(W j                                  (W j
+                     i )⊥|⟨µ l|(ρ j−1    )′|ξ l  i )⊥⟩|µ l⟩≤                    i )⊥|Tr Bj\B ji                        i )⊥⟩
+       l=1                                                        l=1
+                                                                  D2X
+                                                              ≤        ql2η
+                                                                  l=1
+                                                              ≤2η,
+
+
+
+where the first inequality follows from the fact that, for any positive semidefinite operator σ on
+Bji⊗(B  j\B ji ),⟨x|⟨µ|σ|x⟩|µ⟩≤⟨x|Tr                  Bj\B j
+                                                                 i (σ)|x⟩.           The second inequality follows from the
+assumption (stated earlier) that
+
+
+             (I−Π   Wj                     (ρ j−1    )′ (I−Π   Wj    ∞≤2η  ∀i= 1,...,2       M−j
+
+
+                           i ) Tr (B j\B ji)                           i )
+
+                                                                26
+For the second term, applying Cauchy–Schwarz inequality, we obtain
+
+  D2X   √
+           qlqm⟨ξ l(W j                          (W j
+                        i )⊥|⟨µ l|(ρ j−1    )′|ξ m   i )⊥⟩|µ m⟩
+l,m=1
+ m̸=l
+      D2X   √
+ =             qlqm⟨ξ l(W j                 (ρ j−1    )′p(ρ j−1    )′|ξ m(W j
+                            i )⊥|⟨µ l|p                                   i )⊥⟩|µ m⟩
+    l,m=1
+     m̸=l
+      D2X   √         ⟨ξ l                             p
+ ≤             qlqm        (W j               (ρ j−1    )′  (ρ j−1    )′|ξ m(W j
+                              i )⊥|⟨µ l|p                                       i )⊥⟩|µ m⟩
+    l,m=1
+     m̸=l
+
+     D2X√      q                                                   D2X  √      q
+ =          ql    ⟨ξ l(W j                        (W j                     qm     ⟨ξ m(W j                         (W j
+                        i )⊥|⟨µ l|(ρ j−1    )′|ξ l   i )⊥⟩|µ l⟩                         i )⊥|⟨µ m|(ρ j−1    )′|ξ m     i )⊥⟩|µ m⟩
+    l=1                                                           m=1m̸=l
+
+     D2X√      q                                                      D2X  √      q
+ ≤          ql    ⟨ξ l(W j                                (W j                qm     ⟨ξ m(W j                                (W j
+                        i )⊥|Tr Bj\B ji [(ρ j−1    )′]|ξ l    i )⊥⟩                        i )⊥|Tr Bj\B ji [(ρ j−1    )′]|ξ m    i )⊥⟩
+    l=1                                                              m=1m̸=l
+
+     D2X√      p       D2X  √      p
+ ≤          ql    2η           qm      2η
+    l=1               m=1m̸=l
+
+where we do the same trick to the last two inequalities as in the first term.
+Substituting these two terms back to Equation (23), we get
+                                                                                                                           
+    ⟨φ i|                                    D2X  √      D2X  √                      D2X√             D2X  √
+    ∥φ i∥(ρ j−1    )′|φ i⟩∥φ i∥≤2η+ 2η              ql           qm = 2η+ 2η                 ql             qm−√ql
+
+                                             l=1        m=1m̸=l                      l=1             m=1
+                                    2              
+                          D2X  √               D2X
+    = 2η+ 2η                   qm      −       ql≤2η+ 2η   D2−1  = 2ηD  2,                                 (24)
+
+                        m=1                   l=1
+
+where in the second to last inequality we use the Cauchy–Schwarz inequality, and in the last inequality
+follows by the fact thatW   ji  is a subspace ofH   Bj
+                                                                i .
+Now, let’s substitute Equation (24) back to Equation (22):
+                                                                                                  
+                                                        2M−jX                    2M−jX   √        
+                    ⟨φ|(ρ   j−1    )′|φ⟩≤2ηD          2       pi + 2ηD  2                   pipk
+
+                                                         i=1                        i,k=1
+                                                                                     i̸=k
+                                                                                                          
+                                                                 2M−jX  √           2M−jX  √
+                                         = 2ηD  2 + 2ηD  2                 pi               pk−√pi
+
+                                                                  i=1               k=1
+                                                                                 2                 
+                                                                      2M−jX  √              2M−jX
+                                         = 2ηD  2 + 2ηD  2                   pk      −         pi
+
+                                                                       k=1                   i=1
+
+                                         ≤2ηD      2 + 2η  2M−j  −1 
+                                         = 2ηD  22M−j  ,                                                                             (25)
+where in the last inequality we use the Cauchy–Schwarz inequality.
+
+                                                                27
+Lemma D.4.Fix  j∈{1,...,M}          .  For eachi= 1,...,2  M−j      , let HBj
+                                                                                                   i  denote the Hilbert space
+associated with Bji , where Bji  is defined in Algorithm 4. LetWji ⊆H  Bj
+                                                                                                   i  be a subspace defined in
+Definition 12, and denote by ΠWj                                                            i . Let Bj :=S2M−jk=1   Bjk be the
+                                            i  the orthogonal projection ontoWj
+set of all qudits under consideration at stepj.  Let (ρ j−1    )′ be a density matrix on HBj  defined in
+Algorithm 4, and letρ  j be the density matrix defined in Definition 10.
+Suppose that, for eachi= 1,...,2   M−j      , the tomography procedure succeeds in the sense that
+                              (I−Π   Wj                   (ρ j−1    )′ (I−Π   Wj
+
+                                            i ) TrBj\B ji                              i )∞ ≤2η.
+Then, for anyn-qudit matrix product state|ϕ⟩with bond dimensionD,
+                                  ⟨ϕ|ρ  j−1 |ϕ⟩−⟨ϕ|ρ    j|ϕ⟩  ≤2 p4ηD  2 2M−j   .
+
+
+Proof.According to Definition 10 and 11, we can express the fidelity⟨ϕ|ρ           j|ϕ⟩as
+                                                "  jO          !             #
+                 ⟨ϕ|ρ  j|ϕ⟩=⟨ϕ|(E       j)†                Pa      ⊗(ρ  j)′    Ej|ϕ⟩
+                                                     a=1"  jO       !             #
+
+                               =⟨ϕ  j−1 |(U j)†                 Pa      ⊗(ρ  j)′    Uj|ϕ j−1 ⟩
+                                              j−1O       !a=1                                 j−1O       !
+
+                               =⟨ϕ  j−1 |            Pa      (U j)†Pj⊗(ρ  j)′Uj                    Pa      |ϕ j−1 ⟩
+                                               a=1                                             a=1
+                               =⟨ψ  j−1 |(U j)†Pj⊗(ρ  j)′Uj|ψ j−1 ⟩                                                 (26)
+
+Use Equation (20) and Fact D.2, we can rewrite the fidelity⟨ϕ|ρ        j|ϕ⟩as
+            ⟨ϕ|ρ  j|ϕ⟩=⟨ψ     j−1 |Π Wj
+                                            1⊗···⊗Π Wj2M−j     (ρ j−1    )′ ΠWj1⊗···⊗Π Wj2M−j  |ψ j−1 ⟩      (27)
+
+For brevity, we denoteΠ     Wj :=N2M−ji=1    ΠWj
+                                                            i.Then together with Fact D.1, this implies
+⟨ϕ|ρ  j−1 |ϕ⟩−⟨ϕ|ρ    j|ϕ⟩  =⟨ψ j−1 |(ρ j−1    )′|ψ j−1 ⟩−⟨ψ j−1 |Π Wj(ρ j−1    )′ ΠWj|ψ j−1 ⟩
+
+                                     ≤⟨ψ j−1 |(ρ j−1    )′ (I−Π   Wj)|ψ j−1 ⟩ +⟨ψ j−1 |(I−Π    Wj)(ρ j−1    )′ ΠWj|ψ j−1 ⟩
+                                     ≤|ψ j−1 ⟩(ρ j−1    )′ (I−Π   Wj)|ψ j−1 ⟩ +ΠWj|ψ j−1 ⟩(ρ j−1    )′ (I−Π   Wj)|ψ j−1 ⟩
+                                     ≤2 (ρ j−1    )′ (I−Π   Wj)|ψ j−1 ⟩                                                       (28)
+
+Let|eφ⟩= (I−Π         Wj)|ψ j−1 ⟩, and define the normalized vector|φ⟩             := |eφ⟩∥eφ∥      . Then
+
+                          2(ρ j−1    )′ (I−Π   Wj)|ψ j−1 ⟩ = 2(ρ j−1    )′|φ⟩ eφ
+                                                                      ≤2 eφ p⟨φ|[(ρ    j−1    )′]2|φ⟩
+                                                                      ≤2 eφ p⟨φ|(ρ   j−1    )′|φ⟩
+                                                                      ≤2 p⟨φ|(ρ   j−1    )′|φ⟩.                                  (29)
+
+For eachj∈{1,...,M}           andi∈{1,...,2   M−j }, define the root set for the block Bji  at the first
+layer by
+                                                              2j−1 −1[
+                                               S(B  ji ) :=            B12(j−1)i−a     .
+                                                                a=0
+Since|ϕ⟩     is a matrix product state of bond dimensionD, for the bipartition (S(B   ji ),[n]\S(B      ji )),
+we can write
+                                                    D2X
+                                          |ϕ⟩=          |α l⟩S(B  j
+                                                                   i)⊗|β l⟩[n]\S(B     ji).
+                                                   l=1
+
+                                                                  28
+Due to the binary tree structure of the cumulative unitary Ej  :=U  jUj−1 ···U  1,  where Ua  =
+N2M−a
+   b=1  Uab , no single unitaryUab  acts across the bipartition. Each acts either entirely onS(B  ji ) or
+entirely on[n]\S(B       ji ). Therefore, the Schmidt rank across this bipartition is preserved:
+
+                                                    D2X
+                                      Ej|ϕ⟩=             |α′l⟩S(B  j
+                                                                    i)⊗|β′l⟩[n]\S(B     ji).
+                                                    l=1
+As a consequence, the projected (residual) state at levelj,                     
+
+                                                  jO2M−aO
+                               |ψ j−1 ⟩ :=                  ⟨0 f(a,b)  |Bab\ eBab Π(j) Ej|ϕ⟩,
+
+                                                a=1    b=1
+also has Schmidt rank at mostD         2 across(B      ji,B j\B ji ).
+For a fixed bipartition (B ji,B j\B ji ), write ΠWj  = ΠWj                                                             k̸=i     ΠWj
+                                                                               i ⊗Π   rest, where Πrest  =N                      k.
+Then
+                               I−Π  Wj = (I−Π   Wj
+                                                            i )⊗I+ Π   Wji⊗(I−Π           rest).
+Each term is local with respect to this bipartition and therefore maps a state of Schmidt rank at most
+D2 to a state of Schmidt rank at mostD2.  Hence their sum has Schmidt rank at most 2D  2.  Thus
+|eφ⟩= (I−Π       Wj)|ψ j−1 ⟩ and its normalized version|φ⟩    , whenever well-defined, have Schmidt rank
+at most 2D  2 across this bipartition. Moreover, (I−Π   Wj)|φ⟩=|φ⟩.                Therefore, by Lemma D.3, we
+conclude   ⟨ϕ|ρ  j−1 |ϕ⟩−⟨ϕ|ρ    j|ϕ⟩ ≤2 p
+                                                                 ⟨φ|(ρ   j−1    )′|φ⟩≤2  p4ηD  22M−j  .                  (30)
+
+
+Theorem 7(Restatement of Theorem 2). Given access to copies of an   n-qudit stateρ, as well as
+parametersϵ,δ∈(0,1)         , and a bond dimension parameterD. Algorithm 4 outputs a description of a
+state|       ˆϕ⟩, such that, with probability1−δ,
+                                         ⟨ˆϕ|ρ|     ˆϕ⟩ ≥   max|ϕ⟩∈MPS
+                                                           (D)   ⟨ϕ|ρ|ϕ⟩−ϵ
+                                                                                       !
+The  algorithm  requires N=O                        D12n7d4(lnd)        7 lognδ     i7     copies  of ρ  and  runs  in  time
+                                                ϵ12hln(lnd) + ln              128nD      2(√2−1)     2ϵ2
+poly D,n, 1ϵ,log(  1δ ).
+
+Proof.  Suppose that the state tomography procedure succeeds for allσji  throughout the algorithm.
+Then, for eachσ    ji , the tomography produces an estimateˆσ       ji  satisfying
+                                             ∥σ j                      2−1)      2ϵ2p
+                                                i−ˆσ  ji∥1 ≤  (√128D       2n  .
+In the next step, Algorithm 4 invokes Algorithm 3 to select eigenvectors corresponding to eigenvalues
+exceedingη from the estimated density matrix ˆσ ji  to construct a disentangling unitary accordingly.
+We denotefWji  to be the subspace spanned by the eigenvectors of ˆσ ji  with eigenvalues exceedingη.
+From Lemma D.2, we know that
+
+                                 ∥(I−Π      fWj                                    2−1)      2ϵ2p
+                                              i )†σji (I−Π    fWji )∥∞≤ (√         64D     2n  .
+
+Since we havefWji ⊆W  ji   12, whereWji  is defined in Definition 12. Equivalently, their orthogonal
+complements satisfy
+                                                      (W ji )⊥⊆( fWji )⊥
+
+  12In Algorithm 3, we denotem the number of eigenvector exceedingη. Since the trace of ˆσ  j
+                                                                                                    i  is 1,m must be smaller than
+1/η. Then, by the definition oft         :=⌈log     dm⌉andp           :=⌈log     d(1/η)⌉, we get dim(     fW ji )≤dim(W            ji )
+
+
+                                                                29
+Therefore, it follows that
+                                  ∥(I−Π    Wj                                        2−1)      2ϵ2p
+
+                                                i )†σji (I−Π   Wji )∥∞≤ (√64D     2n  .
+Let|ϕ⟩∈(C    d)⊗n    be a matrix product state with bond dimensionD on ann-qudit system. Applying
+Lemma D.4, we get
+                             ⟨ϕ|ρ  j−1 |ϕ⟩−⟨ϕ|ρ    j|ϕ⟩  ≤  (√2−1)ϵ                 r    p
+
+                                                                               2            2n   2M−j   .
+Using the triangular inequality, we derive
+             ⟨ϕ|ρ      0|ϕ⟩−⟨ϕ|ρ    M|ϕ⟩  ≤         MX   (√2−1)ϵ        r    p                  r     p
+
+
+                                                       j=1         2            2n   2M−j  ≤ ϵ2          2n  2M ≤ ϵ2,
+
+where in the last inequality we use the fact thatn>p2 M−1       (see line 3 in Algorithm 4). This implies
+
+                                                ⟨ϕ|ρ  M|ϕ⟩≥⟨ϕ|ρ         0|ϕ⟩−  ϵ2.                                                 (31)
+
+For any matrix product state|ϕ⟩∈(C    d)⊗n    with bond dimensionD, we define its level-j projected
+states|ψ     j⟩∈H  eBj
+                       1⊗···⊗H   eBj2M−j      through Definition 11. By Fact D.1, we have
+                                             ⟨ϕ|ρ  M|ϕ⟩=⟨ψ     M|(ρ M)′|ψ M⟩.                                             (32)
+                                                                              N2M−j
+Similarly, for the reconstructed state|ˆϕ⟩= (E   j)† NMj=1                        i=1 |0 f(j,i) ⟩Bj                      , we obtain
+                                                                                                       i\ eBji⊗| ˆψ⟩
+                                                ⟨ˆϕ|ρ  M|ˆϕ⟩=⟨       ˆψ|(ρ  M)′| ˆψ⟩.                                                 (33)
+If the final tomography on (ρ M)′ succeeds, it yields an estimate (ˆρ M)′ such that∥(ρ  M)′−(ˆρ  M)′∥1≤
+ϵ/4. By Hölder’s inequality for Schattenp-norms, for any state|φ⟩∈H                        eBM1  ,
+                                         ⟨φ|(ρ   M)′|φ⟩−⟨φ|(ˆρ     M)′|φ⟩ ≤ϵ/4.                                        (34)
+
+Applying this bound gives
+ ⟨ ˆψ|(ρ  M)′| ˆψ⟩≥⟨   ˆψ|(ˆρ   M)′| ˆψ⟩−ϵ/4≥⟨ψ      M|(ˆρ M)′|ψ M⟩−ϵ/4≥⟨ψ     M|(ρ M)′|ψ M⟩−ϵ/2. (35)
+Here, we use Equation (34) in the first and last inequalities, while the second step follows from the
+fact that| ˆψ⟩    is the largest eigenvector of (ˆρ M)′. Combining with Equations (32) and (33), we obtain
+
+                                               ⟨ˆϕ|ρ  M|ˆϕ⟩≥⟨ϕ|ρ    M|ϕ⟩−  ϵ2.                                                (36)
+
+Together with Equation (31), this implies
+                                                 ⟨ˆϕ|ρ  M|ˆϕ⟩≥⟨ϕ|ρ        0|ϕ⟩−ϵ                                                 (37)
+Finally, applying Lemma D.1 to Equation (37), we obtain
+                                       ⟨ˆϕ|ρ    0|ˆϕ⟩≥⟨   ˆϕ|ρ  M|ˆϕ⟩≥⟨ϕ|ρ        0|ϕ⟩−ϵ.                                     (38)
+Sinceρ          0 :=ρby Definition 10, the desired inequality is established:
+                                                   ⟨ˆϕ|ρ|     ˆϕ⟩≥⟨ϕ|ρ|ϕ⟩−ϵ.                                                  (39)
+Next, we compute the sample and time complexity of Algorithm 4. From Lemma A.4, taking the
+dimensiondr−i     to bed2p  , the error parameter to beη, and the failure probability to beδ/n, we can
+perform tomography on each sub-normalized stateσji  withO                                 d4p            copies of sample, and
+                                                                                          η2  lognδ
+runtime that is polynomial in the same parameters. In total, the algorithm performs sub-normalized
+tomographyPMj=1  2M−j      = 2M−1 =O(n/p)                  times. Therefore, the sample complexity needed to
+perform tomography on allσ  ji  is                             nd4p
+                                                   N=O            pη2  lognδ       .
+
+
+                                                                  30
+Notice  that dp < d/η  and η  =       (√2−1)     2ϵ2p
+                                                        128D      2n   .     Using  the  asymptotic  notation  of p =
+Θ ln(nD      2 lnd/ϵ    2), we can write
+                                    nd4                        D12n7d4(lnd)        7 logn             !
+                         N=O                           =O                                       δ  i7    .
+                                      pη6 lognδ                ϵ12hln(lnd) + ln              128nD      2
+                                                                                      (√2−1)     2ϵ2
+See Appendix J for a more detailed derivation.  The last call of tomography on (ρ M)′  takes the
+dimensiondr−i     to bedp, the error parameter to beτ=ϵ/4        , and the failure probability to beδ/n.
+The copies of sample needed for the last call of tomography isK=O                                  d2p           .  We show in
+                                                                                                    ϵ2  lognδ
+Appendix K that the complexity boundK is asymptotically dominated byN. Therefore, the overall
+sample complexity is                              D12n7d4(lnd)        7 logn             !
+                                      N=O                                          δ  i7    ,
+                                                  ϵ12hln(lnd) + ln              128nD      2(√2−1)     2ϵ2
+and the whole algorithm runs in polynomial time with respect to the same parameters.
+
+Appendix E: Implementation on Nearest-Neighbor Lattices
+
+Theorem(Restatement of Theorem 3). If quantum gates are restricted to nearest-neighbor interac-
+tions on a square lattice, the depth of the quantum circuit generated by Algorithm 2 isO(  pn/p).
+
+Proof.  Without loss of generality, we assume thatpn/p= 2   M/213   . Note that we may arrange the
+qubits on a square lattice in any convenient way. To prove the lemma, we view a bunch ofp qubits as
+a single lattice point and adopt the following construction to form a 2M/2 ×2 M/2   square lattice. For
+simplicity, we assume that the circuit depthMis even.
+First, we place eBM1   at the bottom-right lattice site of the entire square lattice, which serves as the
+anchor for the0-th level.
+Next, we partition the lattice into 4 blocks, each of size 2M/2−1  ×2 M/2−1      . In each block, we place
+ eBM−2i        at its bottom-right lattice site, which we define as anchors for the 1-st level. The blocks are
+indexed in row-major order, i.e., from left to right and then from top to bottom, withi= 1,...,4.
+We then iterate this procedure.  At levelj≥1     , for each block indexed byi (whose bottom-right
+anchor is eBM−2(j−1)i               ), we partition the block into 2×2      subblocks, each of size 2M/2−j  ×2 M/2−j      .
+In each subblock we place eBM−2jk+4(i−1)            at the bottom-right lattice site as the next-level anchor, with
+k= 1,...,4     .  The four subblocks are again indexed in row-major order.  At theM/2  -th level, we
+obtain a 2M/2 ×2 M/2   square lattice (see Figure 2). Each lattice site is associated with a patch ofp
+qubits, which we label by eB0ℓ , whereℓ= 1,...,2       M .
+Now, we have placed all the qubits on a 2M/2 ×2 M/2   square lattice.  Using the level structure
+described above, we then implement the algorithm iteratively overM/2   levels, fromj=M/2        down
+toj= 1.
+Each levelj consists of two steps. First, we apply the disentangling unitaries horizontally on pairs
+of p-qudit blocks (eBM−2jk−1   , eBM−2jk       ), where k ranges over even integers in{1,...,2      2j}.  These
+horizontal unitaries disentangle the qubits at the left lattice sites (i.e., eBM−2jk−1         for evenk) to the
+all-zero state.  In the second step,  we apply the disentangling unitaries vertically on pairs of p-
+qudit blocks (eBM−2jk−2   , eBM−2jk       ) wherek ranges over multiples of 4 in{1,...,2      2j}. These vertical
+unitaries disentangle the qubits at the top lattice site to the all-zero state. As a result, only the sites
+ eBM−2jk         wherek are multiples of 4 in{1,...,2      2j} remain. Notice that the site eBM−2jk         is exactly the
+same site with the label eBM−2(j−1)k/4              in the next level. Each level corresponds to a pair of successive
+iterations in Algorithm 2.
+
+  13If this is not the case, we can replacen by the smallestn′≥n    such thatpn′/p= 2    M/2  . The following argument then
+applies ton ′ without any change.
+
+
+                                                                31
+The collection of these surviving lattice sites then forms the input to the next level. After executing
+M/2    levels,  only  a  single  lattice  site  containing p  qubits  remains.   We  then  perform  full  state
+tomography on this site to complete the two-dimensional version of Algorithm 2.
+Now, we analyze the circuit depth under the restriction to nearest-neighbor quantum gates. At level
+j, before applying the horizontal disentangling unitaries, we need to move the qubits from the left
+lattice sites (i.e., eBM−2jk−1         for evenk) to the lattice sites immediately to the left of their right partners.
+Similarly, before applying the vertical disentangling unitaries, we need to move the qubits from the
+top lattice sites (i.e., eBM−2jk−2         fork being multiples of 4) to the lattice sites immediately above their
+bottom partners. Therefore, at levelj, this requiresO(2 M/2−(j−1)          ) SWAP gates within each block
+ eBM−2(j−1)k              , wherek= 1,...,2      2(j−1)       . Since these blocks are disjoint, the SWAP gates acting on
+different blocks at the same level can be executed in parallel.  Therefore, the total circuit depth is
+PM/2                                                  n/p).
+   j=1   2M/2−(j−1)           =O(2   M/2  ) =O(  p
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 4: Illustration of the recursive block structure on a 2M/2 ×2 M/2   square lattice withM= 4    . At
+levelj, each block of size 2M/2−(j−1)   ×2 M/2−(j−1)            is partitioned into four subblocks, each of size
+2M/2−j  ×2 M/2−j      . In each subblock, the bottom-right site (corresponding to the maximal-coordinate
+corner in each block) is designated as the anchor eBM−2ji         (circled). These anchors form a coarser
+lattice for the next level.
+
+Corollary(Restatement of Corollary 3.1). Suppose quantum gates are restricted to nearest-neighbor
+interactions on aq-dimensional hypercubic lattice. Then the quantum circuit generated by Algorithm 2
+can be implemented with depthO    q(n/p)           1/q .
+
+Proof.  The proof is a direct generalization of Theorem 3.  Without loss of generality, assume that
+(n/p)         1/q   = 2M/q.14  We view each patch ofp qubits as a single lattice point and arrange then/p
+patches on aq-dimensional hypercubic lattice of side length2      M/q in each coordinate direction.
+We recursively define a level structure on this lattice. At level 0, the entire hypercube has a distin-
+guished anchor site, chosen to be the corner (2M/q,...,2 M/q). At levelj≥1     , each block from level
+j−1      is partitioned into 2q equal subblocks of side length 2M/q−j      . In each subblock, we designate as
+its anchor the corner with maximal coordinates in all directions. AfterM/q levels, every lattice site
+is identified with one patch eB0ℓ , whereℓ= 1,...,2       M .
+We now implement the algorithm level by level, from levelM/q down to level 1. Each level consists
+ofq successive steps, one for each coordinate direction. In ther-th step, wherer∈{1,...,q}        , we
+apply disentangling unitaries to pairs of neighboring subblocks that differ only in ther-th coordinate,
+
+   14If this is not the case, we can replacen by the smallestn′≥n    such that (n′/p)     1/q   = 2M/q for some integerM. The
+following argument then applies ton ′ without any essential change.
+
+
+                                                                32
+so that after this step only one half of the sites in that coordinate direction remain active.  After
+performing allq steps, only one corner site remains in each block, which becomes the anchor of the
+corresponding block at the next coarser level. Thus, each level corresponds toq successive iterations
+of Algorithm 2.
+It  remains to  bound  the depth  under  the nearest-neighbor  constraint.   Consider level j.   Inside
+each block labeled by the level j−1      anchor,  the active sites form a hypercube of side length
+Lj = 2M/q−(j−1)    . Before applying the disentangling unitaries in a given coordinate direction, we
+move the qubits from one half of the active sites to the neighboring sites adjacent to their partner
+blocks along that direction. This routing can be implemented by nearest-neighbor SWAP gates with
+depthO(L  j) inside each block. Since there areq such directions in each level, the total routing depth
+per level isO(qL   j).
+Because distinct blocks at the same level are disjoint, the routing operations in different blocks
+can  be  performed  in  parallel.   The  disentangling  unitaries  themselves  contribute  only  constant
+depth per step, so the total depth of levelj isO(qL  j).  Summing over all levels, the total depth is
+PM/q                                                        )           1/q .This proves the claim.
+   j=1 O q2 M/q−(j−1)    =O(q2    M/q) =O  q(n/p
+
+Appendix F: Sample complexity lower bound on learning product states
+
+To establish a lower bound, we prove that for product state learning, the sampling complexity lower
+bound for producing an approximate description of the given quantum state to fidelityϵ-close to
+optimum isΩ(nd/ϵ), wherenis the number ofd-dimensional systems.
+Theorem(Restatement of Theorem 4). For integer    n≥1      ,d≥2      andϵ∈[0,2/3]             , consider learning
+a product stateρ =  Nni=1 ρi, where eachρi is a state on ad-dimensional Hilbert space.  Any
+quantum algorithm that outputs a product state ˆρ   satisfyingF(ρ,ˆρ)≥1−ϵ                      must use at least Ω(nd/ϵ)
+copies ofρ.
+
+Proof.It suffices to consider the special case in whichρis a pure product state.
+The sample complexity for approximating a single-qudit Haar random state to fidelity at least 1−ϵ
+requiresΩ(d/ϵ)samples. This follows from a direct worst-case to average-case reduction. Suppose
+there exists a learning algorithm B which, giveno(d/ϵ)          samples of a single-qudit Haar random state,
+outputs a estimate with fidelity at least 1−ϵ     . Then we can construct an algorithm B∗ that learns
+arbitrarysingle-qudit states using  o(d/ϵ)          samples, contradicting the Ω(d/ϵ)           lower bound for learning
+d-dimensional states to fidelity1−ϵdue to Yuen [Yue23].
+B∗ can be described as follows: given an arbitrary single-qudit state|ϕ⟩   , one first samples a single-
+qudit Haar-random unitary U1  and apply U1  on|ϕ⟩     to prepare a single-qudit Haar-random state
+U1|ϕ⟩   , runs B onU|ϕ⟩       usingo(d/ϵ)          samples to obtain a state ˆρ   such thatF(ˆρ,U|ϕ⟩)≥1−ϵ                      , and
+then outputsU†|φ⟩U      . By unitary invariance of fidelity, this estimate achieves fidelity at least 1−ϵ
+with|ϕ⟩   , completing the reduction and yielding the desired contradiction to the sample complexity
+lower bound.
+Now, consider a product state ofn single-qudit Haar random state sampled independently,|ψ⟩=
+⊗ni=1|ψ i⟩Haar. Suppose there exists a quantum algorithm A  that takeso( ndϵ ) copies of state|ψ⟩     and
+outputs another product state ˆρ   such thatF(ˆρ,|ψ⟩)≥1−ϵ                       . Then, we can obtain an algorithm A∗ to
+learn a single-qudit Haar random state with fidelity at least1−ϵ/nusing at mosto(nd/ϵ)samples.
+Note thatF(ˆρ,|ψ⟩)≥1−ϵ                        implies thatF1·F 2···F n≥1−ϵ        , whereFi =⟨ψ  i|Haar Tr¯i(ˆρ)|ψ   i⟩Haar
+fori∈[n]         and ¯i={1,2,...,i−1,i+ 1,...,n}                        . Leti∗ be the position that has the largestFi∗, by
+an averaging argument,F      ni∗≥F   1·F 2···F n≥1−ϵ. Then, forϵ≤2/3, we can obtain that
+
+                                             Fi∗≥(1−ϵ)             1/n ≥1−2ϵ/n.                                         (40)
+
+A∗ is described as follows: Given a single-qudit Haar-random input state|ϕ⟩   , the algorithm first
+samplesn independent single-qudit Haar-random states, preparing|ψ⟩ =  Nni=1|ψ i⟩Haar. It then
+runs A  on copies of|ψ⟩    , evaluates the per-qudit fidelities, and identifies an indexi∗ achieving the
+largest fidelity so thatFi∗≥1−2ϵ/n           by Equation 40. (This step will take many copies of|ψ⟩     to
+obtain desired precision of the per-qudit fidelities; however, it does not require any copy of the input
+
+
+                                                               33
+|ϕ⟩   .) Then A∗ replaces the state|ψ i∗⟩Haar with|ϕ⟩    and applies A  to learn a state ˆρ   that approximates
+
+                                 |ψ∗⟩ =  ( O
+                                               i<i∗|ψ i⟩Haar)⊗|ϕ⟩⊗(   Oi>i∗|ψ i⟩Haar)
+to fidelity at least 1−ϵ     . Finally, it outputs the reduced stateρ∗ = Tri∗(ˆρ)    . SinceFi∗≥1−2ϵ/n
+and A∗ uses onlyo(nd/ϵ)             copies, this contradicts the Ω(nd/ϵ)              sample-complexity lower bound for
+learning a single-qudit Haar-random state to fidelity at least 1−2ϵ/n        (setting the Ω(d/ϵ ′) bound with
+ϵ′ =ϵ/n   ). Therefore, any algorithm that learns|ψ⟩=  Nni=1|ψ i⟩Haar to fidelity≥1−ϵ         must use
+Ω(nd/ϵ)              copies. Consequently, learning an arbitraryn-qudit product state to fidelity at least 1−ϵ
+also requiresΩ(nd/ϵ)copies, since the average-case lower bound extends to the worst case.
+
+
+Appendix G: Single-qubit measurement is hard for MPS learning
+
+Notation.Let            Z2 ={0,1}           denote the field with two elements. Forℓ∈N    , let Zℓ2 denote the set of
+binary vectors of lengthℓ. For vectorsa,s∈Z            ℓ2, we denote their inner product overZ   2 by
+
+                                                              ℓX
+                                                ⟨a,s⟩=           aisi mod 2.
+                                                            i=1
+
+We writex   $←−X     to denote thatx is sampled uniformly at random from the set X . Forτ∈(0,1/2)             ,
+we denote byBer  τ  the Bernoulli distribution overZ   2 satisfying
+                                                       Pre∼Ber  τ[e= 1] =τ.
+
+
+Definition 13(Search LPN  τ,ℓ [Pie12]). Let  ℓ∈N      andτ∈(0,1/2)             .  A secret vectors   $←−Z ℓ2 is
+chosen uniformly at random. An adversary is givenqindependent samples of the form
+
+                                                    (a i,bi)∈Z  ℓ2×Z   2,
+
+from the distribution(a     i,bi)∼D  r,ℓLPN where
+                      ai   $←−Z ℓ2,  bi =⟨a  i,s⟩⊕e  i,  ei∼Ber τ  for  i= 1,...,q.
+
+The goal is to recover the secrets.
+Assumption 1(Search LPN τ,ℓ Assumption [Pie12]). Let  ℓ∈N     andτ∈(0,1/2)             . For every quantum
+polynomial-time adversary A , givenq= poly(ℓ)      samples (a i,bi) generated as in Definition 13, the
+probability thatAoutputs the secretsis negligible inℓ, i.e.,
+                                  PrA((a       1,b1),...,(a  q,bq)) =s ≤negl(ℓ),
+
+where the probability is taken over the distribution(a     i,bi)∼D  r,ℓLPN and the quantum algorithmA.
+Lemma G.1.For every   s∈Z  ℓ2, the state|ψ s⟩ generated by the circuit in Figure 3 is a matrix product
+state with bond dimension at most2.
+
+Proof.  The prefix variable satisfies zi  =z i−1 ⊕x isi. Thus the evolution of the parity register
+depends only on the previous parity bitzi−1     and the current input bitxi. This induces a sequential
+tensor-network structure where the virtual bond stores the current parity value, which takes only two
+possible values:0or1. Therefore the bond dimension is at most2.
+
+Theorem(Restatement of Theorem 5). Assume the          LPNτ,ℓ assumption holds for some constant
+τ∈(0,1/2−γ)                    , whereγ >0    is a constant. Let{|ψ s⟩:s∈{0,1}      ℓ} be the family of MPS(2) states
+defined in Figure 3. Then there is no polynomial-time algorithm that, using only computational-basis
+single-qubit measurements on poly(ℓ)    copies of|ψ s⟩, outputs a classical description of a hypothesis
+statebρfrom whichbρcan be efficiently prepared andF(bρ,|ψ                s⟩⟨ψ s|)≥1−ϵ.
+
+
+                                                               34
+Proof.  First, the stringx∈Z  n2  is uniformly random; indeed, each of the corresponding qubits is first
+prepared in the stateH|0⟩= (|0⟩+|1⟩)/      √2. Subsequent CNOT gates, if any, with these qubits as
+controls and|0⟩    ancillas as targets do not change the marginal distribution of the control qubits. For
+each inputx∈Z  ℓ2, the circuit computeszℓ(x) =⟨x,s⟩mod 2.               After applyingRy(2θ)      to the final
+parity register and measuring in the computational basis, the observed bitw  ℓ satisfies
+                                   wℓ =z ℓ(x)⊕e,   e∼Bernoulli(sin               2θ).
+Choosingθsuch thatsin                          2θ=τ, we obtain
+                                      wℓ =⟨x,s⟩⊕e,   e∼Bernoulli(τ).
+Therefore, each observed pair(x,w    ℓ)is distributed exactly as an LPN τ,ℓ sample.
+For eachi∈{1,2,...,ℓ−1}               , immediately before the final Hadamard gate on thewi-register, the
+value of wi  is determined by the previously generated variables.  More precisely, there exists a
+Boolean functionfi such thatwi =f i(x  1,...,xi,w1,...,wi−1   ) at this point in the circuit. Thus,
+without loss of generality, the state can be written as
+              X                                                 iX
+                    ax,w|x 1,...,xi,w1,...,wi−1 ⟩|                 xisi⟩|x i+1 ,...,xℓ,wi+1 ,...,wℓ⟩,
+               x,w                                            j=1
+where the middle register is thew  i-register.
+Applying the Hadamard gate to this middle register gives
+ X     ax,w                                                      Pi
+       √                                           |0⟩+ (−1)        j=1 xisi|1⟩      ⊗|x i+1 ,...,xℓ,wi+1 ,...,wℓ⟩.
+ x,w      2 |x 1,...,xi,w1,...,wi−1 ⟩
+
+Therefore, conditioned on any fixed values of the other registers, measuringwi in the computational
+basis gives 0 and 1 with equal probability. Hence eachwi, fori∈{1,...,ℓ−1}            , is uniformly random
+after the final Hadamard gate and thus is independent of the other computational-basis measurement
+outcomes.
+Suppose that we obtain a classical description of a statebρ   from whichbρ   can be efficiently prepared,
+and suppose that
+                                                F(bρ,|ψ     s⟩⟨ψ s|)≥1−ϵ.
+We show that this allows us to recover the secrets in polynomial time with non-negligible probability.
+Consider|ψ s⟩. By applying Hadamard gatesH to the qubitsw1,w2,...,wℓ−1    , we obtain the values
+(x  1s1,x1s1 +x   2s2,...,Pℓ−1i=1 xisi).  By measuring these qubits and x, we can directly recover
+s1,s2,...,sℓ−1    .  Forsℓ, we can also uncomputeRy(2θ)       to obtainPℓi=1 xisi and then identifysℓ
+after computingx ands1,s2,...,sℓ−1    .  Therefore, if we can prepare|ψ s⟩, we can recovers with
+probability1.
+Now consider the learned statebρ. Since
+                                                F(bρ,|ψ     s⟩⟨ψ s|)≥1−ϵ,
+we can obtain thatD bρ,|ψ   s⟩⟨ψ s|≤√ϵ, whereD(ρ,σ) :=          12∥ρ−σ∥          1 denotes trace distance. Thus,
+for any measurement, the total variation distance between the outcome distributions obtained frombρ
+and from|ψ    s⟩⟨ψ s|is at most √ϵ.
+Applying the algorithm above tobρ   therefore recoverss with probability at least 1− √ϵ, which is
+non-negligible.  Hence a high-fidelity efficiently preparablebρ   allows us to recover the secrets in
+polynomial time with non-negligible probability. This completes the proof.
+
+
+Corollary 7.1.Assume the       LPNτ,ℓ assumption holds forτ∈(0,1/2−γ)                    , whereγ >0    is non-
+negligible. Then there is no polynomial-time non-adaptive algorithm that, using only single-qubit
+measurements on poly(ℓ)     copies of|ψ s⟩, outputs a classical description of a hypothesis state bρ
+from whichbρ   can be efficiently prepared and such thatF(bρ,|ψ     s⟩⟨ψ s|)≥1−ϵ            with non-negligible
+probability.
+
+
+                                                              35
+Proof.  Consider any non-adaptive single-qubit measurement strategy specified by local unitaries
+U1,...,U2ℓ , where the learner measures the i-th qubit in the basis defined by Ui.  Equivalently,
+this measurement procedure can be viewed as first applyingU†1⊗···⊗U †2ℓ   to the state and then
+performing computational-basis measurements. Now define a modified state family
+
+                                           |ϕ s⟩=      U†1⊗···⊗U †2ℓ         |ψ s⟩.
+
+Since local unitaries do not increase MPS bond dimension, Lemma G.1 implies that|ϕ s⟩∈MPS(2).
+Measuring|ϕ s⟩ in the computational basis is statistically equivalent to measuring|ψ s⟩ using the
+original non-adaptive single-qubit measurement strategy.  Therefore, if a polynomial-time learner
+could efficiently learn MPS(2) under arbitrary non-adaptive single-qubit measurements, then it could
+also recover the hidden secrets for the family{|ϕ s⟩}. This contradicts Theorem 5. Hence learning
+MPS(2)remains hard in the worst case under non-adaptive single-qubit measurements.
+
+Appendix H: Solving the self-consistent equation forp
+
+We would like to solve the self-consistent equation
+                                              &         64n                       ’
+                                         p=      logd                 D2              .
+                                                           p    (√2−1)      2ϵ2
+Ignoring the ceiling for the moment, we can rewrite this as
+                                                               64nD     2
+                                             p= log d       p( √2−1)      2ϵ2    .
+
+Define
+                                                   B:=        64nD     2(√2−1)      2ϵ2,
+
+so that the equation becomes
+                                                  p= log dB−log   dp.
+Multiplying through bylndgives
+                                                  lnp+plnd= lnB.
+Settingx:=plnd, we obtain the equivalent form
+                                                       xex =Blnd,
+whose solution is expressed in terms of the LambertWfunction:
+
+                                                 p=     1lnd  W(lnd·B).
+
+Thus, the integer solution of the original equation is
+                                               1
+                                      p=       lnd  W      lnd·          64nD     2(√2−1)      2ϵ2.
+
+
+Bounds onp.   Forz>e, one has the standard bounds
+                                            lnz−ln lnz<W(z)<lnz,                                                (41)
+which follow from the monotonicity off(w) =we      w.
+Letz:= lnd·B. Dividing the inequality (41) bylnd>0gives
+                                          lnz−ln lnz
+                                                lnd     < W(z)lnd   <  lnzlnd .
+Sincep=⌈W(z)/lnd⌉, applying the ceiling function to the above inequality yields
+                                          lnz−ln lnz                         lnz
+                                                 lnd            ≤p≤           lnd     .
+
+
+                                                              36
+Hence, in the usual asymptotic notation,
+                                                   lnz               ln(lnd·B)
+                                         p= Θ        lnd      = Θ           lnd           .
+
+Moreover, one may record the next-order correction:
+                                                                     ln lnz
+                                                  p=   lnzlnd    +O     lnd      ,
+
+so that writingp≈   ln(lnd·B)   lnd           is justified as a leading-order approximation (the omitted term is of
+smaller order).
+
+Appendix I: Existence condition for integer solutionp
+
+Letd>1andB >0be given, and consider the self-consistent equation  B
+
+                                           p=      logd      p      ,   p∈Z  >0 .                                             (42)
+
+Using the equivalence⌈x⌉=p⇐⇒p−1<x≤p, equation (42) is equivalent to
+                                                                    B
+                                                  p−1<log     d        p     ≤p.                                                  (43)
+
+Applying the increasing mapt7→d   t (sinced>1   ) to the three parts of (43) yields the following strict
+double inequality
+                                                     pdp−1  <B≤pd   p                                                            (∗)
+Hence, the integerp≥1solves (42) if and only if it satisfies the inequalities (∗).
+
+Rewriting the existence condition using the LambertWfunction:Define
+
+                                 a:=     1lnd  W(Blnd),   b:=                   1lnd  W(Bdlnd),
+
+whereW  denotes the principal branchW0 of the LambertW  function (this is appropriate because
+its argument is positive).  A standard computation (puttingx=plnd            and usingxex7→W      as the
+inverse) shows that the two inequalities in (∗) are equivalent to
+                                                           a≤p<b                                                               (44)
+Therefore the integer solution exists if and only if the half-open interval[a,b)contains an integer.
+Lemma I.1(Disjointness of the integer intervals). For each integerp≥1define the interval
+                                                    Ip := pdp−1  , pdp.
+ThenI    p∩I q =∅for every pair of distinct integersp̸=q.
+
+Proof.  It suffices to showIp∩I p+1   =∅    for everyp≥1     , since the general statement for arbitrary
+distinct integers follows by iterating this adjacent gap. Compute the right endpoint ofIp and the left
+endpoint ofI  p+1  :
+                                   right(I    p) =pd p,        left(I    p+1  ) = (p+ 1)d   p.
+Becausep+ 1>pandd            p >0, we have
+                                     left(I   p+1  ) = (p+ 1)d   p >pdp =right(I      p).
+Thus the entire interval between the right endpoint ofIp and the left endpoint ofIp+1   is empty of any
+I-intervals, soI   p andI   p+1   do not overlap.
+For arbitrary distinct integersp+ 1<qthe same reasoning applied repeatedly gives
+right(I    p) =pd p <(p+ 1)d     p =left(I     p+1  )<···<(q−1)d         q−2     =left(I     q−1    )<qd q−1     =left(I     q),
+soI  p andI   q are separated by nonempty gaps and hence disjoint. This completes the proof.
+
+
+                                                                 37
+Lemma I.2(Length of the interval[a,b)). For everyB >0andd>1we have
+                                                        0<b−a<1.
+
+Proof.Putz:=Blnd>0and consider the functionf(t) =W(t). Its derivative fort>0is
+
+                                                    f′(t) =    W(t)t(1 +W(t))     ,
+
+which satisfies0<f     ′(t)<1/tbecauseW(t)>0and1 +W(t)>1. Therefore
+                                                         Z dz                  Z dz   1
+                               W(dz)−W(z) =                                            t dt= lnd.
+                                                           z  f′(t)dt<           z
+Dividing both sides by lnd    yieldsb−a<1        . Strict positivity ofb−a      follows from monotonicity of
+Won(0,∞)and the strict inequalitydz>z.
+
+Uniqueness and a practical test:The intervals corresponding to different integers are disjoint (see
+Lemma I.1), hence if a solution exists it is unique. Moreover, sinceb−a<1         (see Lemma I.2), at
+most one integer can lie in[a,b); consequently the following test is necessary and sufficient:
+
+        1.Computea=                     1lnd W(Blnd)and set the candidate integerp                       cand =⌈a⌉.
+
+        2.  Test the inequality pcanddpcand−1  < B≤p       canddpcand.  If it holds, pcand  is the unique
+            solution; otherwise (42) has no integer solution. Sincea=      1lnd W(Blnd)               satisfiesada =B   ,
+            the upper boundB≤p       canddpcand always holds by monotonicity. Therefore it suffices to
+            test the strict inequality
+                                                           pcanddpcand−1 <B,
+            which is equivalent to the condition⌈a⌉< b      .  If it holds, pcand  is the unique solution;
+            otherwise (42) has no integer solution.
+
+Integral values ofa:   In this work, we have B=         64nD    2(√2−1)     2ϵ2. Then for any positive integerm one
+can choose                                                                  s
+                             ϵ2  =         64nD     2                                 64nD     2
+                                       (√2−1)      2mdm,   ϵ=                   (√2−1)      2mdm,
+so that
+                                                           B=md   m.
+In this case we obtain
+                                                 a=     1lnd  W(Blnd) =m,
+
+an integer, and hence
+                                                      pcand =⌈a⌉=m.
+Consequently the interval test reduces to
+                                             mdm−1   <B=md   m≤md m,
+which clearly holds. Thusp=mis the unique solution, and no “gap” phenomenon can occur.
+However, in our case, the accuracy parameter is required to satisfy 0< ϵ≤1       .  This imposes an
+additional constraint on the admissible integersm.
+
+                            0<         64nD     2(√2−1)      2mdm≤1     =⇒md     m≥   64nD     2(√2−1)      2.
+
+Since the functionm7→md    m is strictly increasing form≥1       , there always exists an integerm
+(indeed many) satisfyingmdm≥   64nD    2(√2−1)     2 .  Thus mathematically it is always possible to pick an
+integermso that the correspondingϵlies in(0,1].
+
+
+                                                                 38
+Appendix J: Substituting the expression forpinto the sample-complexity
+
+We start from                            nd4p
+                              N=O                           ,   η=   (√2−1)      2ϵ2p
+                                           pη2   lognδ                        64D     2n  .
+
+Step 1. Rewriting in terms ofη.   Using the inequalityd           p <d/ηand simplifying, one finds
+                                                          nd4
+                                                N=O         pη6  lognδ      .
+
+Step 2. Expandingη.   Since
+                                       η=c      1 ϵ2p                     2−1)      2
+                                                D2n,   c1 := (√            64   ,
+we obtain                                           1         D12n6      1
+
+                                                pη6  =  1c61    ϵ12     p7.
+
+Step 3. Eliminatingp.   Recall that in Appendix H the self-consistent equation gives
+                                   lnz
+                          p= Θ       lnd     ,   z:= lnd·B,  B:=               64nD     2(√2−1)      2ϵ2.
+
+Define
+                                        L:= lnz= ln          lnd·          64nD    2(√2−1)     2ϵ2.
+Therefore                                            1      (lnd)        7
+                                                 p7  = Θ         L7       .
+
+Substituting this gives                                 D12n6
+                                             1                      (lnd)        7.
+                                            pη6  = Θ        ϵ12        L7
+
+Step 4. Final expression.Collecting all terms, we obtain
+                                                 D12n7       d4(lnd)        7
+                                       N=O           ϵ12         L7      lognδ      ,
+
+where
+                                             L= ln      lnd·          64nD    2(√2−1)     2ϵ2.
+
+Step 5. Simplified eOform.Up to polylogarithmic factors, this can be expressed as
+                                                   D12n7
+                                        N=  eO         ϵ12 d4(lnd)        7 lognδ  .
+
+
+Appendix K: Complexity Comparison
+
+Consider the two complexity expressions:
+                       d2p                                 nd4p                                 2−1)      2ϵ2p
+             K=O          ϵ2   lognδ     ,   N=O             pη2   lognδ      ,   η=   (√        64D     2n  .
+
+We analyze the ratio                               nd4p    !         nϵ2d2p
+                                        N             pη2      =O                  .
+                                        K  =O         d2p                pη2
+                                                       ϵ2
+
+                                                            39
+Next, substitute the expression ofη:
+                                                          !         n3D4d2p
+                                   N             nϵ2d2p       = Θ                   .
+                                   K  =O        p·  p2ϵ4n2D4             p3ϵ2
+
+For typical parameter ranges, d2p   grows exponentially in p and dominates the polynomial 1/p  3.
+Therefore,N/K→∞asnincreases andϵ→0. Therefore,
+                   N                                 d2p                    nd4p
+                   K≫1      =⇒ K=O                     ϵ2  lognδ      <O       pη2  lognδ      =N.
+
+In other words, the complexity boundKis asymptotically dominated byN.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                           40

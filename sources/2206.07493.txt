@@ -1,0 +1,790 @@
+       Training biases in machine learning for the analytic continuation of quantum
+                                              many-body Green’s functions
+
+                      Rong Zhang,1 Maximilian E. Merkel,1,∗ Sophie Beck,2 and Claude Ederer1,†
+                     1Materials Theory, ETH Zürich, Wolfgang-Pauli-Strasse 27, 8093 Zürich, Switzerland
+        2Center for Computational Quantum Physics, Flatiron Institute, 162 5th Avenue, New York, NY 10010, USA
+                                                          (Dated: June 16, 2022)
+                 We address the problem of analytic continuation of imaginary-frequency Green’s functions, which
+               is crucial in many-body physics, using machine learning based on a multi-level residual neural
+               network. We speciﬁcally address potential biases that can be introduced due to the use of artiﬁcially
+               created spectral functions that are employed to train the neural network. We also implement an
+               uncertainty estimation of the predicted spectral function, based on Monte Carlo dropout, which
+               allows to identify frequency regions where the prediction might not be accurate, and we study the
+               eﬀect of noise, in particular also for situations where the noise level during training is diﬀerent from
+               that in the actual data. Our analysis demonstrates that this method can indeed achieve a high
+               quality of prediction, comparable or better than the widely used maximum entropy method, but
+               that further improvement is currently limited by the lack of true data that can be used for training.
+               We also benchmark our approach by applying it to the case of SrVO3, where an accurate spectral
+               function has been obtained from dynamical mean-ﬁeld theory using a solver that works directly on
+               the real frequency axis.
+
+
+                   I.  INTRODUCTION                                      which has to be inverted to extract the spectral function
+                                                                         for a given G(τ).  However, the inversion of Eq. (1) is
+  A central quantity in quantum many-body physics                        ill-conditioned, which means that the result is extremely
+is the single-particle Green’s function, which describes                 sensitive to the statistical noise in G(τ).  A variety of
+the propagation of particles (or holes) in an interacting                diﬀerent methods have been used to tackle this prob-
+many-body system [1]. For systems of interacting elec-                   lem.  The most widely used approach is the maximum
+trons without any explicit time dependence, the imagi-                   entropy method (MaxEnt) [5,6], but also other meth-
+nary part of the frequency-dependent Green’s function is                 ods have been suggested, based on, e.g., Padé approxi-
+related to the spectral function,A(ω), which can be mea-                 mants [7], averaged spectrum methods [8], stochastic op-
+sured, e.g., by techniques such as (angle-resolved) pho-                 timization [9], or Carathéodory theory [10].
+toemission spectroscopy [2]. However, numerical meth-                       Recently, alternative approaches using diﬀerent ma-
+ods that work at ﬁnite temperature typically calculate                   chine learning algorithms have been explored, see, e.g.,
+the Green’s function in imaginary time,G(τ), where                       Refs.11–16. These methods have been shown to achieve
+τ∈ [0,β) and β  = 1/(kBT ) is the inverse temperature.                   good performance, often better or at least comparable
+In this case, an analytic continuation to real frequen-                  to MaxEnt. However, one problem of using supervised
+cies is required to obtain the physically relevant spectral              learning to invert Eq. (1) is the lack of true simulation
+function.                                                                data, i.e., spectralfunctionsforrealphysicalsystemsthat
+  In this work, we speciﬁcally focus on the construc-                    are obtained directly on the real frequency axis without
+tion of spectral functions from imaginary time Green’s                   havingtoresorttoanalyticcontinuationintheﬁrstplace.
+functions obtained from Quantum Monte Carlo (QMC)                        Therefore, one typically resorts to artiﬁcially generated
+solvers used in the context of dynamical mean-ﬁeld the-                  spectral functions that fulﬁl certain criteria on how spec-
+ory(DMFT)[3]. WithinDMFT,theproblemofinteract-                           tral functions for real physical systems should look like.
+ing electrons within a solid is mapped on the solution of                These hypothetical spectral functions are then used for
+a ﬁctitious Anderson impurity model describing individ-                  the supervised learning, by applying the forward trans-
+ual atomic sites exchanging electrons with their environ-                formation, Eq. (1), to obtain the corresponding  G(τ),
+ment. The environment is modeled as a non-interacting                    and then train the machine learning architecture to get
+bath which is related to the atomic sites through a self-                A(ω) back from thisG(τ). However, this means that the
+consistency condition.  Some of the most widely used                     ﬁnal performance can depend crucially on the way the
+numerical methods to solve the corresponding impurity                    initial spectral functions are generated.
+problem are based on QMC and determine the Green’s                          Ideally, the performance of any approach for analytic
+function in imaginary time [4].                                          continuation should be quantiﬁed on actual simulation
+  The spectral function can be linked to the imaginary-                  results.  This was indeed done in Ref.12for an insu-
+time Green’s function through the following integral                     lating SrVO3 monolayer with a spectral function that
+equation:                                                                exhibits two rather broad peaks. However, since the cor-
+                          ∫                                              responding Green’s function was obtained in imaginary
+              G(τ) =−        dω  e−τω                                    time using QMC, this only allows to compare the ob-
+                                 1 +e−βωA(ω)  ,        (1)               tainedresulttootheranalyticcontinuationmethods,e.g.,
+                                                                                                                                             2
+
+MaxEnt, but not to quantify the performance relative to                  Table I. Parameters corresponding to the two diﬀerent
+the ground truth, i.e., the correct real-frequency spectral              “recipes” for generating spectral functions. Recipe 1 is used
+function.                                                                throughout most of the paper while recipe 2 is discussed only
+  Here, we use machine learning based on a multi-level                   in Sec.IIIG.
+residual neural network (NN) (described in Sec.IIB) to                                                              Recipe 1    Recipe 2
+predict the spectral function corresponding to a given                    Frequency regimes (in eV)
+imaginary-time Green’s function. Thereby, we put par-                     Ω1, for number and weights           1.6         0.96
+ticular emphasis on cross-validating our NN on diﬀerent                   Ω2, for spreads                      2.4         1.6
+data sets. We also investigate the eﬀect of diﬀerent noise                Ω3, for maximum of peak centers      6.4         6.4
+levels applied to the Green’s function input data dur-                    Ωmax, total frequency window         8.0         8.0
+ing training, in particular also the case where this noise                Sampling range for number of peaks
+level is diﬀerent from that used for the testing. Most im-                Ntot, total                         8 - 34       4 - 6
+portantly, we implement an uncertainty estimation, such                   For|ω|< Ω1                        0 - 4        0 - 3
+that our approach does not only predict the most prob-                    Sampling range for weights ci
+able spectral function but also an uncertainty range for                  For|ω|< Ω1                       [0.5, 1]      [0.6, 1]
+each frequency.  This allows to highlight critical areas                  For|ω|> Ω1                       [0, 0.6]      [0, 0.2]
+where the NN deems the prediction to be more diﬃcult                      Sampling range for spreads σi (in eV)
+and also allows to estimate an empirical upper bound                      For|ω|< Ω2                     [0.12, 0.8]   [0.12, 0.8]
+to the error relative to the ground truth.  Finally, we                   For|ω|> Ω2                     [0.48, 2.4]   [0.32, 0.8]
+benchmark our approach on the spectral function ob-
+tained from a DMFT calculation of metallic bulk SrVO3
+usingasolverthatworksdirectlyinrealfrequencieswith-                      a superposition of Gaussian peaks:
+out having to resort to analytic continuation.                                                          (                )/Ntot∑
+  In the following, we ﬁrst deﬁne how we generate our                                Ntot∑    ci
+training data, how we represent our data and quantify                      A(ω) =          σi√2π exp      −(ω−µi)22σ2i             ci  . (2)
+the prediction error, and describe the NN architecture                                i=1                                     i=1
+we use, before we discuss our results as outlined above.                 Here, µi and σi are the center and spread of the i-th
+We also note that the corresponding code is available                    Gaussian peak with weight ci, and the resulting spec-
+on GitHub [17].  The code allows to reproduce the re-                    tral function is normalized to one. This method allows
+sults of this paper as well as to predict general spectral               to generate in principle inﬁnitely many unique spectral
+functions obtained from DMFT calculations and is easily                  functions which are then used for the training and testing
+executable from GitHub through Google Colab.                             of our NN.
+                                                                            We limit the energy range of our spectral functions
+                                                                         to ω ∈   [−Ωmax, Ωmax],  where we choose   Ωmax   =
+                                                                         8 eV  throughout  this  paper.    Then,  inspired  by
+                       II.  METHODS                                      Ref.11,  we divide the energy window into diﬀer-
+                                                                         ent regimes:   [−Ω1, Ω1],  [−Ω2, Ω2], and  [−Ω3, Ω3] with
+  As already outlined in the introductory section, we                    0< Ω1 < Ω2 < Ω3 < Ωmax.  In order to generate real-
+start by constructing large amounts of spectral functions,               istically looking spectral functions, we employ diﬀerent
+and then use the forward transformation, Eq. (1), at a                   constraints on the number, width, and weights of the
+given inverse temperature β to obtain the Green’s func-                  Gaussian peaks in the diﬀerent energy regions.
+tion. We then add random noise to it, and train our NN                      We do not generate any peaks in the outermost re-
+with the noisy Green’s function as input and the original                gion, Ω3 <|ω|< Ωmax, to allow the spectral function to
+spectral function as true output. Thereby, the deviation                 numerically vanish at±Ωmax. In the innermost region,
+between predicted and true spectral function is used as                  |ω|< Ω1, we restrict the number of peaks to a relatively
+cost function for training and accuracy metric for testing.              small number and also generate peaks with higher av-
+We now discuss these steps in more detail.                               erage weights. This favors the formation of pronounced
+                                                                         quasi-particle-like features at low energies and simulta-
+                                                                         neously increases the probability to obtain some spectral
+                                                                         functions with a gap aroundω = 0. Furthermore, we use
+                                                                         a larger average spread for peaks in the higher energy
+      A.  Generating and representing the data                           region, Ω2 <|ω| < Ω3, to avoid spectral functions with
+                                                                         sharp features at such high energies.  As we will show
+               1.  Generation of initial data set                        later, theseconstraintsallowustogenerateabroadrange
+                                                                         of realistic looking spectral functions.
+                                                                            The speciﬁc parameters used to generate spectral func-
+  Similar to previous work [11–13,15], we use artiﬁcially                tions in this work are listed in TableI. Generally, the
+generated spectral functions which are constructed from                  number, position, width, and weight of the peaks in the
+                                                                                                                                             3
+
+diﬀerent regions are randomly sampled from a homoge-                     therefore add four additional spectral functions for each
+neous distribution in the speciﬁed ranges. Furthermore,                  original A(ω), where the originally generated function is
+we require the spectral functions to vanish at±Ωmax, us-                 narrowed by a factor α of 1.2, 1.4, 1.6 and 1.8, respec-
+ing a threshold value of 6.25× 10−5. If a spectral func-                 tively.
+tiondoesnotvanishafteruniformsamplingoftheparam-                            Finally, even small ﬂuctuations in the spectral function
+eters, the weight and spread of the Gaussian peak that                   often lead to variations in the Green’s function that are
+contributesmosttothespectralfunctionattheboundary                        larger than the typical QMC noise. This is particularly
+is reduced by a factor of 0.5 and 0.7, respectively. If this             noticeableinthebasisofLegendrecoeﬃcientsintroduced
+does not suﬃce, the whole peak is discarded. If required,                below for the ﬁrst few Legendre coeﬃcients. Therefore,
+thisprocedureisrepeateduntilthespectralfunctionvan-                      we add ﬁve more spectral functions for eachA(ω) ob-
+ishes at±Ωmax.                                                           tained after initial generation and extension for linearity
+  Note that we use two diﬀerent parameter sets for gen-                  and scaling. These additional spectral functions contain
+erating spectral functions, as listed in TableI. “Recipe 1”              10 more random Gaussian peaks with very small weights,
+is our main data set which is always used throughout this                ci ∈  [0.001, 0.01], such that the overall appearance of
+paper unless explicitly stated otherwise. It incorporates                A(ω) is almost unaltered.
+our best knowledge on the overall appearance of realis-
+tic looking spectral functions.  In contrast, “Recipe 2”
+is speciﬁcally designed to obtain spectral functions that                  3.  Representation of data, noise, and error quantiﬁcation
+also include sharper peaks at high absolute frequencies
+but with smaller spectral weights than for Recipe 1. This                   For a given spectral function, we obtain the imaginary-
+is motivated by our analysis of the spectral function of                 time Green’s functionG(τ) at an inverse temperature
+SrVO3 presented in Sec.IIIF. Recipe 2 is only used and                   β  =  40 eV−1 from Eq. (1) and represent it in terms of
+discussed in Sec.IIIG.                                                   Legendre polynomials [18], leading to the basis of Leg-
+                                                                         endre coeﬃcientsGl, with typically 20 to 50 coeﬃcients.
+                2.  Extension of initial data set                        We use 80 coeﬃcients as input to our NN, enough to
+                                                                         safely include all information even for well-sampled QMC
+                                                                         calculations, and expect the NN to learn which coeﬃ-
+  After generating an initial set of spectral functions in               cients are relevant and which contain only noise.  The
+the way described above, we extend this data set to bet-                 Legendre parametrization is notably more compact than
+ter account for linearity, scaling, and small variations in              a discretization in imaginary time or using Matsubara
+A(ω), as discussed in the following. This is an eﬃcient                  frequencies.
+techniquetopreventoverﬁttingandbiasesfromthetrain-                          Similar to previous works, we model the statistical
+ing data set.                                                            QMC error as uniform, i.e.,l-independent noise, sampled
+  First, we note that Eq. (1) deﬁnes a linear relation-                  from a Gaussian distribution with variance σ2, added
+ship between A(ω) and G(τ). To incorporate this prop-                    to each Gl coeﬃcient.  We do not consider any corre-
+erty into the training set for the NN, we add two addi-                  lations of the error between diﬀerent Legendre coeﬃ-
+tional pairs of spectral functions for each originally gen-              cients, i.e., the corresponding covariance matrix Kll′  =
+erated spectral function. These pairs correspond to two                  E[(Gl− E[Gl])(Gl′− E[Gl′])], where E is the expectation
+diﬀerent linear decompositions ofA(ω) deﬁned through                     value, is an identity matrix scaled by σ2. In Sec.IIIA,
+Eq. (2), such that each additional spectral function con-                we analyze the covariance matrix of a real DMFT-QMC
+tains a subset of peaks (with the correct overall normal-                calculation in order to validate these assumptions. Fur-
+ization). We choose a decomposition into pairs ofNtot/2                  thermore, we initially use diﬀerent noise levels for the
+and Ntot/2 as well as 1 and Ntot− 1 number of peaks,                     training, σtrain, and the testing, σtest, to address the ro-
+whichmeansthattherearealsosingle-peakspectralfunc-                       bustness of the predicted spectral functions with respect
+tions in the data set.                                                   to uncertainties in the noise estimation of the underlying
+  Second, according to Eq. (1), the  G(τ) corresponding                  data.
+to a scaled spectral function, A(ω)→ αA(αω) is math-                        Allspectralfunctionsarerepresentedonanequidistant
+ematically identical to the Green’s function correspond-                 frequency grid, ωi, with Nω = 800 points. This makes it
+ing to the original spectral function but transformed to                 straightforwardtoenforcepositivityandnormalizationof
+the scaled temperature β/α (with appropriately scaled                    the predicted spectral functions. For our purpose, these
+τ range). While this does not correspond to the correct                  advantages outweigh the higher dimension of the basis
+temperature dependence of the spectral function for a                    compared to more compact representations such as con-
+realphysicalsystem, incorporatingthisscalingrelationof                   formal coeﬃcients [11] or a basis obtained from singular
+the kernel into our data set allows for a certain degree of              value decomposition.
+temperature transferability, i.e., to obtain spectral func-                 We quantify the quality of our prediction in terms
+tions at temperatures that are slightly diﬀerent than the                of  the  mean  absolute  error  (MAE),   ¯ε,  deﬁned  as
+one used during the training of the NN. Furthermore, it                  the discretized integral of the pointwise absolute er-
+adds spectral functions with diﬀerent band widths. We                    ror,ε(ω) =|Atrue(ω)−Apredicted(ω)|, over the whole fre-
+                                                                                                                                            4
+
+quency range:                                                            tuned in the learning process, containing only 100 per-
+               ∫ ∞                                                       ceptrons per layer in the residual blocks.
+                                            Nω∑                            The stochastic gradient descent is performed with the
+          ¯ε =                    Nω− 1         ε(ωi)  .     (3)         ADAM optimizer [22]. Starting from a learning rate of
+                −∞ dωε(ω)≈  2Ωmax           i=1                          5× 10−5, the learning rate is reduced by a factor of 1.2
+Here, Atrue(ω) is the correct spectral function and                      whenever the validation loss stops decreasing, until a
+Apredicted(ω) the function predicted by the NN. Our def-                 threshold learning rate of  5× 10−7 is reached and the
+inition of the MAE has the advantage of being unitless                   training is stopped.
+and fulﬁlls¯ε∈ [0, 2].                                                     Monte-Carlo (MC) dropout is an eﬃcient way to quan-
+                                                                         tify the prediction uncertainty [23]. In our NN, this is
+                                                                         implemented through the dropout layer in the “100 selu”
+                                                                         block. Therefore, by performing 100 prediction runs with
+  B.  Neural network architecture and uncertainty                        our NN on the same inputGl, we obtain both an average
+                           estimation                                    spectral function A(ω) as well as a standard deviation
+                                                                         σdropout(ω) for each frequencyω. However, the standard
+  We use the python libraries TensorFlow and Keras to                    deviation σdropout(ω) obtained in this way is known to
+implement our NN [19,20]. Initially, we tested diﬀerent                  underestimate the absolute errorε(ω) between predicted
+NN architectures that have been used in previous work                    and true output.  Ref.23argues that the uncertainty
+for the analytical continuation problem, such as a multi-                of dropout models depends on the activation function
+layer perceptron (MLP) model [13], a residual NN where                   and NN topology, which makes calibration necessary. In
+a MLP model is used to model the diﬀerence between the                   Sec.IIIC, we therefore carefully analyze the quality of
+target and input (cf. Ref.21), and the Adams-Bashforth                   the uncertainty estimation based on σdropout.
+ResNet [15]. In the end, we decided to use the multi-level
+residual NN as shown in Fig.1, which resulted in the low-
+est training and validation error of all the architectures                            C.  Other computational details
+we have tried.
+  The right-most part of Fig.1shows the basic build-                       We also benchmark the predictions from our NN
+ing block, i.e., the lowest level of residual learning of                against the state-of-the-art maximum-entropy package
+our multi-level residual NN. Each linear layer applies a                 MaxEnt, contained in the TRIQS library (version 1.0.0)
+linear transformation to the input vector of length 100.                 [24,25]. Thereby, we use the     χ2-curvature analyzer to
+The dropout layer randomly sets  10 % of the elements                    ﬁnd the optimal regularization parameterα with a con-
+of the input vector to zero in every step, which reduces                 stant error parameter for G(τ) of 0.03 and a hyperbolic
+overﬁtting and gives an estimation for the prediction un-                mesh in the range of−16 to 16 eV with 800 points. For
+certainty, as we describe below in more detail.  In the                  a direct comparison with the NN on consistent test data,
+activation layer, the non-linear scaled exponential linear               we ﬁrst transformA(ω) intoGl, then add the noise, and
+unit (selu) function, as implemented in Keras, is applied                ﬁnally transform the result into imaginary time to gen-
+to the input. Finally, the original input is added to the                erate the input required for MaxEnt.
+block output, symbolized by the arrow bypassing the dif-                   To validate our model for the noise on Gl, we use
+ferent layers. The middle part of Fig.1shows how the                     density-functional theory (DFT) plus DMFT calcula-
+residual blocks are concatenated. The additional connec-                 tions for SrVO3 to obtain a realistic covariance matrix
+tions in between make the NN residual on higher levels.                  Kll′ corresponding to the local Green’s function obtained
+  The left part of Fig.1shows the pre- and post-                         from a QMC solver.  For that, we ﬁrst converge the
+processing steps applied to the central block.  The in-                  DFT+DMFT calculation. Starting from this converged
+put Gl of dimension 80 is ﬁrst passed through a linear                   solutionbutusingadiﬀerentrandomseed, 200additional
+layer, which scale up the data to the dimension of 100                   independent QMC runs are performed. With the result-
+that the residual blocks use, and then through a selu                    ing local Green’s functionsGl of the V cation, we calcu-
+activation function. The output of this is then used in                  late Kll′ as deﬁned in Sec.IIA3.
+the two “multi-level residual network” blocks, which have                  Furthermore, we also calculate the Green’s function
+been deﬁned in the central panel.  A ﬁnal linear layer                   of SrVO3 within DFT+DMFT directly on the real fre-
+then scales the dimension up to the number of points on                  quency axis, by using the recently developed solver based
+the ω grid, and in the last step, the softmax activation                 on fork tensor-product states (FTPS) [26]. This serves
+function ensures proper normalization of the resulting                   as a ﬁnal benchmark of our NN by comparing the spec-
+spectral function.                                                       tralfunctionobtainedwithoutanalyticcontinuationwith
+  The higher-level residual connections reduce the satu-                 the spectral function predicted from the correspond-
+ration eﬀects observed in the Adams-Bashforth ResNet                     ing Gl, which are obtained from the forward-transform,
+when increasing the number of residual blocks.  More-                    Eq. (1), and subsequent conversion to Legendre coeﬃ-
+over, our architecture can achieve a greater depth with a                cients.  SrVO3 is a standard example for a correlated
+comparable or even smaller number of parameters to be                    metal with a relatively simple crystal structure that is
+                                                                                                                                              5
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 1. The NN architecture. The complete structure on the left, a more detailed view of the "multi-level residual block" in
+the center and the basic residual unit, labeled “100 selu”, on the right. This network architecture allows for accurate training
+while suppressing saturation eﬀects with a manageable number of trainable parameters.
+
+
+straightforward to treat within DFT+DMFT, due to its
+well-separated subset of partially ﬁlled V-t2g bands. Fur-
+ther details of these DFT+DMFT calculations are de-
+scribed in App.A.
+
+
+
+                        III.  RESULTS
+
+              A.  Inﬂuence of the noise level
+
+  Beforeweanalyzetheeﬀectofthenoiselevelappliedto
+Gl onthequalityofpredictionofourNN,weﬁrsttestthe
+validity of our assumption of anl-independent Gaussian-
+distributed noise with no correlations between diﬀerentl.
+As described in Sec.IIC, we obtain a realistic covariance                 Figure 2. The covariance matrix Kll′ corresponding to the
+matrixKll′ by sampling over 200 independent QMC runs                      imaginary-time Green’s function in the Legendre basis,Gl,
+on top of a pre-converged DFT+DMFT calculation for                        for l,l′ < 30, evaluated from 200 independent QMC runs on
+SrVO3. The result is visualized in Fig.2.                                 top of a pre-converged DFT+DMFT calculations for SrVO3.
+  One can see that the covariance matrix is largest along
+the diagonal, while the oﬀ-diagonal elements decay rel-
+atively quickly away from the diagonal.  The diagonal
+terms are indeed almost constant with Kll≈ 2× 10−6,                       analysis shows that, while this model of the noise is not
+except forl = 0 withK00≈ 2× 10−5. However, particu-                       perfect, it nevertheless captures the most important fea-
+larly for small l,l′ the oﬀ-diagonal elements are not neg-                tures of the covariance matrix. Furthermore, except for
+ligible. As discussed in Sec.IIA3, our model of uniform,                  l  = 0, this model ﬁts best to the calculated covariance
+independent noise on the Legendre Green’s function cor-                   matrix for a noise level of σ≈ 0.0014. In the following,
+responds to a covariance matrix Kll′ =δll′σ2. Thus, our                   we will therefore consider a noise level of σ = 10−3 as a
+                                                                                                                                               6
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                          Figure 4. Comparison of the MAE for 400 spectral functions
+                                                                          predicted by the NN (¯εNN) and by MaxEnt (¯εMaxEnt), respec-
+                                                                          tively, for diﬀerent noise levels,σ, applied to both testing (for
+                                                                          the NN) and training data.
+
+
+                                                                             Thiscaneasilyexplainedasfollows. Ifthetestingnoise
+                                                                          levelishigherthanduringthetraining, theNNinterprets
+                                                                          the noise in the testing data as features and thus arrives
+                                                                          at inaccurate results. In turn, if the testing noise level
+                                                                          is smaller than during the training, the NN takes infor-
+Figure 3. Distribution of the MAE corresponding to the pre-               mation as noise, therefore failing to resolve some features
+dicted spectral functions with diﬀerent noise levels applied              that it would be able to resolve with lower training noise,
+to the training and testing data,σtrain andσtest, respectively.           but still gives the same quality of prediction as for the
+ThehistograminbluerepresentsthedistributionoftheMAE,                      original higher noise level. Therefore, it is clear that, if in
+while the dashed line shows its average over all test spectral            the real application the noise level is not known exactly,
+functions. The value of the average MAE is also indicated in              it is better to use a relatively generous estimate.
+the legends of the individual panels.
+
+
+                                                                                           B.  Comparison to MaxEnt
+typicalvalueforwell-convergedQMCdata. Wenotethat
+constructing a more complex model for the noise is far                       Next, we compare the performance of our NN against
+from trivial, and that the more detailed features of the                  the well established and widely used MaxEnt approach.
+covariance matrix can also depend on the speciﬁc sam-                     Thereby, we always use the NN trained with a noise level
+pling method used in the QMC calculations. Therefore,                     identical to that in the testing data, and for each noise
+a more complex model might also become less general.                      level we use the same set of 400 test spectral functions
+  Next, we investigate how the noise level in the data                    (generated from the original data recipe without data set
+aﬀects the quality of prediction of our NN. Thereby, we                   extension) for both the NN and MaxEnt.
+also consider the case where the noise level in the train-                   In Fig.4, we compare the MAE obtained with Max-
+ing data (σtrain) is diﬀerent from the noise level in the                 Ent with that obtained from the NN prediction. For all
+data used for testing (σtest). This is particularly crucial               considered noise levels, the large majority of all points
+if the exact noise level of the data is unknown or hard                   in these scatter plots lie above the diagonal, indicating
+to determine accurately, which is often the case for data                 a larger error of prediction of MaxEnt compared to the
+obtained from real simulations. The results are summa-                    NN. Furthermore, the few data points where the NN er-
+rized in Fig.3, which shows histograms of the MAE of                      ror is larger than that of MaxEnt are all relatively close
+thepredictedspectralfunctionsforthevariouscaseswith                       to the diagonal, which means that there are only very few
+diﬀerentσtrain and σtest.                                                 spectral function where MaxEnt drastically outperforms
+  It can be seen that the minimal MAE for a speciﬁc                       our NN. We therefore conclude that our NN performs
+noise level in the test data is always obtained for the                   much better on this data set than MaxEnt, which is a
+NN that was trained with identical noise level, and that                  very promising result, in line with the literature [11,13].
+the corresponding MAE increases with increasing noise                        However, one should also note that this comparison
+level. Furthermore, the quality of prediction deteriorates                is somewhat biased, since the NN has been speciﬁcally
+signiﬁcantlyiftheNNwastrainedatalownoiselevelbut                          optimized for spectral functions obtained with this data
+is then used on data with a much higher noise level (e.g.,                recipe during the training, whereas MaxEnt works for
+σtrain  = 10−4 and σtest  = 10−2). On the other hand, a                   general cases. Depending on the generality of the data
+NN that was trained with a higher noise level, leads to a                 recipe, this can either be viewed as a negative feature,
+very consistent MAE for all σtest≤σtrain.                                 indicating overﬁtting of the NN, or as a positive feature,
+                                                                                                                                               7
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 5. The point-wise absolute errorε(ω) plotted over the
+standard deviation from the MC dropout,σDropout for a noise
+level of σ = 10−3. The dashed line represents the case where
+ε = σDropout, whereas the solid line, ε = 10σDropout, repre-
+sents the value used for our empirical uncertainty estimation.             Figure 6.  Examples of spectral functions constructed from
+                                                                           data recipe 1.  Each panel contains the ground truth, the
+                                                                           NN prediction with the estimated uncertainty range, and the
+showingthattheNNsuccessfullylearnsaboutthegeneral                          MaxEnt prediction. Predicted spectral functions are obtained
+shape of spectral functions. We will again address this                    with a noise level of σ = 10−3 on Gl.
+question from Sec.IIIEonward, but will ﬁrst discuss the
+uncertainty quantiﬁcation based on MC dropout in the                       an empirical approximate upper bound for the absolute
+following section.                                                         pointwise error according to ε(ω)≤  10σDropout(ω), as
+                                                                           indicated by the solid red line in Fig.5.  This estima-
+                                                                           tion holds true for  92 % of the data points in the plot,
+                C.  Uncertainty estimation                                 where most of its violations occur at medium frequencies
+                                                                           |ω|≈ 4 eV. Comparing diﬀerent noise levels, it appears
+  Fromnowon, exceptwhereotherwisenoted, wealways                           that the reliability of this uncertainty estimation tends to
+use a noise level ofσtrain =σtest = 10−3, unless explicitly                increase for smaller noise levels, see TableIIand App.B.
+stated otherwise. Note that this is indeed close to our                      In the following we will empirically use 10σDropout to
+estimation of a realistic magnitude of the QMC noise                       indicate the uncertainty of the NN prediction. We note
+in DMFT calculations, based on the covariance matrix                       that there is no mathematical guarantee that this works
+analyzed in Fig.2.                                                         equally well for unknown Green’s functions. However, if
+  Fig.5shows the relation between the MC-dropout                           the input Green’s function is similar to our testing data,
+standard deviation σDropout(ω) and the absolute point-                     it is reasonable to expect that the uncertainty estimation
+wise error ε(ω), evaluated over a set of 1000 spectral                     is qualitatively correct. Additionally, a large uncertainty
+functions generated independent from the training set.                     serves as a good indicator to identify potentially prob-
+The color of each data-point indicates the absolute value                  lematic features in a certain frequency range. This will
+of the corresponding frequency ω. One recognizes that                      be further analyzed in the remaining sections.
+larger errors tend to occur for low to medium absolute
+frequencies|ω|< 5 eV, whereas high absolute frequencies
+are typically well described. The latter is due to the fact                    D.  Examples of predicted spectral functions
+that all the spectral functions we generate are forced to
+decay towards|ω| = Ωmax.                                                     Fig.6shows examples of spectral functions randomly
+  Furthermore, one can see that a small dropout stan-                      chosen from our data set, together with the predictions of
+dard deviation seems to always correspond to a small                       our NN (including uncertainty estimation) and MaxEnt,
+error, whereas a large standard deviation can be associ-                   based on a noise level of 10−3. Three of the spectral func-
+ated with anything from a small to a very large absolute                   tions shown in Fig.6correspond to “metallic” cases with
+error. Thus, even though there seems to be some cor-                       approximate half-ﬁlled bands [(a)-(c)], one represents an
+relation between ε and σDropout, a simple relation such                    almost completely ﬁlled case [(d)], and two of them are
+as ε(ω)  = σDropout(ω) (dashed red line) does not hold.                    gapped aroundω = 0 [(e) and (f)], which would indicate
+Nevertheless, it appears that σDropout allows to estimate                  aninsulatingsystem. Thus, Eq.(2)withparameterscho-
+                                                                                                                                             8
+
+sen according to “recipe 1” from TableIindeed leads to
+large variety of diverse and non-trivial spectral functions.
+  BothMaxEntandtheNNareabletocorrectlydescribe
+the main features of all spectra, i.e., metallic versus in-
+sulating character, the main peak structure, and band-
+width. However, MaxEnt clearly fails to resolve more de-
+tailed features such as the double peak structures both
+above and below the gap in (e) and (f), or the shoulders
+towards low energies in (a) and (c). These deﬁciencies
+appear mostly if two smaller peaks are rather close to
+each other or far away from zero energy. The merging of
+peaks can then also lead to a shift of the peak centers, a
+misestimation of peak heights and width, and problems
+with the decay towards high absolute frequencies [see,
+e.g., (a) and (c)].
+  Overall, the NN appears clearly superior to MaxEnt,
+althoughitalsofailstoresolveverydetailedfeaturessuch
+as the two peak structure close to zero energy in (a),
+or the small and narrow peak around 2eV in (b).  It
+also slightly underestimates the heights of the very sharp
+peaks in (c) and (f), but is able to resolve all four peaks
+in (f) as well as the low energy shoulder in (c). In all
+cases, the uncertainty estimation works well in identi-
+fying critical parts of the prediction and even captures
+almost all features within the predicted range. In con-
+clusion, the NN is more reliable for these examples than
+MaxEnt, which agrees with the above comparison of the
+MAE between the NN and MaxEnt.
+                                                                         Figure 7. Comparison between the NN and MaxEnt predic-
+                                                                         tions on a special set of spectral functions not represented by
+        E.  Applying the NN to untypical data                            Eq. (2), for a noise level of  σ  =  10−3. Cases (a)-(c) corre-
+                                                                         spond to wider plateaus, cases (d)-(f) to asymmetric peaks,
+  In the previous sub-sections, in particular in the com-                and (g)-(i) to Lorentzian peaks. The values in the top of each
+parison wit MaxEnt, we have come across the question                     ﬁgure indicate the corresponding MAE for NN and MaxEnt,
+of how versatile our recipe for data generation and thus                 respectively.
+the resulting trained NN really is. To further investigate
+a potential bias of our approach, we now apply both the                  the NN perform rather well for the centered peaks, while
+NN and MaxEnt to spectral functions that we speciﬁ-                      the oﬀ-center peak in (e) appears to be more diﬃcult,
+cally designed to be diﬀerent from those included in the                 with the NN doing a slightly better job than MaxEnt.
+training data for the NN. Fig.7shows a selection of such                 The uncertainty quantiﬁcation works well for the cen-
+spectral functions, which contain plateaus, asymmetric                   tered peaks but vastly underestimates the deviations for
+peaks, and Lorentzians with a diﬀerent asymptotic decay                  the oﬀ-center peak, not clearly identifying this as a crit-
+as the Gaussians used in Eq. (2). Such features cannot                   ical case.
+easily be expressed by Eq. (2), and thus represent a hard
+challenge to our NN.                                                        The bottom row, panels (g)-(i) in Fig.7, contains
+  Starting with the plateaus in the top row, Fig.7(a)-                   Lorentzian peaks. Here, we see that MaxEnt does not
+(c), one sees that the ﬂat parts of the plateaus lead to                 have a problem with these peaks, representing them al-
+oscillations in the MaxEnt prediction and also, to a lesser              most perfectly, while the NN tries to ﬁt the spectral func-
+extent, inthatofourNN.FortheNN,thisclearlyreﬂects                        tions with Gaussians, leading to spurious high-energy
+the bias towards the data seen during the training, i.e.,                peaks in panels (g) and (i). The Lorentzian peaks are
+the NN tries to ﬁt these parts with a superposition of                   also the only spectral functions in Fig.7where MaxEnt
+Gaussian peaks. Additionally, the uncertainty of our NN                  outperforms the NN in terms of the MAE. However, in
+is very large in the plateau area, and mostly includes the               all three cases, the uncertainty quantiﬁcation of the NN
+ground truth. This behavior indicates that plateaus are                  correctly identiﬁes the sides of the peak as well as the
+fundamentally hard to resolve.                                           high energy features as problematic areas.
+  The middle row, panels (d)-(f) in Fig.7, contains                         In summary, the NN seems to outperform MaxEnt
+asymmetric peaks, centered either at ω   =   0 or oﬀ-                    even for cases that are very diﬀerent from the training
+centered, and with diﬀerent widths. Both MaxEnt and                      data, such as wide plateaus and asymmetric peaks, in-
+                                                                                                                                            9
+
+                                                                         peaks, which are related to diﬀerent atomic multiplets,
+                                                                         see Ref.26.
+
+                                                                            Both MaxEnt and the NN give a very good reconstruc-
+                                                                         tion of the quasiparticle peak. The lower Hubbard peak
+                                                                         (at ω≈−2eV) is also described reasonably well, even
+                                                                         though MaxEnt broadens the peak considerably, and the
+                                                                         NN slightly shifts the center of the peak to lower frequen-
+                                                                         cies.  Neither MaxEnt nor the NN are able to capture
+                                                                         the asymmetric, triangular shape of this peak, similar to
+                                                                         what was observed for the example shown in Fig.7(e).
+                                                                         The upper Hubbard band represents a signiﬁcant chal-
+                                                                         lenge for both methods, due its three-peak structure with
+                                                                         two rather sharp peaks at relatively high frequencies.
+                                                                         MaxEnt essentially merges the two peaks at around 2.5
+Figure 8. Spectral functions obtained with the NN trained                and 4eV into one broad peak and completely ignores the
+on (a) data recipe 1 (NN1) and (b) data recipe 2 (NN2), to-              smaller peak at 6 eV. Therefore, it signiﬁcantly underes-
+gether with the MaxEnt prediction for the Green’s function               timates the width of the upper Hubbard band. The NN
+obtained from a DFT+DMFT calculation for SrVO3 using                     also fails to describe the true three-peak structure, but is
+the FTPS solver (with an artiﬁcial noise of10−3 added to the             able to produce more reﬁned features, with the lowest of
+forward-transformed FTPS data). The ground truth is the                  the three peaks partially resolved and a broader feature
+result obtained by the FTPS solver without analytic contin-              that stretches approximately across the energy range of
+uation.                                                                  the two higher energy peaks, such that the overall width
+                                                                         of the upper Hubbard band is captured relatively well.
+dicating the versatility of this approach. It also appears               The uncertainty estimation of the NN correctly identiﬁes
+that in some cases the NN exhibits a certain bias towards                the two Hubbard bands as problematic regions.
+predicting something that is more similar to the training                   We have also veriﬁed that the spectral functions ob-
+data. However, except for case (e), the uncertainty esti-                tained from a DFT+DMFT calculation for SrVO3 using
+mation works rather well in identifying the regions where                the CT-QMC solver in combination with either MaxEnt
+the prediction might not be accurate.                                    or our NN are very similar to those shown in Fig.8, indi-
+                                                                         cating that the diﬀerences are indeed related to the ana-
+ F.  Testing on SrVO3 from real-frequency DMFT                           lytic continuation and not to the diﬀerent solvers. This
+                                                                         is consistent with the analysis presented in Ref.26.
+
+  Next, we benchmark our method on real simulation                          In conclusion, our NN resolves the features of the
+data,usingthespectralfunctionobtainedforSrVO3 from                       FTPS spectral function better than MaxEnt. In partic-
+a DMFT calculation with the FTPS solver, an impurity                     ular, the uncertainty estimation proves to be very useful
+solver based on tensor networks which works directly on                  in identifying region where the prediction seems rather
+the real-frequency axis and therefore does not require                   reliable and others where it might not be too accurate.
+analytic continuation. Since we use the FTPS spectral                    However, the sharp features in the upper Hubbard band
+function as another test function for the NN, we apply                   are not resolved by the NN. This is not too surprising,
+the same procedure to theA(ω) obtained from the FTPS                     since the data set used for training and testing was de-
+solverasfortheartiﬁcialspectralfunctionsobtainedfrom                     signed to not contain any sharp peaks in the frequency
+Eq. (2). Thus, we construct  G(τ) from the forward trans-                region|ω| >  Ω2  =  2.4eV. This constraint was mainly
+formation, Eq. (1), add noise to the corresponding  Gl co-               motivated by “typical” spectral functions for a variety of
+eﬃcients, let the NN predict the spectral function from                  materials that can be found throughout the literature.
+that, and then compare with the original ground truth.                   However, most of these spectral functions have been ob-
+We again use β  =  40 eV−1 even though FTPS runs at                      tained using MaxEnt and this apparently has biased our
+zero temperature, assuming that this does not change                     expectation on how a spectral function typically looks
+the spectral function signiﬁcantly [26].                                 like. On the other hand, the application of the very re-
+  The predicted spectral functions, both from our NN                     cent FTPS solver was able to uncover further details in
+and MaxEnt, together with the original FTPS spectral                     the spectral function of SrVO3.  This raises the ques-
+functionareshowninFig.8(a). Thecorrespondingspec-                        tion of whether the NN simply was not able to resolve
+tral function exhibits features typical for a correlated                 these features because it had not seen comparable spec-
+metal, a pronounced quasi-particle peak at ω  =  0, to-                  tral functions previously, or whether it is related to the
+gether with a lower and upper Hubbard band which are                     general diﬃculty to invert Eq. (1) for high frequencies,
+both formed by localized atomic-like excitations. Speciﬁ-                where the integral kernel becomes very small. This ques-
+cially, the upper Hubbard band consists of three distinct                tion is addressed in the next sub-section.
+                                                                                                                                            10
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                          Figure 10.  Cross-validation of the NNs trained on the two
+                                                                          diﬀerent data recipes. The top row shows the performance of
+Figure 9.  Examples of spectral functions constructed from                NN2 on spectral functions generated according to data recipe
+data recipe 2.  Each panel contains the ground truth, the                 1. The bottom row shows the performance of NN1 on spectral
+NN prediction with the estimated uncertainty range, and the               functions generated according to data recipe 2. In both cases
+MaxEnt prediction. Predicted spectral functions are obtained              the MAE of the NN is compared to that achieved by MaxEnt
+with a noise level of σ = 10−3 on Gl.                                     on the same data.
+
+
+                      G.  Data recipe 2                                   rather well, whereas MaxEnt just produces broad fea-
+                                                                          tures. Overall, the NN trained on data recipe 2 seems
+  Based on the spectral function obtained for SrVO3 us-                   to perform well on the type of data it was trained for,
+ing the FTPS solver, we now use the alternative data                      generally leading to spectral functions that agree equally
+recipe 2 (see Sec.IIA1and TableI) to generate a dif-                      well or better with the ground truth than those obtained
+ferent set of spectral functions, which generally contain                 by MaxEnt.
+fewer, and thus more isolated, peaks that can still be                       Next, we apply the neural network trained on data
+rather narrow also at higher frequencies.                                 recipe 2 (NN2) to the Green’s function of SrVO3 ob-
+  Fig.9shows a random selection of spectral functions                     tained using the FTPS solver.  The result is shown in
+generatedwithdatarecipe2. Theﬁrstobservationisthat                        Fig.8(b). Indeed the new NN2 results in sharper and
+these spectral functions indeed have more clearly sepa-                   more isolated features in the energy region of the upper
+rated peaks and less broad multi-peak structures. Nev-                    Hubbard band, but is also not able to correctly resolve
+ertheless, the spectral functions still exhibit non-trivial               the three-peak structure. We note that this reﬂects the
+features, such as shoulders or split peaks, where multi-                  intrinsic problem of resolving the high-energy peaks from
+ple Gaussians overlap.  The spectral function in panel                    the kernel in Eq. (1) that all methods struggle with. NN2
+(a) would represent a completely ﬁlled “band insulator”,also gives higher uncertainty estimates and in fact per-
+panels (b)-(e) would correspond to metallic systems, and                  forms quantitatively worse on this spectral function than
+panel (f) represents an insulator with partial ﬁlling.                    NN1 (the original NN trained on data recipe 1), with a
+  Both the NN and MaxEnt correctly capture the                            MAE of 0.46 for NN2 compared to an MAE of 0.33 for
+quasiparticle-like peaks around ω  =  0 in panels (b)-(e)                 NN1.
+very well, but have diﬃculties to correctly describe high-                   The construction of a second data set also allows us to
+or low-frequency peaks with small amplitude.  Neither                     cross-validate the NNs by training it on one data recipe
+MaxEnt nor the NN can resolve the small two peak-                         and testing it on the other type of data. The result is
+structures at low and high frequencies in panels (c) and                  shown in Fig.10, where the performance of the two NNs
+(e), respectively. In both cases, MaxEnt produces a very                  on the respectively other data set is compared against
+broad feature, whereas the NN creates a relatively sharp                  MaxEnt for diﬀerent noise levels. The top row indicates
+peak in between the two original peaks. Case (a) seems                    the performance of NN2 (the NN trained on data recipe
+rather well described, but the uncertainty estimation of                  2) for predicting spectral functions from data recipe 1.
+the NN appears very high. In panel (f), the two peak                      The resulting average MAE is larger than that of Max-
+structure at negative frequencies is partially resolved by                Ent for all noise levels (but becomes more comparable
+the NN and the high frequency peak is also described                      to that of MaxEnt for σ = 10−2. In contrast, NN1 (the
+                                                                                                                                          11
+
+NN trained on date recipe 1) performs much better on                     niﬁcantly degrades the reliability of prediction.
+the unknown data set, the overall MAE is only slightly                      In particular, our benchmark using the real-frequency
+larger than that of MaxEnt for low noise levels, while for               DMFT data for SrVO3 gives some important insights.
+medium and high noise levels the performance is superior                 First, it reveals that this spectral function indeed ex-
+to that of MaxEnt.                                                       hibits features that are not well represented in the train-
+  This indicates that date recipe 1 is indeed more ver-                  ingdata. However, developinganimproveddatarecipeis
+satile than recipe 2 and the corresponding NN generally                  not straightforward. Our data recipe 2, which was specif-
+performs well, even on spectral functions diﬀerent from                  ically designed to incorporate more isolated and sharper
+the ones it was trained on. This also agrees with the per-               peaksathigherexcitationenergies, didnotresultinasig-
+formance on the previously unseen real-frequency spec-                   niﬁcant improvement for SrVO3, and indeed turned out
+tral function of SrVO3, and makes NN1 clearly preferable                 to be clearly less general than our original data recipe.
+over NN2.  App.Bcontains an additional quantitative                      Finally, the corresponding analysis also indicates the fun-
+cross-validation of the performance of the uncertainty es-               damental limitations in correctly describing such higher
+timation for both NNs.                                                   energy features that result from the ill-conditioned ker-
+                                                                         nel in Eq. (1), which cannot easily be bypassed using
+                                                                         machine learning.
+       IV.  SUMMARY AND CONCLUSIONS                                         In conclusion, machine learning shows great promise
+                                                                         as an alternative to MaxEnt for analytic continuation.
+  In summary, we have implemented a machine-learning                     Based on the analysis presented here, it seems that cur-
+algorithm to address the problem of analytic continua-                   rently the main limitation for further improvement is the
+tion of imaginary time single-particle Green’s functions                 lack of real training data and the biases that are poten-
+obtained from DMFT using, e.g., QMC solvers. Thereby,                    tially introduced by the way the artiﬁcial training data is
+an important problem is the lack of real physical data,                  generated. On the other hand, while a further optimiza-
+since there is no cheap and suﬃciently accurate method                   tion of the network architecture or training procedure
+to obtain the real-frequency spectral functions without                  might still be possible, it is unclear whether this would
+resorting to analytic continuation, and existing methods                 indeed also lead to a signiﬁcant gain in performance for
+for analytic continuation all suﬀer from the inversion of                spectral functions that are substantially diﬀerent from
+Eq.(1)beingill-conditioned. Thus,similartomostprevi-                     the training data.
+ous work, we obtain data to train our multi-level residual
+NN by generating artiﬁcial spectral functions through a                                   ACKNOWLEDGMENTS
+superposition of Gaussian peaks and then calculating the
+corresponding imaginary-time Green’s function from the                      We thank Ilan Bouquet for doing initial tests on apply-
+numerically stable forward-transform, Eq. (1). However,                  ing machine learning to the problem of analytic continu-
+the assumptions made on the possible shape of a typical
+spectral function and the speciﬁc form that is used for                  ation in his MSc project. This research was supported by
+representation can introduce a bias in the predicted spec-               ETH Zurich and the NCCR MARVEL, a National Cen-
+tral functions. In this work, we have therefore put special              tre of Competence in Research, funded by the Swiss Na-
+emphasis on cross-validating the trained neural network                  tional Science Foundation (grant number 182892). Cal-
+on alternative data that does not necessarily match the                  culations have been performed on the cluster “Piz Daint”
+training data. Furthermore, we have implemented an un-                   hostedbytheSwissNationalSupercomputingCentreand
+certainty estimation based on MC dropout, which helps                    supported under project IDs s889 (User Lab) and mr26
+to identify regions where the predicted spectral function                (MARVEL). The Flatiron Institute is a division of the
+might not be too accurate.                                               Simons Foundation.
+  Overall, the multi-level residual NN used in this work
+performs very well, similar to previous work using ma-
+chinelearningforanalyticcontinuation[11–16], andcom-                         Appendix A: DFT+DMFT calculation details
+parable or even better than the well established Max-
+Ent approach [5,27]. This also holds for spectral func-                     TheDFT+DMFTcalculationsforthecubicperovskite
+tions that are speciﬁcally designed to be diﬀerent from                  SrVO3 presented in this work are performed without
+the training data as well as for the spectral function ob-               enforcing charge self-consistency between the DFT and
+tained for SrVO3 without analytic continuation. (Except                  DMFT part of the calculation and are based on non-
+perhaps for the Lorentzian peaks, where MaxEnt outper-                   magnetic DFT calculations. For the DFT+DMFT cal-
+forms the NN, even though the NN also still gives a rea-                 culations presented in Sec.IIIA, which are used to ob-
+sonable prediction.) Our analysis for diﬀerent noise lev-                tain a typical covariance matrix, we use the “Vienna Ab-
+els during training and testing shows that the NN gives                  initio Simulation Package” (VASP) [28,29] with the PBE
+reliable predictions if the noise level of the test data is              exchange-correlation functional [30]. The unit cell con-
+similar or lower than that used during training, but that                tains one formula unit of SrVO3 with a lattice constant
+an underestimation of the noise level during training sig-               of  3.84Å.  A  9× 9× 9 k-point mesh is used for Bril-
+                                                                                                                                             12
+
+louin zone integration with tetrahedron smearing and a                    cated weight oftw = 10−12 andtw = 10−9 for the ground
+kinetic energy cutoﬀ of450 eV is used for the plane wave                  state search and the time evolution, respectively.  The
+basis set.  We then deﬁne the correlated subspace for                     time evolution is performed up to 56 eV−1.
+the DMFT calculation using the local PAW projections                         BothsolversarepartoftheTRIQSlibrary[24]. Allthe
+from VASP onto the V-t2g orbitals and the “PLO con-                       DMFT calculations are done with the publicly available
+verter” from the DFTTools library [31,32]. To obtain                      solid_dmft package [39].
+the spectral function for SrVO3 from DFT+DMFT dis-
+cussed in Sec.IIIF, we use the        Quantum ESPRESSO
+package [33] with scalar-relativistic ultrasoft pseudopo-                     Appendix B: (Cross-) validation of uncertainty
+tentials [34], again using the PBE exchange-correlation                                               estimation
+functional. Thelatticeconstantis 3.86Å, whereweagain
+simulate a unit cell of one formula unit. The energy cut-                    To further validate the empirical approximate up-
+oﬀs for the wave functions and charge density are set to                  per bound for the pointwise absolute error in terms of
+60 Ry and 720 Ry, respectively. We use a 17× 17× 17                       the standard deviation from the MC dropout, ε(ω) ≤
+k-point grid to sample the Brillouin zone, and a smearing                 10σdropout(ω), we evaluate the fraction of data points
+of 0.015 Ry in the Methfessel-Paxton scheme. The cor-                     ε(ω) that respect this bound and compare this fraction
+related subspace is constructed for the same subspace as                  Table II. (Cross-) Validation of the uncertainty estimation
+above, but using the Wannier90 code [35] to construct                     of the two NNs on the two diﬀerent data sets (recipes 1
+maximally localized Wannier functions (MLWFs) [36].                       and 2). The fraction of data-points for the pointwise abso-
+  Based on these DFT calculations, we then run DMFT,                      lute error that are within the uncertainty estimation, ε(ω)≤
+where the local electron-electron interaction is described                10σdropout(ω), are speciﬁed for the diﬀerent cases and diﬀer-
+using the Kanamori Hamiltonian [37] with  U  = 5.00 eV                    ent noise levels.
+and J    =   0.65 eV.   For the DMFT QMC calcula-                                                   σ = 10−4    σ = 10−3    σ = 10−2
+tions in Sec.IIIA, we use the continuous-time CT-HYB                       NN1 on recipe 1             0.99         0.92         0.70
+solver [38] and an inverse temperature   β  = 1/(kBT ) =                   NN1 on recipe 2             0.94         0.88         0.72
+40 eV−1 to solve the eﬀective impurity problem. We sam-                    NN2 on recipe 1             0.85         0.85         0.79
+ple the local Green’s function with 30 Legendre coeﬃ-                      NN2 on recipe 2             0.98         0.96         0.90
+cients, and ﬁrst converge a solution with8× 107 solver
+cycles over 20 iteration, then run 200 independent runs
+from the same starting point with  2× 107 cycles.  To                     for the diﬀerently trained NNs and diﬀerent noise levels.
+solve the impurity problem using the fork tensor-product                  The result obtained for 1000 test spectral functions in
+states (FTPS) solver [26] for Sec.IIIF, we ﬁrst use Wan-                  each case is summarized in TableII.
+nier interpolation to re-evaluate the Hamiltonian on a                       Generally, it seems that the accuracy of this upper
+denser grid with 50 k-points per dimension. The calcu-                    bound decreases with increasing noise level, indicated by
+lation of the T  = 0 real-frequency spectral function was                 the smaller fraction of points that respect this limit. This
+converged down to a broadening η = 0.05 eV. The num-                      decrease is more pronounced for NN1 but also occurs for
+ber of bath sites was chosen automatically for the given                  NN2.  Furthermore, for a low noise level of σ  =  10−4,
+broadening such that ﬁnite discretization eﬀects from the                 the lower fraction of points within the upper bound ob-
+bath ﬁtting are avoided, yieldingNb≈ 200 per orbital.                     served for NN2 applied on spectral functions generated
+The bond dimensions are set to 150 (300) for the impu-                    according to data recipe 1 indicates a certain degree of
+rity (bath-bath/bath-impurity) links both for the ground                  overﬁtting, as already observed in the cross-validation of
+state search and for the time evolution. We use a trun-                   the MAE (Fig.10).
+
+
+
+
+
+
+
+∗ maximilian.merkel@mat.ethz.ch                                               (Springer Netherlands, Dordrecht, 1989).
+ † claude.ederer@mat.ethz.ch                                               6 J. E. Gubernatis, M. Jarrell, R. N. Silver, and D. S. Sivia,
+ 1 H. Bruus and K. Flensberg, Many-body quantum theory in                     Physical Review B 44, 6011 (1991).
+   condensed matter physics: an introduction (Oxford Uni-                  7 H. J. Vidberg and J. W. Serene,Journal of Low Temper-
+   versity Press, Oxford and New York, 2004).                                 ature Physics 29, 179 (1977).
+ 2 A. Damascelli, Z. Hussain,  and Z.-X. Shen,Reviews of                   8 K. Ghanem and E. Koch,Physical Review B  101, 085111
+   Modern Physics 75, 473 (2003).                                             (2020).
+ 3 A. Georges, G. Kotliar, W. Krauth, and M. J. Rozenberg,                 9 A. S. Mishchenko, N. V. Prokof’ev, A. Sakamoto,  and
+   Reviews of Modern Physics 68, 13 (1996).                                   B. V. Svistunov,Physical Review B  62, 6317 (2000).
+ 4 E. Gull, A. J. Millis, A. I. Lichtenstein, A. N. Rubtsov,              10 J. Fei, C.-N. Yeh, D. Zgid, and E. Gull,Physical Review
+   M. Troyer,  and P. Werner,Reviews of Modern Physics                        B 104, 165111 (2021).
+   83, 349 (2011).                                                        11 L.-F. Arsenault, R. Neuberg, L. A. Hannah,  and A. J.
+ 5 J. Skilling, ed., Maximum Entropy and Bayesian Methods                     Millis,Inverse Problems     33, 115007 (2017).
+                                                                                                                                                13
+
+
+12 H. Yoon, J.-H. Sim,  and M. J. Han,Physical Review B                     27 M. Jarrell and J. E. Gubernatis,Physics Reports      269, 133
+   98, 245101 (2018).                                                          (1996).
+13 R. Fournier, L. Wang, O. V. Yazyev, and Q. Wu,Physical                   28 G.KresseandJ.Hafner,PhysicalReviewB      47,558(1993).
+   Review Letters 124, 056401 (2020).                                       29 G.KresseandJ.Furthmüller,PhysicalReviewB    54,11169
+14 T. Song, R. Valenti, and H. Lee,arXiv:2007.13610 (2020).                    (1996).
+15 X. Xie, F. Bao, T. Maier,  and C. Webster,Discrete and                   30 J. P. Perdew, K. Burke,  and M. Ernzerhof,Physical Re-
+   Continuous Dynamical Systems - S 15, 877 (2022).                            view Letters 77, 3865 (1996).
+16 D. Huang and Y.-f. Yang,Physical Review B    105, 075112                 31 M. Schüler, O. E. Peil, G. J. Kraberger, R. Pordzik,
+   (2022).                                                                     M. Marsman, G. Kresse, T. O. Wehling,  and M. Aich-
+17 R. Zhang and M. E. Merkel,“materialstheory/ml-analytic-                     horn,Journal of Physics: Condensed Matter     30, 475901
+   continuation,”(2022).                                                       (2018).
+18 L. Boehnke, H. Hafermann, M. Ferrero, F. Lechermann,                     32 M.  Aichhorn,  L.  Pourovskii,  P.  Seth,  V.  Vildosola,
+   and O. Parcollet,Physical Review B  84, 075145 (2011).                      M. Zingl, O. E. Peil, X. Deng, J. Mravlje, G. J. Kraberger,
+19 M. Abadi, A. Agarwal, P. Barham, E. Brevdo, Z. Chen,                        C. Martins, M. Ferrero,  and O. Parcollet,Computer
+   C. Citro, G. S. Corrado, A. Davis, J. Dean, M. Devin,                       Physics Communications 204, 200 (2016).
+   S. Ghemawat, I. Goodfellow, A. Harp, G. Irving, M. Isard,                33 P. Giannozzi, S. Baroni, N. Bonini, M. Calandra, R. Car,
+   Y. Jia, R. Jozefowicz, L. Kaiser, M. Kudlur, J. Leven-                      C. Cavazzoni, D. Ceresoli, G. L. Chiarotti, M. Cococcioni,
+   berg, D. Mané, R. Monga, S. Moore, D. Murray, C. Olah,                      I. Dabo, A. D. Corso, S. de Gironcoli, S. Fabris, G. Fratesi,
+   M. Schuster, J. Shlens, B. Steiner, I. Sutskever, K. Tal-                   R. Gebauer, U. Gerstmann, C. Gougoussis, A. Kokalj,
+   war, P. Tucker, V. Vanhoucke, V. Vasudevan, F. Viégas,                      M. Lazzeri, L. Martin-Samos, N. Marzari, F. Mauri,
+   O. Vinyals, P. Warden, M. Wattenberg, M. Wicke, Y. Yu,                      R. Mazzarello, S. Paolini, A. Pasquarello, L. Paulatto,
+   and X. Zheng, “TensorFlow: Large-scale machine learn-                       C. Sbraccia, S. Scandalo, G. Sclauzero, A. P. Seitsonen,
+   ing on heterogeneous systems,”https://tensorflow.org                        A. Smogunov, P. Umari, and R. Wentzcovitch,Journal of
+   (2015).                                                                     Physics: Condensed Matter 21, 395502 (2009).
+20 F. Chollet et al., “Keras,”https://keras.io (2015).                      34 K. F. Garrity, J. W. Bennett, K. M. Rabe,  and D. Van-
+21 K. He, X. Zhang, S. Ren, and J. Sun, in IEEE Conference                     derbilt, Computational Materials Science 81, 446 (2014).
+   on Computer Vision and Pattern Recognition (CVPR)                        35 A. A. Mostoﬁ, J. R. Yates, Y.-S. Lee, I. Souza, D. Vander-
+   (2016) pp. 770–778.                                                         bilt, and N. Marzari,Computer Physics Communications
+22 D. P. Kingma and J. Ba,arXiv:1412.6980 (2017).                              178, 685 (2008).
+23 Y. Gal and Z. Ghahramani, in Proceedings of The 33rd                     36 N. Marzari, A. A. Mostoﬁ, J. R. Yates, I. Souza,  and
+   International Conference on Machine Learning (PMLR,                         D.Vanderbilt,ReviewsofModernPhysics        84,1419(2012).
+   2016) pp. 1050–1059.                                                     37 J. Kanamori,Progress of Theoretical Physics         30, 275
+24 O.  Parcollet,  M.  Ferrero,  T.  Ayral,  H.  Hafermann,                    (1963).
+   I. Krivenko, L. Messio,  and P. Seth,Computer Physics                    38 P. Seth, I. Krivenko, M. Ferrero, and O. Parcollet,Com-
+   Communications 196, 398 (2015).                                             puter Physics Communications 200, 274 (2016).
+25 G. J. Kraberger and M. Zingl, “MaxEnt,”https://                          39 A. Hampel, S. Beck, M. E. Merkel,   and A. Carta,
+   github.com/TRIQS/maxent (2020).                                             “solid_dmft,”https://github.com/flatironinstitute/
+26 D. Bauernfeind, M. Zingl, R. Triebl, M. Aichhorn,  and                      solid_dmft (2021).
+   H. G. Evertz,Physical Review X 7, 031013 (2017).

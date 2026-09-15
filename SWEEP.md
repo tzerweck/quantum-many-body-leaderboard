@@ -35,6 +35,12 @@ shuriken 25, tV 23, pyrochlore 174, kagome 177.
 PDFs were fetched and layout-extracted for the whole prior pool: **214 committed source
 texts, up from 8**, which took the table harvest from 385 PDF cells to 2179.
 
+**Impurity: nobody has published on these Hamiltonians (2026-09-15).** The 12 instances are
+VarBench's own bath discretisations (`vendor/varbench/Impurity/HamParams`), so no other
+paper's total energy is comparable. All 247 papers citing VarBench or the FTPS paper
+(PRX 7, 031013) in Semantic Scholar and OpenAlex were screened, 215 in full text, for the
+instance names and stored energies (`sweep-cites.tsv`): none uses them but VarBench itself.
+
 ### TFIsing had no coverage because it could not be matched, not because nobody published
 
 The family showed 0 of 7 instances covered. Three independent defects made a match

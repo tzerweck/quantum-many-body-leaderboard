@@ -1,0 +1,3325 @@
+  SciPost Physics                                                                            Submission
+
+    Autoregressive neural Slater-Jastrow ansatz for variationalMonte Carlo simulation
+
+
+                                   S. Humeniuk1,2*, Y. Wan1,3, L. Wang1,3†
+
+           1 Institute of Physics, Chinese Academy of Sciences, Beijing 100190, China
+ 2 Department of Physics and Astronomy, Rutgers University, Piscataway, NJ O8854, USA
+         3 Songshan Lake Materials Laboratory, Dongguan, Guangdong 523808, China
+                           * stephan.humeniuk@gmail.com †wanglei@iphy.ac.cn
+
+                                                     March 15, 2023
+
+Abstract
+
+Direct sampling  from a Slater determinant is combined with  an autoregressive
+deep neural network as a Jastrow factor into a fully autoregressive Slater-Jastrow
+ansatz for variational quantum Monte Carlo, which allows for uncorrelated sam-
+pling.  The elimination of the autocorrelation time leads to a stochastic algorithm
+with provable cubic scaling (with a potentially large prefactor), i.e.  the number
+of operations for producing an uncorrelated sample and for calculating the local
+energy  scales  like O(N 3s )  with  the  number  of  orbitals Ns.   The  implementation
+is benchmarked on the two-dimensional t−V  model of spinless fermions on the
+square lattice.
+
+
+Contents
+
+1   Introduction                                                                                                     2
+
+2   Method                                                                                                             5
+    2.1    Neural network Jastrow factor                                                                                   6
+            2.1.1    MADE architecture                                                                                        6
+            2.1.2    Permutation invariant autoregressive Jastrow factor                                     9
+    2.2    Slater sampler                                                                                                          10
+            2.2.1    First-quantized (“unordered”) direct sampling                                            10
+            2.2.2    Second-quantized (“ordered”) direct sampling                                             12
+            2.2.3    Exploiting normalization                                                                              16
+    2.3    Normalization of MADE× SD                                                                                16
+    2.4    Sign of the wavefunction                                                                                          18
+    2.5    Calculation of the local kinetic energy                                                                     19
+            2.5.1    The problem                                                                                                 19
+            2.5.2    Lowrank updates from reference state                                                          20
+            2.5.3    Correction factor                                                                                          22
+    2.6    Optimization and simulation details                                                                        24
+
+3   Benchmark results                                                                                          27
+
+                                                               1
+  SciPost Physics                                                                            Submission
+
+
+4   Outlook                                                                                                           33
+
+5   Conclusion                                                                                                      35
+
+A  Local one-body density matrix (OBDM)                                                       35
+
+B  Slater determinant overlap ratios                                                                   36
+
+C  Cooptimzation of the Slater determinant                                                      37
+
+D  Iterative update of the Schur complement                                                     40
+
+E  Lowrank updates for local kinetic energy                                                      44
+    E.1   remove-r update                                                                                                       46
+    E.2   remove-r-add-s update                                                                                             46
+    E.3   extend-Gnum-remove-r update                                                                                47
+    E.4   extend-Gdenom-remove-r-add-s update                                                                   48
+    E.5   Gdenom-from-Gdenom[k-1] update                                                                          49
+
+F  Illustrative example of conditional probabilities                                            51
+
+References                                                                                                           51
+
+
+
+
+1  Introduction
+
+Recently  application  of  artiﬁcal  neural  networks  to  the  variational  simulation  of  quantum
+many-body problems [1] has shown great promise [2–12].  Variational Monte Carlo (VMC)
+simulations [13] with neural networks as an ansatz have in some cases surpassed established
+methods such as quantum Monte Carlo,  which for fermions and frustrated spin systems in
+general  has  a  sign  problem,  or  tensor  network  states,  which  are  limited  by  entanglement
+scaling.  This success is due to the neural network’s variational expressiveness [14], the ability
+to capture entanglement beyond the area law [14–16] and eﬃcient sampling techniques.
+    Most often for the VMC sampling a Markov chain with local Metropolis update is used [13].
+This  may  result  in  long  autocorrelation  time  and  loss  of  ergodicity  when  the  acceptance
+rate is too low,  a limitation that is especially relevant for deep models [6, 9, 10] and in the
+simulation of molecular wavefunctions [17].  A technique for generating uncorrelated samples
+is the componentwise direct sampling, where the joint distribution pθ(x) of a conﬁguration x
+of components is decomposed into a chain of conditional probabilties [18–23]
+
+                                                            N∏
+                                               pθ(x) =          pθ(xk|x<k).                                                  (1)
+                                                           k=1
+Here, θ  denotes  the  variational  parameters.   The  components x1,...xN  of  a  conﬁguration
+x = (x1,x2,...,xN) are sampled iteratively by traversing the chain of conditional probabilities
+
+
+                                                               2
+ SciPost Physics                                                                            Submission
+
+
+
+
+              pθ(x1) x1∼pθ(x1)−−−−−−→pθ(x2|x1) x2∼pθ(x2|x1)−−−−−−−−→pθ(x3|x1,x2) x3∼pθ(x3|x<3)−−−−−−−−−→...              (2)
+and inserting the value of the sampled component into the next conditional probability.  As
+a result, a sample drawn according to the joint distribution x∼ pθ(x) and its (normalized)
+probability pθ(x) are yielded.  Such autoregressive generative models, which are widely used
+in  image  and  speech  synthesis  [24, 25],  enjoyed  several  elegant  applications  in  the  physical
+sciences, namely to statistical physics [22], the reconstruction of quantum states with gener-
+ative models [26], quantum gas microscopy [27], design of global Markov chain Monte Carlo
+updates [28] and variational simulation of quantum systems [11, 23, 29–31].  Direct sampling
+has also been employed in the optimization of tensor networks [32–34].
+    As long as the conﬁguration components are spins that sit at ﬁxed positions, a natural or-
+dering in which the autoregressive property holds can be imposed easily.  On the other hand,
+adapting  the  autoregressive  approach  to  indistinguishable  particles  with  a  totally  antisym-
+metric wavefunction, requires a number of modiﬁcations.  The antisymmetry of the fermionic
+neural  network  wavefunction  has  been  imposed  in  various  ways:  In  Ref.  [35]  the  antisym-
+metry was implemented directly as a symmetry [5] by keeping track of the sign changes due
+to  permutation  from  a  a  representative  conﬁguration  for  a  given  orbit  of  the  permutation
+group.  Then no Slater determinant needs to be computed which results in aO(N 2) rather
+thanO(N 3)  scaling  with  the  system  size N  [35].   In  Refs.  [17, 36]  the  sign  structure  was
+encoded at the level of the Hamiltonian operator rather than the wavefunction by mapping
+fermionic degrees of freedom to spins via a Jordan-Wigner transformation.  For completeness,
+it is worth mentioning that in the setting of ﬁrst quantization, the deep neural networks Fer-
+miNet  [37]  and  PauliNet  [38, 39]  have  achieved  remarkable  success  in  ab  initio  simulations
+by applying a few generalized determinants [40] to multi-orbital wavefunctions of real space
+electron positions encoded as a permutation-equivariant neural network ansatz.  Alternative
+ﬁrst-quantized  approaches  aimed  at  replacing  the  costlyO(N 3)  determinant  evaluation  by
+a  cheaper  antisymmetrizer  [41]  scaling  asO(N 2)  appear  to  come  at  the  price  of  reduced
+accuracy [42,43].
+    By far the most commonly employed variational wavefunction in VMC for fermions [44,
+45]  is  an  antisymmetric  Slater  determinant  (SD)  [46]  multiplied  by  a  symmetric  Jastrow
+correlation factor [47]
+                                          |ψθ⟩∼∑        |x⟩J (x)⟨x|ψ0⟩,                                                (3)
+                                                     x
+where∼ indicates that the wavefunction written in this form is in general not normalized.  A
+famous example of a variational wavefunction of Slater-Jastrow form is the Laughlin wave-
+function [48] describing quantum Hall states.  The Jastrow factorJ (x), which is diagonal in
+the local basis{x}, encodes complex dynamical correlations by altering the modulus of the
+amplitudes of basis states, however, it does not aﬀect the nodal structure of the wavefunction,
+which is solely determined by the mean-ﬁeld reference wavefunction|ψ0⟩.  The latter is either a
+Slater determinant, or a Pfaﬃan or correlated geminal [49], which is an implicit resummation
+of a subset of Slater determinants.  Neural VMC with an ansatz of the form of Eq. 3, where the
+Jastrow factor is represented by a neural network, has been explored for fermions [2,4,7] and
+also for spin systems [50], through a Gutzwiller projected mean-ﬁeld wavefunction augmented
+by a Jastrow correlation factor.  The Slater-Jastrow ansatz can be extended to incorporate
+static (i.e.  multi-reference) correlations beyond a single Slater determinant [2,4,7,51].
+
+
+
+                                                          3
+ SciPost Physics                                                                            Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+     Figure 1:  Combination of an autoregressive neural network for the Jastrow factor
+     with an autoregressive Slater determinant (SD) into a Slater-Jastrow ansatz which
+     allows direct sampling of many-particle conﬁgurations.
+
+
+    Here,  we  focus  on  lattice  models,  and  we  consider  only  the  case  where  the  reference
+wavefunction|ψ0⟩ is a single Slater determinant.  Thus, static (i.e.  multireference) correlations
+are not captured, which is an inherent limitation of the ansatz.  The emphasis of this paper
+is on improving the sampling eﬃciency [52] by imposing the autoregressive property on both
+the Slater determinant [53–55] and the Jastrow factor so that uncorrelated sampling becomes
+possible.  As illustrated schematically in Fig. 1,  the conditional probabilities are interlaced
+into a combined autoregressive ansatz
+                                                              vuu√
+                                                                 Np∏
+                                 ΨSJ(x) = sign(⟨x|ψ0⟩)               pSJ(ik|i<k),                                     (4)
+                                                                 k=1
+wherepSJ(ik|i<k) =NpJastrow(ik|i<k)pSD(ik|i<k), with normalization factorN , and where the
+sign structure is determined solely by the Slater determinant|ψ0⟩.  While generic components
+are denoted as xk, we write ik∈{1,...,N} and nik∈{0, 1} if the components are particle
+positions or occupation numbers, respectively.
+    In simulations of lattice models with a Slater-Jastrow variational wavefunction, which in-
+cludes orbital space VMC [56–59],  the autocorrelation time increases as some power of the
+system size [56] so that eliminating autocorrelation would change the scaling of the method.
+Also bottlenecks due to low acceptance rates [17] are avoided by direct sampling.  We note
+the related work of autoregressive neural-network wavefunctions for quantum chemistry ap-
+plications [60,61] that have recently been proposed for VMC in the space of arbitrary excited
+Slater determinants (“full conﬁguration interaction“).  Our approach is diﬀerent in that all
+correlations are handled by the Jastrow factor.
+    This  paper  is  structured  as  follows:  In  Sec.  2  the  building  blocks  of  the  autoregressive
+Slater-Jastrow  ansatz  are  ﬁrst  introduced  separately:  a  permutation  invariant  masked  au-
+toregressive deep neural network representing the (bosonic) Jastrow factor (Sec. 2.1.1) and
+the  Slater  sampler,  which  can  sample  unordered  (Sec.  2.2.1)  or  ordered  (Sec.  2.2.2)  parti-
+
+                                                          4
+ SciPost Physics                                                                            Submission
+
+
+cle positions from the mean-ﬁeld wavefunction.  Sec. 2.3 discusses the issue of normalization
+which  arises  from  the  multiplication  of  the  Jastrow  factor  and  the  Slater  determinant  and
+has important implications both for the probability density estimation of a sample and the
+calculation  of  the  local  energy  of  the  combined  ansatz.   Sec.  2.5  is  devoted  to  the  eﬃcient
+calculation of the local kinetic energy through a speciﬁcally designed lowrank update, which
+is crucial for preserving the cubic scaling of the ansatz.  A complete documentation of the
+lowrank update is provided in appendix   E. Benchmark results for a two-dimensional t−V
+model  of  spinless  fermions  are  shown  in  Sec.  3.   We  conclude  with  an  outlook  on  possible
+extensions to autoregressive multireference wavefunctions in Sec. 4 and summarize in Sec. 5.
+
+2  Method
+
+We consider a model of Np spinless fermions on Ns lattice sites with Hamiltonian
+
+                                                            Ns∑      (              )
+                                 H =Hint({n})− 12                tsr  c†scr +c†rcs                                  (5)
+                                                           r,s=1
+
+The fermion operators satisfy canonical anticommutation rules{c†r,cs} =δrs and the occupa-
+tion numbers are nr =c†rcr.  The interactionsHint are assumed to be diagonal in the basis of
+occupation number conﬁgurations{n} = (n1,...,nNs).  Variational Monte Carlo (VMC) for
+simulating ground state physics is based on the Rayleigh-Ritz variational principle.  With the
+deﬁnition of the local energy
+                                               Elocθ   (x) =⟨x|H|ψθ⟩⟨x|ψθ⟩                                                        (6)
+
+for basis state x≡{n} the expectation value of the energy over the variational wavefunction
+is
+                                        ⟨Eθ⟩ =∑        |⟨x|ψθ⟩|2   ⟨x|H|ψθ⟩
+                                                    x   ⟨ψθ|ψθ⟩      ⟨x|ψθ⟩
+
+                                               =∑      pθ(x)Elocθ   (x).                                                     (7)
+                                                    x
+
+⟨Eθ⟩ is minimized iteratively with respect to the variational parameters θ  and needs to be
+estimated at each step.  Since
+                                              pθ(x) = |ψθ(x)|2∑
+                                                            x′|ψθ(x′)|2                                                    (8)
+is positive deﬁnite, it can be interpreted as a probability distribution and the high-dimensional
+sum in Eq. 7 is evaluated using a Monte Carlo scheme
+                                       ⟨Eθ⟩≈       1           ∑      Elocθ   (x),                                            (9)
+                                                 Nsamples    x∼pθ(x)
+
+wherex∼pθ(x) denotes drawing a sample from the probability distributionpθ(x).  Note that
+amplitude and sign of the wavefunction ψθ(x) =⟨x|ψθ⟩ appear only in the expression for the
+
+
+
+                                                           5
+ SciPost Physics                                                                            Submission
+
+
+local energy
+
+                                        Elocθ   (x) =∑    ⟨x|H|x′⟩⟨x′|ψθ⟩
+                                                      x′        ⟨x|ψθ⟩                                                   (10)
+
+through a ratio of amplitudes involving all basis statesx′ connected tox via the (oﬀ-diagonal
+part of the) Hamiltonian.  An autoregressive variational ansatz must fulﬁll two tasks:
+
+   1.Direct  sampling:   Generate  uncorrelated  samples  x  from  the  normalized  probability
+       distribution pθ(x).
+
+   2.Probability density estimation: For calculating the local kinetic energy (or any other oﬀ-
+       diagonal observable) the wavefunction amplitude⟨x′|ψθ⟩ = sign(⟨x′|ψθ⟩)√|⟨x′|ψθ⟩|2 on
+       an arbitrary (i.e.  not necessarily previously sampled) conﬁgurationx′ must be available
+       to obtain the amplitude ratio⟨x′|ψθ⟩/⟨x|ψθ⟩ in Eq. (10).
+
+Furthermore  gradients  with  respect  to  the  variational  parameters θ  need  to  be  calculated,
+which is conveniently done using automatic diﬀerentiation.
+
+2.1Neural network Jastrow factor
+
+2.1.1MADE architecture
+Many neural network architectures satisfying the autoregressive property have been put for-
+ward.   We  use  the  masked  autoencoder  for  distribution  estimation  (MADE)  proposed  by
+Germain et al. [21], which makes both sampling and density estimation (inference) tractable.
+The autoregressive connectivity between input and output nodes is realized by appropriate
+masks  in  a  fully-connected  feed-forward  neural  network,  see  Fig.  2(a),  and  all  conditional
+probabilities can be obtained in a single forward pass.  Sampling requires N  forward passes,
+where N  is the number of ”components“ [21].
+    For  modeling  the  Jastrow  factor,  the  inputs  are  adapted  to  represent  positions  of  in-
+disinguishable  particles  rather  than  binary  variables,  see  Fig.  2(b).   A  conﬁguration  in  the
+computational basis of Np indistinguishable particles (spinless fermions) on Ns sites is either
+speciﬁed in terms of ordered particle positions|x⟩≡|i1,i2,...,iNp⟩ with i1 <i2 <...<iNp
+or, equivalently, in terms of occupation numbersni∈{0, 1}, i.e.|x⟩ =|n1,n2,...,nNs⟩ where
+ni = 1 if i∈{i1,i2,...,iNp} and ni = 0 otherwise.  Conceptually, the autoregressive Slater-
+Jastrow  ansatz  is  a  generative  model  for  ordered  particle  positions  at  ﬁxed  total  particle
+number, and it is autoregressive in the particle index (see Fig. 2(b)), however, as will be ar-
+gued below, the representation in terms of occupation numbers is essential in an intermediate
+step (see Sec. 2.2.2).
+    A conﬁguration|i1,i2,...,iNp⟩ is “unfolded” and input to the autoregressive Slater-Jastrow
+network (Fig. 3) as a concatenation of Np blocks of one-hot encoded particle positions
+
+                             xin = [onehot(i1), onehot(i2),..., onehot(iNp)],
+
+which componentwise reads xin(k−1)Ns+1:kNs =δi,ik  with i,ik∈{1,...,Ns} and k = 1,...,Np.
+Here, [·,·] denotes vector concatenation and the colon notation
+
+                                         i :j = (i,i + 1,i + 2,...,j)
+
+
+                                                          6
+SciPost Physics                                                                            Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    Figure 2:  (a) Three-layer MADE network for binary components:  By zeroing out
+    elements of the network weight matrix W  with a mask M  of zeros and ones it is
+    ensured that outputs ˆxk′ with indexk′ only depend on inputs xk with indexk<k′.
+    The  activation σ(a)  =  (1 + exp(−a))−1  at  each  output  ensures  that  the  output
+    ˆxk ∈  [0, 1]  can  be  interpreted  as  the  probability  for  the  binary  variable xk  to  be
+    set to 1, which is conditional on the inputs in the receptive ﬁeld of  ˆxk.  (b) MADE
+    Jastrow network for sampling particle positions: Inputs are one-hot encoded particle
+    positions, outputs are categorical distributions over the number of sites where the
+    k-th particle is to be placed.  Connections in the original MADE network (a) are
+    replaced  by  dense  linear  layers  between  blocks  of Ns  nodes  each.   The  activation
+    function at each node is a parametric ReLU [62].
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                        7
+ SciPost Physics                                                                            Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+     Figure 3:  Architecture of the autoregressive Slater-Jastrow ansatz.  Note that the
+     Slater sampler and Jastrow network act in parallel and not sequentially.  The last in-
+     put is not connected to any output as this would violate the autoregressive property.
+     The  ﬁrst  output  is  unconditional  and  the  probability  is  solely  determined  by  the
+     Slater determinant p(i1) =|⟨i1|ψSD⟩|2.  Red arrows indicate the iterative sampling
+     along the chain of conditional probabilities in which a sampled on-hot encoded par-
+     ticle position is fed back to the inputs such that another pass through the network
+     determines the next conditional probability.  The probability of the generated sample
+     is the product of the conditional probabilities at the actually sampled positions.
+
+
+indicates a range of indices.  The output of the autoregressive Slater-Jastrow network
+
+                            ˆxout = [p(i1),p(i2|i1),p(i3|i1,i2),...,p(iNp|i<Np)]
+
+is a concatenation of Np blocks of categorical distributions over the number of sites with the
+k-th block p(ik|i<k)≡ pcond(k,ik) modeling the conditional probability for the k-th particle
+to be at position ik.  The normalization∑Nsik=1p(k,ik) = 1 of each conditional probability is
+ensured by applying a softmax activation function in the last layer to each block of outputs.
+    The total input dimension of the MADE network for particle positions is NpNs, as there
+are Np  blocks  of  one-hot  encodings  of Ns  particle  positions  each.   The  weights  connecting
+nodes  in  the  original  MADE  architecture  [20, 21]  are  promoted  to Ns×Ns  weight  matrix
+blocks.  Thus the dimensionality of the weight matrices between layers is NpNs×NpNs, and
+to ensure the autoregressive property they have a lower-triangular block structure with blocks
+of size Ns×Ns.  Since direct connections are allowed for all layers except the ﬁrst one (so as
+to ensure the autoregressice property [21]) only the weight matrix of the ﬁrst layer is strictly
+lower block-triangular, whereas the weight matrices of subsequent layers can have non-zero
+blocks on the diagonal.
+
+
+                                                          8
+ SciPost Physics                                                                            Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+     Figure 4:  Distinct “unfolded” output conﬁgurations of the autoregressive Jastrow
+     neural network correspond to the same conﬁguration of indistinguishable particles.
+     In α1  the “ﬁrst” particle is at position 4 and the “second” particle at position 2,
+     while inα2 the order is reversed. α1 andα2 represent the same state of indistinguish-
+     able particles,  but for the network they appear distinct and are assigned diﬀerent
+     probabilities.
+
+
+2.1.2Permutation invariant autoregressive Jastrow factor
+The  autoregressive  ansatz  implies  some  predetermined  ordering  of  inputs  and  outputs.   If
+the outputs are interpreted as categorial distributions for particle conﬁgurations without any
+constraints, MADE will sample distinct unfolded conﬁgurations which correspond to the same
+state of indistinguishable particles.  However, they would be assigned diﬀerent probabilities by
+the Jastrow network (see Fig. 4). Therefore it must be ensured that only one of the possibleNp!
+permutations ofNp particle positions is output by the network so that a unique probability can
+be assigned to each conﬁguration of indistinguishable particles.  This is achieved by imposing
+an ordering constraint [63] on the particle positions:
+
+                                              i1<i2<...<iNp.
+
+It is implemented by augmenting the ouput blocks of MADE for each particle k by a “block-
+ing”/“ordering“ layer which modiﬁes the output such that the conditional probability for the
+k-th particle to sit at site i is
+                                0                                       if i≤ik−1
+
+                   ˆxi(k) =      0                                       if i≥Ns− (Np−k) + 1                   (11)
+                                ˆxi(k)/(∑Ns−(Np−k)j=ik−1+1    ˆxj(k))    else
+
+The ﬁrst line in Eq. (11) expresses the requirement that the k-th particle has to be “to the
+right” of (k−1)-th while the second line is due to the fact that the remaining (Np−k) particles
+need space somewhere “to the right” (Pauli blocking).  The third line returns a normalized
+probability  on  the  support  of  valid  positions  for  the k-th  particle,  which  is imin[k]≤ ik≤
+imax[k] with imin[k] =ik−1 + 1 and imax[k] =Ns− (Np−k)− 1.
+
+                                                          9
+ SciPost Physics                                                                            Submission
+
+
+    The Jastrow MADE network fulﬁlls two computational tasks:
+
+   1.Sampling:  During the sampling, which requires  Np passes through the MADE network
+       [21],  automatic  diﬀerentiation  is  not  activated.   The  MADE  network  can  process  a
+       batch of samples in parallel, however note that the ﬁnal “Pauli ordering“ layer and the
+       normalization in Eq. (11) depend on the given particle conﬁguration. The position of the
+       ﬁrst particle (which is unconditional) is sampled from the probability distribution given
+       in terms of the Slater determinant only (see following section, as well as Fig. 5).  To this
+       end the ﬁrst output block of the ”Pauli ordering” layer is set to a uniform distribution.
+
+   2.For density estimation only a single pass through MADE in necessary [21].
+
+The MADE network is implemented in the PyTorch [64] machine learning framework.
+
+2.2Slater sampler
+In statistical analysis the problem of directly sampling fermion conﬁgurations from a Slater
+determinant is known as a “determinantal point process” [54,55] and fast algorithms scaling
+asO(NpN 2s ) have been designed [54, 65, 66].  The following Sec. 2.2.1 re-derives such a fast
+fermion sampling algorithm, where particle positions that are successively sampled come out
+“unordered”.  Although this is not the actual fermion sampling algorithm that will be used, it
+introduces the optimizations that are crucial for achieving cubic scaling with system size and
+sets the stage for the eﬃcient  “ordered”  sampling algorithm in Sec. 2.2.2, which is the one
+relevant to the autoregressive Slater-Jastrow ansatz.  The reader interested only in the ﬁnal
+algorithm may directly proceed to Sec. 2.2.2.
+    As a matter of terminology, the ”unordered” sampling is in fact based on the ﬁrst-quantized
+formalism,  where  the  particles  are  regarded  as  distinct  and  the  anti-symmetrization  of  the
+wave function is added as a requirement.  By contrast, the ”ordered” sampling is based on
+the second-quantized formalism, where we no longer distinguish particle labels.
+
+2.2.1First-quantized (“unordered”) direct sampling
+Autoregressive sampling is feasible whenever the probability distribution is tractable, i.e.  its
+normalization  constant  and  the  marginal  distributions  over  components  can  be  calculated
+eﬃciently.  For a Slater determinant this is possible.  The Hartree-Fock Slater determinant is
+written in terms of the matrix P  of single-particle orbitals as
+
+                                                     Np∏ Ns∑
+                                           |ψ0⟩ =            Pi,nc†i|0⟩.
+                                                    n=1  i=1
+
+The corresponding one-body density matrix is denoted as{⟨ψ0|c†icj|ψ0⟩}Nsi,j=1 =PP†≡G and
+the single-particle Green’s function as G = 1Ns−G.  The marginal probability for k≤ Np
+particles to be at positions (i1,i2,...,ik) is given by the generalized Wick’s theorem in terms
+
+
+
+
+
+
+
+
+                                                        10
+ SciPost Physics                                                                            Submission
+
+
+of principal minors of the one-body density matrix
+
+                           p(i1,i2,...,ik)
+                                          Ns∑
+                                 =                  |⟨i1,i2,...,ik,ik+1,...,iNp|ψ0⟩|2
+                                     ik+1,...,iNp=1
+
+                                 =     1k!(Np) det (GIk,Ik).                                                                 (12)
+                                          k
+GIk,Ik  is the restriction of the matrixG  to the rows and columns given by the ordered index
+set of particle positionsIk ={i1,i2,...,ik−1,ik}.  In this section the indexk labelling position
+ik  denotes the sampling step and, other than that, there is no ordering among the positions
+implied.  The conditional probability can be obtained from the ratio of marginals
+
+                                    p(ik+1|i1,...,ik) = p(i1,i2,...,ik+1)p(i1,i2,...,ik) .                                     (13)
+
+Note that the normalization constant in Eq. (12) does not depend on the sample (i1,i2,...,ik).
+This normalization is only valid if the one-body density matrix can be written asG =PP†,
+i.e.   it  derives  from  a  single  Slater  determinant  and  therefore  is  a  projector,G2  =G.   The
+normalization will be dropped in the following and restored in the ﬁnal result.  The normalized
+conditional probabilities are
+
+                                    p(ik+1|i<k+1) =     1N−k ˜p(ik+1|i<k+1),                                     (14)
+
+where we denote by a tilde the unnormalized  conditional probabilities
+                                                             )
+                     ˜p(ik+1|i<k+1) = det(GIk+1,Ik+1det (GIk,Ik)
+                                                ( X[k]  GIk,ik+1          )
+                                           det    GTIk,ik+1 Gik+1,ik+1
+                                       =             det(X[k])                                                            (15)
+
+                                       =Gik+1,ik+1− ∑             Gik+1,l(X[k]−1)l,mGm,ik+1                    (16)
+                                                          l,m∈Ik
+                                                                                                                    (17)
+
+Here, the k×k submatrixGIk,Ik  is abbreviated as X[k].  The block determinant formula has
+been used, which allows to cancel the denominator determinant det(X[k]) so that the deter-
+minant  of  the  Schur  complement  of X[k]  remains.   Whenever  numerator  and  denominator
+matrix  diﬀer  in  just  one  row  and  column,  the  latter  is  just  a  number.   The  expression  for
+˜p(ik+2|i<k+2) is analogous, with X[k] replaced by X[k + 1].  Having X[k]−1  available is es-
+sential for eﬃcient calculation of the Schur complement for all positions ik+1∈{i1,...,iNs}.
+While traversing the chain of conditional probabilities and sampling new particle positions
+conditional  on  the  previously  sampled  ones,  we  need  to  keep  track  of  the  inverse  matri-
+ces X−1[1]→ X−1[2]→ ...X−1[k− 1]→ X−1[k] and update X−1[k] iteratively based on
+X−1[k− 1] using the block matrix update formula.  With the deﬁnition of the vector
+                                         ⃗ξ[k− 1] =X−1[k− 1]GIk−1,ik                                            (18)
+
+                                                           11
+ SciPost Physics                                                                            Submission
+
+
+the block update of the inverse matrix is seen to be a low-rank update
+                       (X[k− 1] GIk−1,ik)−1
+           X−1[k] =       GTIk−1,ik  Gik,ik
+                       (                                                                              )
+                    =     X−1[k− 1] +⃗ξ[k− 1]⊗S−1[k]⊗⃗ξ[k− 1]T                    −⃗ξ[k− 1]S−1[k]        .        (19)
+                                          −S−1[k]⃗ξ[k− 1]T                              S−1[k]
+
+S−1[k]≡  ˜p(ik|i<k[unordered]), the inverse of the Schur complement of X[k− 1], is given by
+Eq.  (16)  evaluated  at  the  actually  sampled  position ik.   Therefore S−1[k]  has  already  been
+computed,  and  in  the  given  case  of  unordered  sampling  it  is  just  a  scalar  (compare  with
+Sec.2.2.2, where the Schur complement is a matrix).  In terms of computational complexity,
+the matrix-vector product in Eq. (18) costsO((k− 1)2) while the expression in the ﬁrst block
+of Eq. (19) is an outer product, which costsO((k− 1)2).  Thus, after sampling the position
+of  the k-th  particle,  the  update X−1[k− 1]→ X−1[k]  can  be  preformed  withO((k− 1)2)
+operations.
+    The matrix-vector product in Eq. (16) also costsO(k2), but it needs to be computed for
+the conditional probabilities at all ik+1∈{1,...,Ns}, resulting in a cost ofO(Nsk2) at the
+(k + 1)-th sampling step.  Then sampling all Np particle positions{i1,i2,...,iNp} along the
+entire chain of conditional probabilities would costO(NsN 3p ), if Eq. (16) were used directly.
+    Making use of computations done at previous iterations [65, 66], a recursion relation for
+the conditional probabilities can be derived.  By inserting X−1[k] from Eq. (19) into Eq. (16)
+and recognizing the expression for the conditional probabilities at the previous sampling step
+k, it can be veriﬁed that
+
+                           ˜p(ik+1 =x|i<k+1) = ˜p(ik =x|i<k)−S−1[k]χ(x)2,                            (20)
+
+where                                                                 
+                                 χ(x) =    ∑        ξ[k− 1]mGm,x−Gik,x,                                   (21)
+
+                                             m∈Ik−1
+and, as stated earlier, S−1[k] = ˜p(ik|i<k) is the unnormalized  conditional probability for the
+position of the k-th particle at the actually sampled position ik.  In eﬀect, the matrix-vector
+product in Eq. (16) has been replaced by a vector-vector dot product in Eq. (21), which reduces
+the computational cost at sampling stepk toO(Nsk) and the cost of sampling allNp particle(k2 +Nsk)∼
+positions  (i1,i2,...,iNp),  including  the  iterative  update  of X−1[k],  to ∑Npk=1
+O(NsN 2p ) for Ns>Np.
+    The presented algorithm is similar to “Algorithm 2” in Ref. [65] and “Algorithm 3” in
+Ref.  [66],  except  that  there  the  explicit  construction  of  the  matrix X−1[k]  has  also  been
+avoided.  Note that another fast fermion sampling algorithm scaling asO(NsN 2p ) is given in
+Ref. [54].
+
+2.2.2Second-quantized (“ordered”) direct sampling
+A Slater determinant is by construction invariant under permutation of particle positions, i.e.
+
+                            |⟨σ(i1)σ(i2)...σ(iNp)|ψ0⟩|2 =|⟨i1i2...iNp|ψ0⟩|2,                             (22)
+
+
+                                                         12
+ SciPost Physics                                                                            Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+     Figure  5:   Conditional  probabilities  for  a  Slater  determinant  of Np   =  4  non-
+     interacting  fermions  in  a  chain  with Ns  =  50  sites  and  periodic  boundary  condi-
+     tions.  For the conﬁguration in (a) the ﬁrst particle is at position i1  = 1 and the
+     second and third at i2 = 2,i3 = 3.  In (b) the positions of the ﬁrst three particles
+     are i1  = 5,i2  = 10 and i3  = 15.  Clearly, there are conditional probabilities which
+     approach zero due to interference (not caused by the Pauli principle).  Note that the
+     probability for the ﬁrst particle, which is unconditional, is not uniform because of
+     the requirement that all positions to the left be empty.
+
+
+where σ is an element of the symmetric groupSNp  of Np  permutations.  This is reﬂected in
+Eq. (12) by the fact that an equal number of row and column permutations does not change the
+determinant.  As mentioned earlier, the same is not true for the autoregressive Jastrow factor,
+and one needs to impose an ordering constraint to be able to assign unique probabilities to
+conﬁgurations of indistinguishable particles.  Now, the statement that the second particle is at
+positioni2 and is “to the right” in the chosen fermion ordering of the ﬁrst particle at position
+i1, that isi2>i1, actually implies that all positions betweeni1 andi2 are empty.  This cannot
+be guaranteed by ﬁrst-quantized (“unordered”) sampling from a Slater determinant,  which
+is therefore incompatible with the ansatz for the autoregressive Jastrow factor.  Instead, one
+needs to sample sequentially (for example in a snake-like ordering in dimension D≥ 2, see
+Fig. 1) occupation numbers rather than particle positions to make sure that the sites between
+ik andik−1 are empty and the particle position sampled in the k-th sampling step is also the
+k-th one in the fermion ordering.  This is outlined in the following.
+    The joint (marginal) distribution of a subset of occupation numbers is [27]
+                                                  G1,1−n1   G1,2  ···    G1,m                        
+                                                  G2,1   G2,2−n2 ···    G2,m                    
+                                    ∑m                    ...                 ...           ...            ...
+     p(n1,n2,...,nm) = (−1)            i=1ni det                                                          ,       (23)
+                                                       Gm,1    Gm,2  ···  Gm,m−nm
+
+
+                                                         13
+ SciPost Physics                                                                            Submission
+
+
+where Gi,j  are elements of the single-particle Green’s function.  Note that p(n1,n2,...,nm)
+in Eq. (23) is correctly normalized.  In terms of the joint distribution of occupation numbers
+the joint distribution of ordered particle positions can be expressed as
+
+                               p(i1<i2<...<ik =m)
+                               =p(n1 = 0,n2 = 0,...,ni1 = 1,...,
+                                  ni2−1 = 0,ni2 = 1,ni2+1 = 0,...,nm = 1).                                (24)
+
+With the obvious convention that occupation numbers at particle positions are equal to one
+and between particle positions equal to zero, the conditional probabilityp(ik+1|i<k+1[ordered])
+for ordered particle positions is
+
+  p(ik+1|i<k+1[ordered]) = p(i1<i2<...<ik =m<ik+1 =m +l)p(i1<i2<...<ik =m)                                            (25)
+                  G1,1−n1   G1,2  ···    G1,m                              G1,m+1  ···    G1,m+l               
+                  G2,1   G2,2−n2 ···    G2,m                     G2,m+1  ···    G2,m+l               
+                          ...                 ...           ...            ...  ...             ...              ...
+              det       Gm,1    Gm,2  ···  Gm,m−nm                          Gm,m+1 ···   Gm,m+l
+                      Gm+1,1   Gm+1,2 ···   Gm+1,m                        Gm+1,m+1 ···   Gm+1,m+l
+                          ...                 ...            ...              ......           ...             ...
+
+   = (−1)1            Gm+l,1   Gm+l,2  ···   Gm+l,m                      Gm+l,m+1 ···  Gm+l,m+l+1                ,
+                                         G1,1−n1   G1,2  ···    G1,m
+                                         G2,1   G2,2−n2 ···    G2,m                     
+                                  det          ...                 ...           ...            ...
+
+                                            Gm,1    Gm,2  ···  Gm,m−nm
+                                                                                                                 (26)
+
+where ik≡ m and ik+1≡ m +l are the positions of the k-th and (k + 1)-th particle in the
+given fermion ordering.  Like Eq. (15), the numerator matrix exhibits a block structure of the
+form                                                   ( ˜X[k]      )
+                                              (26)≡               B    ,                                                   (27)
+                                                          BT      D
+where  ˜X[k] is anik×ik matrix and the blocksB andD are deﬁned by Eq. (26).  Using again
+the block determinant formula and cancelling det( ˜X[k]), we are left with the determinant of
+the Schur complement of  ˜X[k]:
+                                                                   (                       )
+                        p(ik+1|i<k+1[ordered]) = (−1) det            D−BT  ˜X−1[k]B          .                        (28)
+
+At variance with Eq.(15), where the blocksB andD are a vector and a number, respectively,
+in Eq. (26) the width l of those blocks is in the range l∈{1,...,imax[k + 1]−ik}.
+    The  inverse  matrix   ˜X−1[k + 1]  is  updated  iteratively  from   ˜X−1  to  be  available  when
+calculating the Schur complement in the next sampling stepk + 1.  As in Eq. (19) the formula
+for the inverse of a block matrix is used:
+                                                          ( ˜X[k] B)−1
+                                         ˜X−1[k + 1] =       BT  D           .                                            (29)
+
+
+                                                          14
+ SciPost Physics                                                                            Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+     Figure 6: CPU time in seconds for generating 100 samples from a Slater determinant
+     as  a  function  of  system  size Ns  for  half  ﬁlling, Np  = Ns/2.   Both  unordered  and
+     ordered direct sampling of particle positions scales likeO(N 3s ),  which is indicated
+     by the dashed line.  Shown for unordered  direct sampling are the naive algorithm of
+     Sec. 2.2.1 without reusing previous computations (red), the optimized algorithm of
+     Sec. 2.2.1 (green), and the algorithm of Tremblay at al. [66] (magenta).  Shown for
+     ordered  direct sampling is the naive implementation in Sec. 2.2.2 without reusing
+     previous  computations  (blue)  and  the  optimized  version  described  in  appendix  D
+     (orange).
+
+
+For ordered sampling the Schur complement of  ˜X[k],
+
+                                         ˜S[k + 1]≡D−BT  ˜X−1[k]B,                                            (30)
+
+is  an l×l  matrix.   Direct  calculation  according  to  Eqs.  (29)  and  (30)  costsO(i2kl +l2ik)
+operations, and at the (k + 1)-th sampling step all conditional probabilities on the allowed
+support l∈{1,...,imax[k + 1]−ik}, see Eq. 11, need to be computed.
+    By  reusing  previously  calculated  matrix-vector  products  in  the  Schur  complement  in
+Eqs.  (29)  and  (30)  for  diﬀerent  values  of l  (see  appendix  D)  as  well  as  by  reusing  compu-
+tations already done when calculating the conditional probabilities of the previous particle
+(similar to the algorithm in Sec. 2.2.1), the overall computation cost for producing an uncorre-
+lated sample of ordered particle positions can be brought down toO(N 3s ), see Fig. 6.  A precise
+operation count is diﬃcult due to the stochastic dependence on the sampled positions{ik}.
+For small system sizes the computational cost is dominated by linear algebra operations for
+very small matrices [67].  The speedup related to optimized ordered sampling (see appendix
+D)  only  comes  to  bear  when  the  system  size  is  large  enough  so  that  reusing  precomputed
+matrix-vector products pays oﬀ.
+    As the ordered sampling proceeds by calculating conditional probabilities for occupation
+numbers  rather  than  particle  positions,  the  sampling  space  is  initially  the  grand-canonical
+
+                                                          15
+ SciPost Physics                                                                            Submission
+
+
+ensemble which is then by the trick (11) constrained to ﬁxed particle number.  The compu-
+tational complexity is therefore only weakly dependent on the particle number or ﬁlling (see
+Fig. 7).
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+     Figure 7: CPU time in seconds for generating 100 samples from a Slater determinant
+     as a function of the number of particles Np  on Ns  = 200 sites, using ordered and
+     unordered sampling.  For ordered sampling the computational eﬀort decreases again
+     for particle numbers above half ﬁlling because the number of available positions is
+     restricted by the Pauli blocker.
+
+
+2.2.3Exploiting normalization
+The  fact  that  the  conditional  probabilities  for  each  component  of  the  Slater  determinant
+sampler are normalized can be exploited to “screen” the probabilities:  The conditional prob-
+ability pcond(k,ik)  for  the k-th  component  is  calculated  consecutively  for  the  orbitals ik  =
+imin,...,m,...,imax up to the smallestm for which the normalization of probabilities∑mik=1pcond(k,ik)> 1−ε
+is exhausted within a small marginε.  Calculations fori>m are skipped and the correspond-
+ing  probabilities  are  set  to  zero.   It  is  found  that  with ε  =  10−10− 10−8,  approximately
+25% of the conditional probabilities that would need to be evaluated can be skipped with-
+out aﬀecting the normalization.  Appendix F shows what conditional probabilities in a large
+two-dimensional system of non-interacting fermions look like.
+
+2.3Normalization of MADE  × SD
+Having discussed the direct sampling of positions of indistinguishable particles from the sym-
+metric Jastrow factor (MADE) and the anti-symmetric Slater determinant sampler (SD), we
+now turn to the coupling of the two autoregressive generative models.  In machine learning ter-
+minology such multiplication of two model probabilities is known as a product of experts [68].
+
+
+
+                                                        16
+ SciPost Physics                                                                            Submission
+
+
+This brings about the issue of normalization since the product of two individually normalized
+probability distributions,∑{n}pSD(n) = 1 and∑{n}pJastrow(n) = 1, is not normalized.
+    Due to the structure of the autoregressice ansatz, the normalization is done at the level
+of the conditional probabilities, i.e.  for each output block of MADE× SD, which is feasible
+since  the  size  of  their  support  is  at  most Ns−Np + 1.   The  normalized  modulus  squared
+of the wavefunction for a conﬁguration|β⟩  with occupation numbers n(β)  in the combined
+autoregressive Slater-Jastrow ansatz reads
+
+                           pθ(n(β))≡|⟨β|Ψθ⟩|2 = pJastrow(n(β))×pSD(n(β))N (n(β))      ,                            (31)
+
+where
+                                                      Np∏
+                                      pSD(n(β)) =         pSD(n(β)ik|n(β)i<ik)                                          (32)
+                                                      k=1
+and
+                                                       Np∏
+                                  pJastrow(n(β)) =         pMADE(n(β)ik|n(β)i<ik)                                     (33)
+                                                      k=1
+is the (normalized) probability in the Slater determinant or Jastrow ansatz, written as a chain
+of conditional probabilities.  It is easy to show that the normalization of all conditional prob-
+abilities implies the correct normalization of the joint distribution.  Pairing up corresponding
+conditional probabilities in Eqs. (32) and (33) and normalizing over the relevant support leads
+to
+
+           pSJ(nk(ik) = 1|n1,n2,...,nk−1)
+
+               =   pSD(nk(ik) = 1|n1,...,nk−1)·pMADE(nk(ik) = 1|n1,...,nk−1)∑
+                      ik∈IkpSD(nk(ik) = 1|n1,...,nk−1)pMADE(nk(ik) = 1|n1,...,nk−1).        (34)
+Here, the sum runs over the support for the k-th sampling step, which according to Eq. (11)
+is Ik  = [imin,imax]≡ [ik−1 + 1,Ns− (Np−k)].  It should be emphasized that pSJ(nk(ik) =
+1|n1,...,nk−1) means the conditional probability that thek-th particle sits at positionik with
+all positions betweenik−1 andik empty.  All normalization constants can be grouped together
+into
+                                                                   
+ N (n(β)) =    ∑      pSD(n1(i1) = 1)·pMADE(n1(i1) = 1)
+
+                 i1∈I1
+                                                                  
+    · ∑      pSD(n2(i2) = 1|n1)·pMADE(n2(i2) = 1|n1)···
+        i2∈I2
+                                                                                                        
+    ·  ∑         pSD(nNp(iNp) = 1|n1,...,nNp−1)·pMADE(nNp(iNp) = 1|n1,...,nNp−1),  (35)
+        iNp∈INp
+
+which is the renormalization factor in Eq. (31).  Of course, the conditional probabilities are
+sample-dependent, which is why also the renormalization factorN (n(β)) depends on the given
+sample n(β).
+
+                                                        17
+ SciPost Physics                                                                            Submission
+
+
+    The normalization requirement has important implications for the inference step:  Con-
+sidering  the  Slater  determinant  and  Jastrow  network  separately,  the  probability  of  a  given
+sample|β⟩ =|i1,i2,...,iNp⟩ could be obtained from Eq. (12) for the Slater determinant, and
+for the Jastrow factor by passing the sample through the MADE network [21] and picking
+from the output of MADE only the conditional probabilities at the actually sampled positions
+and taking their product (according to Eq. (1)).  On the other hand, in the combined model
+MADE× SD, for the sake of normalization according to Eq. (35), the conditional probabil-
+ities  at  all  positions ik ∈ Ik,  not  just  at  those  of  the  given  sample,  need  to  be  calculated
+even in the inference step.  While MADE provides all conditional probabilities with a single
+pass through the network [21], the Slater sampler needs to traverse the full chain of sampling
+steps to generate all conditional probabilities since it has an internal state which needs to be
+updated iteratively.  As a result, for the combined model, inference is as costly as sampling.
+
+2.4Sign of the wavefunction
+The MADE network and the Slater sampler parameterize the probability, but not the ampli-
+tude and sign of a state ψθ(x) = sgn(⟨x|ψθ⟩)√pθ(x).  The sign structure of the wavefunction
+is solely determined by the Slater determinant (which may be cooptimized with the Jastrow
+factor, i.e.  rotated by an orthogonal matrix R, see Appendix  C). Therefore
+
+                        sign [⟨x|ψθ⟩] = sign [⟨x|ψ0⟩]                                                                   (36)[()]
+                                        = sign    det    P (R){i1,i2,...,iNp};{1,2,...,Np}   ,                        (37)
+
+which  requires  calculating  the  determinant  of  an Np× Np  submatrix  of  the  P-matrix  in
+Eq. (2.2.1) and costsO(N 3p ) for each sample x.  In the autoregressive approach subsequent
+samples x are not related in any way and the sign needs to re-calculated for every sample.
+This does not modify the overall cubic scaling of our algorithm.
+    In the calculation of the local energy Eq. (10) the relative sign(⟨β|ψ0⟩/⟨α|ψ0⟩) is needed
+between a reference state|α⟩ and another basis state|β⟩ diﬀering just in the position of one
+particle.  Given the local one-body density matrix
+
+                                         Gj,i≡G(α,ψ0)              jci|ψ0⟩
+                                                   j,i      =⟨α|c†⟨α|ψ0⟩  ,                                             (38)
+
+it  can  be  shown  that  the  overlap  ratio  between |α⟩  and  an  occupation  number  state|β⟩
+diﬀering from|α⟩ by a particle hopping from (occupied) site r to (unoccupied) site s is (see
+Appendix B)
+                             ⟨β|ψ0⟩
+                             ⟨α|ψ0⟩ = (1−Gr,r−Gs,s +Gr,s +Gs,r)×σ(r,s).                             (39)
+The additional sign                                        ∑max(r,s)−1
+                                      σ(r,s) =⟨α|(−1)         i=min(r,s)+1 ˆni|α⟩                                        (40)
+
+is due to the fact that in the P-matrix representation (2.2.1) of a Fock state columns need to
+be ordered according to increasing row index of particle positions.  The index i in Eq. (40)
+runs according to the fermion ordering.  The calculation of the local OBDM (see Appendix B)
+requires the inversion of an Np×Np matrix and thus scales asO(N 3p ) with particle number
+Np.
+
+
+                                                          18
+ SciPost Physics                                                                            Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      Figure 8:  Example of conditional probabilities for a reference state|α⟩ and a cor-
+      responding one-hop state|β⟩ for 5 particles on 10 sites.  Open circles in the upper
+      graph denote the conditional probabilities at the actual particle positions in state
+      |α⟩ and|β⟩,  respectively.  The conditional probabilities at other positions need to
+      be calculated for the sake of obtaining the normalization constant in Eq. (35) (after
+      multiplying with the probabilities of the Jastrow factor).  Coloured shading in the
+      lower part of the ﬁgure indicates the support of the distribution of conditional prob-
+      abilities for sampling the position of the k-th particle in state|α⟩ (left set of sites,
+      red) or|β⟩ (right set of sites, blue), respectively.
+
+2.5Calculation of the local kinetic energy
+
+2.5.1The problem
+The local energy of basis state|α⟩ is
+
+                              E(loc)θ     (α) =⟨α|Hint|α⟩ +∑⟨α|Hkin|β⟩⟨β|ψθ⟩⟨α|ψθ⟩,                              (41)
+                                                                β
+where the non-zero contribution to the sum is from all states|β⟩ connected to|α⟩ by single-
+particle hopping.  Assuming that it exists, the occupation number state|β⟩∼c†scr|α⟩ diﬀers
+from|α⟩  only  in  the  occupancies n(β)r    =  1−n(α)r    and ns  =  1−n(α)s   .   The  sign  of|β⟩  was
+discussed in the previous section.  The conﬁguration|β⟩ is called a “one-hop state” as it arises
+from the “reference” state|α⟩ by the hopping of a single particle from position r  to s  1  In
+
+   1Hamiltonians  with  two-body  oﬀ-diagonal  terms  such  as  indirect  Coulomb  interaction  would  require  a
+lowrank update for all “two-hop states” that arise from a common reference state.
+
+                                                          19
+ SciPost Physics                                                                            Submission
+
+
+conventional Markov chain VMC the ratio of determinants⟨β|ψ0⟩/⟨α|ψ0⟩ can be calculated
+using the lowrank update Eq. (39) so that⟨β|ψ0⟩ does not need to be calculated from scratch.
+Likewise,  the ratio of Jastrow factors J(n(β))/J(n(α)),  which is diagonal in the occupation
+number basis, is calculated fast [13] (After all, in Markov chain VMC only relative probabilities
+are required, which need not be normalized.)
+    In the autoregressive ansatz, on the other hand, the issue is that changing the position of
+a single particle changes the conditional probabilities for all subsequent particles in the given
+ordering (see Fig. 8).  As far as the Jastrow factor is concerned this is not a problem as the
+probabilitypJastrow(n(β)) is obtained by a single pass through the MADE network [21], which
+is  much  cheaper  than  the  sampling  step,  which requires Np  passes  with Np  the  number  of
+components (i.e.  particles).  The Slater sampler encoding pSD(n(β)), however, has an internal
+state, and probability density estimation of an arbitrary occupation number state is as costly
+as sampling a state since all components have to be processed in order to update the internal
+state (the matrix  ˜X−1[k] in Eq. (29)) iteratively.  Then, the evaluation of the kinetic energy
+would become the bottleneck of the algorithm:  Since state|α⟩ is connected by the kinetic
+energy operator toO(Np) states|β⟩, evaluating the kinetic energy would beO(Np) times more
+costly than the sampling of the reference state|α⟩, if⟨β|ψθ⟩ = sign(β)√|⟨β|ψθ⟩|2 needed to be
+re-evaluated for each “one-hop state”|β⟩.  Furthermore, as already mentioned, all conditional
+probabilities need to be calculated (not just at the sampled positions) since we need to be
+able to obtain the normalization constantN (n(β)), see Eq. (35).
+
+2.5.2Lowrank updates from reference state
+The  goal  is  to  compute  the  conditional  probabilities  in  “one-hop”-state |β⟩  based  on  the
+conditional  probabilities  of  the  reference  state|α⟩  without  recomputing  any  determinants.
+Assume  that  in  state|α⟩  the  (k− 1)-th  particle  is  located  at ik−1 ≡ m  and  the  the k-th
+particle atik≡m +l.  In between there are by deﬁnition no particles.  With k the component
+(i.e. k-th particle) being sampled and ik the position in question the conditional probability
+reads
+
+ p(α)cond(k,ik =m +l)≡p(nm+l = 1|n(α)(        1 ,n(α)2 ,...,n(α)m ,nm+1 = 0,...,nm+l−1 = 0,nm+l = 1))
+                                    det   GM+L,M+L−N (α)M+L
+                          = (−1)            (                  )   ,                                                   (42)
+                                        det   GM,M−N (α)M
+
+where M  = {1, 2,...,m}  and L  = {m + 1,...,m + l}  indicate  ordered  sets  of  site  in-
+dices, GM,M  is the corresponding submatrix of the equal-time Green’s function and N (α)M   =
+diag(n(α)1 ,n(α)2 ,...,n(α)m  ) is a diagonal matrix whose entries are the occupation numbers up to
+site m in basis state|α⟩.  In N (α)M+L =N (α)M ⊕ diag(0, 0,..., 0, +1) the occupation numbers on
+sites m + 1 to m +l− 1 are all set to zero and only site m +l is occupied.
+    It is convenient to introduce for the conditional probability and for the ratio of numerator
+and denominator determinants in Eq. (42) the short-hand notation
+
+                                      p(α)                             num)
+                                       cond(k,ik) = (−1)  det(G(α)det(G(α)
+                                                                      denom).                                         (43)
+
+
+
+                                                         20
+ SciPost Physics                                                                            Submission
+
+
+For later use, let us also highlight the block matrix structure of the expression Eq. (42):
+                                                         (A B)
+                                                    det    C  D
+
+                                                        det(A)                                                             (44)
+where
+                                                  A = [G−N]M,M                                                    (45a)
+                                                 B = [G]M,L                                                            (45b)
+                                                 C =BT                                                                  (45c)
+                                                 D = [G−N]L,L                                                     (45d)
+and M  and L are the index sets deﬁned above.
+    For describing the lowrank update systematically a graphical representation of conditional
+probabilities is useful.  As already said, we assume that the conditional probabilityp(α)cond(k,ik)
+for thek-th component in the reference state n(α) has been calculated at positionik =m +l.
+In  another  occupation  number  state n(β)  the  expression  of  the  conditional  probability  for
+occupation  of  the  (m +l)-th  site  diﬀers  only  in  the  diagonal  matrices N (β)M   and N (β)M+L  =
+N (β)M ⊕ diag(0, 0,..., 0, 1)  while  the  submatrices  of  the  equal-time  Green’s  function  are  the
+same:                                                            (                            )
+                                                            det    GM+L,M+L−N (β)(      M+L)   .                       (46)
+                        p(β)cond(k,ik =m +l) = (−1)
+                                                                 det    GM,M−N (β)M
+This motivates the graphical representation of the conditional probabilities in terms of the en-
+tries of the diagonal matricesN (γ)M+L andN (γ)M  ,γ ={α,β}, in the numerator and denominator
+determinant, respectively.  In Fig. 9, lattice sites, which are counted from left to right in the
+chosen fermion ordering, are denoted as boxes, and black points indicate occupied positions.
+A green point indicates the position for which the conditional probability is to be calculated.
+The green line indicates the support ik∈{imin(k),imax(k)} of the conditional probabilities of
+component k.  In the example in Fig. 9 we consider the conditional probabilities for particle
+number k = 4 out of ﬁve particles on nine sites.  In accordance with the ordering constraint
+Eq. (11), the last position i = 9 marked by a cross is excluded from the support since a ﬁfth
+particle still needs to ﬁt in somewhere so that this position cannot be occupied by the fourth
+particle.  In the example in Fig. 9, the state|β⟩ is obtained from|α⟩ by letting a particle hop
+from position r = 4 to position s = 2, i.e. n(α)r − 1 = n(β)r    and n(α)s    + 1 = n(β)s   .  Therefore,
+the numerator and denominator matrices diﬀer only in the diagonal entries (r,r) and (s,s)
+as follows:            (                           )        (       )
+                                            G(β)num  r,r =   G(α)num  r,r + 1,                                             (47)
+
+and similarly           (                          )        (       )
+                                            G(β)num  s,s =   G(α)num  s,s− 1.                                            (48)
+
+Eq.  (47)  describes  the  removal  of  a  particle  at  position r  and  Eq.  (48)  the  addition  of  a
+particle  at  position s.   Since G(β)num  and G(β)denom  diﬀer  from G(α)num  and G(α)denom  only  in  two
+diagonal matrix elements, their determinants can be updated from those of theα-states using
+a low-rank update withO(1) operations.  This is discussed in the next section.
+
+                                                           21
+ SciPost Physics                                                                            Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      Figure  9:   Graphical  representation  of  the  ratio  of  determinants  in  Eq.  (42)  and
+      Eq. (46) for a reference state|α⟩ and a related one-hop state|β⟩.  In this example
+      the conditional probabilities are for placing the fourth (k = 4) out of ﬁve particles
+      on  nine  sites.   Given  e.g. p(α)(k  =  4,ik  =  7),  one  can  obtain p(β)(k  =  4,ik  =  7)
+      using  a  lowrank  update  of  the  numerator  and  denominator  determinant  in  which
+      the diagonal elements (r,r) and (s,s) are changed (see main text).
+
+
+2.5.3Correction factor
+The ”onehop states“|β⟩ are ordered according to the smallest particle position in which they
+diﬀer from the reference state. The rationale is that, if a onehop state agrees with the reference
+state up to the k-th particle position, the conditional probabilities of the reference state up
+to the k-th particle can simply be copied.  The largest k up to which (inclusive) conditional
+probabilities for state|β⟩ can be copied from state|α⟩ is called kcopy[β].  Fig. 10 illustrates
+the ordering of one-hop states.
+    Letik[β] denote the position of thek-th particle in the one-hop state|β⟩, which is assumed
+to arise from the reference state|α⟩ by a particle hopping from position r≡r[β] to position
+s≡s[β].  We wish to compute the conditional probability of the k-th particle in the one-hop
+state|β⟩  based  on  the  conditional  probabilities  for  the k-th  particle  in  the  reference  state
+|α⟩.   In  the  simplest  case  where r,s < ik  (e.g. |β1⟩  in  Fig.  10),  both  the  numerator  and
+denominator matrix in Eq. (46) need to be corrected in the positions r and s.  This can be
+achieved by a lowrank update of the corresonding inverse matrices.  Let G(α)  denote either
+G(α)num[k,i] or G(α)denom[k] at a given sampling step (sampling whether the k-th particle is to be
+placed  at  position i)  of  the  reference  state|α⟩  and G(β)  the  corresponding  matrices  in  the
+reference state|β⟩.  The lowrank update amounts to
+
+                                  G(β)r,r  =G(α)r,r  + 1    ”remove particle“ at r
+                                  G(β)s,s  =G(α)s,s− 1    ”add particle“ at s
+
+which is realized by
+                                         G(β) =G(α) +U (r,s)(V (r,s))T                                            (49)
+
+with m× 2 (m-th position being sampled) matrices U (r,s)  = (ˆer|ˆes) and V (r,s)  = (ˆer|− ˆes)
+
+                                                           22
+SciPost Physics                                                                            Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    Figure 10: Ordering of one-hop states.  A reference state|α⟩ and the associated
+    one-hop states|βj⟩∼  ˆc†s(j)ˆcr(j)|α⟩, j  = 1,..., 6,  generated by the kinetic operator
+    for a chain with nearest-neighbour hopping.  Red dashed brackets with circled num-
+    bers  k○   =kcopy[β] indicate that conditional probabilities up to the k-th component
+    (inclusive) can be copied from the reference state.  Lattice positions shaded in blue
+    indicate the support for the calculation of conditional probabilities for the example
+    of the component k = 3.  For the states|β4⟩,|β5⟩,|β6⟩ the conditional probabilities
+    for the position of the third particle can be copied from state|α⟩.  Note that for|β2⟩
+    the support of p(β2)cond(k = 3,ik) is larger than that of p(α)cond(k = 3,ik).
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                        23
+ SciPost Physics                                                                            Submission
+
+
+containing unit vectors as columns.  By the generalized determinant lemma
+
+                       det(G(β)) = det(G(α) +U (r,s)(V (r,s))T )                                                   (50)
+
+                                   = det12 + (V (r,s))TG(α)−1U (r,s)|{z      }× detG(α).                      (51)
+
+                                                             C
+The ”capacitance matrix“ C is
+                                       (1 + (G(α)−1)r,r       (G(α)−1)r,s         )
+                                 C =       −(G(α)−1)s,r     1− (G(α)−1)s,s           ,                                   (52)
+
+
+and its determinant gives the correction factor to the determinants in the updateG(α)→G(β):
+
+                 κ(r,s)≡ det(G(β))det(G(α)) = det(C)
+
+                        = (1 + (G(α)−1)r,r)(1− (G(α)−1)s,s) + (G(α)−1)r,s(G(α)−1)s,r.               (53)
+
+Applying the lowrank update to both the numerator and denominator matrix the correction
+factor  connecting  the  conditional  probabilities  in  the  reference  state|α⟩  to  the  conditional
+probabilities of state|β⟩ is obtained as
+
+  p(β)                num   ×p(α)
+   cond(k,i) = κ(r,s)κ(r,s)      cond(k,i)
+                     denom
+               =  (1 + (G(α)−1num  )r,r)(1− (G(α)−1num  )s,s) + (G(α)−1num  )r,s(G(α)−1num  )s,r×p(α)
+                   (1 + (G(α)−1                                                                     cond(k,i).   (54)
+                             denom)r,r)(1− (G(α)−1denom)s,s) + (G(α)−1denom)r,s(G(α)−1denom)s,r
+For this to work,  the inverses of the numerator and denominator matrices of the reference
+state|α⟩,G(α)−1num   andG(α)−1denom, need to be kept and updated iteratively during the component-
+wise sampling.  As a result of the lowrank updates the conditional probabilities p(β)cond(k,i) for
+all states|β⟩ connected to|α⟩ by the hopping of a single particle can be calculated simultane-
+ously withp(α)cond(k,i).  With the lowrank update, the relative overhead of calculating the local
+kinetic energyE(kin, loc)θ          (α) compared to the sampling or probabilitiy estimation of|α⟩ is only
+a constant factor which approachesO(1) asymptotically for large system sizes (see Fig. 11).
+Without it, the calculation of the local energy would beO(Np)-times slower.  Therefore this
+relatively complicated low-rank update is essential to the eﬃciency of the proposed autore-
+gressive Slater-Jastrow ansatz.  Only the simplest case ”remove-r-add-s“ has been discussed
+here, all other details can be found in Appendix E.
+
+2.6Optimization and simulation details
+The  optimization  of  the  variational  parameters  is  done  with  the  stochastic  reconﬁguration
+(SR) method [69–71], which is also known as natural gradient descent [72,73].  In the update
+of the variational parameters at optimization step t
+
+                                           θ(t+1)p       =θ(t)p −ηS−1∂⟨Eθ⟩∂θp                                                 (55)
+
+
+                                                          24
+SciPost Physics                                                                            Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                 (∑           )
+   Figure  11:  Relative  overhead η  =               βt(β)CPU  /t(α)CPU  of  CPU  time  for  computing
+   all conditional probabilities needed to obtain pSD(n(β)) for states|β⟩ connected to
+   the reference state|α⟩ by the kinetic operator via lowrank updates compared to the
+   CPU time needed for calculating the conditional probabilities and pSD(n(α)) for the
+   reference state|α⟩ itself.  As the cost of calculating the conditional probabilitiesp(α)cond
+   for the reference state|α⟩ grows with system size Ns =L2, the cost of the lowrank
+   update for all states|β⟩ is increasingly amortized, although the number of states|β⟩
+   scales as∼Np (The scatter indicates diﬀerent randomly chosen reference states|α⟩;
+   blue dots:  half-ﬁlling with particle number Np =⌊L2/2⌋; red crosses:  quarter ﬁlling
+   with Np =⌊L2/4⌋; V/t = 6).
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                       25
+ SciPost Physics                                                                            Submission
+
+
+the stochastic gradient
+                                            gp≡ ∂⟨Eθ⟩∂θp   =⟨⟨OpH⟩⟩                                                 (56)
+
+is preconditioned by the inverse of the Fisher information matrix Sp,p′ =⟨⟨OpOp′⟩⟩.  In these
+expressions, the logarithmic derivative operator is deﬁned as Op(x) =  ∂∂θp logψθ(x) and the
+connected  correlators⟨⟨AB⟩⟩  =⟨AB⟩−⟨A⟩⟨B⟩  are  estimated  stochastically  by  averaging
+over a batch of samples.  Stochastic reconﬁguration is very eﬀective in thinning out redundant
+parameters  and  dealing  with  possible  vastly  diﬀerent  curvatures  of  the  loss  landscape  that
+arises from the cooptimization of the Jastrow factor and the orbitals of the Slater determinant
+(see Appendix C). The autoregressive Jastrow factor is not translationally invariant and no
+other symmetries are imposed so that the number of variational parameters increases very
+quickly with system size likeNparam∼  12(NpNs)2.  In order to circumvent the construction and
+storage of the matrixS, which is quadratic inNparam, the linear systemηg =−S(θ(t+1)−θ(t))
+is solved using the conjugate gradient method with lazy evaluation of matrix-vector products
+[74].
+    Redundant parametrization of the variational ansatz causes the covariance matrix S  to
+be non-invertible.  In our case the Jastrow factor is heavily over-parametrized.  Therefore a
+regularization of S  is required, which is accomplished by rescaling [71] the diagonal matrix
+elements and with a diagonal shift [2].  For SR the learning rate was η = 0.2.
+    Alternatively to SR we use the reinforcement loss
+
+                                        M∑                       [                      ]
+                          ∇θL =                ∇θ log(ψθ(x))      E(loc)θ     (x)−Eθ,avg  ,                           (57)
+                                    x∼|ψθ(x)|2
+
+where the gradient acts only on the wavefunction.  Using stochastic gradient descent, the gra-∑M
+dients are estimated over a batch ofM≈ 200−300 samples andEθ,avg =   1M                          x∈batchE(loc)θ     (x).
+Backpropagation on this loss functionL directly reproduces the gradients of the average en-
+ergy  Eq.  (56)  and  thus  allows  to  employ  ﬁne-tuned  optimizers  such  as  Adam  [75]  and  the
+learning rate schedulers available in the PyTorch [64] machine learning framework.
+    An inﬁnite variance of the local energy [76] is a known issue in fermionic QMC. It is related
+to the presence of nodes where the wavefunction can change sign during the optimization; a
+small value of|ψθ(x)| in Eq. (6) can make the calculation of E(loc)θ     (x) unstable.  Following
+Ref. [37],  the local energy is clipped when calculating gradients in Eq. (57),  but not when
+calculating the average local energy.
+    Fig.  12  shows  that  the  largest  part  of  the  computation  time  is  due  to  the  inference  of
+samples on the Slater determinant, log(pSD(x)), which is caused by the iterative procedure
+of calculating conditional probabilities (see Sec. 2.3) and the need to calculate all conditional
+probabilities (rather than just at the actually sampled positions) for the purpose of normal-
+ization.  The second-largest contribution comes from the calculation of the local energy.  In
+comparison, the running time for inference of the bosonic probabilities given by the MADE
+neural network is negligible.
+    The  diagram  is  only  meant  to  give  an  overall  indication  of  the  relevance  of  optimizing
+certain computational tasks; the CPU timings for diﬀerent tasks are not disjoint.
+
+
+
+
+
+                                                         26
+ SciPost Physics                                                                            Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+     Figure 12:  CPU time per 100 samples (in seconds) of the most important computa-
+     tional tasks with cooptimization of the Slater determinant.
+
+3  Benchmark results
+
+The implementation of the autoregressive Slater-Jastrow VMC ansatz (arSJVMC) is bench-
+marked on thet−V  model ofNp spin-polarized fermions on a square lattice of Ns =L2 sites
+with periodic boundary conditions:
+                                                  (             )
+                                HtV  =−t∑          c†icj +c†jci    +V∑       ninj,                                   (58)
+                                             ⟨i,j⟩                      ⟨i,j⟩
+where⟨i,j⟩ denotes nearest neighbours and t,V > 0.  Only at half ﬁlling and on a bipartite
+graph, thet−V  model withV > 0 does not have a sign problem in QMC [77–79] and unbiased
+simulations on large systems are possible.  Away from half ﬁlling the phase diagram has been
+explored using various variational methods [7].
+    In order to assess the amount of correlation energy captured by the autoregressive Slater-
+Jastrow VMC, Fig. 13 compares the VMC results with the exact ground state energy and the
+energy from Hartree-Fock (HF) approximation of the Hamiltonian (58) (see e.g.  Ref. [7]) on
+a 4× 4 system.  Around 98% of the correlation energy, deﬁned as EHF−Eexact, are recovered
+with  a  single  (cooptimized)  Slater  determinant,  except  for  large V/t  around  quarter  ﬁlling
+(Np = 4, 5), where - apparently - static correlations become important.  Interestingly, at half
+ﬁlling (Np = 8), the Hartree-Fock solution provides already an extremely good approximation
+to  the  ground  state  such  that  the  correlation  energy  is  very  small  over  the  entire  range  of
+V/t-values.
+    In order to further verify the quality of the approximated ground state wavefunction we
+compare in Fig. 14 the density-density correlation function
+                                                ∑
+                                  C(r) =   1Ns       (⟨nini+r⟩−⟨ni⟩⟨ni+r⟩)                                     (59)
+                                                  i
+
+                                                        27
+ SciPost Physics                                                                            Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      Figure 13:  Comparison of the ground state energy obtained from arSJVMC (sym-
+      bols)  with  exact  diagonalization  (continuous  lines)  and  the  Hartree-Fock  solution
+      (dashed  lines)  on  a  4× 4  system  with  particle  number  varying  from Np  =  2  to
+      Np = 8.
+
+
+with results from exact diagonalization (ED). Following Ref. [7], the density-density correla-
+tions are also plotted as a function of graph distance
+                                            ˜C(r) =   1      ∑       C(r),                                               (60)
+                                                      Nr   dist(r)=r
+
+wherer = dist(r) =|rx| +|ry| is the Manhattan distance andNr is the number of points with
+given distance r.
+    The  Lanczos  exact  diagonalization  was  carried  out  using  the  Quspin  package  [80, 81],
+restricting to the momentum sectors which contain the ground state.  Correlation functions
+were  averaged  over  degenerate  ground  states  in  momentum  sectors  related  by  point  group
+symmetry. As it involves only a single Hartree-Fock Slater determinant, for open-shell systems,
+the VMC ansatz does not necessarily have well-deﬁned quantum numbers.
+    The  orbitals  of  the  Slater  determinant  are  cooptimized  so  as  to  ﬁnd  the  best  single-
+determinant wavefunction in the presence of the Jastrow factor.  The evolution of the opti-
+mized Slater determinant relative to the original Hartree-Fock Slater determinant is quantiﬁed
+through a measure of the change of the sign structure [4]
+                                   ∑
+                                      x|ψHF(x)|2sign(ψHF(x))sign(ψθ(x))∑
+                                                      x|ψHF(x)|2        ,                                    (61)
+and the overlap of the initial and the optimized wavefunctions
+
+                                                    ⟨ψHF|ψSD,θ⟩.                                                         (62)
+
+The evolution of these quantities during optimization is shown in Fig. 16(b) for a larger system
+(L = 6).  In order to verify the eﬀectiveness of the cooptimization, the Slater determinant has
+been initialized with a HF solution which is not fully converged so that part of the HF orbital
+optimization is transferred to the VMC loop.  As Figs. 15 and 16 show, with cooptimization,
+the ground state is recovered even with a poor starting point for the mean-ﬁeld wavefunction.
+
+                                                          28
+ SciPost Physics                                                                            Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+     Figure 14: Left column: Convergence of the energy (with Adam used as an optimizer,
+     batchsize is 200 samples).  Dashed and dashed-dotted lines denote the exact energies
+     of the ground and ﬁrst excited state, respectively.  Middle column:  Density-density
+     correlation  function,  where  the  variable r  =  (rx,ry)  has  been  ﬂattened  such  that
+     C(m) =C(r) withm =rx +ryL.  Continuous lines are exact results from ED. Right
+     column:  Density-density correlations as a function of graph distance.
+
+
+For  small  systems  (L  =  4),  only  the  overlap⟨ψHF|ψθ⟩  changes  during  optimization  (inset
+Fig.  15)  whereas  the  measure  of  the  sign  structure  stays  pinned  to  1.   For  larger  system
+(Fig. 16), the sign structure also changes considerably after an initial plateau around 1.  On
+the  other  hand,  with  a  fully  self-consistent  HF  Slater  determinant  as  a  starting  point,  the
+beneﬁcial  eﬀect  of  cooptimizing  the  orbitals  is  much  less  signiﬁcant.   It  should  be  pointed
+out that the computational cost of automatic diﬀerentiation for optimizing the orbitals of the
+Slater determinant (i.e.  calculation of gradients of log(ψθ(x)) in Eq. (57)) is approximately an
+order of magnitude larger than the cost of automatic diﬀerentiation for calculating gradients
+with respect to parameters of the MADE neural network alone.  This is due to the iterative
+process by which the conditional probabilities under the Slater determinant are calculated.)≈ 5.6× 109 (see Fig. 16).
+    The largest Hilbert space dimension for the test systems is(3615
+Due to memory constraints, for this system size no exact ground state energy was available
+to us, and we use the correlation function from Ref. [7] as a benchmark (see inset in Fig. 16),
+ﬁnding excellent agreement.  Best results over ﬁve random seeds and variance extrapolation of
+the energies (Fig. 17) for this set of simulations are shown in Tab. 1 for a range of interactions
+and  ﬁlling  fractions.   The  relative  error  ∆E  =|EarSVMC−Eexact|/|Eexact|  is  always  below
+1− 2%,  which  is  consistent  with  an  ansatz  limited  by  the  sign  structure  of  a  single  Slater
+determinant.  Such an error is comparable to other works [2,51].
+    Tabs. 2,3,4 compare energies obtained with our arSJVMC to energies from a Slater-Jastrow
+ansatz represented by a restricted Boltzmann machine (RBM) [2] and other methods from
+the comprehensive variational benchmark published in Ref. [82,84].  The conclusion from this
+comparison is that, in terms of accuracy, the arSJVMC is on par with a simple RBM-Slater-
+
+                                                          29
+SciPost Physics                                                                            Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    Figure 15:  Cooptimization of the orbitals of the Slater determinant together with
+    the Jastrow factor allows for convergence to the ground state even if the initial HF
+    Slater determinant is poorly converged.  optSD (nooptSD) denotes that the Slater
+    determinant was (not) cooptimized.  Dashed (dotted) lines indicate the exact ground
+    state energy (energy of the ﬁrst excited state).  Adam was used as an optimizer.
+
+
+
+
+        (Np, V/t)        exact              HF          arSJVMC (best)    arSJVMC (extrap.)
+          (9, 1.0)      -21.747707    -21.499999         -21.732(3)                        –
+          (9, 3.0)      -18.510441    -16.499999         -18.370(8)                        –
+          (9, 6.0)      -15.820226    -12.195724          -15.40(2)                  -15.58(9)
+         (12, 1.0)     -22.171946    -21.599772          -22.09(1)                         –
+         (12, 3.0)     -16.023298    -14.340569          -15.67(2)                  -15.83(1)
+         (12, 6.0)      -12.45152     -10.414462          -12.13(3)                  -12.19(4)
+         (15, 6.0)            –           -6.1515321           -6.27(2)                    -6.39(5)
+
+    Table 1:  Benchmark of energies for L = 6 and Np = 9, 12 (second three rows) and
+    Np  =  15  (last  row,  where  the  Hilbert  space  was  too  large  for  exact  diagonaliza-
+    tion).   The  second  and  third  column  give  the  exact  ground  state  energy  and  the
+    Hartree-Fock (HF) approximation.  The fourth column shows the  best  variational
+    energies accross ﬁve random seeds and the the ﬁfth column the corresponding vari-
+    ance extrapolation.  The relative error after variance extrapolation is on the order
+    of (1-2)%.
+
+
+
+                                                           30
+SciPost Physics                                                                            Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    Figure 16:  (a) Convergence of energy for system size L = 6 with Np = 15 particles
+    and V/t = 6, starting from a poorly converged (i.e.  not self-consistent) HF Slater
+    determinant.   The  dashed  line  is  the  energy  from  variance  extrapolation  (not  the
+    exact ground state energy).  The density-density correlations as a function of graph
+    distance agree with data from Ref. [7] (inset).  The sign structure of the optimized
+    Slater determinant diﬀers considerably from the initial one:  (b) shows the evolution
+    during training of the Slater determinant overlap Eq. (62) and the measure for the
+    change in sign structure, Eq. (61).
+
+
+
+
+
+
+
+
+
+
+
+
+                                                        31
+SciPost Physics                                                                            Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      Figure 17:  Variance extrapolation of the energy for the parameters of Fig. 16.
+
+
+                                              System (L = 4,Np = 5)
+Method             V/t = 0.01    V/t = 0.1     V/t = 1     V/t = 10
+HF         −11.980000  −11.800000  −10.000000  −3.232766
+arSJVMC (this work) −11.97996(5)  −11.8019(6)  −10.238(1)  −3.93(1)
+Lanczos ED (QuSpin) −11.980026  −11.802611  −10.240650  −4.052055
+SJ (RBM)      −11.9800(4)  −11.80259(4)  −10.2394(2)  −3.778(4)
+SJ (RBM), K = 0          −11.802606(4) −10.2399(1)  −3.79(2)
+SJB (RBM), K = 0  −11.980025(1) −11.802611(4) −10.24062(4) −4.02(2)
+
+   Table 2:  Comparison of our autoregressive Slater-Jastrow ansatz (arSJVMC) with
+   Slater-Jastrow (SJ) and Slater-Jastrow-Backﬂow (SJB) wavefunctions realized with
+   a restricted Blotzmann machine (RBM) [82], with and without symmetry-projection
+   onto the ground state of zero momentum (K = 0).  Hartree-Fock (HF) and Lanczos
+   exact  diagonalization  (ED)  indicate  the  expected  upper  and  lower  bounds  of  the
+   variational energy.
+
+
+                                              System (L = 6,Np = 13)
+Method             V/t = 0.01    V/t = 0.1     V/t = 1      V/t = 10
+HF         −27.933333  −27.333333  −21.333333  −6.908615
+arSJVMC (this work) −27.9332(4)  −27.332(1)   −21.85(1)   −7.23(3)
+Lancos ED (QuSpin) −27.93340531 −27.34054415 −22.07737235 −7.92802624
+SJ (RBM), K = 0   −27.933406(5) −27.34055(5)  −22.017(3)  −6.16(8)
+SJB (RBM), K = 0  −27.93340(1)  −27.340544(3) −22.0749(2)  −7.566(7)
+
+                  Table 3:  System: L = 6,Np = 13; see Tab. 2 for details.
+
+
+                                              32
+ SciPost Physics                                                                            Submission
+
+
+
+                                                        System (L = 8,Np = 32)
+                 Method             V/t = 1    V/t = 2    V/t = 4
+                 HF         −29.193934 −18.506328 −10.221101
+                 arSJVMC (this work) −28.78(2)  −17.56(4)  −9.28(4)
+                 CTQMC       −29.48(2)  −18.7(1)  −9.8(2)
+                 DMRG (χmax = 4096) −29.380064 −18.633949 −10.248601
+
+     Table  4:   Comparison  with  DMRG  and  continuous  time  quantum  Monte  Carlo
+     (CTQMC) [82,83] at half ﬁlling, where the sign problem can be avoided.  ForV/t = 2
+     and 4, the VMC energy falls short of even the Hartree-Fock energy, which is, how-
+     ever, in the present case of half ﬁlling already extremely close to the exact ground
+     state energy (see also Fig. 13).
+
+
+Jastrow ansatz with a single Slater determinant, while a more advanced RBM-Slater-Jastrow
+ansatz with symmetry projection and backﬂow correlations can reach almost exact ground
+state energies.  For the half-ﬁlled t−V  model on a bipartite lattice, comparison can also be
+made with the unbiased continuous time quantum Monte Carlo method [83], which is free of
+the sign problem, see Tab. 4.  It turns out that for L = 8,Np = 32 at V/t = 4, the arSJVMC
+ansatz  is  not  lower  than  the  HF  energy,  which  is  due  to  diﬃculties  in  the  training  rather
+than the expressibility of the ansatz.  Notably,  the CTQMC energy is also higher than the
+HF energy.  As an explanation, the HF energies in Tab. 4 and Fig. 13 suggest that for the
+t−V  model on the square lattice, the HF approximation is already extremely accurate at half
+ﬁlling and therefore diﬃcult to surpass.  As the Jastrow factor is initialized randomly (i.e.  it
+is not an identity),  the arSJVMC ansatz is not guaranteed to reach a lower energy than a
+single Slater determinant in the HF approximation.
+
+4  Outlook
+
+A natural question is how corrections to the sign structure of the single Slater determinant
+can be incorporated into an autoregressive framework.  Apart from using a separate neural
+network dedicated to sign corrections [7] (which does not aﬀect the ability to directly sample
+from  the  ansatz  [60]),  there  are  well-established  multireference  ans¨atze.   This  includes  the
+linear superposition of determinants that are built as particle-hole excitations from a common
+reference Slater determinant [67,85,86], Paﬃan pairing wave functions [13,87,88] and orbital
+backﬂow [4,89], where the orbitals of the Slater determinant depend on the conﬁguration.
+    Multi-determinant wavefunctions with a small number of determinants (on the order of the
+system size) are useful as they allow for symmetry-projection [45,90].  The necessary low-rank
+updates [85] resemble those of Sec. 2.5.  However, ultimately, for systematic improvement of
+the sign structure an exponentially large number of excited orthogonal Slater determinants
+needs to be included [91] for a sizable eﬀect.  A more economical ansatz is a Pfaﬃan pairing
+wavefunction or antisymmetrized geminal power (AGP) [49] which constitues a resummation
+of  a  certain  subset  of  Slater  determinants  and  provides  a  larger  variational  space  at  the
+computation  cost  of  a  single  Slater  determinant  [13].   The  normalized  AGP  wavefunction
+
+
+                                                       33
+ SciPost Physics                                                                            Submission
+
+
+reads                                                                Np/2
+                                                         Ns∑
+                         |ψAGP⟩ =          1(Np)             Fijc†ic†j      |0⟩≡|F⟩,                         (63)
+                                         2   ! 2Np/2    i,j=1
+
+whereFT  =−F is a pairing wavefunction.  While the overlap of a Pfaﬃan with a single Slater
+determinant|α⟩, i.e.⟨α|F⟩, can be expressed in terms of a Pfaﬃan of F , which is all that is
+needed for performing sampling in Markov chain VMC [13], there is no known compact formula
+for the overlap of two diﬀerent Pfaﬃan or AGP wavefunctions⟨F|F′⟩.  An AGP wavefunction
+can be written as a projection of a Hartree-Fock-Bogoliubov (HFB) wavefunction, which is a
+product of independent quasiparticles, onto a ﬁxed particle-number sector, i.e.  it is a linear
+combination of HFB states for which there is an eﬃcient overlap formula [92,93] since Wick’s
+theorem applies to each HFB state individually.  However, Wick’s theorem is not valid for the
+linear combination of HFB states and an overlap formula for diﬀerent AGP states is not known
+to us.  The absence of a computationally eﬃcient expression for the marginal probabilities of
+Eq. (23) appears to be an obstacle to formulating an autoregresssive Pfaﬃan-Jastrow ansatz,
+which warrants further investigation.
+    Finally, incorporating a general backﬂow transformation into an autoregressive neural net-
+work naively would lead to a prohibitive computational cost scaling likeO(N 5) rather than
+O(N 4) for neural network backﬂow in a Slater-Jastrow ansatz with Markov chain Monte Carlo
+sampling [4].  The reasoning is the following:  With the backﬂow transformation aﬀecting each
+entry of the Green’s function in Eq. (23),  low-rank updates are not possible and all deter-
+minants need to be calculated from scratch, which costsO(N 3).  Calculating N conditional
+probabilities for one uncorrelated sample therefore costsO(N 4).  The conditional probabilities
+need to be normalized because, although the probability distributions of the Slater sampler
+and the Jastrow factor are individually normalized, their product is not.  This has implications
+for  the inference  step  (when calculating  local energy):  Calculating  the  probability of  some
+conﬁguration is as expensive as sampling a conﬁguration since we need all conditional prob-
+abilities for the purpose of normalization, not just those at the actually sampled positions.
+Therefore density estimation also costsO(N 4).  When calculating local energy we need the
+probabilities of all states connected to the sampled state by the kinetic term.  There areO(N)
+such states for nearest-neighbour hopping and density estimation for each one costsO(N 4).
+Therefore the overall cost for calculating the local energy isO(N 5).
+    With a view towards ab  initio  simulations, e.g.  of small molecules, one needs to ﬁnd an
+eﬃcient way to evaluate the contribution of the (oﬀ-diagonal) Coulomb interaction to the local
+energy.  This can be achieved by a low-rank update analogous to that for the local kinetic
+energy where the states|α⟩ and|β⟩ can diﬀer in up to four positions.
+    Another  future  direction  aimed  at  improving  the  scalability  [61]  is  the  replacement  of
+the  MADE  network  by  another  autoregressive  architecture  such  as  the  PixelCNN  [24]  or
+RNN [11, 94] in order to reduce the number of variational parameters, which in the current
+approach scales like Nparam∼N 4 and may limit the achievable system sizes due to memory
+constraints.
+
+
+
+
+
+
+
+
+                                                        34
+ SciPost Physics                                                                            Submission
+
+5  Conclusion
+
+In  conclusion,  we  have  presented  an  autoregressive  Slater-Jastrow  ansatz  suitable  for  vari-
+ational Monte Carlo simulation which allows for uncorrelated sampling while retaining the
+cubic  scaling  of  the  computational  cost  with  system  size.   This  comes  at  the  price  of  im-
+plementing a complicated low-rank update for calculating the oﬀ-diagonal part of the local
+energy.
+    A  number  of  challenges  need  to  be  addressed  before  the  described  method  can  be  put
+to practical use:  (i) Evaluating the probability of a conﬁguration under the ansatz (density
+estimation) is as costly as sampling the conﬁguration.  Therefore symmetry projection, which
+consists in associating with a conﬁguration some average of the probabilities of all symmetry
+related conﬁgurations [90],  becomes forbiddingly expensive.  (ii) There is an imbalance be-
+tween the expressibility of the Jastrow factor and the Slater determinant part.  The former is
+heavily over-parametrized, and the required memory to store the network parameters limits
+the simulatable system sizes to around 10× 10.  This can be remedied by choosing another
+autoregressive  architecture  such  as  PixelCNN  or  RNN.  At  the  same  time,  calculating  the
+conditional probabilities due to the Slater determinant and cooptimizing the orbitals takes
+up the bulk of the simulation time, which calls for further optimizations.  While our method
+in its current implementation is slower than other neural network VMC schemes such as e.g.
+Slater-Jastrow-RBM,  the  formally  cubic  scaling  holds  the  promise  of  ultimately  accessing
+larger system sizes.
+    An implementation written in PyTorch is available in the code repository [95].
+
+Acknowledgment
+
+SH thanks D. Luo for helpful discussions.
+
+Funding information    The work of SH was supported by the Simons Collaboration on the
+Many Electron Problem.  LW is supported by the Strategic Priority Research Program of the
+Chinese Academy of Sciences under Grant No.  XDB30000000 and National Natural Science
+Foundation of China under Grant No.  T2121001.
+
+A Local one-body density matrix (OBDM)
+
+For completeness this and the following section review a number of well-known relations for
+Slater determinants, see for instance [96].  A Slater determinant can be written as
+
+                                                  Np∏  Ns∑
+                                          |ψ⟩ =             Pm,nc†n|0⟩,                                                (64)
+                                                  n=1 m=1
+with anNs×Np matrixP  whose columns contain the orthonormal single-particle eigenstates
+(P-matrix  representation).   Let|α⟩  and|ψ⟩  denote  two  Slater  determinants  with  the  same
+number of particles and let Pα and Pψ  be their P-matrices.  Then the local Green’s function
+
+
+
+                                                        35
+ SciPost Physics                                                                            Submission
+
+
+is given as
+                                                j|ψ⟩            [                       ]
+                            G(α,ψ)ij      =⟨α|cic†⟨α|ψ⟩     =δij− Pψ(PTαPψ)−1PTα          ij.                            (65)
+
+The local one-body density matrix is
+                                                             [                       ]
+                               G(α,φ)ji      =δij−G(α,φ)ij      =Pψ(PTαPψ)−1PTα
+                                                                                      ij.                               (66)
+    Proof:                                                 ((        )TP (j)′)
+                                      ⟨α|cic†j|ψ⟩ = det        P (i)′α     ψ      ,                                        (67)
+
+where the primed matrix P (i)′α    arises from Pα by adding a particle at position i, i.e.
+
+                                    P (i)′α    =(Pα   ˆei),  P (j)′ψ    =(Pψ     ˆej)
+
+so that            (                        )TP (j)′       (PTαPψ (PTα        )  )
+                                       P (i)′α                                 :,j                                  (68)
+                                                  ψ    =     (Pψ)i,:   δij
+
+.  Using Schur complementation of this block matrix its determinant is seen to be
+                                                          Np∑           ((PTαPψ)−1)                   
+              ⟨α|cic†                           δij−           (Pψ)i,k                       (PTα )   .           (69)
+                     j|ψ⟩ = det(PTαPψ)·                                                   k,l       l,j
+                                                         k,l=1
+
+With⟨α|ψ⟩ = det(PTαPψ) the stated result Eq. (65) follows. PTαPψ  is an Np×Np  matrix,
+which needs to be inverted, and the number of operations for calculating all elements of the
+local Green’s function is thusO(N 3p ) +O(2N 2pNs).
+
+B Slater determinant overlap ratios
+
+Let Pα  and Pβ  denote  P-matrix  representations  of  occupation  number  states  related  by  a
+particle hopping from occupied position r in|α⟩ to an unoccupied position s. Pβ  is obtained
+from Pα by a lowrank update
+
+                                          Pβ = (1Ns− ∆(r,s))PαΠsort                                             (70)
+
+with  ∆(r,r)  =  ∆(s,s)  =  1  and  ∆(r,s)  =  ∆(s,r)  =−1  and  all  other  elements  of  ∆  equal
+to  zero.   Πsort  makes  sure  that  the  columns  of Pβ  are  ordered  according  to  increasing  row
+index  of  particle  positions.   To  illustrate  this  point,  consider  the  following  example  with
+[α] = [0, 1, 0, 1, 1] and [β] = [1, 1, 0, 1, 0], i.e. |β⟩ arises from|α⟩ by a particle hopping from
+r = 5 tos = 1.  The P-matrix representations of these Fock states and the factors connecting
+them are:
+       0   0   0                                 0   0   1                                               1   0   0
+       1   0   0,    (15−∆(r,s))Pα =     1   0   0,    Πsort =0   1   0                0   1   0.
+Pα =      0   0   0                                   0   0   0                   0   0   1,  Pβ =            0   0   0
+          0   1   0                                   0   1   0                     1   0   0                   0   0   1
+          0   0   1                                   0   0   0                                                 0   0   0
+
+                                                           36
+ SciPost Physics                                                                            Submission
+
+
+The ratio of overlaps of|α⟩ and|β⟩ with an arbitrary Slater determinant|ψ⟩ is then:
+
+                   R =⟨β|ψ⟩⟨α|ψ⟩ = det(PTα (1Ns− ∆(r,s))Pψ)det(PTαPψ)    × det(Πsort)
+
+                                  = det(1Np− (PTαPψ)−1PTα ∆(r,s)Pψ)× det(Πsort)
+                                  = det(1Ns− ∆(r,s)Pψ(PTαPψ)−1PTα )× det(Πsort),                  (71)
+
+where in the last step the identity det(1M +AB) = det(1N +BA) for rectangularM×N and
+N×M  matrices A andB has been used.  From Eq. (66) one may recognize the local OBDM
+between Slater determinants|α⟩ and|φ⟩ so that:
+                                                         (
+                             R = det(1Ns− ∆(r,s)           G(α,ψ))T )× det(Πsort)                               (72)
+
+The transpose may be dropped sinceG(α,ψ)  is hermitian.  As ∆(r,s) has only four non-zero
+entries, the ﬁnal result is
+                       ⟨β|ψ⟩
+                       ⟨α|ψ⟩ = (1−G(α,ψ)r,r −G(α,ψ)s,s    +G(α,ψ)r,s     +G(α,ψ)s,r    )×σ(r,s).                      (73)
+
+                                                  ∑max(r,s)−1
+The sign σ(r,s) = det(Πsort) =⟨α|(−1)               i=min(r,s)+1 ˆni|α⟩ takes care of the number of permu-
+tations required for sorting the columns of Pβ.
+    This lowrank update of the ratios of Slater determinants is well-known from conventional
+VMC using Markov chains where is used to calculate the acceptance rate for a Monte Carlo
+update|α⟩→|β⟩.  What is needed for the purposes of the algorithm presented in the main
+text is only the relative sign(⟨β/ψ⟩/⟨α|ψ⟩) of all ”one-hop states“|β⟩ relative to the reference
+state|α⟩.
+
+C Cooptimzation of the Slater determinant
+
+When cooptimizing the occupied orbitals of the Slater determinant together with the Jastrow
+factor  it  must  be  ensured  that  they  remain  orthonormal.   This  is  done  by  applying  an  or-
+thogonal matrixR to the matrixUHF whose columns are the single-particle eigenstates of the
+Hartree-Fock Hamiltonian.  Selecting the ﬁrst Np  columns as occupied orbitals one obtains
+the P-matrix representation in Eq. (64) as
+
+                                          P (R) = [RUHF]1:Ns,1:Np.                                               (74)
+
+For  orthonormal  orbitals  the  expression  of  the  single-particle  Green’s  function  in  Eq.  (65)
+simpliﬁes to
+                                         G(R) = 1Ns−P (R)P (R)T.                                             (75)
+The orthogonal property ofR is guaranteed by writing it as the matrix exponential of a skew-
+symmetric matrix, speciﬁcallyR =eT−TT , whereT  is a strictly lower triangular matrix.  The
+n(n−1)
+   2     non-zero real entries of T  give a non-redundant parametrization of all proper rotation
+matricesR∈SO(n).  The entries ofT  are cooptimized together with the Jastrow factor using
+automatic diﬀerentiation.  At the beginning of the optimizationT  is initialized to zero so that
+the Hartree-Fock Slater determinant is recovered.
+
+                                                        37
+SciPost Physics                                                                            Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    Figure 18:  Illustration of the special cases arising for hopping in 1D with periodic
+    boundary conditions.  (a) Forr>s, the support [imin(k),imax(k)] (blue shaded boxes
+    fork = 2) ofp(β)cond(k, :) is larger to the left than that ofp(α)cond(k, :) because the particle
+    number ordering has changed for particlesks[β]<k<kr[β] as a result of the particle
+    hopping from position r  to s.  Therefore some additional conditional probabilities
+    p(β)cond(k,jadd)  for jadd∈{i(β)k−1 + 1,...,i(α)k−1}  need  to  be  calculated  which  have  no
+    counterpart in the reference state|α⟩.  (b) For r < s,  the support of p(β)cond(k, :) is
+    smaller than that of p(α)cond(k, :).  Again, the particle numbering has changed in state
+    |β⟩ due to a particle hopping fromr tos:  Thek-th particle in|β⟩ corresponds to the
+    (k + 1)-th particle in the reference state.  Therefore the conditional probabilities for
+    the k-th particle in state|β⟩ are updated based on those for the (k + 1)-th particle
+    in the reference state|α⟩ (see Fig. 19).
+
+
+
+
+
+
+
+
+
+
+
+
+                                                        38
+SciPost Physics                                                                            Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+   Figure  19:  Lowrank  update  scheme  for r < s  and  hopping  across  periodic
+   boundary conditions in 1D.|β⟩ arises from reference state|α⟩ by a particle hopping
+   across periodic boundary conditions in 1D from the ﬁrst (r) to the last (s) position.
+   Although|α⟩ and|β⟩ agree in all other particle positions, the numbering has changed:
+   Because the ﬁrst particle in|α⟩ is missing in state|β⟩ the k-th particle in|β⟩ is the
+   (k + 1)-th particle in|α⟩.  Therefore conditional probabilities for the k-th particle
+   in state|β⟩ must be calculated based on conditional probabilities for the (k + 1)-th
+   particle in|α⟩.  Note that the support of the k-th conditional probabilities (green
+   line) in the onehop state|β⟩, [i(β)k−1,Ns− (Np−k)], is smaller to the left than in the
+   reference  state|α⟩.   The  dependence  of  the  correction  factors  for  both  numerator
+   and  denominator  determinants  is  indicated  by  arrows.   The  last  case k  = Np  is
+   special because numerator and denominator determinants need to be updated from
+   the reference state at the same k (rather than k + 1).
+
+
+
+
+
+
+
+
+
+
+
+                                                       39
+ SciPost Physics                                                                            Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+     Figure 20: r<s: Additional special cases for hopping in 2D. (a) Green brackets with
+     circled numbers indicate the beginning of the support for the conditional probabilities
+     of the  k○  -th particle.  (b) Up to particle k =ks[β] = 6 the strategy is the same as in
+     Fig. 19.  Fork>ks[β] the lowrank update simpliﬁes again, consisting in “removing”
+     a particle atr and “adding” a particle ats both in the numerator and denominator
+     determinants; the particle numbering is again the same in|α⟩ and|β⟩ (see encircled
+     numbers in panel (a)).
+
+D Iterative update of the Schur complement
+
+For a matrix                                             ( ˜X  B)
+                                                  M =      C  D                                                   (76)
+
+with invertible submatrix  ˜X, the Schur complement of  ˜X in M  is deﬁned as
+
+                                                S =D−C ˜X−1B,                                                    (77)
+
+and it holds that
+                                           det(M) = det( ˜X) det(S),                                               (78)
+which is the determinant formula for block matrices.
+    Let us consider the conditional probability for thek-th particle to be at two positions from
+the position ik−1 of the (k− 1)-th particle as well as the conditional probability for it to be
+at three positions from ik−1 and carve out how the expressions change.  In the former case
+                                                                                                                               
+                                                     (Gik−1+1,ik−1+1   Gik−1+1,ik−1+2              )
+pcond(k,i =ik−1 + 2) = (−1)nik−1+2 det             Gik−1+2,ik−1+1 Gik−1+2,ik−1+2− 1               −Cl (GK,K−NK)−1|{z       } Bl
+                                                     |                      {z                      }               ˜X−1
+                                                                            Dl
+                                                                                                                  (79)
+                           ≡ (−1)nik−1+2 det(Sl)                                                                        (80)
+
+
+                                                          40
+SciPost Physics                                                                            Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+   Figure 21: Lowrank update scheme for r>s.  Nearest-neighbour hopping in 2D
+   translates into long-range hopping in the 1D system of ordered positions, i.e.  unlike
+   for nearest neighbour hopping there are particles between position s and r, and for
+   those particles the particle number index changes by +1 in state|β⟩ compared to
+   state|α⟩.  The position of thek-th particle in state|α⟩ is denoted asi(α)k    andks (kr)
+   is the particle number index of the particle at positions in state|β⟩ (at positionr in
+   state|α⟩).  For k≤ kcopy[β], the conditional probabilities can be copied identically
+   from the reference state. In the examplekcopy = 1. Fork>kcopy[β], the denominator
+   determinant det(G(β)denom)[k,i] is updated based on det(G(α)denom)[k− 1,i)] by adding
+   a particle at position s, and the numerator determinant det(G(β)num)[k,i] is updated
+   based on det(G(α)num)[k,i] by adding a particle at s and removing the particle at i(α)k−1
+   which  is  only  there  in  the  reference  state|α⟩.   Note  that  the  support  of  the k-th
+   conditional probability, indicated by a green line, in state|β⟩,I(β)k    = [i(β)k−1 + 1,imax]
+   is larger to the left than in reference state|α⟩ (these additional positions are hatched
+   in the ﬁgure).  This is due to the fact that i(α)k−1 > i(β)k−1  since the particle number
+   index k  has  been  shifted  by  +1  after  a  particle  jumped  from  position r  to s.   In
+   other words, for ks[β] < k < kr[β] the k-th particle in state|β⟩ corresponds to the
+   (k− 1)-th particle in the reference state|α⟩.
+
+
+
+
+
+
+
+
+
+
+                                                       41
+ SciPost Physics                                                                            Submission
+
+
+with                                                                             
+                                              G1,ik−1+1   G1,ik−1+2                                                (81)
+                                    Bl=2 =        G2,ik−1+1   G2,ik−1+2
+                                                        ...                     ...
+                                                Gik−1,ik−1+1 Gik−1,ik−1+2
+and Cl =BTl  . Sl and Dl are l×l matrices where l =i−ik−1 is the distance of the position
+i under consideration from the last sampled position ik−1.  The conditional probability for
+placing the k-th particle at the next position is given by matrices which have grown by one
+row and one column:
+
+  pcond(k,i =ik−1 + 3) = (−1)nik−1+3                                                                                 (82)
+             Gik−1+1,ik−1+1 Gik−1+1,ik−1+2   Gik−1+1,ik−1+3
+× detGik−1+2,ik−1+1 Gik−1+2,ik−1+2   Gik−1+2,ik−1+3                         −Cl+1(GK,K−NK)−1Bl+1
+             Gik−1+3,ik−1+1 Gik−1+3,ik−1+2 Gik−1+3,ik−1+3− 1
+                                                                                                                   (83)
+   = (−1)nik−1+3 det(Sl+1).                                                                                                 (84)
+
+Note also that the matrix element marked red has changed fromGik−1+2,ik−1+2−1 toGik−1+2,ik−1+2.
+Generally, the conditional probabilities for the positions of the k-th fermion are given by the
+determinant of Schur complements of increasing size.  Since in each step the Schur comple-
+ment grows just by one row and one column, the calculation of determinants can be avoided
+altogether, which will be demonstrated below.  Furthermore, the Schur complement, like the
+single-particle Green’s function, is a symmetric matrix.
+    While calculating the conditional probabilities of thek-th particle,  ˜X−1≡ (GK,K−NK)−1
+stays  constant  whereas  the  matrices Bl,Cl,  and Dl  grow.    The  repeated  multiplications
+Cl(GK,K−NK)−1Bl and the repeated determinant evaluations are very costly.  By reusing al-
+ready computed results large computational savings are possible, which is illustrated schemat-
+ically in Fig. 22.  Applying the formula for block determinants to the second row of Fig. 22
+we obtain
+                                 det(Sl+1) = det(S′l) det(SD−STBS′−1l  SB).                                  (85)
+Note that S′l  diﬀers from Sl by just by one element, the element in the lower right corner:
+                                                (S′l)
+                                                     l,l = (Sl)l,l + 1.                                                    (86)
+
+det(S′l) can be calculated from the already known quantitiy det(Sl) by using the Sherman-
+Morrison formula
+                     det(S′l) = det(Sl + ˆelˆeTl    )
+                               = det(Sl) det(1 + ˆeTl S−1                                    )
+                                                            l   ˆel) = det(Sl)(1 +(S−1l        l,l).                    (87)
+
+Similarly,  (S′l)−1  in Eq. (85) is obtained from S−1l     using a low-rank update for the inverse
+
+
+
+
+
+
+
+                                                           42
+ SciPost Physics                                                                            Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      Figure 22: Graphical representation of the iterative update of the Schur complement
+      in Eq. (30), when calculating the l-th conditional probability for the k-th particle.
+      Blue shading in the (l + 1)-th step indicates matrix entries that have already been
+      used in thel-th step (to the left of the second equality sign) or that have already been
+      computed - up to small modiﬁcations - in the l-th step (to the right of the second
+      equality sign).  The primed block matrices D′l and S′l diﬀer from the unprimed ones
+      only in the lower right matrix element (see main text).
+
+matrix                                                                                 
+                                                                       0 ···         0
+                         (S′l)−1 =S−1                                ...    ...         ...S−1
+                                        l −         1      )   S−1l                          l
+                                               1 +(S−1l     l,l        0 ···    0   0
+                                                                       0 ···    0   1
+                                   =S−1                    )   (S−1)                  )
+                                        l −         11 +(S−1       l   1:l,l⊗(S−1l     l,1:l                               (88)
+                                                        l   l,l
+Likewise, since (Sl)l,l = (S′l)l,l− 1
+                            S−1                            )    (S′−1)                 )
+                              l    =S′−1l     +          11−(S′−1  l    1:l,l⊗(S′−1l     l,1:l.                           (89)
+                                                       l     l,l
+In summary
+                        det(Sl+1) = det(Sl)(1 + (S−1l   )l,l) det(SD−STB(S′l)−1SB),                      (90)
+with S′−1l     given by Eq. (88).  Compared to the direct evaluation of the determinant on the
+left-hand side of Eq. (90), which costs (l + 1)3 operations, the vector-matrix-vector product
+STB(S′l)−1SB on the right-hand side requires only l2 +l operations.  (S−1l   )l,l is calculated from
+S′−1l     through                                    (S′−1)      (S′−1)            (S′−1)
+                        (S−1)                 )          l    l,l   l)   l,l =        l    l,l)  .                       (91)
+                            l   l,l =(S′−1l    l,l +    1−(S′−1                 1−(S′−1
+                                                                 l    l,l                l    l,l
+Given S′−1l−1 one can calculate S′−1l     using the formula for the inverse of a block matrix.
+
+                                                           43
+ SciPost Physics                                                                            Submission
+
+E Lowrank updates for local kinetic energy
+
+Supplementing Sec. 2.5, the code listing 1 speciﬁes how to obtain the conditional probabili-
+ties p(β)cond(k,i) for all “onehop” states|β⟩ connected by single-particle hopping to a common
+reference state|α⟩ from p(α)cond(k,i) using a set of low-rank updates.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                       44
+  SciPost Physics                                                                            Submission
+
+
+Algorithm 1 Pseudocode of lowrank update for local kinetic energy
+
+Input:  Conditional  probabilities p(α)cond(k,i)  in  reference  state|α⟩  for  particle  number k∈{1,...,Np}  and
+     position i∈I(α)k
+Input:  Onehop states|β⟩ ordered according to increasing kcopy[β] for β = 1,...,Nonehop states
+Input: r[β],s[β]:  onehop state|β⟩ is generated from reference state|α⟩ by letting a particle hop from position
+     r[β] to s[β]
+Input: kr[β],ks[β]:   numbering  of  particles  at  positions r[β],s[β],  as  counted  in  onehop  state |β⟩ →  see
+     Fig. 18(b)
+Input: i(α)k ,i(β)k   :  position of the k-th particle in state|α⟩,|β⟩
+Output:  Conditional probabilities p(β)cond(k,i) for all β = 1,...,Nonehop states
+
+ 1:  for  each particle k = 1,Np do                        ⊿ k refers to particle numbering in|α⟩
+ 2:   I(α)k    = [i(α)k−1 + 1,Ns− (Np−k)]                           ⊿ I(α)k    is support of p(α)cond(k, :)
+ 3:       for each ordered position i∈I(α)k    do
+ 4:           for each “onehop state” β = 1,Nonehop states do
+ 5:                if k≤kcopy[β] then
+ 6:          p(β)cond(k, :)←p(α)cond(k, :)          ⊿ up to kcopy[β] conditional probabilities are identical
+ 7:                else
+ 8:                     if r[β]<s[β] then                            ⊿→ see Fig. 18(b) and Fig. 19
+ 9:                          if k> 1 and k≤ks[β] then
+10:               κ(r)(i)← Eqs. 92                        ⊿ correction factor κ, remove-r
+11:               p(β)cond(k− 1,i) =κ(r)(i)×p(α)cond(k,i)
+12:                              if k =ks[β] or k =Np then                           ⊿→ see Fig. 20
+13:                 p(β)cond(k,i)← Eq.(95l) for i∈ [i(β)k−1,Ns− (Np−k)]
+14:                              end if
+15:                          else if k =ks[β] + 1 and i>s[β] then
+16:               κ← Eq.(96i)
+17:               p(β)cond(k,i) =κ×p(α)cond(k,i)
+18:                          else if k>ks[β] + 1 and i>s[β] then
+19:               κ(r,s)(i)← Eq. (93)                               ⊿ remove-r-add-s
+20:               p(β)cond(k,i) =κ(r,s)(i)×p(α)cond(k,i)
+21:                          end if
+22:                     else if r[β]>s[β] then                                   ⊿→ see Fig. 21
+23:                          if k≤kr[β] then
+24:               I(β)k    ={i(β)k−1 + 1,...,i(α)k−1}∪I(α)k
+25:                              if i =i(α)k−1 then
+26:                                   Calculate additionally ...                  ⊿ ...since I(β)k    is larger than I(α)k
+27:                                   for jadd∈{i(β)k−1 + 1,...,i(α)k−1} do                     ⊿ see Fig. 18(a)
+28:                   κdenom← Eq. (97g)         ⊿ reuse G(α)−1denom[k− 1] and G(α)−1num   [k− 1,jadd]
+29:                   κnum←κ(s)(jadd) Eq. (97a)                            ⊿ add-s
+30:                   p(β)cond(k,jadd) = κnumκdenom×p(α)cond(k− 1,jadd)
+31:                                   end for
+32:                              end if
+33:               κnum←κ(i(α)k−1,s[β])(i) Eq. (97i)              ⊿ remove-r-add-s in numerator
+34:                              if k =kcopy[β] + 1 then
+35:                 κdenom← Eqs.(97f), (97g)                     ⊿ extend-Gdenominv
+36:                              else
+37:                 κdenom←κ(s[β]) Eq. (97j)                                ⊿ add-s
+38:                              end if
+39:               p(β)cond(k,i) = κnum                         denom[k])      cond(k,i) Eq. (97k)
+                                             κdenom×    det(G(α)det(G(α)
+                                                             denom[k−1])×p(α)
+40:                          else if k>kr[β] then
+41:               κ(r,s)← Eq. (93)                                ⊿ remove-r-add-s
+42:               p(β)cond(k,i) =κ(r,s)(i)×p(α)cond(k,i)
+43:                          end if
+44:                     end if
+45:                end if                                      45
+46:           end for
+47:       end for
+48:  end for
+ SciPost Physics                                                                            Submission
+
+
+E.1remove-r update
+
+
+
+
+
+
+
+     Figure 23: remove-r adjustment, see Eqs. (92).  Example for four particles on nine
+     sites.
+
+    The remove-r update is illustrated in Fig. 23.  Using the lowrank update of the determi-
+nant given by Eqs. (49) and (51) with U (r)  = V (r)  = ˆer, the total correction factor for the
+remove-r adjustment shown in Fig. 23 becomes
+                                                        (                            )
+                              κ(r)(i) = remove        r   G(α)−1num  [k,i],G(α)−1denom[k]
+                                                (               )
+                                           1 +   G(α)−1num  [k,i]
+                                       =         (             ) r,r                                           (92a)
+                                            1 +   G(α)−1denom[k]
+                                                                r,r
+with the numerator and denominator matrices
+
+                                    G(α)num[k,i] =G1:i,1:i−N (α)1:i                                                    (92b)
+                                    G(α)denom[k] =G1:i(α)                 1:i(α)
+                                                         k−1,1:i(α)k−1−N (α)k−1,                                     (92c)
+
+whose inverses are assumed to be known from the processing of state|α⟩.
+
+E.2remove-r-add-s update
+
+
+
+
+
+
+
+                Figure 24: remove-r-add-s adjustment, see Eqs. (93),(92b),(92c).
+
+    The remove-r-add-s update is shown in Fig. 24.  As derived in the main text in Eq. (54),
+the total correction factor for removing a particle at r and adding a particle ats, both in the
+numerator and denominator determinant, is as follows
+
+  κ(r,s)(i) = (1 + (G(α)−1num  [k,i])r,r)(1− (G(α)−1num  [k,i])s,s) + (G(α)−1num  [k,i])r,s(G(α)−1num  [k,i])s,r (93)
+                   (1 + (G(α)−1denom[k])r,r)(1− (G(α)−1denom[k])s,s) + (G(α)−1denom[k])r,s(G(α)−1denom[k])s,r
+
+with the matrices from Eqs. (92b),(92c).
+
+
+
+
+
+                                                         46
+ SciPost Physics                                                                            Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      Figure 25:  extend-Gnum-remove-r:  The meaning of the two arrows in the up-
+      per  part  of  the  ﬁgure  is  explained  in  the  lower  part:  Extend G(α)−1num  [k,i(β)k−1]  from
+      i(β)k−1 +1 toi (extended positions shaded grey) via block update of the inverse matrix
+      according to Eq. (95i).
+
+E.3extend-Gnum-remove-r update
+
+The extend-Gnum-remove-r update is used forr[β]<s[β],k =ks[β],i>i(β)k−1; see Fig. 25.
+First notice that the inverse of the matrix
+
+                      G(α)num[k,i(β)k−1] =G1:i(β)                 1:i(α)
+                                                k−1,1:i(β)k−1−N (α)k−1∪{0, 0,..., 0, 1i(β)k−1},                    (94)
+
+where the last 1 in{0, 0,..., 0, 1i(β)                             k−1, is assumed to have been computed for
+                                          k−1} is at positioni(β)
+the reference state|α⟩.  (Remark:  One does not need to compute the inverse of G(α)num[k,i(β)k−1]
+each  time  from  scratch,  but  one  can  update  it  iteratively  from  some  previously  computed
+G(α)−1num  [k′,i′] for some k′≤k and i′<i(β)k−1 using a block update.)  The block structure of the
+extended numerator matrix is
+
+      A =G(α)num[k,i(β)k−1] =G1:i(β)                    1:i(α)
+                                      k−1,1:i(β)k−1−N (α)k−1∪{0, 0,..., 0, 1} →A−1 is known       (95a)
+      B =G1:i(β)
+                 k−1,i(β)k−1+1:i                                                                                                     (95b)
+      C =BT                                                                                                                       (95c)
+     D =Gi(β)
+               k−1+1:i,i(β)k−1+1:i− diag(0, 0,..., 0, 1i)                                                                (95d)
+and
+                                                     (A B)
+                    det(Gnum, extended) = det          C  D       = det(A) det(D−CA−1B)| {z          }              (95e)
+
+                                                                                        κ1(i)
+                                                                  =κ1(i) det(G(α)num[k,i(β)k−1]),                  (95f)
+
+where the determinant of the Schur complement of A,  that is S  = D−CA−1B,  has been
+marked as an intermediate correction factor κ1(i).  To obtain the numerator determinant of
+the onehop state|β⟩, a particle needs to be removed at positionr fromGnum, extended, that is
+
+                                 (Gnum, extended)r,r→ (Gnum, extended)r,r + 1.                               (95g)
+
+                                                            47
+ SciPost Physics                                                                            Submission
+
+
+This results in another intermediate correction factor to the numerator determinant of the
+onehop state|β⟩:                                    (                 )
+                                     κ2(i) = 1 +     G−1num, extended
+                                                                       r,r,                                        (95h)
+where the inverse of the extended numerator matrix has been obtained via a block update:
+                                (A B)−1           (A−1 +A−1BS−1CA−1 −A−1BS−1)
+            G−1num, extended =    C  D         =           −S−1CA−1        S−1                     .         (95i)
+
+
+Thus, for i>i(β)k−1
+
+                    det(G(β)num[k =ks[β],i]) =κ2(i)×κ1(i)× det(G(α)num[k,i(β)k−1]).                   (95j)
+
+The denominator determinant is obtained directly from the determinant of G(α)num[k,i(β)k−1] by
+removing a particle at r
+                                        (      (                 )   )
+         det(G(β)denom[k =ks[β]]) =       1 +    G(α)num[k,i(β)k−1]r,r × det(G(α)num[k,i(β)k−1]).            (95k)
+                                        |             {z              }
+                                                      =κ3
+Collecting the correction factors for numerator and denominator determinants one obtains for
+the conditional probability in the onehop state:
+
+
+                                 num[k =ks[β],i])                        det(G(α)num[k,i(β)k−1])
+p(β)cond(k =ks[β],i) = det(G(β)det(G(β)                       κ3×(((((((((det(G(α)                      κ3   .
+                                      denom[k])        = κ1(i)κ2(i)×(((((((((num[k,i(β)k−1])       = κ1(i)κ2(i)
+                                                                                                           (95l)
+One may wonder whether the use of Eq. (95l) gives any eﬃciency gain compared to the direct
+calculation  of  the  determinant  ratio.   The  key  point  is  that  the  matrices B,C,  and S  in
+eq. (95i) are of dimension i(β)k−1× (i−i(β)k−1) and (i−i(β)k−1)× (i−i(β)k−1), respectively, and on
+average (i−i(β)k−1)≪i, so that the calculation of the block inverse Eq. (95i) is less expensive
+than the calculation of a determinant of the i×i matrix G(β)num[k,i].
+
+E.4extend-Gdenom-remove-r-add-s update
+
+
+
+
+
+
+
+                           Figure 26: extend-Gdenom-remove-r-add-s
+
+    The extend-Gdenom-remove-r-add-s is used forr[β]<s[β],k =ks[β] + 1,i>s[β]; see
+Fig. 26.  To obtain the numerator matrix of the|β⟩ state from that of the|α⟩ state one needs
+to remove a particle at position r and put a particle at position s, and consequently for the
+numerator determinant there is a correction factor
+
+ κ(r,s)num(i) = (1 + (G(α)−1num  [k,i])r,r)(1− (G(α)−1num  [k,i])s,s) + (G(α)−1num  [k,i])r,s(G(α)−1num  [k,i])s,r.  (96a)
+
+                                                       48
+  SciPost Physics                                                                            Submission
+
+
+The denominator matrix of the|β⟩ state is obtained by extending the (inverse of the) denom-
+inator matrix of the|α⟩ state and then removing a particle at position r.  This results in two
+correction factors, one for the block update of the inverse denominator matrix according to
+Eq. (95e)
+                                               κ1 = det(D−CA−1B),                                              (96b)
+where
+
+        A =G(α)denom[k] =G1:i(α)                       1:i(α)
+                                     k−1,1:i(α)k−1−N (α)k−1                                                                   (96c)
+        B =G1:i(α)
+                    k−1,i(α)k−1+1:s                                                                                                  (96d)
+        C =BT                                                                                                                    (96e)
+        D =Gi(α)
+                  k−1+1:s,i(α)k−1+1:s− diag(0, 0,..., 0, 1s) → put a particle at position s         (96f)
+are the block matrices in                                            (A B)
+                                            Gdenom, extended =         C  D       ,                                          (96g)
+
+and secondly for the removal of a particle at positionr using Eq. (95i) for the block update of
+the inverse of te extended denominator matrix and then applying Eq. (95h) to the resulting
+matrix:                                                (                      )
+                                          κ2 = 1 +       G−1denom, extended    r,r.                                         (96h)
+
+Combining the correction factors for numerator and denominator determinants one obtains
+the overall correction factor
+                                                        κ = κ(r,s)num
+                                                              κ1κ2.                                                          (96i)
+.
+
+E.5Gdenom-from-Gdenom[k-1] update
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      Figure 27:  Since the support of the conditional probabilties in the|β⟩ state, I(β)k   , is
+      larger to the left than in the|α⟩ state,I(α)k   , some additional conditional probabilities
+      need to be calculated which have no counterpart in the|α⟩ state (shaded in grey).
+      Example for Np = 4 particles on Ns = 12 sites.
+
+
+
+
+                                                              49
+ SciPost Physics                                                                            Submission
+
+
+    The Gdenom-from-Gdenom[k-1] update is used for r[β]>s[β],k =kcopy[β] + 1; see
+Fig. 27 as well as Fig. 21.  The correction factor to the numerator determinant is
+                                                              (                         )
+                              κnum≡κ(s)(jadd) = 1−              G(α)−1num  [k− 1,jadd]   s,s                            (97a)
+
+with
+                    G(α)−1num  [k− 1,jadd] =G1:i(α)                    1:i(α)
+                                                     k−2,1:i(α)k−2−N (α)k−2∪{0,..., 0, 1jadd},                (97b)
+whose inverse should have been calculated and stored while processing state|α⟩.  The inverse
+of the denominator matrix is extended via a block update with
+
+        A =G(α)denom[k− 1] =G1:i(α)                       1:i(α)
+                                         k−2,1:i(α)k−2−N (α)k−2                                                             (97c)
+        B =G1:i(α)
+                   k−2,i(α)k−2+1:s                                                                                                  (97d)
+        C =BT                                                                                                                    (97e)
+       D =Gi(α)
+                 k−2+1:s,i(α)k−2+1:s− diag(0, 0,..., 0, 1s) → put a particle at position s         (97f)
+which results in a correction factor
+
+                                        κdenom≡κ1 = det(D−CA−1B)                                       (97g)
+
+to the denominator determinant.  Note that there is no additional correction factor for adding
+a particle ats in the denominator because this has already been taken care of when extending
+the denominator inverse in Eq. (97f).  In total,
+
+                                 p(β)cond[k,jadd] = κnumκdenom×p(α)cond[k− 1,jadd],                               (97h)
+
+
+i.e.  for the sites jadd∈{s + 1,...,i(α)k−1} the lowrank update has to be based on p(α)cond for the
+previous particle k− 1 because p(α)cond[k, :] has no support there.
+    Still referring to Fig. 27, for i > i(α)k−1 (and, as before, r[β] > s[β],ks[β] < k≤ kr[β]) the
+numerator determinant in the|β⟩ state is obtained from that of the|α⟩ state by removing
+the particle at i(α)k−1  and adding it at position s, i.e.  the correction factor to the numerator
+determinant is given by Eq. (53) of the main text (remove-r-add-s) with the replacement
+r←i(α)k−1 and s =s[β]
+
+κ(r=i(α)num         = (1+(G(α)−1k−1,s)
+                         num  [k,i])i(α)k−1,i(α)k−1)(1−(G(α)−1num  [k,i])s,s)+(G(α)−1num  [k,i])i(α)k−1,s(G(α)−1num  [k,i])s,i(α)k−1.
+                                                                                                                    (97i)
+The correction factor to the denominator determinant is given by Eqs. (97f) and Eqs. (97c)
+to (97g) for k =ks[β] + 1≡kcopy + 1, and for k>ks[β] + 1 by
+                                                         (                   )
+                                       κdenom = 1−         G(α)−1denom[k− 1]   s,s.                                        (97j)
+
+Note that in either case the starting point are denominator matrices of the reference state|α⟩
+
+
+
+                                                           50
+ SciPost Physics                                                                            Submission
+
+
+at the previous sampling state k− 1.  Putting everything together:
+
+                   p(β)                               num[k,i])
+                    cond[k,i] =  κnum· det(G(α)κdenom· det(G(α)
+                                                    denom[k− 1])
+                               = κnum                    denom[k])                 num[k,i])    .                (97k)
+                                   κdenom×    det(G(α)det(G(α)denom[k− 1])×   det(G(α)det(G(α)denom[k,i])
+                                                                          |        {z         }
+                                                                                p(α)cond[k,i]
+
+F Illustrative example of conditional probabilities
+
+Figs. 28 to 30 illustrate the degree of similarity between the conditional probabilities of a refer-
+ence conﬁguration|α⟩ and three randomly selected “onehop”-states|β80⟩,|β90⟩ and|β100⟩ for
+a large system of 36 fermions on a square system of 144 sites (considering only the contribution
+from the Slater determinant).
+
+References
+
+ [1]G. Carleo and M. Troyer,      Solving the quantum many-body problem with artiﬁcial neural
+     networks,  Science 355(6325), 602 (2017),  doi:10.1126/science.aag2302,  https://www.
+     science.org/doi/pdf/10.1126/science.aag2302.
+
+ [2]Y. Nomura, A. S. Darmawan, Y. Yamaji and M. Imada,      Restricted boltzmann machine
+     learning for solving strongly correlated quantum systems, Phys. Rev. B 96, 205152 (2017),
+     doi:10.1103/PhysRevB.96.205152.
+
+ [3]Z.  Cai  and  J.  Liu,       Approximating  quantum  many-body  wave  functions  using  artiﬁcial
+     neural networks,  Phys. Rev. B 97, 035116 (2018),  doi:10.1103/PhysRevB.97.035116.
+
+ [4]D.   Luo   and   B.   K.   Clark,            Backﬂow   transformations   via   neural   networks   for
+     quantum   many-body   wave   functions,        Phys.   Rev.   Lett.   122,    226401   (2019),
+     doi:10.1103/PhysRevLett.122.226401.
+
+ [5]K.  Choo,  G.  Carleo,  N.  Regnault  and  T.  Neupert,        Symmetries  and  many-body  ex-
+     citations  with  neural-network  quantum  states,   Phys.  Rev.  Lett.  121,  167204  (2018),
+     doi:10.1103/PhysRevLett.121.167204.
+
+ [6]K.  Choo,   T.  Neupert  and  G.  Carleo,          Two-dimensional   frustrated J1−J2   model
+     studied  with  neural  network  quantum  states,     Phys.  Rev.  B  100,   125124  (2019),
+     doi:10.1103/PhysRevB.100.125124.
+
+ [7]J. Stokes, J. R. Moreno, E. A. Pnevmatikakis and G. Carleo,      Phases of two-dimensional
+     spinless lattice fermions with ﬁrst-quantized deep neural-network quantum states,  Phys.
+     Rev. B 102, 205122 (2020),  doi:10.1103/PhysRevB.102.205122.
+
+ [8]A. Szab´o and C. Castelnovo,      Neural network wave functions and the sign problem, Phys.
+     Rev. Research 2, 033075 (2020),  doi:10.1103/PhysRevResearch.2.033075.
+
+                                                        51
+ SciPost Physics                                                                            Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+     Figure 28:  Conditional Slater determinant probabilities p(α)cond(k,ik) and p(β)cond(k,ik)
+     for a reference state|α⟩ and an arbitrary “onehop”-state|β80⟩ (out of 134 “onehop”
+     states). k  is the ordered particle index and ik  is its position.  Up to k = kcopy(β)
+     the conditional probabilities coincide completely: p(β)cond(k,ik) =p(α)cond(k,ik) for k≤
+     kcopy(β).  “Onehop” states|β⟩ are ordered according to increasing value of kcopy(β),
+     i.e. kcopy(β2)≥ kcopy(β1) if β2 > β1.  Red and blue dots indicate the conditional
+     probabilities  at  the  actually  sampled  positions  in  state|α⟩  and|β⟩,  respectively.
+     Parameters: Nx =Ny = 12,Np = 36,V/t = 6.
+
+
+ [9]X.  Liang,  S.-J.  Dong  and  L.  He,        Hybrid  convolutional  neural  network  and  projected
+      entangled  pair  states  wave  functions  for  quantum  many-particle  states,   Phys.  Rev.  B
+      103, 035138 (2021),  doi:10.1103/PhysRevB.103.035138.
+
+[10]L. Yang, Z. Leng, G. Yu, A. Patel, W.-J. Hu and H. Pu,        Deep  learning-enhanced  vari-
+      ational  monte  carlo  method  for  quantum  many-body  physics,   Phys.  Rev.  Research 2,
+      012039 (2020),  doi:10.1103/PhysRevResearch.2.012039.
+
+[11]M.  Hibat-Allah,  M.  Ganahl,  L.  E.  Hayward,  R.  G.  Melko  and  J.  Carrasquilla,          Re-
+      current   neural   network   wave   functions,      Phys.  Rev.  Research  2,   023358  (2020),
+      doi:10.1103/PhysRevResearch.2.023358.
+
+
+
+                                                          52
+ SciPost Physics                                                                            Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      Figure 29:  Conditional Slater determinant probabilities for a reference state|α⟩ and
+      an arbitrary “onehop”-state|β90⟩.  See Fig. 28 for more details.
+
+
+[12]C. Adams, G. Carleo, A. Lovato and N. Rocco,        Variational monte carlo calculations of
+      a≤ 4  nuclei  with  an  artiﬁcial  neural-network  correlator  ansatz,  Phys. Rev. Lett. 127,
+      022502 (2021),  doi:10.1103/PhysRevLett.127.022502.
+
+[13]F. Becca and S. Sorella,        Quantum Monte Carlo approaches for correlated systems, Cam-
+      bridge University Press (2017).
+
+[14]J.  Chen,   S.  Cheng,   H.  Xie,   L.  Wang  and  T.  Xiang,            Equivalence   of   restricted
+      boltzmann  machines  and  tensor  network  states,    Phys.  Rev.  B  97,  085104  (2018),
+      doi:10.1103/PhysRevB.97.085104.
+
+[15]D.-L. Deng, X. Li and S. Das Sarma,        Quantum  entanglement  in  neural  network  states,
+      Phys. Rev. X 7, 021021 (2017),  doi:10.1103/PhysRevX.7.021021.
+
+[16]Y. Levine, O. Sharir, N. Cohen and A. Shashua,        Quantum entanglement in deep learning
+      architectures, Phys. Rev. Lett. 122, 065301 (2019), doi:10.1103/PhysRevLett.122.065301.
+
+[17]K.   Choo,    A.   Mezzacapo   and   G.   Carleo,               Fermionic    neural-network    states
+      for    ab-initio    electronic    structure,         Nature   communications   11(1),    1   (2020),
+      doi:https://doi.org/10.1038/s41467-020-15724-9.
+
+                                                           53
+ SciPost Physics                                                                            Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      Figure 30:  Conditional Slater determinant probabilities for a reference state|α⟩ and
+      an arbitrary “onehop”-state|β100⟩.  See Fig. 28 for more details.
+
+
+[18]S.  Bengio  and  Y.  Bengio,          Taking  on  the  curse  of  dimensionality  in  joint  distribu-
+      tions using neural networks,  IEEE Transactions on Neural Networks 11(3), 550 (2000),
+      doi:10.1109/72.846725.
+
+[19]H. Larochelle and I. Murray,        The neural autoregressive distribution estimator, In G. Gor-
+      don, D. Dunson and M. Dud´ık, eds., Proceedings of the Fourteenth International Confer-
+      ence on Artiﬁcial Intelligence and Statistics, vol. 15 of Proceedings of Machine Learning
+      Research, pp. 29–37. PMLR, Fort Lauderdale, FL, USA (2011).
+
+[20]B.  Uria,  M.-A.  Cˆot´e,  K.  Gregor,  I.  Murray  and  H.  Larochelle,         Neural  autoregressive
+      distribution estimation,  The Journal of Machine Learning Research 17(1), 7184 (2016).
+
+[21]M. Germain, K. Gregor, I. Murray and H. Larochelle,        Made:  Masked autoencoder for dis-
+      tribution estimation,  In F. Bach and D. Blei, eds., Proceedings of the 32nd International
+      Conference on Machine Learning, vol. 37 of Proceedings of Machine Learning Research,
+      pp. 881–889. PMLR, Lille, France (2015).
+[22]D.   Wu,    L.   Wang   and   P.   Zhang,              Solving   statistical   mechanics   using   vari-
+      ational    autoregressive    networks,           Phys.    Rev.    Lett.    122,     080602    (2019),
+      doi:10.1103/PhysRevLett.122.080602.
+
+                                                           54
+ SciPost Physics                                                                            Submission
+
+
+[23]O. Sharir, Y. Levine, N. Wies, G. Carleo and A. Shashua,         Deep  autoregressive  models
+      for the eﬃcient variational simulation of many-body quantum systems,  Phys. Rev. Lett.
+      124, 020503 (2020),  doi:10.1103/PhysRevLett.124.020503.
+
+[24]A. van den Oord, N. Kalchbrenner and K. Kavukcuoglu,        Pixel recurrent neural networks,
+      In  M.  F.  Balcan  and  K.  Q.  Weinberger,  eds.,  Proceedings  of  The  33rd  International
+      Conference on Machine Learning, vol. 48 of Proceedings of Machine Learning Research,
+      pp. 1747–1756. PMLR, New York, New York, USA (2016).
+
+[25]A. van den Oord, S. Dieleman, H. Zen, K. Simonyan, O. Vinyals, A. Graves, N. Kalch-
+      brenner, A. Senior and K. Kavukcuoglu,  WaveNet:  A Generative Model for Raw Audio,
+      arXiv e-prints arXiv:1609.03499 (2016),  1609.03499.
+
+[26]J.   Carrasquilla,   G.   Torlai,   R.   G.   Melko   and   L.   Aolita,             Reconstructing   quan-
+      tum  states  with  generative  models,     Nature  Machine  Intelligence  1(3),  155  (2019),
+      doi:https://doi.org/10.1038/s42256-019-0028-1.
+
+[27]S.   Humeniuk   and   Y.   Wan,             Numerically   exact   mimicking   of   quantum   gas   mi-
+      croscopy   for   interacting   lattice   fermions,       Phys.   Rev.   B  104,   075155   (2021),
+      doi:10.1103/PhysRevB.104.075155.
+
+[28]D.   Wu,    R.   Rossi   and   G.   Carleo,               Unbiased    monte    carlo    cluster    updates
+      with   autoregressive   neural   networks,       Phys.   Rev.   Research  3,   L042024   (2021),
+      doi:10.1103/PhysRevResearch.3.L042024.
+
+[29]Z. Wang and E. J. Davis,        Calculating r´enyi entropies with neural autoregressive quantum
+      states,  Phys. Rev. A 102, 062413 (2020),  doi:10.1103/PhysRevA.102.062413.
+
+[30]D.  Luo,  Z.  Chen,  J.  Carrasquilla  and  B.  K.  Clark,         Autoregressive  neural  network  for
+      simulating open quantum systems via a probabilistic formulation,  Phys. Rev. Lett. 128,
+      090501 (2022),  doi:10.1103/PhysRevLett.128.090501.
+
+[31]D.  Luo,  Z.  Chen,  K.  Hu,  Z.  Zhao,  V.  Mikyoung  Hur  and  B.  K.  Clark,          Gauge  In-
+      variant  Autoregressive  Neural  Networks  for  Quantum  Lattice  Models,   arXiv  e-prints
+      arXiv:2101.07243 (2021),  2101.07243.
+
+[32]A. J. Ferris and G. Vidal,        Perfect sampling with unitary tensor networks,  Phys. Rev. B
+      85, 165146 (2012),  doi:10.1103/PhysRevB.85.165146.
+
+[33]Z.-Y. Han, J. Wang, H. Fan, L. Wang and P. Zhang,        Unsupervised Generative Modeling
+      Using Matrix Product States,  Phys. Rev. X 8(3) (2018).
+
+[34]T.   Vieijra,   J.   Haegeman,   F.   Verstraete   and   L.   Vanderstraeten,              Direct   sam-
+      pling   of   projected   entangled-pair   states,        Phys.   Rev.   B   104,   235141   (2021),
+      doi:10.1103/PhysRevB.104.235141.
+
+[35]K.   Inui,    Y.   Kato   and   Y.   Motome,              Determinant-free   fermionic   wave   func-
+      tion  using  feed-forward  neural  networks,     Phys.  Rev.  Research  3,   043126  (2021),
+      doi:10.1103/PhysRevResearch.3.043126.
+
+
+
+
+                                                           55
+ SciPost Physics                                                                            Submission
+
+
+[36]N.  Yoshioka,  W.  Mizukami  and  F.  Nori,          Solving  quasiparticle  band  spectra  of  real
+      solids  using  neural-network  quantum  states,   Communications  Physics 4(1),  1  (2021),
+      doi:https://doi.org/10.1038/s42005-021-00609-0.
+[37]D. Pfau, J. S. Spencer, A. G. D. G. Matthews and W. M. C. Foulkes,        Ab initio solution of
+      the many-electron schr¨odinger equation with deep neural networks,  Phys. Rev. Research
+      2, 033429 (2020),  doi:10.1103/PhysRevResearch.2.033429.
+[38]J.    Hermann,    Z.    Sch¨atzle    and    F.    No´e,                 Deep-neural-network    solution    of
+      the   electronic   schr¨odinger   equation,        Nature   Chemistry   12(10),    891   (2020),
+      doi:https://doi.org/10.1038/s41557-020-0544-y.
+[39]Z.  Sch¨atzle,  J.  Hermann  and  F.  No´e,           Convergence  to  the  ﬁxed-node  limit  in  deep
+      variational  monte  carlo,    The  Journal  of  Chemical  Physics  154(12),  124108  (2021),
+      doi:10.1063/5.0032836,  https://doi.org/10.1063/5.0032836.
+[40]M.   Hutter,                On    Representing    (Anti)Symmetric    Functions,         arXiv   e-prints
+      arXiv:2007.15298 (2020),  2007.15298.
+[41]J.   Han,   L.   Zhang   and   W.   E,            Solving   many-electron   schr¨odinger   equation   us-
+      ing  deep  neural  networks,    Journal  of  Computational  Physics  399,  108929  (2019),
+      doi:https://doi.org/10.1016/j.jcp.2019.108929.
+[42]A. Acevedo, M. Curry, S. H. Joshi, B. Leroux and N. Malaya,       Vandermonde wave function
+      ansatz for improved variational monte carlo,  In 2020 IEEE/ACM Fourth Workshop on
+      Deep Learning on Supercomputers (DLS), pp. 40–47,  doi:10.1109/DLS51937.2020.00010
+      (2020).
+[43]T.  Pang,  S.  Yan  and  M.  Lin,    O(N 2)  Universal  Antisymmetry  in  Fermionic  Neural
+      Networks,  arXiv e-prints arXiv:2205.13205 (2022),  2205.13205.
+[44]W.  M.  C.  Foulkes,  L.  Mitas,  R.  J.  Needs  and  G.  Rajagopal,          Quantum  monte  carlo
+      simulations of solids,  Rev. Mod. Phys. 73, 33 (2001),  doi:10.1103/RevModPhys.73.33.
+[45]T.  Misawa,  S.  Morita,  K.  Yoshimi,  M.  Kawamura,  Y.  Motoyama,  K.  Ido,  T.  Oh-
+      goe,  M.  Imada  and  T.  Kato,    mvmc—open-source  software  for  many-variable  vari-
+      ational  monte  carlo  method,    Computer  Physics  Communications  235,  447  (2019),
+      doi:https://doi.org/10.1016/j.cpc.2018.08.014.
+[46]J.   C.   Slater,               Note    on    hartree’s    method,         Phys.   Rev.   35,    210   (1930),
+      doi:10.1103/PhysRev.35.210.2.
+[47]R.  Jastrow,           Many-body  problem  with  strong  forces,    Phys.  Rev.  98,  1479  (1955),
+      doi:10.1103/PhysRev.98.1479.
+[48]R.   B.   Laughlin,             Anomalous   quantum   hall   eﬀect:     An   incompressible   quantum
+      ﬂuid   with   fractionally   charged   excitations,      Phys.   Rev.   Lett.  50,   1395   (1983),
+      doi:10.1103/PhysRevLett.50.1395.
+[49]M.  Casula,   C.  Attaccalite  and  S.  Sorella,            Correlated  geminal  wave  function  for
+      molecules:?an  eﬃcient  resonating  valence  bond  approach,    The  Journal  of  Chemical
+      Physics 121(15),  7110  (2004),   doi:10.1063/1.1794632,   https://doi.org/10.1063/1.
+      1794632.
+
+                                                           56
+ SciPost Physics                                                                            Submission
+
+
+[50]F.  Ferrari,  F.  Becca  and  J.  Carrasquilla,         Neural  gutzwiller-projected  variational  wave
+      functions,  Phys. Rev. B 100, 125131 (2019),  doi:10.1103/PhysRevB.100.125131.
+
+[51]J. R. Moreno, G. Carleo, A. Georges and J. Stokes,       Fermionic wave functions from neural-
+      network  constrained  hidden  states,   Proceedings  of  the  National  Academy  of  Sciences
+      119(32),  e2122059119 (2022),  doi:10.1073/pnas.2122059119,   https://www.pnas.org/
+      doi/pdf/10.1073/pnas.2122059119.
+
+[52]R. M. Lee, G. J. Conduit, N. Nemec, P. L´opez R´ıos and N. D. Drummond,        Strategies for
+      improving the eﬃciency of quantum monte carlo calculations,  Phys. Rev. E 83, 066706
+      (2011),  doi:10.1103/PhysRevE.83.066706.
+
+[53]X.   Li,    G.   Zhu,    M.   Han   and   X.   Wang,               Quantum   information   scrambling
+      through   a   high-complexity   operator   mapping,     Phys.  Rev.  A  100,   032309  (2019),
+      doi:10.1103/PhysRevA.100.032309.
+
+[54]H.  Sun,  J.  Zou  and  X.  Li,          Fermion  Sampling  Made  More  Eﬃcient,   arXiv  e-prints
+      arXiv:2109.07358 (2021),  2109.07358.
+
+[55]A. Kulesza and B. Taskar,        Determinantal point processes for machine learning, Founda-
+      tions and Trends® in Machine Learning 5(2–3), 123 (2012),  doi:10.1561/2200000044.
+
+[56]I.  Sabzevari  and  S.  Sharma,          Improved  speed  and  scaling  in  orbital  space  variational
+      monte  carlo,    Journal  of  Chemical  Theory  and  Computation  14(12),  6276  (2018),
+      doi:10.1021/acs.jctc.8b00780,  PMID: 30418769,  https://doi.org/10.1021/acs.jctc.
+      8b00780.
+
+[57]I.  Sabzevari  and  S.  Sharma,         Faster  and  lower  scaling  orbital-space  Variational  Monte
+      Carlo,  arXiv e-prints arXiv:1807.10633 (2018),  1807.10633.
+
+[58]A.  Mahajan  and  S.  Sharma,         Symmetry-projected  jastrow  mean-ﬁeld  wave  function  in
+      variational  monte  carlo,   The  Journal  of  Physical  Chemistry  A 123(17),  3911  (2019),
+      doi:10.1021/acs.jpca.9b01583, PMID: 30945859, https://doi.org/10.1021/acs.jpca.
+      9b01583.
+
+[59]P.-J. Yang, M. Sugiyama, K. Tsuda and T. Yanai,        Artiﬁcial neural networks applied as
+      molecular  wave  function  solvers,  Journal of Chemical Theory and Computation 16(6),
+      3513  (2020),   doi:10.1021/acs.jctc.9b01132,   PMID:  32320233,   https://doi.org/10.
+      1021/acs.jctc.9b01132.
+
+[60]T. D. Barrett,  A. Malyshev and A. Lvovsky,         Autoregressive  neural-network  wavefunc-
+      tions  for  ab  initio  quantum  chemistry,   Nature  Machine  Intelligence 4(4),  351  (2022),
+      doi:https://doi.org/10.1038/s42256-022-00461-z.
+
+[61]T. Zhao, J. Stokes and S. Veerapaneni,        Scalable  neural  quantum  states  architecture  for
+      quantum chemistry,  arXiv e-prints arXiv:2208.05637 (2022),  2208.05637.
+
+[62]K. He,  X. Zhang,  S. Ren and J. Sun,         Delving  deep  into  rectiﬁers:  Surpassing  human-
+      level  performance  on  imagenet  classiﬁcation,  In  Proceedings  of  the  IEEE  international
+      conference on computer vision, pp. 1026–1034 (2015).
+
+
+
+                                                          57
+ SciPost Physics                                                                            Submission
+
+
+[63]H. Xie, L. Zhang and L. Wang,   m∗  of two-dimensional electron gas:  a neural canonical
+      transformation study,  arXiv e-prints arXiv:2201.03156 (2022),  2201.03156.
+
+[64]A. Paszke,  S. Gross,  F. Massa,  A. Lerer,  J. Bradbury,  G. Chanan,  T. Killeen,  Z. Lin,
+      N. Gimelshein, L. Antiga, A. Desmaison, A. Kopf  et  al.,  Pytorch:  An  imperative  style,
+      high-performance  deep  learning  library,  In H. Wallach,  H. Larochelle,  A. Beygelzimer,
+      F. d’ Alch´e-Buc, E. Fox and R. Garnett, eds., Advances in Neural Information Processing
+      Systems, vol. 32. Curran Associates, Inc. (2019).
+
+[65]J.  A.  Gillenwater,          Approximate  Inference  for  Determinantal  Point  Processes,   Ph.D.
+      thesis, University of Pennsylvania (2014).
+
+[66]N. Tremblay, S. Barthelme and P.-O. Amblard,        Optimized Algorithms to Sample Deter-
+      minantal Point Processes,  arXiv e-prints arXiv:1802.08471 (2018),  1802.08471.
+
+[67]A.  Scemama,  T.  Applencourt,  E.  Giner  and  M.  Caﬀarel,         Quantum  monte  carlo  with
+      very large multideterminant wavefunctions, Journal of Computational Chemistry 37(20),
+      1866  (2016),   doi:https://doi.org/10.1002/jcc.24382,   https://onlinelibrary.wiley.
+      com/doi/pdf/10.1002/jcc.24382.
+
+[68]G. E. Hinton,        Training products of experts by minimizing contrastive divergence,  Neural
+      Computation 14(8), 1771 (2002),  doi:10.1162/089976602760128018.
+
+[69]S.  Sorella,         Generalized  lanczos  algorithm  for  variational  quantum  monte  carlo,   Phys.
+      Rev. B 64, 024512 (2001),  doi:10.1103/PhysRevB.64.024512.
+
+[70]S.  Sorella,         Wave  function  optimization  in  the  variational  monte  carlo  method,   Phys.
+      Rev. B 71, 241103 (2005),  doi:10.1103/PhysRevB.71.241103.
+
+[71]S. Sorella, M. Casula and D. Rocca,        Weak binding between two aromatic rings:  Feeling
+      the van der waals attraction by quantum monte carlo methods,  The Journal of Chemical
+      Physics 127(1), 014105 (2007),  doi:10.1063/1.2746035,  https://doi.org/10.1063/1.
+      2746035.
+
+[72]S.  Amari,  K.  Kurata  and  H.  Nagaoka,         Information  geometry  of  boltzmann  machines,
+      IEEE Transactions on Neural Networks 3(2), 260 (1992),  doi:10.1109/72.125867.
+
+[73]S.-i. Amari,        Natural  gradient  works  eﬃciently  in  learning,  Neural Computation 10(2),
+      251 (1998),  doi:10.1162/089976698300017746.
+
+[74]E.  Neuscamman,   C.  J.  Umrigar  and  G.  K.-L.  Chan,            Optimizing   large   parame-
+      ter   sets   in   variational   quantum   monte   carlo,     Phys.  Rev.  B  85,   045103  (2012),
+      doi:10.1103/PhysRevB.85.045103.
+
+[75]D. P. Kingma and J. Ba,        Adam:  A Method for Stochastic Optimization,  arXiv e-prints
+      arXiv:1412.6980 (2014),  1412.6980.
+
+[76]H.  Shi  and  S.  Zhang,         Inﬁnite  variance  in  fermion  quantum  monte  carlo  calculations,
+      Phys. Rev. E 93, 033303 (2016),  doi:10.1103/PhysRevE.93.033303.
+
+[77]S. Chandrasekharan and U.-J. Wiese,        Meron-cluster solution of fermion sign problems,
+      Phys. Rev. Lett. 83, 3116 (1999),  doi:10.1103/PhysRevLett.83.3116.
+
+                                                          58
+ SciPost Physics                                                                            Submission
+
+
+[78]Z.-X.  Li,  Y.-F.  Jiang  and  H.  Yao,           Solving  the  fermion  sign  problem  in  quantum
+      monte  carlo  simulations  by  majorana  representation,  Phys. Rev. B 91, 241117 (2015),
+      doi:10.1103/PhysRevB.91.241117.
+
+[79]L.  Wang,  Y.-H.  Liu,  M.  Iazzi,  M.  Troyer  and  G.  Harcos,          Split  orthogonal  group:   A
+      guiding  principle  for  sign-problem-free  fermionic  simulations,   Phys.  Rev.  Lett.  115,
+      250601 (2015),  doi:10.1103/PhysRevLett.115.250601.
+
+[80]P. Weinberg and M. Bukov,        QuSpin:  a Python Package for Dynamics and Exact Diag-
+      onalisation  of  Quantum  Many  Body  Systems  part  I:  spin  chains,  SciPost Phys. 2, 003
+      (2017),  doi:10.21468/SciPostPhys.2.1.003.
+
+[81]P. Weinberg and M. Bukov,        QuSpin:  a Python Package for Dynamics and Exact Diago-
+      nalisation of Quantum Many Body Systems. Part II: bosons, fermions and higher spins,
+      SciPost Phys. 7, 20 (2019),  doi:10.21468/SciPostPhys.7.2.020.
+
+[82]  https://github.com/varbench/varbench.
+
+[83]L. Wang, M. Iazzi, P. Corboz and M. Troyer,        Eﬃcient continuous-time quantum monte
+      carlo method for the ground state of correlated fermions, Phys. Rev. B 91, 235151 (2015),
+      doi:10.1103/PhysRevB.91.235151.
+
+[84]D.  Wu,  R.  Rossi,  F.  Vicentini,  N.  Astrakhantsev,  F.  Becca,  X.  Cao,  J.  Carrasquilla,
+      F.  Ferrari,  A.  Georges,  M.  Hibat-Allah,  M.  Imada,  A.  M.  L¨auchli  et  al.,   Variational
+      Benchmarks for Quantum Many-Body Problems, arXiv e-prints arXiv:2302.04919 (2023),
+      doi:10.48550/arXiv.2302.04919,  2302.04919.
+
+[85]B.  K.  Clark,  M.  A.  Morales,  J.  McMinis,  J.  Kim  and  G.  E.  Scuseria,         Computing  the
+      energy of a water molecule using multideterminants:  A simple, eﬃcient algorithm,  The
+      Journal  of  Chemical  Physics 135(24),  244105  (2011),   doi:10.1063/1.3665391,   https:
+      //doi.org/10.1063/1.3665391.
+
+[86]A. Mahajan and S. Sharma,        Eﬃcient local energy evaluation for multi-slater wave func-
+      tions  in  orbital  space  quantum  monte  carlo,  The Journal of Chemical Physics 153(19),
+      194108 (2020),  doi:10.1063/5.0025055,  https://doi.org/10.1063/5.0025055.
+
+[87]J. Bouchaud,  A. Georges and C. Lhuillier,         Pair  wave  functions  for  strongly  correlated
+      fermions and their determinantal representation,  Journal de Physique (49), 553 (1988),
+      doi:https://doi.org/10.1051/jphys:01988004904055300.
+
+[88]M. Bajdich, L. Mitas, L. K. Wagner and K. E. Schmidt,        Pfaﬃan  pairing  and  backﬂow
+      wavefunctions for  electronic structure quantum  monte carlo  methods,  Phys. Rev. B 77,
+      115112 (2008),  doi:10.1103/PhysRevB.77.115112.
+
+[89]L. F. Tocchio, F. Becca and C. Gros,         Backﬂow  correlations  in  the  hubbard  model:  An
+      eﬃcient  tool  for  the  study  of  the  metal-insulator  transition  and  the  large-u  limit,  Phys.
+      Rev. B 83, 195138 (2011),  doi:10.1103/PhysRevB.83.195138.
+
+[90]Y.  Nomura,         Helping  restricted  boltzmann  machines  with  quantum-state  representation
+      by  restoring  symmetry,  Journal of Physics:  Condensed Matter 33(17),  174003 (2021),
+      doi:10.1088/1361-648X/abe268.
+
+                                                          59
+ SciPost Physics                                                                            Submission
+
+
+[91]M. A. Morales, J. McMinis, B. K. Clark, J. Kim and G. E. Scuseria,        Multideterminant
+     wave functions in quantum monte carlo,  Journal of Chemical Theory and Computation
+     8(7),  2181  (2012),   doi:10.1021/ct3003404,   PMID:  26588949,   https://doi.org/10.
+     1021/ct3003404.
+
+[92]B. G. Carlsson and J. Rotureau,        New and practical formulation for overlaps of bogoliubov
+     vacua,  Phys. Rev. Lett. 126, 172501 (2021),  doi:10.1103/PhysRevLett.126.172501.
+
+[93]G. F. Bertsch and L. M. Robledo,        Symmetry restoration in hartree-fock-bogoliubov based
+     theories,  Phys. Rev. Lett. 108, 042505 (2012),  doi:10.1103/PhysRevLett.108.042505.
+
+[94]C. Roth,       Iterative Retraining of Quantum Spin Models Using Recurrent Neural Networks,
+     arXiv e-prints arXiv:2003.06228 (2020),  2003.06228.
+
+[95]  https://github.com/shifushuimenu/autoregressive_Slater-Jastrow.
+
+[96]E.  Loh  Jr  and  J.  Gubernatis,          Stable  numerical  simulations  of  models  of  interacting
+     electrons in condensed matter physics,  Electronic Phase Transitions 32, 177 (1992).
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                         60

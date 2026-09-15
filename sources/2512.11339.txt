@@ -1,0 +1,1610 @@
+   PROJECTED SOBOLEV NATURAL GRADIENT DESCENT FOR
+           EFFICIENT NEURAL NETWORK SOLUTION OF THE
+                             GROSS–PITAEVSKII EQUATION∗
+
+                CHENGLONG  BAO†,  CHEN  CUI‡,  KAI  JIANG§, ANDSHI  SHU   §
+
+    Abstract.This paper introduces a projected Sobolev natural gradient descent (NGD) method
+for computing ground states of the Gross–Pitaevskii equation.  By projecting a continuous Riemann-
+ian Sobolev gradient flow onto the normalized neural network tangent space,  we derive a discrete
+NGD algorithm that preserves the normalization constraint.  The numerical implementation employs
+variational Monte Carlo with a hybrid sampling strategy to accurately account for the normaliza-
+tion  constant.   To  enhance  computational  efficiency,  a  matrix-free  Nystr¨om-preconditioned  conju-
+gate gradient solver is adopted to approximate the NGD operator without explicit matrix assembly.
+Numerical  experiments  demonstrate  that  the  proposed  method  converges  significantly  faster  than
+physics-informed neural network approaches and exhibits near-constant wall-clock time and memory
+over the tested high-dimensional range when the hidden architecture is fixed and the implicit Gram
+operator is used.  Moreover, the resulting neural-network solutions provide high-quality initial guesses
+that substantially accelerate subsequent refinement by traditional high-precision solvers.
+
+    Key words.Gross–Pitaevskii equation,  Deep neural network,  Variational Monte Carlo,  Rie-
+mannian optimization, Natural gradient descent, Preconditioning
+
+    MSC codes.65N30, 65K10, 81Q05, 68T07
+
+     1.  Introduction.Bose–Einstein condensation (BEC) is a macroscopic quantum
+phenomenon in which many identical bosons occupy a single quantum ground state at
+ultracold temperatures.  Since its first experimental realization in 1995 [1], BEC has
+become a central platform for studying macroscopic quantum coherence, superfluidity,
+and quantum simulation. In the mean-field approximation, the macroscopic wavefunc-
+tion, or order parameter, is governed by the Gross–Pitaevskii equation (GPE) [39].
+The  GPE  is  a  nonlinear  Schr¨odinger  equation  with  a  cubic  term  induced  by  effec-
+tive  short-range  interactions.   Computing  its  ground  states  is  therefore  a  basic  but
+demanding problem in numerical analysis.  Mathematically, the task is to minimize
+a highly non-convex energy functional on a Riemannian manifold defined by a nor-
+malization constraint.  The interaction nonlinearity can make the energy landscape
+severely ill-conditioned, which complicates robust and efficient optimization.
+     Existing numerical methods for GPE ground states broadly follow two paradigms.
+The first is discretize–then–solve:  spatial discretization reduces the continuous prob-
+lem to a nonlinear eigenvalue problem, which is then treated by algebraic techniques
+such as self-consistent field iterations [19,9] and inverse iteration schemes [32].  The
+second  is  optimize–then–discretize:   the  continuous  energy  functional  is  minimized
+
+
+   ∗Submitted to the editors DATE.
+    Funding:C.   Bao   was   supported   by   the   National   Key   R&D   Program   of   China
+(2021YFA1001300)  and  the  National  Natural  Science  Foundation  of  China  (12271291).   K.  Jiang
+was supported by the National Key R&D Program of China (2023YFA1008802) and the Science and
+Technology Innovation Program of Hunan Province (2024RC1052).  S. Shu was supported in part
+by the National Natural Science Foundation of China (12371373) and the Science Challenge Project
+(TZ2025007).
+   †Yau Mathematical Sciences Center, Tsinghua University, Yanqi Lake Beijing Institute of Math-
+ematical Sciences and Applications, Beijing, China, 100084.
+   ‡Yau Mathematical Sciences Center, Tsinghua University, Beijing, China, 100084.
+   §Hunan Key Laboratory for Computation and Simulation in Science and Engineering, Key Lab-
+oratory  of  Intelligent  Computing  and  Information  Processing  of  Ministry  of  Education,  School  of
+Mathematics and Computational Science, Xiangtan University, Xiangtan, Hunan, China, 411105.
+                                                       1
+2                                        C. BAO, C. CUI, K. JIANG, AND S. SHU
+
+directly  under  the  manifold  constraint.   Representative  methods  include  projected
+Sobolev  gradient  methods  [5, 25, 15, 29, 12],  Riemannian  conjugate  gradient  algo-
+rithms [2,16,47], momentum-accelerated schemes [11], and preconditioning strategies
+[2,22].  A comprehensive overview is given in [28].
+     Despite their maturity, these algorithms can face reduced efficiency and robust-
+ness in extreme physical regimes and high-dimensional settings.  In the presence of
+strong interactions or highly heterogeneous external potentials, the GPE energy land-
+scape becomes severely ill-conditioned, which often leads to stagnation or convergence
+to spurious local minima [46].  Moreover, although the GPE is conventionally formu-
+lated in physical space, the investigation of its high-dimensional extensions is of both
+physical and numerical relevance.  On the physical side, modern research directions
+such  as  multicomponent  spinor  condensates  [53]  and  quantum  Hall  physics  in  syn-
+thetic  dimensions  [44]  naturally  give  rise  to  nonlinear  Schr¨odinger  equations  posed
+in dimensions exceeding three.  From a numerical standpoint, high-dimensional for-
+mulations are often necessary for modeling quasi-periodic potentials, where auxiliary
+dimensions are introduced to restore periodicity [33].  In these contexts, classical grid-
+based discretizations are hampered by the curse of dimensionality, as their memory
+footprint and computational cost increase exponentially with the dimension, rendering
+them impractical for large-scale simulations.
+     Deep neural networks (DNNs) have recently become effective tools for scientific
+computing, especially for high-dimensional approximation problems [49,18,56,55].
+Motivated by these advances, several neural methods for the GPE exploit its structural
+and geometric properties [4,37].  For example, the norm-DNN method [4] augments
+physics-informed neural networks (PINNs) [49] with an explicit normalization layer.
+However, direct PINN-type formulations for the GPE face two main challenges.  First,
+they typically evaluate residual-based losses on fixed or uniformly sampled collocation
+points.  In high dimensions, and especially for strongly localized probability densities,
+such sampling can miss the physically relevant regions.  The resulting gradients can
+then be small at most sampled points, causing parameter updates to stagnate. Second,
+training usually relies on first-order optimizers such as Adam [36], which can converge
+slowly on ill-conditioned high-dimensional energy landscapes.
+     To  circumvent  the  sampling  limitations  inherent  in  collocation-based  schemes,
+neural network representations of wavefunctions, commonly termed neural quantum
+states (NQS), have emerged as a compelling alternative.  In the context of linear quan-
+tum many-body physics, NQS combined with neural variational Monte Carlo (VMC)
+methods [10] have achieved state-of-the-art performance, with notable successes in-
+cluding FermiNet [48] and PauliNet [31].  In contrast to PINNs, VMC naturally han-
+dles  high-dimensional  integration  via  importance  sampling  from  the  wavefunction-
+induced  distribution  and  structurally  enforces  normalization.   However,  extending
+this paradigm to the GPE presents distinct difficulties.  Unlike the linear Schr¨odinger
+equation,  the GPE includes a nonlinear interaction term that complicates the con-
+struction of low-variance gradient estimators.
+     From  an  optimization  perspective,  several  high-performance  neural  optimiza-
+tion  methods  have  been  developed,  including  evolutional  DNNs  [21, 35, 34, 58],
+neural  Galerkin  methods  [8, 6, 38],  and  natural  gradient  descent  (NGD)  methods
+[40,57,7,43,13,50,26,17]. These approaches are closely related to the Dirac–Frenkel
+variational principle (DFVP) [20,24], which projects continuous-time dynamics onto
+finite-dimensional  parameter  manifolds.   Existing  studies  have  examined  metric  se-
+lection, temporal discretization, and efficient approximations of the associated metric
+matrices.  Their direct application to the GPE nevertheless remains nontrivial.  The
+                              PROJECTED SOBOLEV NGD FOR GPE                             3
+
+GPE combines strong nonlinearity with a strict normalization constraint, requiring a
+variational optimization scheme tailored to this structure.
+     In this work, we propose a projected Sobolev NGD method within a neural VMC
+framework for computing ground states of high-dimensional GPEs. Rather than treat-
+ing neural-network training as a purely Euclidean optimization problem in parameter
+space,  we  use  anoptimize–then–discretizestrategy  based  on  the  geometry  of  the
+normalized function manifold.  Starting from a projected Sobolev gradient flow,  we
+derive natural-gradient dynamics in parameter space through the DFVP [20,24]. This
+construction preserves the geometric constraints and links continuous functional opti-
+mization to discrete parameter updates, as illustrated inFigure 1.  To address strong
+nonlinearity and high dimensionality, we further develop a set of implementation tech-
+niques that target the main computational bottlenecks.  The hybrid sampling strategy
+combines Markov chain Monte Carlo (MCMC) with adaptive defensive importance
+sampling (ADIS) to estimate the energy gradient, normalization constant, and Sobolev
+Gram quantities.  The matrix-free Nystr¨om-preconditioned conjugate gradient solver
+avoids  explicit  Gram-matrix  assembly  and  inversion,  thereby  reducing  memory  use
+and improving scalability.  The numerical results show three advantages of the pro-
+posed framework.  First, compared with existing approaches such as norm-DNN, the
+method converges faster, often by an order of magnitude (seeTable 6).  Second, the
+optimized neural-network solution provides a high-quality initial guess for traditional
+high-precision  solvers,  reducing  both  iteration  counts  and  time  to  convergence  (see
+Figure 6).  Finally, the implicit Gram-operator implementation substantially reduces
+dimension dependence in the high-dimensional experiment:  with a fixed hidden ar-
+chitecture, wall-clock time and GPU memory remain nearly constant ford= 4,...,8,
+with no evidence of exponential growth (seeTable 7).
+     The remainder of this paper is organized as follows.Section 2reviews the varia-
+tional formulation of the GPE and derives the continuous projected Sobolev gradient
+flow.Section 3introduces the neural discretization and derives the resulting NGD
+scheme.Section 4presents the VMC implementation, including gradient estimation,
+adaptive importance sampling for the normalization constant, and randomized pre-
+conditioning of the Gram matrix.Section 5reports numerical experiments assessing
+the proposed method.Section 6concludes with limitations and future directions.  The
+appendices collect the supporting stability analysis and ablation studies.
+
+     2.  Variational formulation and Sobolev gradient flow.This section sets up
+the variational framework for the GPE and derives the continuous projected Sobolev
+gradient flow used for the neural discretization.
+     2.1.  Gross–Pitaevskii energy functional and ground state problem.The
+dimensionless GPE on a bounded domainD⊂R        d  with Lipschitz boundary∂Dde-
+scribes a BEC in the mean-field approximation at zero temperature.  Its energy func-
+tional is
+                             Z    1
+(2.1)    E(ψ) =                     2|∇ψ(r)|              2 +V(r)|ψ(r)|                      2 + β2|ψ(r)|          4 dr,
+                               D
+
+whereψ:D →Ris  the  condensate  wavefunction  subject  to  the  mass  constraint
+∥ψ∥     2L2(D)     = 1. The parameterβ∈Rrepresents the dimensionless interaction strength,
+whereβ >0 corresponds to the repulsive interactions investigated in this work and
+β <0 models attractive interactions.  The external potentialV(r) is assumed to be
+real-valued, essentially bounded, i.e.,V∈L    ∞(D), andV(x)≥0 almost everywhere.
+4                                        C. BAO, C. CUI, K. JIANG, AND S. SHU
+
+We impose homogeneous Dirichlet boundary conditionsψ= 0 on∂Dand useH                                          10(D)
+as the basic Sobolev space associated with this boundary condition.
+      The ground state is defined as the global energy minimizer on the unitL        2 sphere,
+
+                                                           n                                                     o
+(2.2)ψ          GS = arg min                                  ψ∈H      10(D)∩L          4(D) :∥ψ∥            2L2(D)     = 1.
+                            ψ∈S   E(ψ),      S:=
+
+The intersection withL         4(D) defines the finite-energy admissible class for the quartic
+interaction  and  ensures  that RD|ψ|    4 dris  finite  for  everyψ∈S.   This  condition  is
+automatic ford≤4 through the Sobolev embeddingH                         10(D),→L             4(D) and becomes
+an  effective  restriction  only  whend >4.   Critical  points  ofEonScorrespond  to
+stationary  states  and  satisfy  a  constrained  variational  principle.   By  introducing  a
+Lagrange multiplierµ∈R, these states satisfyδ(E(ψ)−µ(∥ψ∥                                                                  2L2−1)) = 0.  The first
+variation in a directionv∈H                        10(D)∩L          4(D) is given by
+                                            Z     ∇ψ·∇v+ 2Vψv+ 2β|ψ|                           2ψv dr,
+(2.3)   ⟨E   ′(ψ),v⟩=
+                                              D
+leading to the nonlinear eigenvalue problem
+
+(2.4)        H[ψ]ψ:=                            −12∆ +V(r) +β|ψ|                     2 ψ=µψ.
+
+For  a  ground  stateψ          GS,  the  associated  chemical  potential  satisfiesµ=E(ψ                           GS) +
+β
+2∥ψ  GS∥4L4(D)    .  The ground state can be chosen nonnegative inD.
+      2.2.  Projected Sobolev gradient flow and metric selection.To compute
+ground states while maintaining the mass constraint,  we give a formal Riemannian
+projected Sobolev-gradient-flow derivation [28] that integrates metric preconditioning
+with projection onto the mass-orthogonal admissible directions.  Atψ, these directions
+are                                                                              Z
+                     TψS= v∈H      10(D)∩L          4(D) : (ψ,v)    L2 =
+                                                                                   Dψvdr= 0  	.
+To  state  the  Riesz  construction  rigorously,  one  must  first  select  a  Hilbert  spaceX
+compactly embedded inL    2(D), compatible with the admissible test class, and such
+thatE  ′(ψ) is continuous onX.  Whenever such a Hilbert structure has been fixed,
+the Riesz representer ofE ′(ψ) defines theXSobolev gradient∇           XE(ψ)∈Xthrough
+
+(2.5)                           (∇ XE(ψ),ϕ)     X =⟨E  ′(ψ),ϕ⟩,  ∀ϕ∈X,
+
+where⟨·,·⟩denotes the duality pairing.
+      Formally choosingX=L                  2(D) gives theL            2  gradient∇ L2E(ψ) = 2H[ψ]ψ,  and
+the resulting flow recovers the imaginary time evolution method [5].  However,  this
+approach often suffers from numerical stiffness becauseH[ψ] is an unbounded operator
+onL     2.  To mitigate this issue, we use an energy-adaptive metric [29,27] induced by
+the bilinear form
+                                           Z
+(2.6)      a    ψ(v,w) :=                         1                                           dr,
+                                             D    2∇v·∇w+Vvw+β|ψ|                               2vw
+
+evaluated onH     10(D)∩L          4(D).  Ford>4, the norm induced bya      ψ does not in general
+control theL      4  norm, so this intersection need not be complete in thea   ψ  norm.  We
+                                        PROJECTED SOBOLEV NGD FOR GPE                             5
+
+         therefore do not assert thata   ψ  makesH    10(D)∩L          4(D) a Hilbert space.  A fully rig-
+         orous Hilbert-manifold treatment in arbitrary dimension would require an additional
+         choice of topology for which the relevant embedding and the continuity and coercivity
+         properties ofa  ψ are established.  In the present work, the following continuous-space
+         construction is understood formally on the sufficiently regular finite-energy class rep-
+         resented by the neural ansatz.  On this class, we write the formala     ψ-Sobolev gradient
+         as  the  function  satisfyinga    ψ(∇ aψE(ψ),ϕ)  =⟨E     ′(ψ),ϕ⟩for  all  sufficiently  regular
+         finite-energy test functionsϕ.  With the convention in (2.3),⟨E     ′(ψ),ϕ⟩= 2a      ψ(ψ,ϕ).
+         Thus,  the  metric  incorporates  leading-order  curvature  information  from  the  energy
+         functional and acts as a nonlinear, state-dependent preconditioner for theL       2 flow.
+              Because the normalization constraint is imposed in theL       2  geometry, projecting
+         anX-gradient ontoT     ψSrequires theX-Riesz representern        ψ∈Xof the constraint
+         differential, defined by (n ψ,ϕ) X = (ψ,ϕ)  L2 for allϕ∈X.  The Riemannian projection
+         is defined as
+
+         (2.7)        gradXE(ψ) =P     ψ,X(∇ XE(ψ)) =∇     XE(ψ)−         (∇ XE(ψ),n    ψ)X∥n ψ∥2X    nψ.
+
+         The continuous projected Sobolev gradient flow is then given by
+
+         (2.8)             ∂    tψ(t) =−grad      XE(ψ(t)),
+
+         which preserves the mass∥ψ(t)∥                     2L2≡1 and dissipates the energy monotonically.
+              Remark2.1.Beyond formulations based on first-order ordinary differential equa-
+         tions (ODEs),  various alternative computational strategies exist for obtaining BEC
+         ground states.  These include second-order ODE systems analogous to Nesterov mo-
+         mentum [11], Riemannian conjugate gradient methods [16], and preconditioned nor-
+         malizedL               2 flows [2].  Although these approaches differ in implementation complexity
+         and convergence behavior, each could serve as a starting point for deriving discrete
+         neural schemes similar to the one developed here.
+              3.  Neural  discretization  and  natural  gradient  descent.This  section  in-
+         troduces the neural network discretization of the GPE. By invoking the DFVP, we
+         project the continuous Sobolev gradient flow onto the parameterized manifold, which
+         yields a natural gradient evolution for the network parameters.  We first detail the
+         neural network architecture and normalization strategies before deriving the discrete
+         parameter-space dynamics.
+              3.1.  Deep  neural  network  ansatz  and  normalization.Since  the  ground
+         state can be chosen nonnegative, the implementation parameterizes its log amplitude
+         by  combining  a  Gaussian  envelope  with  a  multilayer  perceptron  (MLP)  correction.
+         For an inputr∈R       d, the forward propagation of theL-layer correction network is
+
+                                h(0) =r,
+(3.1)                            h(l)   =σ   W(l)  h(l−1)     +b    (l)  ,   l= 1,...,L−1,
+
+                               fη(r) =W        (L)   h(L−1)      +b    (L) ,
+
+         whereσdenotes the activation function andη={W                               (l) ,b (l) }Ll=1  contains the MLP
+         parameters.  The unnormalized wavefunction used in the experiments is
+
+         (3.2)    ψ         θ(r) = exp  − 12∥C ⊤r∥  2 exp(f        η(r)),      θ= (η,C),
+6                                        C. BAO, C. CUI, K. JIANG, AND S. SHU
+
+where the trainable matrixCprovides a Gaussian envelope and the MLP learns a
+multiplicative  correction.   The  experimental  implementation  registers  a  fulld×d
+trainable matrix and uses its lower-triangular part in the forward evaluation.
+     A key challenge in learning GPE wavefunctions is enforcing the normalizing con-
+straint while optimizing unconstrained network parameters.  Standard VMC methods
+for linear Hamiltonians can work with unnormalized densities by exploiting scale in-
+variance [48].  This invariance is lost for the GPE because of its nonlinear interaction
+term.
+     One way to impose the constraint is to use the normalized ansatz [4,37]
+
+(3.3)                                            ˆψθ(r) =   ψθ(r)∥ψ  θ∥L2(D)  .
+
+However,  differentiating  the  normalization  integral  by  automatic  differentiation  is
+computationally expensive and can be unstable.  We therefore use a hybrid strategy:
+the normalized ansatz enforces mass conservation, while the log-derivative statistical
+estimators described inSubsection 4.2compute gradients without directly differenti-
+ating the normalization factor.
+     3.2.  Natural gradient descent.We introduce the normalized neural manifold
+Mθ  ={    ˆψθ∈S:θ∈R     P}.  To project the gradient flow  (2.8) onto this manifold,
+we use the chain rule,  which gives∂  t ˆψθ  =J(θ)         ˙θ,whereJ(θ) = [∂          θ1 ˆψθ,...,∂θP ˆψθ]
+denotes the Jacobian operator.  Because  ˆψθ  is normalized, its parameter derivatives
+obey⟨    ˆψθ,∂θj ˆψθ⟩L2 = 0,so each∂   θj ˆψθ lies in the tangent spaceT            ˆψθS.  The parameter-
+induced tangent subspace is therefore
+
+                            Vθ = span{∂     θj ˆψθ :j= 1,...,P}⊂T             ˆψθS.
+
+     Remark3.1.Heretis only a pseudo-time indexing the optimization pathθ(t),
+not the physical time in the time-dependent GPE.
+     Since the neural ansatz possesses finite expressivity, the exact Riemannian gra-
+dient  gradXE(   ˆψθ)  generally  extends  beyond  the  tangent  subspaceV  θ.   The  DFVP
+[20,24] resolves this by seeking a velocity            ˙θwhose dynamical residual is orthogonal
+toV    θ  under  theX-metric.   This  approach,  also  known  as  the  Galerkin  projection
+[8,3], yields
+
+(3.4)      
+J(θ)      ˙θ+ grad XE(   ˆψθ),∂ θj ˆψθX = 0,   j= 1,...,P.
+
+     Expanding the above equation leads to a system of ODEs governing the evolution
+of the parameters
+
+            PX
+                ˙θi ∂θi ˆψθ,∂θj ˆψθX =−  gradXE(   ˆψθ),∂ θj ˆψθX,   j= 1,...,P.
+
+           i=1
+To simplify notation, we introduce the Gram matrix associated with the parameterized
+manifoldM                 θ,
+
+(3.5)                           G    ij(θ) =   ∂θi ˆψθ,∂θj ˆψθX,
+
+which is symmetric and positive semidefinite.  At this stage, we keep the inner product
+(·,·)  X abstract to emphasize that the Galerkin projection and the resulting parameter
+                               PROJECTED SOBOLEV NGD FOR GPE                             7
+
+dynamics depend on the chosen metric but are not tied to a particular inner product.
+For  any  such  choice,  the  Gram  matrixG(θ)  is  the  pullback  of  the  corresponding
+function-space metric under the normalized neural embeddingθ7→              ˆψθ.  The energy-
+adaptive choice used in this work is specified after the natural-gradient iteration is
+derived.
+     Using the definition of the Sobolev gradient in (2.5) and the fact that∂       θj ˆψθ∈
+T ˆψθS, the right-hand side can be written entirely in parameter derivatives. Specifically,
+we obtain
+            gradXE(   ˆψθ),∂ θj ˆψθ
+                                        X = ∇XE(   ˆψθ),∂ θj ˆψθX
+                                           =⟨E  ′( ˆψθ),∂ θj ˆψθ⟩=  ∂∂θjE(   ˆψθ) =∇   θL(θ)   j,
+
+where  we  have  defined  the  parameter-space  objective  function  asL(θ)  :=E(                ˆψθ).
+Therefore, the evolution of the parameters is governed by the natural gradient flow
+
+(3.6)                               G(θ)                ˙θ=−∇      θL(θ),
+
+which constitutes a finite-dimensional realization of the Sobolev gradient flow on the
+neural network manifold.
+     Applying the forward Euler method to (3.6) leads to the following NGD iteration
+
+
+(3.7)                       θ    k+1   =θ  k−τ k G(θ   k)−1 ∇θL(θ  k),
+
+whereτ     k >0 denotes the learning rate.Figure 1illustrates both the algebraic struc-
+ture and the geometric interpretation of the proposed method.  Panel (a) depicts a
+commutative diagram emphasizing manifold consistency: the discrete NGD update on
+Θ represents the optimal finite-dimensional approximation of the continuous Sobolev
+gradient  flow  inS.   Panel  (b)  geometrically  interprets  the  DFVP-induced  Galerkin
+projectionP.  Here, the NGD update identifies the descent direction within the tan-
+gent spaceT            ˆψMθ that minimizes the angular deviation from the true Sobolev gradient
+under theX-inner product.
+     The derivation above holds for a general inner product (·,·)  X.  In this work, we
+choose  the  energy-adaptive  Sobolev  inner  product  from  (2.6);  namely,  forψ=               ˆψθ,
+we set (u,v)  X  =a    ˆψθ(u,v) in the Gram matrix (3.5).  By contrast, the standardL                              2
+metric yields the classical Fisher information matrix and recovers the stochastic re-
+configuration method [51], but it often induces numerical stiffness that necessitates
+Runge–Kutta schemes or specialized integrators [21,8].  The energy-adaptive metric
+mitigates this stiffness and permits stable explicit integration with large time steps of
+orderO(1), cf. (5.5).  The subsequent section details efficient strategies for precondi-
+tioning the inverse metricG(θ        k)−1    and the gradient∇  θL(θ  k).
+     4.  Implementation via variational Monte Carlo.This section describes the
+practical implementation of the method: evaluating the lossL(θ) =E(                  ˆψθ), estimating
+its gradient∇  θL(θ), and solving the Gram system involvingG(θ).  We first estimate
+the energy and gradient within a VMC framework using MCMC sampling.  We then
+introduce  a  hybrid  sampling  strategy  for  the  normalization  constant.   Finally,  we
+describe matrix-free Gram products and Nystr¨om preconditioning.
+     4.1.  Estimation of the energy functional.Recall that the loss function is de-
+fined as the Gross–Pitaevskii energy evaluated at the normalized neural wavefunction
+               8                                        C. BAO, C. CUI, K. JIANG, AND S. SHU
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+               Fig.  1:  Schematic  of  Projected  Sobolev  NGD  method.   (a)  Commutative  diagram
+               relating  the  continuous  function-space  flow  to  the  discrete  parameter  update.   (b)
+               Galerkin projection of the Sobolev flow onto the neural tangent space.
+
+
+                ˆψθ, namely
+                                                            Z    1
+               (4.1)   L(θ) =E(                    ˆψθ) =          2|∇ ˆψθ|2 +V(r)|          ˆψθ|2 + β2| ˆψθ|4 dr.
+                                                             D
+                     Let us define the normalization constant (or partition function)Z
+
+               (4.2)          Z(θ) =∥ψ                      θ∥2L2(D)     =
+                                                                                   D|ψ θ(r)|      2 dr.
+               Within the VMC framework, integrals overDare reformulated as expectations with
+               respect to the densityp  θ(r) =|       ˆψθ(r)|      2.
+                     We decompose the total energy into linear and nonlinear components.  The linear
+               energyE             lin encompasses the kinetic and external potential terms.  By introducing the
+               local energyE     L(r;θ) =ψ   −1θ  (−  12∇2 +V)ψ        θ, it takes the expectation form
+                                                Z                                                   EL(r;θ)  .
+               (4.3)    E          lin =              ˆψθ   −12∇2 +V            ˆψθ dr=E       r∼p     θ
+                                                  D
+               HereE    L is understood pointwise as the ratioE    L(r;θ) =   (−  12∇2 +V)ψ        θ(r)/ψ     θ(r).
+               This  ratio  is  evaluated  only  away  from  the  nodes;  sincep         θ  =|    ˆψθ|2  assigns  zero
+               probability to the set{r∈D:ψ              θ(r) = 0}, sampled points avoid the nodesp              θ-almost
+               surely.  Notably,E lin  is invariant under the rescaling ofψ    θ, soZ(θ) cancels out.  In
+               contrast, the nonlinear interaction energyE             int explicitly depends on the amplitude   β
+                                                        Z
+               (4.4)      E          int = β2                                           2Z(θ)  |ψ θ(r)|      2 .
+                                                          D| ˆψθ|4 dr=E       r∼p     θ(b) Tangent Space Projection
+         (a) Algebraic CorrespondenceCombining these contributions yields the total energy expectation
+
+Function SpaceS
+               (4.5)        L(θ) =E                  r∼p     θContinuous Sobolev FlowEL(r;θ) +     β       .
+                    ∂t ˆψ=−grad       XE(  ˆψ)                                      2Z(θ)  |ψ θ(r)|      2 P
+        ˆψθk                                    ˆψtarget                                      T ˆψM
+               This formulation highlights that a stable evaluation of the scalarZ(θ) is essential.SobolevProjected
+                                                                                  Flow             (NGD)
+               InSubsection 4.3, we describe a hybrid sampling strategy designed to computeZ(θ)
+  Neural       effectively.⟳                         Galerkin
+ Ansatz                                              Projection                    ˆψθk            Standard
+                          Commutative
+                                                                                                   Gradient
+
+         θk                                       θ∗                                                      Mθ
+                  Natural Gradient Flow˙θ=−G(θ)    −1∇θL(θ)
+
+Param ManifoldΘ
+                                PROJECTED SOBOLEV NGD FOR GPE                             9
+
+     4.2.  Estimation of the gradients.To estimate the gradient∇       θL(θ), we em-
+ploy  the  log-derivative  identity∇  θ|ψ θ|2  =  2|ψ   θ|2Oθ,  whereO           θ(r)  =∇       θ ln|ψ     θ(r)|
+denotes the score function.  Differentiating the linear Rayleigh quotientE  lin and the
+nonlinear interaction energyE             int with respect toθ, and applying the quotient rule to
+handle the normalization factorZ(θ),  allows us to express the total gradient as an
+expectation over the probability densityp  θ.
+     To present the estimator in a concise form, we introduce thelocal  chemical  po-
+tentialµ     L(r), which effectively aggregates the local energy and the potential induced
+by the nonlinearity
+
+(4.6)           µ    L(r)    :=E L(r) +   βZ(θ)  |ψ θ(r)|      2.
+
+Correspondingly, we denote the mean chemical potential as ¯µ=E        r∼p     θ[µ L(r)], noting
+that  ¯µ=E         lin + 2E  int  due to the scaling of the interaction term.  Combining these
+definitions, the gradient of the loss function is given by
+
+(4.7)      ∇         θL(θ) = 2E         r∼p     θ [(µ L(r)−¯µ)O               θ(r)].
+
+This estimator, structured as a covariance between the local chemical potential and the
+score function, inherently acts as a control variate formulation, reducing the variance
+of the stochastic gradients.
+     4.3.  Hybrid sampling strategy. The explicit dependence of the energy expec-
+tation (4.5) on the normalization constantZ(θ) necessitates a dual sampling approach.
+We employ a hybrid strategy comprising two distinct routines:
+     Gradient Estimation:The first routine estimates energy gradients via MCMC
+sampling (e.g., Metropolis–Hastings (M-H) [41] or Hamiltonian Monte Carlo (HMC)
+[42])  fromp              θ.   By  concentrating  samples  in  high-probability  regions  where|          ˆψθ|2  is
+large, this method yields low-variance estimators efficiently.
+     Normalization  via  ADIS:The  second  routine  computesZ(θ)  using  Monte
+Carlo integration to overcome the curse of dimensionality inherent in grid-based quad-
+rature.  We utilize an adaptive defensive importance sampling (ADIS) strategy,  ex-
+pressing the constant asZ(θ) =E             r∼q    [|ψ  θ|2/q].  The proposalqis a mixture
+
+(4.8)    q(r) =αq     N (r|µ,Σ) + (1−α)q       U(r|Ω),  α∈[0,1].
+
+Here,q   N  is a multivariate Gaussian updated using statistics from the MCMC stream
+to track the wavefunction’s mass, while the defensive uniform componentq U  guaran-
+tees global support.  This combination prevents variance explosion and ensures the
+method  scales  linearly  with  sample  size,  independent  of  spatial  dimension.   All  re-
+ported main experiments use the fixed defaultα= 0.8, with no per-problem tuning.
+The ablations inAppendix D.1show that this value gives the most accurateZes-
+timate in the 3D benchmark with a grid reference and remains stable in thed= 8
+benchmark.
+     4.4.  Computation  of  the  Gram  matrix.We  adopt  thea                        ˆψ-inner  product
+evaluated at the normalized wavefunction  ˆψθ as the underlying metric for constructing
+the Gram matrix, cf. (2.6).  Specifically, the bilinear form is defined as
+                               Z    1
+(4.9)  a          ˆψ(u,v) =           2∇u·∇v+V(r)uv+            βZ(θ)  |ψ θ(r)|      2uv     dr,
+                                 D
+10                                    C. BAO, C. CUI, K. JIANG, AND S. SHU
+
+The Gram matrix is then given by
+                                                                          !
+(4.10)                       G     ij(θ) =a         ˆψ      ∂ ˆψθ            .
+                                                             ∂θi ,∂ ˆψθ∂θj
+
+      We  first  derive  an  explicit  expression  for  the  tangent  vectors  associated  with
+the  normalized  wavefunction   ˆψθ  =ψ   θ/pZ(θ).   Differentiating  with  respect  to  a
+parameterθ        k yields
+                                         ψθ                                       1
+                       ∂ ˆψθ                          (∂ θkψθ)√Z−ψ      θ       2√Z∂θkZ
+                        ∂θk  = ∂∂θk       √Z       =                     Z
+                                       ∂θkψθ            ∂θkZ
+(4.11)                        =  ˆψθ       ψθ − 12        Z       .
+
+Introducing  the  log-derivativeO k(r)  :=∂    θk ln|ψ     θ(r)|, and  recalling  that∂       θkZ=
+2ZE     r∼p     θ[O k], we arrive at the compact form
+
+
+(4.12)       ∂ ˆψθ∂θk  =  ˆψθ(r) (O  k(r)−E        r∼p     θ[O k]) =:  ˆψθ(r)δO   k(r),
+
+whereδO      k denotes thecentered score function, satisfyingE                 pθ[δO k] = 0.  This center-
+ing reflects the orthogonality of tangent vectors to the normalization constraint.
+
+      4.4.1.  Gradient expansion of the kinetic term.We now evaluate the kinetic
+contribution                              1
+
+                                            2∇(∂  θi ˆψθ)·∇(∂   θj ˆψθ).
+Using (4.12) and the product rule,
+                                     ˆψθδO k
+(4.13)     ∇                                      = (∇  ˆψθ)δO  k +  ˆψθ∇δO  k.
+
+
+Define thequantum forceF(r) :=∇ln|                       ˆψθ(r)|=  ∇ ˆψθˆψθ .SinceδO      k =O k−E[O   k], its
+gradient satisfies∇δO   k =∇O   k.  Therefore,
+                                        !
+(4.14)    ∇                       ∂ ˆψθ    =  ˆψθ(r) (F(r)δO       k(r) +∇O     k(r)).
+                                  ∂θk
+
+Substituting the expressions for indicesiandjinto the kinetic term yields
+                 Z    1  h ˆψθ(FδO   i +∇O   i)i      h ˆψθ(FδO   j +∇O   j)i
+        Kij =         2                             ·                              dr
+                 ZD                                                                                         i
+              =       1          |F|     2δO iδO j +F·(δO     i∇O  j +δO  j∇O  i) +∇O   i·∇O  j               dr
+                   D  2| ˆψθ|2h
+                           1
+(4.15)        =E   r∼p     θ2|F|     2δO iδO j + 12F·(δO   i∇O  j +δO  j∇O  i) + 12∇O  i·∇O  j                 ,
+
+
+where we have usedp        θ =|    ˆψθ|2 to convert the integral into an expectation.
+                                 PROJECTED SOBOLEV NGD FOR GPE                           11
+
+ ˆψθδO k directly, we obtain4.4.2.  Potential  and  interaction  terms.Substituting  the  tangent  vectors
+
+                                  Z
+                 Vij +I ij =             V(r) +    βZ(θ)  |ψ θ(r)|      2 ( ˆψθδO i)( ˆψθδO j) dr
+                                    D
+(4.16)                         =E   r∼p     θ V(r) +    βZ(θ)  |ψ θ(r)|      2 δO i(r)δO   j(r)    .
+
+      Collecting (4.15) and (4.16), it is convenient to group all coefficients multiplying
+δO iδO j  into a single weight function, termed thegeneralized energy density
+
+(4.17)    W(r) =V(r) +            βZ(θ)  |ψ θ(r)|      2 + 12|F(r)|          2.
+
+The Sobolev Gram matrix then admits the compact expectation form
+                                          h
+                    Gij(θ) =E       r∼p     θ         W(r)δO     i(r)δO   j(r)
+                                                      |            {z           }
+                                            Term I: energy-weighted Fisher information
+
+                                            + 12F(r)·    ∇O  i(r)δO   j(r) +∇O     j(r)δO   i(r) 
+(4.18)                                         |                           {z                           }
+                                                           Term II: drift–gradient coupling
+                                                                                         i
+                                            +          12∇O  i(r)·∇O    j(r)               .
+                                                       |          {z           }
+                                               Term III: pure Sobolev regularization
+      4.5.  Matrix-free PCG solver with Nystr¨om preconditioning.The Gram
+matrixG(θ) is symmetric positive semidefinite.  To make the linear system nonsingu-
+lar, we add Tikhonov regularizationλIwithλ>0.  Projecting the Sobolev gradient
+flow onto parameter space then requires solving (G(θ)+λI)                ˙θ=−∇      θL(θ).  Explicitly
+forming the Gram matrix costsO(P                2) memory, and direct inversion costsO(P                3) time.
+We therefore use a matrix-free PCG solver that requires only productsv7→Gv.
+      4.5.1.  Matrix-free implementation.For Monte Carlo samples{r              n}Nn=1  , let
+
+                    O(r) =∇           θ log|ψ       θ(r)|∈R    P,   δO(r) =O(r)−E           pθ[O]
+
+be the score vector and its centered version.  Define the centered score matrix and
+mixed input–parameter derivative tensor by
+
+                                     J∈R  N×P  ,      J n,:    =δO(r     n)⊤,
+
+                    K∈R   N×P×D    ,      K n,:,d     =∇ rdδO(r   n)⊤ =∇ rdO(r  n)⊤.
+The last equality holds because the centering constant has no spatial derivative.  Let
+F(r  n)∈R  D  denote  the  drift  field,  and  letW(r     n)  denote  the  generalized  energy
+density.  The Sobolev Gram matrix in (4.18) acts onv∈R         P  as
+(4.19)
+                  h                             DX            F:,d⊙(Jv)    +J ⊤ F:,d⊙(K     :,:,d  v) 
+     Gv=        1N J⊤ W⊙(Jv)     + 12                K⊤:,:,d
+                                               d=1
+
+                           DX                     i
+                    + 12       K⊤:,:,d   (K  :,:,d  v),
+                          d=1
+12                                    C. BAO, C. CUI, K. JIANG, AND S. SHU
+
+whereW∈R        N  stacks the generalized energy densities and⊙denotes elementwise
+multiplication.  We now describe two implementations of this product, which differ in
+whether the matrixJand the mixed-derivative tensorKare materialized.
+     Explicit  Sobolev  implementation.In the low-dimensional experiments,JandK
+are materialized and the Gram products are evaluated by batched contractions (4.19).
+The centered scoreδO(r       n) is obtained by a reverse-mode pass over the parameters,
+with  costO(P)  per  sample.    The  tensor  sliceK          n,:,d      =∇ rdO(r  n)⊤  is  computed
+by  forward-over-reverse  automatic  differentiation.   Consequently,  formingKcosts
+O(NDP)  operations,  up  to  constants  from  automatic  differentiation,  and  requires
+O(NPD) storage.  OnceJandKare cached, each productv7→GvcostsO(NDP)
+floating-point operations.  This path avoids explicitO(P                     2) Gram storage andO(P              3)
+Gram inversion, but storingKbecomes prohibitive asPorDgrows.
+     Implicit Sobolev operator chain.The implicit implementation evaluates the same
+product without materializing eitherJorK.  It uses the quadratic-form identity
+                                                        1
+                                          Gv=∇         v 2v⊤Gv        .
+
+Givenv∈R    P , a forward-mode Jacobian-vector product first computes the uncentered
+directional score
+                                   Ov(r n) =X        vj∂θj log|ψ       θ(r n)|.
+                                                  j
+Sample-mean centering gives the centered tangent perturbation
+
+                                                      NX
+                    δψv(r n) =O   v(r n)−   1N            Ov(r m) =X         vjδO j(r n).
+                                                    m=1                   j
+
+Spatial differentiation then yields the input-gradient intermediate∇                   rδψv∈R N×D     .
+Writingδψ          v,n   =δψ   v(r n), these quantities define the scalar tangent energy
+(4.20)
+                NXh
+E(v) =        1      1                                                                            =  1
+           N         2W(r   n)δψ  2v,n   +  12F(r  n)·∇  rδψv,n δψv,n   +  14∥∇rδψv,n ∥2i            2v⊤Gv.
+              n=1
+A final reverse-mode vector-Jacobian product returnsGv=∇                      vE(v).  The product
+rule  reproduces  the  two  drift–gradient  cross  terms  in  (4.19).   This  is  Pearlmutter’s
+Hessian-vector  trick  [45]  specialized  to  the  energy-adaptive  metric.   Each  matrix-
+free product stores only samplewise directional intermediates such asO    v∈R N  and
+∇rOv∈R N×D     , parameter-sized gradient vectors, the Nystr¨om basisM∈R       P×r    , and
+automatic-differentiation activations.  Its peak-memory scaling is thereforeO(N) +
+O(ND) +O(Pr) + activations, with noO(NP) orO(NPD) cached tensor.  It also
+avoids the denseO(P                 2) Gram matrix.
+     The standard Fisher or stochastic-reconfiguration metric uses only the first-order
+centered score JacobianJ, so its matrix-free product costsO(NP).  In our implemen-
+tation,  one implicit Sobolev product empirically corresponds to roughly four to six
+network forward/backward evaluations.  The constantc  AD inTable 1accounts for the
+JVP, input-gradient, and VJP chain. We use the implicit path in the high-dimensional
+experiments.
+     4.5.2.  Randomized Nystr¨om preconditioning.To accelerate PCG conver-
+gence, we use a low-rank Nystr¨om approximation of the Gram matrix [23]:G≈MM    ⊤
+                                                PROJECTED SOBOLEV NGD FOR GPE                           13
+
+
+                 Table 1:  Cost of one matrix-free productv7→Gvand peak memory of the associated
+                 Nystr¨om–PCG solve.  HereNis the number of samples,Pthe number of parameters,
+                 Dthe spatial dimension,rthe Nystr¨om rank, andc                                   AD an implementation-dependent
+                 automatic-differentiation constant.
+
+
+
+
+
+
+
+
+
+
+                 withM∈R       P×r      andr≪P.  The construction follows the GPU-efficient approach of
+                 [26]:
+                        1.Generate a Gaussian random test matrixΩ∈R          P×r    ;
+                        2.Compute the projected matrixY=GΩusing the matrix-freeGvoperator;
+                        3.Form the Nystr¨om basis
+
+                                                              M=Y   Ω⊤Y+εI   −1/2  ,
+
+                            where a small shiftε>0 is added for numerical stability.
+                      The Woodbury identity gives a closed form for the approximate inverse used as
+                 the preconditioner:
+                                                                  h
+                 (4.21)                (MM⊤ +λI)  −1   =  1λ       I−M   M⊤M+λI     r−1   M⊤i.
+
+                 This reduces the inversion cost toO(Pr          2), which is tractable for moderate ranks.  We
+                 also use a lazy update strategy that refreshes the Nystr¨om basis only every ten steps,
+                 reducing overhead.  The reported main experiments use the fixed defaultr= 128 and
+                 update frequencyK= 10.  The rank ablation inAppendix C.1shows thatr= 128 is
+                 a budget-aware default, whiler= 512 gives the best median residual and Hutchinson
+                 spectral error for the testedP∼10                   4 network when accuracy is prioritized.
+                      4.6.  Implementation  details.Algorithm  4.1summarizes  the  Sobolev  NGD
+                 algorithm.  The implementation combines several techniques to improve robustness
+                 and scalability.
+                      We  first  clarify  the  role  of  Tikhonov  regularization.   The  continuous  projected
+                 Sobolev  gradient  flow  (2.8)  is  energy  dissipative  in  function  space.   However,  this
+                 monotonicity  should  not  be  interpreted  as  a  pathwise  monotonicity  guarantee  for
+                 the  fully  discrete  stochastic  NGD  iterates.   In  practice,  both  the  gradient  and  the
+                 Gram-matrix  action  are  estimated  from  Monte  Carlo  samples,  and  the  regularized
+                 Gram system is solved only approximately by PCG. The damping parameter defines
+                 Hk  =G k +λ kIand  therefore  satisfies∥H     −1k ∥ ≤1/λ  k.   Hence,  the  lower  bound
+                 imposed onλ  k limits the amplification of both Monte Carlo noise and PCG residuals.
+                 The specific residual-aware schedule and its empirical trajectory are reported in (5.6)
+                 andFigure 2c,  respectively.  An idealized conditional-expectation stability estimate
+                 under a conditionally unbiased gradient model is provided inAppendix A.
+                      We next describe the Fourier-feature embedding used for oscillatory potentials.
+                 Because standard MLPs suffer from spectral bias, we use Gaussian random Fourier
+
+
+
+                                  Explicit Sobolev                              Implicit Sobolev
+JacobianJ      O(NP), materialized                           not materialized
+Mixed derivativeK  O(NPD), materialized                         not materialized
+Product mechanism             tensor contractions                      JVP/input gradient/VJP
+Per-product work      O(NDP)          O(NPc               AD)
+Peak memoryO(NPD) +O(Pr) + activationsO(N) +O(ND) +O(Pr) + activations
+14                                    C. BAO, C. CUI, K. JIANG, AND S. SHU
+
+Algorithm 4.1Projected Sobolev NGD for the GPE
+Require:Initial parametersθ                                          0,  learning rateτ   k,  damping parameterλ        k,  Nystr¨om
+     rankr= 128, and update frequencyK= 10.
+Ensure:Ground-state wavefunction approximation                ˆψθ.
+ 1:Initialization:  Initialize MCMC walkersX                                       mcmc.
+ 2:fork= 0,1,2,... until convergencedo
+ 3:    Step 1:  Hybrid Sampling and Statistics
+ 4:        Update  walkersX         mcmc  ={r  n}Nn=1    via  MCMC  sampling  fromp         θ(r)∝
+     |ψ θ(r)|      2.
+ 5:        Compute statistics (µ,Σ) fromX                       mcmc and update the ADIS proposalq(r).
+ 6:        Estimate the normalization constantZ(θ) using ADIS samplesX                            int.
+ 7:    Step 2:  Gradient Estimation
+ 8:        Evaluate local chemical potentialµ    L(r n) =E L(r n) +  βZ(θ) |ψ θ(r n)|  2.
+ 9:        Form  the  Monte  Carlo  loss-gradient  estimate  bgk   =    2                     PN
+                                                                                          N      n=1  (µ L(r n)−
+     ¯µ)∇      θ ln|ψ     θ(r n)|.
+10:   Step 3:  Randomized Nystr¨om Preconditioner (Lazy Update)
+11:   ifk≡0  (modK)then
+12:         Generate Gaussian random matrixΩ∈R          P×r    .
+13:         ComputeY=GΩvia the matrix-free operator.
+14:         Form the Nystr¨om basisM=Y(Ω        ⊤Y+εI)   −1/2     .
+15:   end if
+16:   Step 4:  Natural Gradient Direction Search
+17:       Solve (G   k +λ kI)  ˙θk =− bgk using matrix-free PCG.
+18:       Apply preconditioning via the Woodbury identity:h              i
+19:      P −1  v=      1λk    v−M   M⊤M+λ    kIr−1   M⊤v                  .
+20:   Step 5:  Parameter and Damping Update
+21:       Update parameters:θ            k+1   =θ k +τ k ˙θk.
+22:       Update damping by the residual-aware rule (5.6).
+23:end for
+24:return      ˆψθ =ψ   θ/pZ(θ)
+
+
+features  (RFFs)  [52]  for  potentials  with  known  oscillatory  lattice  structure.   The
+embedding is
+                                γ(r) = [cos(2πBr),sin(2πBr)]∈R                                                      2m ,
+where the rows ofB∈R    m×d      are initialized independently fromN(0,σ                  2Id).  In the
+optical-lattice  experiments,Bis  trainable  after  this  Gaussian  initialization  and  is
+optimized jointly with the MLP. In the smooth high-dimensional anisotropic quadratic
+experiments, no RFF layer is used; the raw coordinateris passed directly to the MLP.
+This embedding helps the network resolve high-frequency spatial structures when they
+are present in the potential.
+     For  the  optical-lattice  benchmarks,  the  bandwidth  is  chosen  according  to  the
+spatial scale of the prescribed lattice oscillations.  We useσ= 1.0 for the 2D sin             2(πx)
+lattice and the smaller valueσ= 0.25 for the slower-varying 3D sin               2(πx/4) lattice.
+These choices are summarized inTable 2.
+     5.  Numerical experiments.This section evaluates the proposed method on
+problems  ranging  from  low-dimensional  optical  lattices  with  strong  nonlinearity  to
+high-dimensional systems with fully coupled anisotropic harmonic confinement.  We
+                                                  PROJECTED SOBOLEV NGD FOR GPE                           15
+
+
+                         Table 2:  Random Fourier feature configurations used in the experiments.
+
+
+
+
+
+
+
+
+                 also compare the method with norm-DNN and test whether the neural-network solu-
+                 tion can serve as an effective initial guess for traditional high-precision solvers.  These
+                 experiments assess accuracy, computational efficiency, and scaling with spatial dimen-
+                 sion.
+                       5.1.  Experimental  setup  and  evaluation  metrics.We  measure  accuracy
+                 using the variance of the local chemical potential (thelocal variance), which for nor-
+                 malized wavefunctions equals the squared residual norm of the nonlinear eigenvalue
+                 problem
+                                                                           Z              H[    ˆψ]   ˆψ(r)     2
+                                                                               | ˆψ(r)|         2ˆψ(r)   −µ    1  dr
+                 (5.1)            Res( ˆψ) =∥H[           ˆψ]   ˆψ−µ       1 ˆψ∥   22 =h µL(r)−µ         12i
+                                             =E   r∼|  ˆψ|   2                    = Varr∼|  ˆψ|   2µL(r) .
+
+                       For the low-dimensional problems (2D and 3D), we further validate the results
+                 against high-accuracy reference solutions computed with theDFTK.jlpackage [30],
+                 which  uses  direct  energy  minimization  with  plane-wave  basis  sets.   We  report  the
+                 following relative error metrics:
+
+        (5.2)                  εE =|E NN−E    ref||E ref|   ,                                   (relative energy error),
+
+        (5.3)                   εµ =|µ NN1 −µ    ref|
+                                            |µ ref|   ,                 (relative chemical potential error),
+
+         (5.4)                  ερ =∥ρ  NN−ρ    ref∥2∥ρ  ref∥2   ,                           (relative densityL    2 error),
+
+
+                 whereρ(r) =|                  ˆψ(r)|         2 denotes the probability density.
+                       The MLP correction in all experiments uses 5 hidden layers, 50 neurons per layer,
+                 andtanhactivation.  For the Adam baseline, we fix the learning rate at 10     −3  .  For
+                 the proposed NGD method, we use the adaptive step size
+
+
+                 (5.5)             τ    k = 0.5 + 0.5          Res( ˆψ)1 + Res( ˆψ) ,
+
+
+                 which accelerates early-stage descent while allowing smaller updates near convergence.
+                 LetR   k = Res( ˆψk) denote the local variance at iterationk, and let                 ¯Rk denote its expo-
+                 nential moving average.  We choose the damping parameter based on this smoothed
+                 residual as follows:
+
+                 (5.6)           λ    k = clip 10−3   ¯Rk, 10−4 , 10−3 .
+
+
+
+
+Experiment                 d  m  σ    Rationale
+2D optical lattice                                  2     16    1.0    oscillatory term sin2(πx)
+3D optical lattice                                  3     16    0.25    oscillatory term sin2(πx/4)
+High-dimensional anisotropic quadratic    4–8    –      –      no RFFs; smooth low-frequency state
+16                                    C. BAO, C. CUI, K. JIANG, AND S. SHU
+
+Large residuals therefore keepλ   k  close to 10−3    during early iterations, whereas the
+lower bound 10−4    prevents the regularization from becoming too small near conver-
+gence.  This schedule is analyzed inAppendix A. Unless otherwise stated, all reported
+main  experiments  use  the  fixed  hyperparameters  (r,α,K)  =  (128,0.8,10)  for  the
+Nystr¨om rank,  ADIS mixture weight,  and preconditioner refresh frequency,  respec-
+tively.  These values are not tuned separately for individual test problems; supporting
+ablations are reported inAppendices C.1andD.1.  Complete implementation details
+are available in the code repository:https://github.com/cuichen1996/NGD4GPE.
+     5.2.  2D  optical  lattice  potential.We  consider  the  2D  optical  lattice  with
+anisotropic harmonic confinement [28], defined by
+
+(5.7)      V(x,y) =                  14(x  2 + 4y  2) + 5 sin2(πx) + sin    2(πy) .
+
+Withβ= 250 onD= [−8,8]                              2, the ground state has a multiscale structure consisting
+of a macroscopic harmonic envelope modulated by high-frequency lattice oscillations.
+     To resolve these high-frequency features, the neural ansatz incorporates a train-
+able Fourier feature embedding withB∈R                16×2     , initialized fromN(0,I                 2), i.e.,σ= 1.0
+inTable 2.  Expectations are estimated by M-H sampling with 4000 samples, while
+the normalization constantZis computed on a uniform 100×100 grid.  We compare
+the proposed NGD method for 100 epochs with Adam for 2000 epochs.
+     Figure  2shows  the  energy  evolution,  local  variance  convergence,  and  adaptive
+damping  trajectory.   Adam  descends  rapidly  at  first  but  stagnates  later.   In  this
+experiment, NGD shows stable empirical energy decay by using curvature information
+from  the  Sobolev  metric,  and  the  damping  trajectory  illustrates  how  the  residual-
+aware schedule regularizes the noisy early phase before gradually releasing curvature
+information.
+
+
+
+
+
+
+
+
+
+
+(a)  Evolution  of  the  ground-      (b) Comparison of Adam and            (c) Adaptive damping param-
+state energy during NGD op-           NGD  in  terms  of  the  local        eterλ        k   during   NGD   opti-
+timization.                           variance Res( ˆψ).                    mization.
+
+
+             Fig. 2:  Convergence history for the 2D optical lattice potential.
+
+
+     Figure 3visualizes the ground-state density obtained by NGD. The solution cap-
+tures both the smooth global envelope and the checkerboard-like periodic modulation
+induced  by  the  lattice  potential,  showing  that  the  method  resolves  features  across
+multiple spatial scales.
+     Table 3reports the quantitative error metrics at convergence.  Both optimizers
+reach comparable accuracy, but NGD needs far fewer iterations.
+     Finally, Table 4compares the computational cost of different optimization and
+preconditioning  strategies.   NGD  (ExplicitG)  uses  the  full  Gram  matrix  without
+                                               PROJECTED SOBOLEV NGD FOR GPE                           17
+
+
+
+
+
+
+
+
+
+
+
+
+
+                Fig. 3:  Ground-state density for the 2D optical lattice potential computed by NGD.
+
+
+
+                               Table 3:  Error comparison for the 2D optical lattice problem.
+
+                                Optimizerε        E        εµ        ερ            Iter.
+                                  Adam       2.90×10   −3       5.89×10   −4       6.31×10   −2       1986
+                                   NGD        3.46×10   −3       1.39×10   −4       6.22×10   −2       99
+
+
+                preconditioning.  NGD (Block-Jacobi-PCG) uses a layer-wise block-Jacobi precondi-
+                tioner, which acts as a nonoverlapping domain-decomposition preconditioner in pa-
+                rameter  space.   NGD  (Nystr¨om-PCG)  is  the  proposed  Nystr¨om-preconditioned  ap-
+                proach.   Although  NGD  costs  more  per  iteration  than  Adam,  faster  convergence
+                reduces total training time.  Nystr¨om-PCG reduces GPU memory by more than an
+                order  of  magnitude  compared  with  the  explicit  Gram  matrix  and  achieves  a  3.6×
+                end-to-end speedup over Adam.
+
+
+                Table 4:  Comparison of computational costs for different optimization and precondi-
+                tioning strategies on an A100 GPU.
+
+
+
+
+
+
+
+
+
+
+                     5.2.1.  Comparison with theL        2 natural gradient (SR).We next report a
+                wall-clock comparison on two nonlinear 2D ground-state problems:  a harmonic trap
+                withβ=  250  and  an  optical  lattice  withβ=  250.   Within  each  problem,  both
+                methods useN= 4000 MCMC samples and the same five-hidden-layer network of
+                width 50.  Thea   ψ-NGD method is run for 100 epochs and theL       2-NGD/SR method
+                for 300 epochs, all on a single A100 GPU.Figure 4reports the ground-state density,
+                energy,  and  local  variance  as  functions  of  wall-clock  time.   In  both  tests,a    ψ-NGD
+                reaches a substantially lower local variance despite using one third as many epochs,
+                demonstrating an end-to-end wall-clock advantage rather than only better per-step
+                progress.
+
+
+Algorithm       ε        ρ       Epochs    Time (s)    Speedup    VRAM (GB)
+Adam (Baseline)                   7.2%       2000          67.1           1.0×            0.7
+NGD (ExplicitG)                 6.2%       100           61.9           1.1×           25.1
+NGD (Block-Jacobi-PCG)     6.3%       100           23.5           2.8×            4.1
+NGD (Nystr¨om-PCG)    6.3%       100    18.7         3.6×            2.4
+18                                    C. BAO, C. CUI, K. JIANG, AND S. SHU
+
+
+
+
+
+
+
+
+
+
+
+ (a) Harmonic density.                 (b) Harmonic energy.                    (c) Harmonic variance.
+
+
+
+
+
+
+
+
+
+
+
+   (d) Lattice density.                  (e) Lattice energy.                     (f) Lattice variance.
+
+
+Fig. 4:  Comparison ofa  ψ-NGD andL       2-NGD/SR on two nonlinear 2D GPE problems
+withβ= 250.  The first and second rows show the harmonic trap and optical lattice,
+respectively;  columns show the ground-state density,  energy versus wall-clock time,
+and local variance versus wall-clock time.
+
+
+
+     5.3.  3D optical lattice potential.To validate the ADIS strategy, we use a 3D
+optical lattice benchmark for which deterministic grid-based quadrature is still feasible
+and provides a reliable reference.  Following [4], the external trapping potential is
+
+(5.8)V(x,y,z) =              12(x  2 +y    2 +z    2) + 52sin2 πx4     + sin2 πy4       + sin2 πz4        ,
+
+with  interaction  strengthβ=  200  and  computational  domainD=  [−6,6]                                               3.   We
+compare two strategies for evaluating the normalization constantZ:  a deterministic
+Riemann  sum  on  a  uniform  tensor  grid  with  1003  points,  and  the  proposed  ADIS
+method  using  8000  samples  with  a  mixture  ratioα=  0.8.   Because  the  potential
+contains the lattice frequencyπ/4 in each coordinate, this experiment uses a train-
+able  Fourier  feature  embedding  withB∈R                16×3       initialized  fromN(0,0.25                   2I3),  as
+summarized inTable 2.
+     Figure 5shows both the neural VMC solution and the sampling behavior induced
+by ADIS. Specifically,Figure 5adisplays planar slices of the ground-state density,Fig-
+ure 5bshows the spatial distribution of MCMC walkers during training, andFigure 5c
+shows the ADIS samples used to estimateZ.  The ADIS sample distribution closely
+matches the ground-state density, indicating that the adaptive proposal concentrates
+samples in high-probability regions.
+     Table  5compares  the  two  computational  strategies.   ADIS  achieves  accuracy
+comparable  to  that  of  the  dense  grid-based  Riemann  sum  while  using  only  about
+1%  of  the  sample  points.   Because  grid-based  quadrature  costs  grow  exponentially
+with dimension, ADIS avoids the exponential sample and storage cost of full tensor-
+product quadrature.  Under this experimental configuration, the two strategies have
+                              PROJECTED SOBOLEV NGD FOR GPE                           19
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                         (b) MCMC walker distribu-          (c)  ADIS  integration  sam-
+    (a) Planar density slices.           tion.                              ples.
+
+
+Fig.  5:  Visualization  of  the  ground-state  density  and  sampling  profiles  for  the  3D
+optical lattice problem.
+
+
+
+comparable peak allocated memory.
+
+
+Table 5:  Comparison of accuracy and computational cost between deterministic grid-
+based integration and the ADIS framework for the 3D optical lattice problem.
+
+        Method              Sample points    Time (s)   ε  ρ            VRAM (GB)
+        Riemann sum            1003                42.6        5.82×10   −2             5.986
+        ADIS             8000               45.0        5.82×10       −2             5.964
+
+
+     5.3.1.  Neural-network solution as an initial guess.We also use the NGD
+solution  as  an  initial  guess  for  a  high-precision  solver.   The  neural  wavefunction  is
+evaluated on a uniform real-space grid and then projected onto a plane-wave basis by
+FFT. This spectral representation initializes the energy-adaptive Riemannian conju-
+gate gradient (EARCG) method [47].  In practice, 20 NGD iterations, requiring less
+than 10 seconds, suffice as a warm start for refinement.
+     AsFigure  6shows,  this  warm  start  improves  over  a  default  initialization.   It
+skips the initial high-energy relaxation phase and reduces the starting energy error.
+The EARCG iterations then converge faster on a logarithmic scale,  indicating that
+the  neural  network  has  already  captured  the  global  structure  of  the  ground  state.
+The warm-started iterate is therefore closer to the convergence basin,  reducing the
+ill-conditioning typical of nonlinear GPE landscapes.
+
+     5.4.  Comparison  with  the  norm-DNN.We  now  compare  with  the  norm-
+DNN approach [4], a PINN-based method that enforces the mass constraint through
+an explicit normalization layer. In the 3D setting, norm-DNN considers the discretized
+optimization problem
+                                     1  ∇ ˆψθ         ˆψθ        ˆψθ            
+(5.9)          minθ              X                2 +V         2 + 1         4
+                   L= |D|Nb     j,k,l  2                           2β          (x j,yk,zl).
+             20                                    C. BAO, C. CUI, K. JIANG, AND S. SHU
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+             Fig. 6:  Energy convergence of the EARCG solver with a neural-network warm start
+             versus a default initial guess.
+
+
+
+                   We  compare  the  methods  on  two  benchmark  problems  from  [4],  following  the
+             original experimental settings.  The first example is a 2D optical lattice problem with
+             potential
+                                                       x2 +y    2 + 5
+             (5.10)   V(x,y) =                12                         2   sin2 πx4       + sin2 πy4          ,
+
+             posed on the domainD= [−6,6]                           2  with interaction strengthβ= 400.  The second
+             example  is  the  3D  optical  lattice  problem  defined  by  (5.8)  onD=  [−6,6]                         3  with
+             β= 200.
+                   Table 6summarizes the results. Our method converges in 100 epochs, while norm-
+             DNN requires 30,000 to 100,000 epochs for comparable accuracy.  For the 3D optical
+             lattice, our method achieves a lowerL    2 density error with far fewer sampling points.
+
+
+             Table  6:  Comparison  between  the  projected  Sobolev  NGD  method  and  the  norm-
+             DNN method [4] for 2D and 3D optical lattice benchmark problems.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                   5.5.  High-dimensional scalability test.To assess scalability, we use a fully
+             coupled high-dimensional nonlinear Schr¨odinger model with an anisotropic quadratic
+             potential,
+
+             (5.11)               V(r) =                12 r⊤Ar,
+Method              Batch  size       Epochs      ε  ρ           εE                  Time  (s)
+
+                                                   2D  case
+
+norm-DNN             4096              30,000         4.82×10          −2            2.08×10          −3               169.7
+Ours             4000            100         3.14×10                     −2         7.51×10          −4             15.1
+
+                                                   3D  case
+
+norm-DNN           60,000           100,000        1.28×10          −1            1.60×10          −2               687.9
+Ours             8000            100         5.94×10                     −2         4.92×10          −3             39.4
+                                                 PROJECTED SOBOLEV NGD FOR GPE                           21
+
+                 whereA∈R        d×d     is  a  randomly  generated  symmetric  positive  definite  matrix  with
+                 condition number fixed atκ(A) = 10 in all dimensions.  The full matrixAcouples all
+                 spatial dimensions and precludes a separation-of-variables approach.  We setβ= 2000
+                 onD=  [−6,6]       d.   Grid-based  methods  are  infeasible  here  because  the  number  of
+                 degrees of freedom grows exponentially withd.
+                      Because high-dimensional reference solutions are unavailable, we use the general-
+                 ized virial theorem [14] as a self-consistency check.  We define the virial residual ratio
+
+
+                 (5.12)        R            vir = 2⟨T⟩+d⟨E                int⟩2⟨V⟩      ,
+
+                 where⟨T⟩,⟨V⟩, and⟨E                                   int⟩denote the kinetic, potential, and interaction energy com-
+                 ponents,  respectively.  For an exact normalized ground state,  this ratio equals one.
+                 Deviations  from  one  therefore  measure  the  physical  inconsistency  of  the  numerical
+                 approximation.
+                      We consider dimensionsd= 4,...,8.  Each model is trained for 200 epochs using
+                 15,000 HMC walkers, while 12,000 ADIS samples are used to estimate the normaliza-
+                 tion constantZ.  The MLP correction has five hidden layers of width 50, with both
+                 depth and width held fixed across dimensions.  Raw coordinates are passed directly to
+                 the network without an RFF embedding, consistent with the smooth, low-frequency
+                 structure of this benchmark.  For the Gaussian envelope, the implementation regis-
+                 ters a fulld×dmatrixC,  distinct from the potential matrixA,  but uses only its
+                 lower-triangular part in the forward evaluation.  Counting all MLP weights and bi-
+                 ases  together  with  alld     2  registered  entries  ofCgives  a  total  registered  parameter
+                 count  ofP=d          2 + 50d+ 10,301.   Consequently,  the  input  layer  and  the  registered
+                 envelope matrix are the only dimension-dependent components, so the increase inP
+                 remains modest over the tested range.  All high-dimensional runs evaluate the Sobolev
+                 Gram-matrix products using the implicit operator described inSubsection 4.5.1; con-
+                 sequently, neither the centered score matrixJnor the mixed input–parameter deriv-
+                 ative tensorKis materialized.  The corresponding parameter counts and numerical
+                 results  are  summarized  inTable  7.   Across  the  tested  dimensions,  the  virial  ratio
+                 remains  close  to  its  exact  value  and  the  local  variance  stays  small.   The  measured
+                 wall-clock time varies only modestly, and the peak allocated GPU memory is nearly
+                 constant.   Thus,  with  fixed  MLP  width  and  depth  and  only  mild  parameter-count
+                 growth, the observed computational cost shows no evident exponential growth over
+                 this benchmark.
+
+
+                 Table 7:  Architecture size, physical consistency, and computational cost for the high-
+                 dimensional fully coupled model.
+
+
+
+
+
+
+
+
+
+
+                      6.  Conclusion  and  outlook.This  paper  presents  a  projected  Sobolev  NGD
+                 method for computing high-dimensional GPE ground states.  The framework maps
+
+
+
+DimensionP     Time (s)    Peak allocated VRAM (GB)    Local variance    Virial ratio
+     4          10,517      174.3                      0.255                     1.075×10   −4          1.00267
+     5          10,576      170.2                      0.256                     2.556×10   −4          0.99735
+     6          10,637      158.5                      0.258                     2.993×10   −4          0.99998
+     7          10,700      172.7                      0.260                     1.728×10   −4          1.00293
+     8          10,765      162.4                      0.261                     1.251×10   −4          1.00681
+22                                    C. BAO, C. CUI, K. JIANG, AND S. SHU
+
+the continuous gradient flow onto the neural tangent space by Galerkin projection,
+preserving normalization and geometric consistency.  To handle the GPE’s nonlinear-
+ity and dimensionality, we developed a hybrid ADIS–MCMC sampling strategy and
+a matrix-free Nystr¨om-preconditioned PCG solver for Gram matrix inversion.  The
+method converges an order of magnitude faster than PINN approaches and the im-
+plicit Sobolev Gram-operator implementation avoids both theO(NP) score-matrix
+cache and theO(NPD) mixed-derivative tensor, with nearly constant measured al-
+located memory over the testedd= 4,...,8 benchmark.  The learned solutions also
+provide warm starts that accelerate traditional solvers.
+     Several  directions  remain  for  future  work.   Extending  the  method  to  rotating
+GPEs will require complex-valued neural networks capable of representing vortices and
+metastable states.  Computing excited states using penalty or deflation strategies is
+another natural direction.  For dimensions in which a fixed hidden width is insufficient,
+a dimension-dependent width ruleP=P(d) will be needed.  The present fixed-width
+test should therefore not be interpreted as a general expressivity result.  Spectral bias
+in high-frequency regimes, such as Anderson localization, also motivates architectures
+beyond standard MLPs.  For high-dimensional multiscale or quasi-periodic problems,
+i.i.d.  Gaussian RFFs may be inefficient.  Structured frequency dictionaries, separable
+or tensorized Fourier features, and multiscale wavelet-type encodings are promising
+alternatives.
+     Appendix A. Stability interpretation of adaptive damping.
+     This appendix records the conditional-expectation estimate underlying the adap-
+tive damping discussion in the main text.  The estimate provides a stability rationale
+for the regularized stochastic update, but it is not a pathwise monotonicity theorem
+for the realized iterates.
+     Let
+                   gk =∇   θL(θ  k),      G k =G(θ    k),      H k =G k +λ kI,
+
+whereL(θ) =E(                     ˆψθ) is the parameter-space loss andλ   k >0 is the damping parameter.
+We write the Monte Carlo gradient estimator as
+
+      bgk =g k +ξ k,      E[ξ  k|Fk] = 0,      E[ξ   kξ⊤k |Fk] =Σ k,       tr(Σ   k)≤σ      2k.
+
+HereF    k is the information available before Monte Carlo sampling at iterationk,Σ         k
+is the conditional covariance of the gradient noise, andσ        2k is a scalar upper bound on
+its trace.
+     In this estimate, we condition on the realized stochastic Gram approximation and
+idealize the Monte Carlo gradient estimator as conditionally unbiased.  Finite-chain
+MCMC bias and the plug-in error associated with the estimated normalization con-
+stant are not included explicitly; they may be represented as additional perturbation
+terms.
+     Letd   k  denote  the  positive  natural-gradient  vector,  the  parameter  update  is
+θk+1   =θ  k−τ kdk.  If the regularized Gram system were solved exactly, thenH    kdk =
+bgk.  In the implemented matrix-free PCG solve, the residualρ      k satisfies
+
+                        Hkdk =bgk−ρ k,      d k =H −1k bgk−H −1k  ρk.
+
+BecauseG       k is positive semidefinite,H          k⪰λ kI, and therefore
+
+                              ∥H −1k ∥≤  1λk,  ∥H −1k  ρk∥≤∥ρ k∥λk .
+                               PROJECTED SOBOLEV NGD FOR GPE                           23
+
+Thus the same damping floor limits both Monte Carlo noise amplification and PCG
+residual amplification.
+     For  the  exact-solve  idealization,  setρ  k  =  0  and  assume  thatLis  locallyL                     sm-
+smooth in parameter space.  The descent lemma, conditioned onF  k, gives
+
+                 E[L(θ    k+1  )|F k]≤L(θ    k)−τ  kg⊤k H−1k  gk
+(A.1)                                                     ∥H −1
+                                             + Lsmτ 2k2        k  gk∥2 + tr(H −2k  Σk).
+
+If, additionally, 0⪯G  k⪯MIfor a local spectral upper boundM, then
+
+(A.2)  E[L(θ        k+1  )|F k]≤L(θ    k)−   τk                                     ∥g k∥2 +σ    2k.
+                                                    M+λ   k∥g k∥2 + Lsmτ 2k2λ  2k
+
+The  negative  term  is  the  expected  descent  contribution,  whereas  the  positive  term
+accounts for the finite step size and Monte Carlo noise.  Increasingλ  k suppresses the
+noise-amplification factor 1/λ  2k.  The damping floor also prevents late-stage inverse-
+Gram amplification whenG    k is singular or nearly singular.  For example, the conser-
+vative condition
+(A.3)           τ    k≤    λ2k                                  ∥g k∥2
+                                          Lsm(M+λ    k)      ∥g k∥2 +σ    2k
+
+is sufficient for expected descent under the exact-solve idealization above.
+     In the main experiments, we use the residual-aware schedule
+
+                                  λk = clip 10−3   ¯Rk,10−4 ,10−3 ,
+
+where  ¯Rk  is the exponentially averaged local variance.  This quantity is a practical
+proxy for the noise and residual level, rather than an identity withσ         2k.  The resulting
+trajectory is shown inFigure 2c.  The schedule keeps stronger damping during the
+noisy early stage and retains a positive damping floor near convergence.
+     Appendix B. Random Fourier feature ablations.
+     B.1.  Fixed versus trainable Fourier matrix.
+     To  decide  whether  the  Fourier  matrixBshould  be  fixed  or  trainable,  we  ran
+a  controlled  ablation  on  the  2D  optical  lattice  benchmark  withβ=  250,m=  32,
+σ= 1.0, and three random seeds.
+
+
+Table 8: Fixed versus trainable Fourier matrixBfor the 2D optical lattice benchmark
+(m= 32,σ= 1.0).  Values are medians across three seeds; brackets denote interquar-
+tile ranges where reported.
+
+          B                     Best Res                        Bestε     E       Tepoch (s)
+          Fixed          0.263 [0.172, 0.511]    4.27 [2.75,5.20]×10       −5          0.155
+          Trainable    0.083 [0.053, 0.099]    4.63 [3.34,4.92]×10       −5          0.173
+
+     The energy error remains at the same order for both choices.  MakingBtrainable
+reduces the best residual by roughly a factor of three, with only a modest increase in
+per-epoch cost.  We therefore use trainableBin the optical-lattice experiments.
+24                                    C. BAO, C. CUI, K. JIANG, AND S. SHU
+
+
+Table 9:  RFF feature-count ablation for the 2D optical lattice benchmark with train-
+ableBandσ= 1.0.  Values are medians across three seeds; brackets denote interquar-
+tile ranges where reported.
+
+             m            Best Res                           Bestε     E       Tepoch (s)
+             8      0.0208 [0.0121, 0.0213]    2.93 [2.21,5.07]×10       −5          0.173
+             16     0.0231 [0.0175, 0.182]     1.22 [1.10,1.29]×10       −5          0.164
+             32    0.0831 [0.0531, 0.0994]    4.63 [3.34,4.92]×10       −5          0.173
+             64    0.0416 [0.0282, 0.0792]    7.12 [4.89,9.22]×10       −5          0.170
+
+
+     B.2.  Feature count.
+     We also swept the number of RFF featuresm∈{8,16,32,64}with trainableB
+andσ= 1.0 on the same 2D optical lattice benchmark.
+     Table 9shows that the energy error is not sensitive to the feature count over this
+range.  The choicesm= 8 andm= 16 both give low residuals.  Among the tested
+settings,m= 16 gives the smallest median energy error and the lowest median epoch
+time.  We therefore usem= 16 for the optical-lattice experiments.
+     B.3.  High-dimensional RFF ablation.
+     The high-dimensional experiments raise a separate question:  whether a fixed-size
+Gaussian RFF dictionary remains useful as the dimension increases.  We tested this
+on the smoothd= 8 anisotropic quadratic problem.  The comparison includes raw
+coordinates  without  RFF,  RFF  withm=  16,  and  RFF  withm=  32,  using  three
+seeds for each configuration.
+
+
+
+
+
+
+
+
+
+
+Fig.  7:  RFF  ablation  for  thed=  8  anisotropic  quadratic  potential.   Left:  energy
+convergence; middle:  local variance on a logarithmic scale; right:  virial ratio.  Shaded
+bands denote one standard deviation across three seeds.
+
+
+
+
+Table 10:  Final statistics for thed= 8 RFF ablation.  Values are means±standard
+deviations over three seeds.
+
+            Configuration          FinalE          Final Res(         ˆψ)           FinalR              vir
+            No RFF              5.098±0.001    (3.1±1.0)×10           −4       0.998±0.004
+            RFF (m= 16)    5.099±0.001    (1.1±0.3)×10             −3       0.996±0.003
+            RFF (m= 32)    5.098±0.001    (2.8±0.3)×10             −3       1.000±0.004
+                                                   PROJECTED SOBOLEV NGD FOR GPE                           25
+
+                       Figure 7andTable 10show that the final energy and virial ratio are comparable
+                 across the three configurations.  The local variance is lowest without RFF: (3.1±1.0)×
+                 10−4  , compared with (1.1±0.3)×10      −3    form= 16 and (2.8±0.3)×10         −3    form=
+                 32.   Thus,  for  the  smooth  high-dimensional  potential  studied  here,  adding  random
+                 Fourier features does not improve the result; instead, it increases the final residual.
+                 This  behavior  is  consistent  with  the  problem  structure.   The  anisotropic  quadratic
+                 potential produces a smooth, low-frequency ground state, so a high-frequency random
+                 dictionary is not the limiting factor and may complicate late-stage optimization.
+                       Appendix C. Nystr¨om preconditioning ablation.
+
+                       C.1.  Nystr¨om rank.
+                       For the Nystr¨om rank study, we used the 2D optical lattice problem withβ= 250
+                 and sweptr∈{32,64,128,256,512}over three random seeds.  The Nystr¨om factor
+                 was refreshed everyK= 10 optimization steps.  This ablation is reported for accuracy
+                 and spectral diagnostics.  Timing results are omitted because a median computed only
+                 over non-refresh steps is not an amortized measure of the total optimization cost.
+                       In this ablation, Hutch. rel. error denotes the mean probe-wise relative approxi-
+                 mation error∥Gz−MM      ⊤z∥  2/∥Gz∥          2.  HereGis the matrix-free Gram matrix, and
+                 MM⊤  is  the  rank-rNystr¨om  approximation.   The  quantity  ˆκdenotes  the  Lanczos
+                 estimate of the condition number of the damped operator after preconditioning, com-
+                 puted from a short PCG probe immediately after a Nystr¨om refresh.
+
+
+                 Table 11:  Nystr¨om rank ablation on the 2D optical lattice problem withβ= 250 and
+                 update frequencyK= 10.  Values are medians across three seeds;  brackets denote
+                 interquartile ranges.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                 Fig. 8:  Nystr¨om rank ablation with update frequencyK= 10.  Left:  final residual;
+                 right:  Hutchinson relative error.
+
+
+
+r           Final Res(  ˆψ)           Hutch. rel.  error                              ˆκ
+32      0.467 [0.269, 0.554]    0.257 [0.224, 0.283]    2.89×10            4 [2.42×10             4, 3.29×10            4]
+64      0.195 [0.103, 0.213]    0.184 [0.154, 0.204]    1.02×10            4 [7.72×10             3, 1.10×10            4]
+128    0.079 [0.050, 0.093]    0.201 [0.154, 0.205]    1.85×10            3 [1.84×10             3, 2.71×10            3]
+256    0.078 [0.048, 0.208]    0.181 [0.143, 0.193]    1.67×10            3 [1.61×10             3, 1.93×10            3]
+512    0.068 [0.041, 0.156]    0.152 [0.132, 0.164]    1.87×10            3 [1.73×10             3, 2.37×10            3]
+26                                    C. BAO, C. CUI, K. JIANG, AND S. SHU
+
+     Table 11andFigure 8show a clear quality–rank tradeoff.  Increasingrfrom 32 to
+128 reduces the median residual from 0.467 to 0.079 and lowers the Lanczos condition
+proxy  from  2.89×10            4  to  1.85×10            3.   The  best  median  residual  and  Hutchinson
+relative error occur atr= 512 (0.068 and 0.152, respectively), but the residual gain
+overr= 128 is about 15% while Nystr¨om basis storage grows linearly withr.  We
+therefore user= 128 as a budget-aware default.  The valuer= 512 is a quality-first
+option for comparable networks, whereasr= 32 andr= 64 are not recommended
+when high final accuracy is required.
+     Appendix D. Adaptive defensive importance sampling.
+     D.1.  ADIS mixture parameter.
+     For the ADIS mixture parameter, we sweptα∈{0,0.2,0.5,0.8,0.95,1.0}on two
+benchmarks:  the 3D optical lattice benchmark, where a deterministic grid reference
+forZis available, and thed= 8 anisotropic quadratic benchmark.  Each configura-
+tion uses three independent seeds.  We report both solution quality and importance-
+sampling diagnostics.  Letw   i =|ψ     θ(r i)|  2/qα(r i) be the raw ADIS importance weights,
+whereq     α is the defensive proposal.  The diagnostics useN       IS = 8000 samples in the 3D
+benchmark andN       IS = 12,000 in thed= 8 benchmark.  The ESS fraction is ESS/N                       IS,
+where  ESS  =  (Piwi)2/Piw2i ;  larger  values  indicate  less  weight  degeneracy.   We
+use Pareto  ˆkonly as a heuristic upper-tail diagnostic.  Specifically, we sort the raw
+weights, retain the largest 20%, set the thresholduto the smallest retained weight,
+and fit a generalized Pareto distribution by maximum likelihood to the excessesw       i−u,
+with the location parameter fixed at zero; ˆkis the fitted shape parameter.  No Pareto
+smoothing is applied to the ADIS weights.  Motivated by the Pareto-smoothed impor-
+tance sampling [54], we regard      ˆk≥0.7 as evidence of a problematic upper tail at these
+sample sizes.  A value below this empirical threshold is not, by itself, a guarantee of
+accuracy for the unsmoothed ADIS normalization estimate.
+
+
+Table 12:  ADISαablation for the 3D optical lattice problem withβ= 200.  Values
+are medians across three seeds unless otherwise indicated.
+
+                       α      ESS frac    Pareto    ˆk  Zrel-err    Final Res
+                       0.0         0.032  3.82   0.055          0.029
+                       0.2         0.182−1.25        0.0053         0.0041
+                       0.5         0.385−0.56        0.0033         0.0021
+                       0.8   0.589−0.16   0.00130.0024
+                       0.95       0.688           0.02          0.0029         0.0028
+                       1.0         0.720           0.01          0.0075         0.0035
+
+     Tables 12and13reveal complementary failure modes at the two endpoints.  The
+pure  uniform  proposal,α=  0,  has  a  severely  problematic  upper-weight  tail,  with
+ˆk= 3.82 ind= 3 and           ˆk= 8.93 ind= 8.  Ind= 8, its final residual is 0.083, about
+185×larger than that forα= 0.8.  The pure Gaussian proposal,α= 1, has a high
+ESS fraction but gives a worseZestimate in thed= 3 benchmark.  ItsZrelative error
+is 7.5×10   −3  , compared with 1.3×10   −3    forα= 0.8.  Thus ESS alone is not sufficient;
+the  tail  diagnostic,  reference  normalization  error  when  available,  and  final  residual
+should be considered together.  Both components of the defensive mixture therefore
+play a useful role.  We useα= 0.8 as the conservative default because it gives the best
+                                  PROJECTED SOBOLEV NGD FOR GPE                           27
+
+
+Table 13: ADISαablation for thed= 8 anisotropic quadratic problem withβ= 2000.
+Values are medians across three seeds unless otherwise indicated.
+
+                                α      ESS frac    Pareto    ˆk   Final Res
+                                0.0        0.00018.93   0.083
+                                0.2         0.099           0.02          0.00049
+                                0.5         0.249−0.37        0.00046
+                                0.8   0.394−0.39        0.00045
+                                0.95       0.467−0.39   0.00044
+                                1.0         0.497−0.41        0.00048
+
+
+Zrelative error in thed= 3 benchmark, has below-threshold Pareto diagnostics in
+both dimensions (ˆk=−0.16 and−0.39), and is within about 2% of the best median
+final residual in thed= 8 sweep.  For new problems, we recommend monitoring ESS
+and Pareto ˆkand, when possible, checking values in the rangeα∈[0.5,0.95].
+
+
+                                                   REFERENCES
+
+  [1]M. H. Anderson,  J. R. Ensher,  M. R. Matthews,  C. E. Wieman,  and E. A. Cornell,
+            Observation of Bose–Einstein condensation in a dilute atomic vapor, Science, 269 (1995),
+            pp. 198–201.
+  [2]X. Antoine, A. Levitt, and Q. Tang,Efficient spectral computation of the stationary states of
+            rotating Bose–Einstein condensates by preconditioned nonlinear conjugate gradient meth-
+            ods, J. Comput. Phys., 343 (2017), pp. 92–109.
+  [3]V.  Armegioiu,  J.  Carrasquilla,  S.  Mishra,  J.  M    ¨uller,  J.  Nys,  M.  Zeinhofer,  and
+            H. Zhang,Functional neural wavefunction optimization, arXiv preprint arXiv:2507.10835,
+            (2025).
+  [4]W. Bao, Z. Chang, and X. Zhao,Computing  ground  states  of  Bose–Einstein  condensation
+            by normalized deep neural network, J. Comput. Phys., 520 (2025), p. 113486.
+  [5]W. Bao and Q. Du,Computing the ground state solution of Bose–Einstein condensates by a
+            normalized gradient flow, SIAM J. Sci. Comput., 25 (2004), pp. 1674–1697.
+  [6]J.  Berman  and  B.  Peherstorfer, Randomized  sparse  neural  Galerkin  schemes  for  solv-
+            ing  evolution  equations  with  deep  networks,  Adv.  Neural  Inf.  Process.  Syst.,  36  (2023),
+            pp. 4097–4114.
+  [7]A. Bonfanti, G. Bruno, and C. Cipriani,The challenges of the nonlinear regime for physics-
+            informed neural networks, Adv. Neural Inf. Process. Syst., 37 (2024), pp. 41852–41881.
+  [8]J. Bruna, B. Peherstorfer, and E. Vanden-Eijnden,Neural Galerkin schemes with active
+            learning for high-dimensional evolution equations, J. Comput. Phys., 496 (2024), p. 112588.
+  [9]E.  Canc    `es,  G.  Kemlin,  and  A.  Levitt, Convergence  analysis  of  direct  minimization  and
+            self-consistent iterations, SIAM J. Matrix Anal. Appl., 42 (2021), pp. 243–274.
+[10]G. Carleo and M. Troyer, Solving  the  quantum  many-body  problem  with  artificial  neural
+            networks, Science, 355 (2017), pp. 602–606.
+[11]H. Chen, G. Dong, W. Liu, and Z. Xie,Second-order flows for computing the ground states
+            of rotating Bose–Einstein condensates, J. Comput. Phys., 475 (2023), p. 111872.
+[12]Z. Chen, J. Lu, Y. Lu, and X. Zhang,On  the  convergence  of  Sobolev  gradient  flow  for  the
+            Gross–Pitaevskii eigenvalue problem, SIAM J. Numer. Anal., 62 (2024), pp. 667–691.
+[13]Z.  Chen,  J.  McCarran,  E.  Vizcaino,  M.  Solja     ˇci´c,  and  D.  Luo, TENG:  Time-evolving
+            natural gradient for solving PDEs with deep neural nets toward machine precision, arXiv
+            preprint arXiv:2404.10771, (2024).
+[14]F.  Dalfovo,  S.  Giorgini,  L.  P.  Pitaevskii,  and  S.  Stringari, Theory  of  Bose–Einstein
+            condensation in trapped gases, Rev. Mod. Phys., 71 (1999), pp. 463–512.
+[15]I.  Danaila  and  P.  Kazemi, A  new  Sobolev  gradient  method  for  direct  minimization  of  the
+            Gross–Pitaevskii energy with rotation, SIAM J. Sci. Comput., 32 (2010), pp. 2447–2467.
+[16]I. Danaila and B. Protas,Computation of ground states of the Gross–Pitaevskii functional
+            via Riemannian optimization, SIAM J. Sci. Comput., 39 (2017), pp. B1102–B1129.
+28                                    C. BAO, C. CUI, K. JIANG, AND S. SHU
+
+
+[17]F.  Dangel,  J.  M     ¨uller,  and  M.  Zeinhofer, Kronecker-factored  approximate  curvature  for
+            physics-informed  neural  networks, Adv. Neural Inf. Process. Syst., 37 (2024), pp. 34582–
+            34636.
+[18]Z. Denis and G. Carleo,Accurate neural quantum states for interacting lattice bosons, Quan-
+            tum, 9 (2025), p. 1772.
+[19]C. M. Dion and E. Canc     `es,Ground state of the time-independent Gross–Pitaevskii equation,
+            Comput. Phys. Commun., 177 (2007), pp. 787–798.
+[20]P. A. Dirac,Note  on  exchange  phenomena  in  the  Thomas  atom, in Math. Proc. Cambridge
+            Philos. Soc., vol. 26, 1930, pp. 376–385.
+[21]Y.  Du  and  T.  A.  Zaki, Evolutional  deep  neural  network,  arXiv  preprint  arXiv:2103.09959,
+            (2021).
+[22]Z. Feng and Q. Tang,On  preconditioned  Riemannian  gradient  methods  for  minimizing  the
+            Gross–Pitaevskii energy functional:  algorithms, global convergence and optimal local con-
+            vergence rate, arXiv preprint arXiv:2510.13516, (2025).
+[23]Z. Frangella, J. A. Tropp, and M. Udell,Randomized Nystr¨om preconditioning, SIAM J.
+            Matrix Anal. Appl., 44 (2023), pp. 718–752.
+[24]J. Frenkel,Wave Mechanics:  Advanced General Theory, Clarendon Press, 1934.
+[25]J.  J.  Garc     ´ıa-Ripoll  and  V.  M.  P´erez-Garc´ıa, Optimizing  Schr¨odinger  functionals  using
+            Sobolev gradients:  applications to quantum mechanics and nonlinear optics, SIAM J. Sci.
+            Comput., 23 (2001), pp. 1316–1334.
+[26]A. Guzm     ´an-Cordero, F. Dangel, G. Goldshlager, and M. Zeinhofer,Improving  energy
+            natural  gradient  descent  through  Woodbury,  momentum,  and  randomization,  arXiv pre-
+            print arXiv:2505.12149, (2025).
+[27]P. Henning, L. Huynh, and D. Peterseim,Metric-driven numerical methods, arXiv preprint
+            arXiv:2512.10083, (2025).
+[28]P. Henning and E. Jarlebring,The Gross–Pitaevskii equation and eigenvector nonlinearities:
+            numerical methods and algorithms, SIAM Rev., 67 (2025), pp. 256–317.
+[29]P.  Henning  and  D.  Peterseim, Sobolev  gradient  flow  for  the  Gross–Pitaevskii  eigenvalue
+            problem:   Global  convergence  and  computational  efficiency,  SIAM  J.  Numer.  Anal.,  58
+            (2020), pp. 1744–1772.
+[30]M. F. Herbst, A. Levitt, and E. Canc     `es,DFTK: A Julian approach for simulating electrons
+            in solids, Proc. JuliaCon Conf., 3 (2021), p. 69.
+[31]J.  Hermann,  Z.  Sch     ¨atzle,  and  F.  No´e, Deep-neural-network  solution  of  the  electronic
+            Schr¨odinger equation, Nat. Chem., 12 (2020), pp. 891–897.
+[32]E.  Jarlebring,  S.  Kvaal,  and  W.  Michiels, An  inverse  iteration  method  for  eigenvalue
+            problems  with  eigenvector  nonlinearities,  SIAM  J.  Sci.  Comput.,  36  (2014),  pp.  A1978–
+            A2001.
+[33]K. Jiang, X. Li, Y. Ma, J. Zhang, P. Zhang, and Q. Zhou,Irrational-window-filter projec-
+            tion method and application to quasiperiodic Schr¨odinger eigenproblems, SIAM J. Numer.
+            Anal., 63 (2025), pp. 564–587.
+[34]T. Kao,  H. Zhang,  L. Zhang,  and J. Zhao, pETNNs:  Partial  evolutionary  tensor  neural
+            networks  for  solving  time-dependent  partial  differential  equations,  CSIAM  Trans.  Appl.
+            Math., 6 (2025), pp. 862–891.
+[35]H. Kim and T. A. Zaki,Multi  evolutional  deep  neural  networks  (Multi-EDNN), J. Comput.
+            Phys., 531 (2025), p. 113910.
+[36]D.  P.  Kingma  and  J.  Ba, Adam:   A  method  for  stochastic  optimization,  in  International
+            Conference on Learning Representations (ICLR), 2015.
+[37]Z. Kong, J. Z. Yang, C. Yuan, and X. Zhao,Toward fast, accurate and robust AI prediction
+            of ground states in rotating BEC, arXiv preprint arXiv:2511.07489, (2025).
+[38]Q. Li, Y. Liu, J. Zhao, and W. Zhu,MAD-NG: Meta-auto-decoder neural Galerkin method for
+            solving parametric partial differential equations, arXiv preprint arXiv:2512.21633, (2025).
+[39]E. H. Lieb, R. Seiringer, and J. Yngvason,Bosons in a trap:  A rigorous derivation of the
+            Gross–Pitaevskii energy functional, Phys. Rev. A, 61 (2000), p. 043602.
+[40]J. Martens,New  insights  and  perspectives  on  the  natural  gradient  method, J. Mach. Learn.
+            Res., 21 (2020), pp. 1–76.
+[41]N. Metropolis,  A. W. Rosenbluth,  M. N. Rosenbluth,  A. H. Teller,  and E. Teller,
+            Equation  of  state  calculations  by  fast  computing  machines,  J.  Chem.  Phys.,  21  (1953),
+            pp. 1087–1092.
+[42]R.  M.  Neal, MCMC  using  Hamiltonian  dynamics,  in  Handbook  of  Markov  Chain  Monte
+            Carlo,  S.  Brooks,  A.  Gelman,  G.  Jones,  and  X.-L.  Meng,  eds.,  Chapman  &  Hall/CRC,
+            2011, pp. 113–162.
+[43]L. Nurbekyan, W. Lei, and Y. Yang,Efficient  natural  gradient  descent  methods  for  large-
+                                 PROJECTED SOBOLEV NGD FOR GPE                           29
+
+
+           scale  PDE-based  optimization  problems,  SIAM  J.  Sci.  Comput.,  45  (2023),  pp.  A1621–
+           A1655.
+[44]T.  Ozawa,  H.  M.  Price,  A.  Amo,  N.  Goldman,  M.  Hafezi,  L.  Lu,  M.  C.  Rechtsman,
+           D. Schuster, J. Simon, O. Zilberberg, et al.,Topological photonics, Rev. Mod. Phys.,
+           91 (2019), p. 015006.
+[45]B. A. Pearlmutter,Fast exact multiplication by the hessian, Neural computation, 6 (1994),
+           pp. 147–160.
+[46]D.  Peterseim,  J.-F.  Pietschmann,  J.  P     ¨uschel,  and  K.  Ruess, Neural  network  accelera-
+           tion  of  iterative  methods  for  nonlinear  Schr¨odinger  eigenvalue  problems,  arXiv preprint
+           arXiv:2507.16349, (2025).
+[47]D. Peterseim, J. P     ¨uschel, and T. Stykel,Energy-adaptive Riemannian conjugate gradient
+           method for density functional theory, arXiv preprint arXiv:2503.16225, (2025).
+[48]D. Pfau, J. S. Spencer, A. G. Matthews, and W. M. C. Foulkes,Ab initio solution of the
+           many-electron Schr¨odinger equation with deep neural networks, Phys. Rev. Res., 2 (2020),
+           p. 033429.
+[49]M. Raissi, P. Perdikaris, and G. E. Karniadakis,Physics-informed neural networks:  A deep
+           learning  framework  for  solving  forward  and  inverse  problems  involving  nonlinear  partial
+           differential equations, J. Comput. Phys., 378 (2019), pp. 686–707.
+[50]N. Schwencke, C. Rousselot, A. Shilova, and C. Furtlehner,AMStraMGRAM: Adaptive
+           multi-cutoff strategy modification for anagram, arXiv preprint arXiv:2510.15998, (2025).
+[51]S. Sorella,Green function Monte Carlo with stochastic reconfiguration, Phys. Rev. Lett., 80
+           (1998), pp. 4558–4561.
+[52]M. Tancik, P. Srinivasan, B. Mildenhall, S. Fridovich-Keil, N. Raghavan, U. Singhal,
+           R. Ramamoorthi, J. Barron, and R. Ng,Fourier  features  let  networks  learn  high  fre-
+           quency functions in low dimensional domains, Adv. Neural Inf. Process. Syst., 33 (2020),
+           pp. 7537–7547.
+[53]M. Ueda,Spinor Bose–Einstein condensates, Contemp. Phys., 63 (2022), pp. 106–115.
+[54]A. Vehtari, D. Simpson, A. Gelman, Y. Yao, and J. Gabry,Pareto  smoothed  importance
+           sampling, Journal of Machine Learning Research, 25 (2024), pp. 1–58.
+[55]L. L. Viteritti, R. Rende, and F. Becca,Transformer variational wave functions for frus-
+           trated quantum spin systems, Phys. Rev. Lett., 130 (2023), p. 236401.
+[56]D. Wu, R. Rossi, F. Vicentini, N. Astrakhantsev, F. Becca, X. Cao, J. Carrasquilla,
+           F. Ferrari, A. Georges, M. Hibat-Allah, et al.,Variational benchmarks for quantum
+           many-body problems, Science, 386 (2024), pp. 296–301.
+[57]M. Zeinhofer, R. Masri, and K.-A. Mardal,A unified framework for the error analysis of
+           physics-informed neural networks, IMA J. Numer. Anal., (2024), p. drae081.
+[58]J. Zhang, S. Zhang, and G. Lin,Low-rank adaptation of evolutionary deep neural networks
+           for efficient learning of time-dependent PDEs, arXiv preprint arXiv:2509.16395, (2025).

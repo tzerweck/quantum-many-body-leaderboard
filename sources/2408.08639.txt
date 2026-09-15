@@ -1,0 +1,1218 @@
+          SOLVING THE QUANTUM MANY-BODY HAMILTONIAN
+LEARNING PROBLEM WITH NEURAL DIFFERENTIAL EQUATIONS
+
+
+
+
+
+                                 Timothy Heightman∗1,2, Edward Jiang1, and Antonio Acín1,3
+
+   1ICFO-Institut de Ciencies Fotoniques, The Barcelona Institute of Science and Technology, 08860 Castelldefels
+                                                          (Barcelona), Spain
+             2Quside Technologies SL, Carrer d’Esteve Terradas, 1, 08860 Castelldefels, Barcelona, Spain
+       3ICREA-Institucio Catalana de Recerca i Estudis Avançats, Lluis Companys 23, 08010 Barcelona, Spain
+
+
+
+                                                            ABSTRACT
+          Understanding and characterising quantum many-body dynamics remains a significant challenge due
+          to both the exponential complexity required to represent quantum many-body Hamiltonians, and the
+          need to accurately track states in time under the action of such Hamiltonians. This inherent complexity
+          limits our ability to characterise quantum many-body systems, highlighting the need for innovative
+          approaches to unlock their full potential. To address this challenge, we propose a novel method to
+          solve the Hamiltonian Learning (HL) problem—inferring quantum dynamics from many-body state
+          trajectories—using Neural Differential Equations combined with an Ansatz Hamiltonian. Our method
+          is reliably convergent, experimentally friendly, and interpretable, making it a stable solution for HL
+          on a set of Hamiltonians previously unlearnable in the literature. In addition to this, we propose a
+          new quantitative benchmark based on power laws, which can objectively compare the reliability and
+          generalisation capabilities of any two HL algorithms.  Finally, we benchmark our method against
+          state-of-the-art HL algorithms with a 1D spin-1/2 chain proof of concept.
+
+Keywords  Hamiltonian Learning· Neural Ordinary Differential Equations· Quantum Many-body Systems, Quantum
+Machine Learning
+
+1    Introduction
+
+Characterizing  many-body  Hamiltonians  is  central  to  the  development  of  quantum  information  and  processing
+technologies. Once the true Hamiltonian generating unitary dynamics is known, we can use this knowledge to perform
+error mitigation, optimal quantum control, quantum simulation, and device certification [1, 2, 3].  The Hamiltonian
+Learning (HL) problem is defined as the task of inferring the Hamiltonian of a many-body system given some dataset
+about that system.  In the context of quantum many-body systems and information processing, this task is difficult
+for two key reasons. First, there is an exponential number of interactions that a many-body system can have, making
+the search space exponentially large.  Second, there are sets of Hamiltonians that can be compatible with a data-set
+taken from a quantum system; the answer may not be unique. This gives rise to two equally important formulations of
+this problem shown in Fig. 1, hereby referred to as the white-box and black-box scenarios. In the white-box scenario,
+we assume that the structure of the Hamiltonian is known, and inferring it simply involves tuning the interaction
+coefficients to best match the dataset. This means the set of compatible Hamiltonians is relatively small, even being
+unique in some cases [4, 5]. In contrast, the black-box scenario makes no such assumptions. Here, the structure of the
+Hamiltonian must also be found by representing it as a sum over different quantum operators with weighted interaction
+coefficients. Consequently, the set of Hamiltonians that are compatible with the data is larger, comprising of different
+possible operators, as well as their relative weighting.
+
+
+
+
+   ∗Corresponding author: theightman@icfo.eu
+                                   Hamiltonian Learning with NODEs
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                   Figure 1: The black-box and white-box Hamiltonian Learning (HL) scenarios are shown in (a) and (b) respectively.
+                                   In both cases, the evolution is unitary, and we may control the length of time,t, for which the system evolves. In the
+                                   white-box scenario (a), the structure of the true HamiltonianHT  =PjcjPj is known, but the coefficientscj∈ R are
+                                   not. Whilst in the black-box scenario (b), neither the structure of the Hamiltonian,Pj, nor the coefficientscj are known.
+                                   As discussed in Sec. 1, we choose to formulate the HL problem assuming control on the amount of time evolution, as it
+                                   requires little optimal control. This makes data from time-evolved states experimentally friendly, provided the chosen
+                                   evolution times are sufficiently short.
+
+
+                                   There are a variety of approaches to try and tackle these two versions of the HL problem [6, 7, 8, 9, 10, 11, 12, 4, 13, 5].
+                                   By exploring which types of quantum states can be informative, theoretical studies have demonstrated the conditions
+                                   required to create a dataset from which a Hamiltonian can be efficiently learned. For example, works such as [4, 5]
+                                   show how one can determine Hamiltonians from eigenstates, whereas [13, 14, 15, 16] address the use of thermal
+                                   states to generate data.  In contrast, [11, 5, 17, 18, 19] show that using a selection of states and evolving them for a
+                                   controlled amount of time can also be meaningful. Intuitively this can be considered as using the trajectories of a few
+                                   quantum states in order to find the most likely Hamiltonian. This idea is advantageous in practical settings as it involves
+                                   preparing few quantum states, so there is less overhead in terms of state preparation when compared to other methods.
+                                   Furthermore, evolving states under the action of the true Hamiltonian for variable amounts of time requires no optimal
+                                   control [12]. We need only choose the time at which to measure the output states. For these reasons, we will focus on
+                                   the task of inferring Hamiltonians from time-evolved states shown in Fig. 1.
+
+                                   Despite these considerations, HL algorithms are yet to meet the needs of theoreticians, experimentalists, and industrial
+                                   hardware providers. From the theoretical perspective of quantum simulation, state-of-the-art HL algorithms are so far
+                                   incapable of learning sufficiently complex Hamiltonians. This means that the space of interactions from which we can
+                                   infer a meaningful representation is limited when attempting to simulate. For this limited set of interactions, we can
+                                   often simulate through simpler means than HL. Whilst on the experimental side, state-of-the-art HL algorithms cannot
+                                   handle noisy many-body systems robustly. This limits their applicability in optimal control and error mitigation [20],
+                                   where the imperfections arising from unforeseen interactions in the system and environment must be taken into account
+                                   to meaningfully perform quantum control and correct for systematic errors. Where they are robust to noise, current
+                                   algorithms are rarely scalable to the level needed in current NISQ hardware [21, 22, 23]. This is either because they
+                                   work on too few spins or do not cover a sufficiently large interaction set to fully characterise and certify NISQ hardware.
+                                   Recent advances in deep learning for quantum dynamical systems highlight the potential for its use to solve the HL
+                                   problem [24, 25, 26, 27, 28, 9, 10].  These advances have provided useful tools in special cases like quantum state
+                                   tomography [29, 2] and variational Monte-Carlo [2, 30], gaining some traction in the wider quantum community
+                                   [24, 26]. The philosophy behind recently developed deep-learning based methods is to use neural networks as function
+                                   approximators.  For example, using neural networks to detect phase transitions posits the existence of a map from
+                                   measurement data to probabilities of being in different phases [31]. Even when neural networks are used to represent
+                                   quantum states, we rely on the existence of a function that maps configurations to probability amplitudes [32]. However,
+                                   a general deep learning framework is yet to solve the above pressing issues in HL, because in HL the fundamental
+                                   object we are aiming to represent is not a function, but an operator.  Whilst some progress has been made using
+                                   so-called neural quantum states formalism to represent density operators [33], one cannot use such constructions to
+                                   solve the HL problem. In simple terms, this is because our solution should facilitate unitary dynamics for any input
+                                   quantum state (in principle), meaning an exponential number of forward passes would be needed to enumerate how
+                                   every component of the basis evolves. Furthermore, the purpose of solving the HL problem is to return an estimator for
+                                   the ground truth in an interpretable form. A neural network representation does not yet allow for such an interpretation.
+                                   In this sense, our aim is to leverage deep learning techniques to construct propagators of quantum many-body systems
+
+
+                                                                           Promise:                        2
+(a)|ψ(t = 0)⟩                         U(t) = ?                             U(t)U†(t) = I
+                                                                           No given Hamiltonian structure
+
+
+
+                                                                           Promise:
+(b)|ψ(t = 0)⟩                     U(t) =e−iHTt                             U(t)U†(t) = I andHT  =PjcjPj
+                                                                           Pj known,cj unknown
+Hamiltonian Learning with NODEs
+
+
+in a way that facilitates an intepretable answer. Some recent works have explored this concept in the context where the
+potential (and therefore the Hamiltonian) is known [34, 35, 36, 37]. Their objective in this case is to predict the time
+evolution of states using neural networks and a given action, which is not available in our problem setting as it must be
+inferred.  This means techniques such as Kernel Ridge Regression [35], non-recursive Artificial Intelligence-based
+Quantum Dynamics [36], and One-Shot Trajectory Learning [37] cannot be used to solve the HL problem, where the
+action is not known a-priori in both scenarios of Fig.1.
+
+In this work, we introduce a general framework to solve the HL problem using the language of Neural Differential
+Equations (NDE). A NDE uses a neural network to specify a system of differential equations. This sits in contrast to
+typical uses of neural networks in the physical sciences, where a system of differential equations is given, and a neural
+network is used to numerically solve that system [35, 37, 36]. Our method presents several advantages in terms of the
+complexity of true Hamiltonians that are now learnable in our framework. It extends both the set of Hamiltonians now
+learnable, and offers accurate estimates of its generalisation capabilities. We demonstrate these advantages by using
+relatively small neural networks to benchmark our HL algorithm on 1D spin-1/2 chains for systems up to 8 spins.
+We also propose a new benchmark for HL which is agnostic to the specifics of a given implementation. In brief, our
+benchmark explores the power-law scaling behaviour of a HL algorithm outside its training data, allowing us to estimate
+the quality and reliability of a HL algorithm independently of the Hamiltonians considered or the number of bodies.
+Using this benchmark amongst others found across the literature, we demonstrate the capabilities of our framework
+to comfortably surpass the state-of-the-art in terms of robustness, accuracy and generalisation capabilities. We then
+explain how our method is able to learn complex Hamiltonians by analysing loss landscapes, using our numerical study
+of 1D spin-1/2 chains as an instructive example.  Finally, we highlight the interpretability of our framework, using
+curriculum learning to allow users to yield an interpretable estimate for the Hamiltonian, rather than a black-box neural
+representation, as depicted in Fig. 1. Consequently, our method can be used in both the black-box scenario as done
+in [10], as well as the white-box scenario of Fig. 1 [11]. This opens up possibilities to use our framework for error
+mitigation, quantum optimal control, quantum simulation, and device certification [23, 38, 39].
+
+The rest of this work is organised as follows:  In section 1.1 we formally define the HL problem.  In section 2 we
+describe in detail how to use NDEs in quantum dynamics to solve the HL problem. We then recall how to construct
+loss functions which are experimentally friendly, as was done in [11], and provide a curriculum learning procedure to
+yield an interpretable solution to the HL problem.  In section 3 we probe the performance of our HL framework on
+representative problems from 1D spin-1/2 chains, showing how the robustness, accuracy and experimental friendliness
+surpass current state of the art methods such as [10, 11]. Finally, in section 4 we discuss the implications of our findings
+in error mitigation, optimal quantum control, quantum simulation and device certification.
+
+1.1    Statement of Problem
+
+For spin-1/2 systems such as qubits, we consider the unitary dynamics of an initial state,|ψ(t = 0)⟩, governed by the
+Time Dependent Schrödinger Equation (TDSE),
+                                                              i| ˙ψ⟩ =HT|ψ⟩,                                                                            (1)
+whereHT  is the true Hamiltonian for the system’s evolution. The HL problem aims to find a representation ofHT  that
+generates the correct output for given input states as shown in Fig.1. In general, we wish for the learned representation
+to be valid over arbitrary time-scales. However, in practise such a representation is usually valid for transient (short)
+times [40], or the steady state [13, 41, 16].  In this manuscript, we will work with 1D, spin-1/2 chains ofN  spins,
+whose Hamiltonian may always be expressed in the Pauli basis,
+
+                                                                      4N−1X
+                                                              HT  =          cjPj,                                                                           (2)
+                                                                       j=0
+wherePj∈PN  is an element of the Pauli group onN spins, andcj∈ R are real coefficients. However, we emphasise
+that the philosophy behind our method goes beyond 1D spin-1/2 chains. We use them as an example for conceptual
+clarity and numerical studies to benchmark against other methods, who have broadly done HL on 1D spin-1/2 chains
+[13, 11, 16, 5, 4, 17, 19, 42].
+Since there are an exponential number of learnable parameters over the whole Pauli group, many works make the HL
+problem more tractable by aiming to learn subgroups ofPN , formed with assumptions such as random sparse support
+[43], maximalk-Locality2 [44, 46], order of non-identity terms [47, 11, 13] , or homogeneity of the coefficientscj
+
+    2often, geometrick-Locality is assumed, see [44, 45, 46] for further discussion.
+
+
+                                                                        3
+Hamiltonian Learning with NODEs
+
+
+[48, 11]. Such assumptions limit the complexity of the true Hamiltonian, allowing previous HL methods to work by
+reducing the number of free parameters that need to be found. However, these assumptions impose theoretical limits on
+the effectiveness of HL, since they will be unable to accurately learn true Hamiltonians outside this subgroup. Intuitively,
+with too few parameters to tune in an Ansatz, we cannot explore a space of Hamiltonians that is large enough to cover all
+the possible interactions that may be happening in the physical system. It is therefore of interest to find a procedure which
+works over as large a set of interactions as possible. Our procedure makes no assumptions on the order of Pauli operators,
+nor the homogeneity of the coefficientscj, thus avoiding the limiting effects on expressivity shown by previous methods.
+
+It is crucial to be able to infer this Hamiltonian efficiently from the data, i.e.  requiring sub-exponential resources
+to accurately characterise the quantum many-body system of interest.  Whilst some procedures assume unbridled
+access to the output state or true Hamiltonian [42], it has been shown that there are many cases where we can learn
+a Hamiltonian from local measurements [4].  This means we can avoid cumbersome procedures like quantum state
+and process tomography [49, 50, 51, 52] to construct estimators for the difference between the ground truth and our
+estimates. In line to previous state-of-the-art works such as [11], we use an experimentally friendly format for training
+data which involves sampling from the marginal distributions of a simulated output state. As such, the loss function is
+constructed from binary bitstrings sampled from marginal distributions corresponding to compatible observable, as
+might be done on idealised experimental hardware. See Sec. 3.1 for further discussion and examples.
+
+2    Neural Differential Equations in Quantum Dynamics
+
+A common practise in machine learning is to use deep neural networks as function approximators to solve a given
+system of differential equations [53, 54, 55, 56]. Whereas the central idea of Neural Ordinary Differential Equations
+(NODEs) is that we use neural networks to specify differential equations [57, 58]. For example, letx(t)∈ RN , then we
+may define
+                                             dx
+                                              dt (t) =fθ(x(t)),      x(t = 0) =x0,                                                      (3)
+wherefθ : RN→ RN , is some neural architecture with trainable parametersθ. The input to the NODE is the initial
+vectorx(t = 0) =x0, and the output isx(T ) which is obtained by numerical integration of equation (3) up to some
+timeT . Eq.(3) exploits the Universal Approximation Theorem [59, 60] to predict the rate of change of a system of
+differential equations.
+
+The NODE can be used as a layer embedded in some larger neural network. As such, the solution,y(t), t∈ [0,T ],
+forms a differentiable computation graph. We may tune this computational graph by varying its parameters,θ, until
+the numerical solver outputs a trajectory,y(t), that matches some desired behaviourytrue(t). One pertinent example is
+tuning with gradient descent,
+                                                             θ←θ−ε∇θL(θ),                                                                          (4)
+whereL : RN× RN→ R is any loss function mapping the tuple (y(t),ytrue(t)) to the reals. However, in principle, any
+gradient-based optimisation strategy can work, for example we use the so-called ADAM optimiser [61].
+
+For a comprehensive introduction to NODEs and their applications in dynamical systems, we refer the reader to [58] and
+references therein. To integrate Eq.(3), the choice of numerical solver is somewhat arbitrary, and comes with the usual
+trade-off between accuracy and speed3. From the perspective of HL, we can consider trying to learn a representation of
+the true Hamiltonian,HT  from Eqs.(1,2) by specifying an Ansatz structure,HA(θ), and numerically integrating the
+TDSE, with the set of parameters,θ, being tuned to best match observed trajectories. This formulation of parameter
+tuning after numerical integration can put the work of [11, 10, 16] into the language of NDEs. For example, consider
+using as an Ansatz the Transverse Field Ising Model (TFIM) Hamiltonian,
+
+                                                  HTFIM =X         JijXiXj +X           hkZk,                                                            (5)
+                                                              ⟨i,j⟩                 k
+
+whereXj is the Paulix-matrix on sitej,Zk is the Pauliz-matrix on sitek,hk is a local transverse field, and⟨i,j⟩
+specifies that only nearest neighbour sites are coupled. For this Ansatz, the tunable parameter setθ is ={Jij,hk}∈ R.
+
+
+    3In this manuscript we use the diffrax package [58] which integrates seamlessly with the Python-based numerical computation
+library, jax, opting for the third-order Runge Kutta method [62] for our numerical integration. See Sec. 3 for further discussion on
+our implementation and numerical study.
+
+
+                                                                        4
+Hamiltonian Learning with NODEs
+
+
+By comparing the output states found by numerically integrating
+                                                Z t+∆t     d                       Z t+∆t
+                          |ψ(t + ∆t);θ⟩ =                 dt′|ψ(t′)⟩dt′ =−i
+                                                  t                                  t   HTFIM(θ)|ψ(t′)⟩dt′,                             (6)
+with true output states,
+                                                     |ψ(t)⟩true =e−iHTt|ψ(t = 0)⟩                                                                 (7)
+we can construct a simple Loss function,L :H×H→ R to perform parameter updates with gradient based rules
+such as the given example in Eq.(4).  This gives the architecture shown in Fig.2b, hereby referred to as the vanilla
+model. We note here that all Ansatz-based HL algorithms such as [11, 10, 16] can be cast as vanilla models, tuning
+theθ according to different Loss functions regardless of whether they focus on experimental friendliness [11], or the
+Black-Box scenario [10]. In this langauge, we see these HL algorithms are limiting if there are additional terms not
+included inHA(θ). Furthermore, as we will show in Sec. 3, using a vanilla HL algorithm causes convergence issues
+due to the loss landscape ofθ, even on a relatively small number of spins.
+
+2.1    Combining Ansatz with NODEs
+
+Consider a representation ofHT  decomposed as the sum of an Ansatz Hamiltonian,HA(θ), and a NODE with a Neural
+Network (NN) architecture acting as a map NN :H θ−→H,
+                                                         HT  =HA(θ) + NN(φ),                                                                      (8)
+with independent,  tunable parameters θ, φ for the Ansatz and NN respectively.   Under this decomposition,  the
+Schrödinger equation reads,
+                                              i| ˙ψ(t)⟩ =HA(θ)|ψ(t)⟩ + NN(|ψ(t)⟩ ;φ),                                                       (9)
+which can be expressed as,
+                             Z t+∆t     d                       Z t+∆t                               Z t+∆t
+          |ψ(t + ∆t)⟩ =                dt′|ψ(t′)⟩dt′ =−i
+                               t                                  t   HA(θ)|ψ(t′)⟩dt′−i               t         NN(|ψ(t′)⟩ ;φ)dt′.      (10)
+for numerical integration. In integral form, we may represent the Schrödinger equation as a computational graph with a
+NODE component, as shown in Fig. 2c. This architecture sits in contrast with the Ansatz-based methods employed by
+state-of-the-art protocols in [11, 10], shown in Fig.2b.
+
+2.2    Measurements and Loss Function
+
+In order to provide feedback to the NODE, we must design a function,L :H×H→ R, which compares the estimated
+time-evolved state,|ψ(t;θ,φ)⟩ to the ground truth,|ψT (t)⟩, evolved under the action ofHT . To make our loss function
+experimentally friendly, we will assume that access to|ψT (t)⟩ can only be achieved by sampling from compatible
+marginal distributions of|ψT (t)⟩, corresponding to Pauli measurements. As such, we will sample from the marginals
+of the true output state ,|ψT (t)⟩, giving a dataset,D, comprising binary measurement outcomes for each Pauli basis
+measurement chosen at random. Using this dataset, we can then compute the log-likelihood that such a dataset can
+be sampled from the estimated time-evolved state,|ψ(t;θ,φ)⟩. As per [11], forJ time-stamps, withM  repeats per
+measurement, andK different random Pauli basis, we have|D| =MKJ. Given that we will also vary the input state,
+this creates a dataset with|D| =MKJL points, whereL is the number of different chosen input states. In order to
+construct a loss function from this data-set, we note that since our pipeline is numerical, we do have full access to the
+estimator|ψ(t;θ,φ)⟩ of the underlying true output|ψT (t)⟩. As such, it is possible to use the Born rule to calculate the
+probabilities of observing bitstrings,b, in the dataset,
+                                                     p b|ψθ(t)⟩ =|⟨b|ψθ(t)⟩|2.                                                               (11)
+From here, we can use the probabilities to construct our loss function as the average negative log-likelihood of these
+outcomes,
+                                                  L(|ψθ⟩ ;D) =−X             log|⟨b|ψθ⟩|2,                                                          (12)
+                                                                       b∈D′
+whereD′⊂D is a subset of the dataset corresponding to bitstrings acquired from evolving the correct input state, and
+measuring at the same timestamp as the estimator.
+This enables us to create an update rule for the ODE via back propagation of the loss function to the trainable
+parameters,θ andϕ of the Ansatz Hamiltonian and NN, respectively.
+
+
+
+                                                                        5
+                                          Hamiltonian Learning with NODEs
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                                                              (a)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                                                              (b)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                                                              (c)
+                                          Figure 2: Architectures of the models used to simulate the time evolution of the parameterised HamiltonianH(θ). (a)
+                                          The numerically exact time evolution under the Hamiltonian. (b) The approximate time evolution through integrating
+                                          the Schrodinger equation, hereby referred to as the vanilla model.  (c) The time evolution through integrating the
+                                          Schrodinger equation with an added corrective term to the right-hand-side.
+
+
+
+                  |ψ0⟩|ψ0⟩                                                                                     6
+
+
+
+                  |ψ0⟩|ψ⟩|ψ⟩             −iH(θ)−iH(θ)e−iHTt
+
+
+
+
+        NN(φ)                       ××       ×
+         ODEint
+
+
+
+                                    +
+ODEint
+Hamiltonian Learning with NODEs
+
+
+Depending on the NN architecture, the NN component of the architecture in Fig. 2c can be much more expressive that
+HA(θ), meaning it is powerful enough to overfit the training data and completely ignore the contribution ofHA(θ). For
+example, a Multi-Layer Perceptron (MLP), which has fully connected layers, is able to correlate any element of an
+input wavefunction with any other. Physically, this would correspond to an action which couples every spin to every
+other spin in our many-body system. This is of concern since it is beneficial for our representation to be intepretable in
+the white-box scenario from Fig.1 - which is the case when as much of the output of Fig.2c as has large a contribution
+as possible from the analytic component,HA(θ), rather than the NN. Hence, we should seek to make the architecture
+be as dependent on the ansatz component as possible. We may address this problem with heavy regularisation of the
+NN [63], and with a curriculum learning strategy [64, 65] discussed below. In the black-box scenario of Fig.1, we can
+ourselves make an ansatz and use curriculum learning in order to estimate the extent to which our ansatz is correct.
+Further details can be found in Sec. 2.3.
+
+2.3    Curriculum learning
+
+As stated above, the expressive power of the NN means its contribution to the output state could dominate over the
+Ansatz Hamiltonian.  The reason for this is that the NN receives as input a vectorised state and is fully connected.
+Thus, through the hidden, fully connected layers, the NN is able to enact transformations that couple state coefficients
+that would otherwise be uncoupled with just the Ansatz Hamiltonian alone4, as well as being able to couple the same
+coefficients of the input state,|ψT (t = 0)⟩, as the Ansatz Hamiltonian. Consequently, the NN is in principle able to
+dominate over the Ansatz Hamiltonian, causing complications in the white-box scenario in Fig.1. However, if we seek
+an analytic answer to the HL problem (as opposed to simply finding a neural representation of it, solving the black-box
+scenario with no interpretation), we wish for as much of the output as possible to come from the Ansatz. To enable this,
+we use the principle of curriculum learning. In short, curriculum learning is a training strategy that gradually increases
+in complexity as training progresses. To that end, we use the following curriculum
+
+Curriculum 1
+
+        i.Warm-up phase: the Hamiltonian parameters, θ, and the NN parameters,ϕ, are trained simultaneously.
+       ii.  First phase: the NN is switched off 5 for both the forward and backward passes. The Hamiltonian parameters,
+           θ, are trained.
+      iii.Second phase: the Hamiltonian parameters,  θ are frozen and the NN’s parameters,ϕ, are trained.
+
+Our reasoning for the warm-up phase comes from the fact that works such as [11, 10, 66] only converge to the correct
+ground truth for specific parameter initialisations. This sensitivity to initial parameters is due to a barren loss landscape,
+local minima, or insensitivity of the loss function to variation of the parameters in these initialisation regions.  See
+Sec.  3 and Fig.3 for further discussion.  In practise, we found that having a warm-up phase avoids this problem
+entirely. Further discussion on the curriculum and initialisation can be found in Sec. 3.2 where we directly compare
+the robustness to the results in [11]. Finally, we note that for the case where Curriculum 1 fails to be robust, we can
+further break the HL problem down into smaller parts. Since our proof of concept up toN = 8 spins converges with
+Curriculum 1 for our test set detailed below, we reserve a brief discussion on this extended curriculum to Appendix 5.
+
+
+3    Results
+
+In this section, we benchmark the performance our algorithm on 1D spin-1/2 chains for,N∈{3,..., 8} spins. We
+begin by explaining the datasets used in training, detailing the Hamiltonians tested, and neural network architecture.
+We choose a wide variety of Hamiltonians which include higher order polynomials of Pauli operators, and non-ergodic
+systems [67, 68]. We also choose Hamiltonians from state-of-the-art works such as [11, 10] in order to benchmark our
+work against current methods. We then probe the robustness of our algorithm by evaluating its success rates on our test
+Hamiltonians, and evaluate its performance outside of training times using our new benchmark defined in Sec. 3.3.
+Finally, we analyse our algorithm’s limitations and experimental friendliness.
+
+
+    4Assuming that the Ansatz is an element of a subgroup of PN , otherwise it has an exponentially large number of parameters
+rendering it untrainable for large system sizes.
+    5Note that this is different from freezing the NN parameters,ϕ.
+
+
+                                                                        7
+Hamiltonian Learning with NODEs
+
+
+3.1    Datasets and Ground Truth
+
+To find some reasonable test Hamiltonians, we consider the work of [11], where the authors use a 1D Heisenberg spin
+chain, with homogeneous coupling coefficients and a local transverse field,
+
+                                        N−1X                                                      NX
+                                 H =          [JxXiXi+1 +JyYiYi+1 +JzZiZi+1] +                       hiXi,                                      (13)
+                                        i=1                                                      i=1
+where the number of spins,n, ranges between 6 and 100. On the other hand, the authors of [10] use a transverse field
+Ising model with 9 spins as their example. We test our method on the 1D Heisenberg spin chain from [11], as well as
+the following modifications to the Heisenberg Hamiltonian to probe the capabilities of our method on more complex
+Hamiltonians:
+
+       1.The Anisotropic Heisenberg Hamiltonian:
+
+                                              N−1X                                                      NX
+                                      H1 =          [JxiXiXi+1 +JyiYiYi+1 +JziZiZi+1] +                     hiXi                              (14)
+                                               i=1                                                     i=1
+       2.The next-nearest-neighbour Heisenberg Hamiltonian:
+
+
+
+                                    NX                                  N−1X
+                           H2 =         [hxiXi +hyiYi +hziZi] +               [JxiXiXi+1 +JyiYiYi+1 +JziZiZi+1]
+                                    i=1                                  i=1
+                                               N−2X
+                                            +        [KxiXiXi+2 +KyiYiYi+2 +KziZiZi+2]                                             (15)
+                                                i=1
+       3.The third-order Heisenberg Hamiltonian:
+
+
+                                    NX                                  N−1X
+                           H3 =         [hxiXi +hyiYi +hziZi] +               [JxiXiXi+1 +JyiYiYi+1 +JziZiZi+1]
+                                    i=1                                  i=1
+                                               N−2X
+                                            +        [KxiXiXi+1Xi+2 +KyiYiYi+1Yi+2 +KziZiZi+1Zi+2]                     (16)
+                                                i=1
+       4.The PXP Hamiltonian [69, 70], which is one of the simplest examples of a non-ergodic Hamiltonian:
+
+                                                                    N−1X
+                                                            H4 =          JiPi−1XiPi+1                                                           (17)
+                                                                     i=2
+          wherePk =|0⟩⟨0|k is the projector onto the|0⟩ state for thei-th spin.
+       5.The dense nearest-neighbour Hamiltonian:
+
+                                                 NX                                 N−1X  X    JABi  AiBi+1                                (18)
+                                        H5 =        [hxiXi +hyiYi +hziZi] +
+                                                i=1                                  i=1  A,B
+
+          where in the second sum,A andB are each taken over the Pauli matrices{X,Y,Z}.
+
+We generate our ground-truth dataset using an exact state-vector simulation of the system evolving under the true
+Hamiltonian, whose computational graph is shown in Fig.2a. To simplify training data collection from hardware, we
+can use short interaction times, ensuring the system’s coherence isn’t needed for long periods.
+For all system sizesN∈{3, 4, 5, 6, 7, 8}, we useL = 5 randomly chosen initial computational basis states,J  = 5
+timestamps corresponding tot∈{0.2, 0.4, 0.6, 0.8, 1.0} (in units of ℏ),K = 200 Pauli bases chosen at random from
+the uniform distribution of Pauli strings, andM  = 100 shots per each combination of state, timestamp, and Pauli
+measurement. This means that for fewer than 4 bodies, the Pauli measurements can be informationally complete, but
+
+
+                                                                      8
+Hamiltonian Learning with NODEs
+
+
+not necessarily since the Pauli-basis measurements are sampled at random. For all datasets higher than 4, the number of
+shots limits the measurement set to always be informationally incomplete.
+For each of our Hamiltonians, we sample the true parameters,cj uniformly from the interval [−1, 1] to test the robustness
+over 50 different samples. This interval assumes that all parameters are of the same order, however our method can also
+apply when true parameters vary over more orders of magnitudes. We note here that this means our proof of concept
+does not consider Hamiltonians with critical points and phase transitions. However, sinceN = 8 bodies in our study,
+effects such as power-law decays, spin-spin correlations, gapped and gapless phases and different excitation spectra do
+not dominate dynamics for this relatively small number of bodies [71, 72].
+In order to estimate the generalisation capabilities of our algorithm, we define the Infidelity Loss of an output quantum
+state,
+                                       L |ψT (t)⟩,|ψ(t;θ)⟩ = 1−F |ψT (t)⟩,|ψ(t;θ)⟩,                                            (19)
+
+whereF is any fidelity function, in our case we use the overlap,F =|⟨ψ1|ψ2⟩|2.
+We can use this loss on testing datasets by allowing our system to evolve past its training times. For this test set, we use
+the same ground-truth parameters across all experiments for comparison purposes, tracking 5 different basis states.
+
+We now proceed to understand the performance of our algorithm in terms of three aspects: robustness, accuracy and
+extrapolation behaviour, and experimental friendliness.
+
+3.2    Robustness
+
+To test the robustness of our algorithm, we can initialise each of models described on Eqs.(13-18) for different ground
+truth initialisations. We may then evaluate the robustness by estimating how often our algorithm converges for different
+ground truth parameters. To that end, letθ be the set of ground-truth parameters for Hamiltonians in our test set Eqs.(13-
+18).  For example, the Anisotropic Heisenberg Hamiltonian in Eq.(14) hasθ ={Jxi,Jyi,Jzi,hzi}, i∈{1,...,N},
+whilstθ ={hxi,hyi,hzi,Jxi,Jyi,Jzi,Kxi,Kyi,Kzi}, i∈{1,...N} for the next-nearest-neighbour Heisenberg Hamilto-
+nian of Eq.(15). Furthermore, let ˜θ be the set of estimators for the ground-truth parameters for Hamiltonians in our test
+set, Eqs.(14-18). We may then define the relative absolute error between the true Hamiltonian parameters,θ, and the
+predicted parameters, ˜θ, as
+
+                                                               ϵ(˜θ) =∥θ− ˜θ∥∥θ∥  ,                                                                          (20)
+
+where∥·∥ is the L1 norm.
+We say that the learning algorithm is successful if the relative absolute error is lower than some threshold, which we set
+to approximately 0.1. This choice of threshold is inconsequential since in all experiments the separation of the relative
+errors between successful trials and unsuccessful trials is large. We chose 0.1 because it is approximately the noise rate
+of state-of-the-art hardware’s two-qubit gate infidelity [21].
+The success rates of the vanilla model and the neural ODE model on the 6 Hamiltonians above are shown in table
+(1).  We see that the vanilla model has a significant probability of failure across our test set when compared to the
+neural augmentation’s performance. Considering the loss landscape of these two models in Fig.3, we infer that this
+this is due to their difference in sensitivity to parameter initialization.  In the vanilla model from Fig.2a (with only
+the Ansatz parameters), the loss landscape is more barren and ridden with local minima, thus making it difficult for
+effective gradient-based parameter tuning as shown in Fig.3. However, the neural ODE model from Fig.2c has success
+rates close to 100% for all of the Hamiltonians evaluated up toN = 8 bodies. Considering Fig.3, which shows how
+the loss landscape changes under the neural augmentation of Fig.  2c, this neural augmentation improves the loss
+landscape to one with fewer local minima and barren plateaus. Thus we see that adding the neural augmentation helps
+to remove the sensitivity of the architecture to initialization of its parameters. In a smoother loss landscape, there are
+more initialisations of the Ansatz parameters which will converge towards the global optimum.
+This is further reinforced by the fact that the vanilla model is much more robust on Hamiltonians such as the dense
+nearest-neighbour landscape of Eq.(18), whose loss landscape appears smooth with all gradients pointing almost directly
+to the global optimum. In this instance, the Neural ODE model makes little change to the loss landscape near the global
+minimum, meaning the vanilla model and Neural ODE model have similar performance for this Hamiltonian. Whereas
+for the PXP Hamiltonian of Eq.(17), the ruggedness of the loss landscape in Fig.3 explains the almost vanishing success
+rate of the vanilla model in learning the PXP Hamiltonian.
+
+
+                                                                        9
+Hamiltonian Learning with NODEs
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 3: The loss landscapes of for two parameters in the anisotropic Heisenberg Hamiltonian, the PXP Hamiltonian,
+and the dense nearest-neighbour Hamiltonian respectively from left to right.  The center of each plot is the global
+minimum, and the axes are chosen as two random orthogonal directions in the parameter space. The top row contains
+the landscapes for the vanilla model architecture from [11], shown in Fig.2b.  The bottom row contains landscapes
+for the Neural ODE model from Fig.2c, over the same Hamiltonians, with the same ground-truth parameters. We see
+clearly in the centre two plots that the Neural ODE model can make significant improvements to the loss landscape in
+terms of the number of local minima, as well as having a smoothing effect to the ruggedness of the PXP Hamiltonian’s
+landscape. This effect is visible in Table 1, where the convergence rate of the Neural ODE model greatly surpasses
+the vanilla model. Notice that for the left panels (Heterogeneous Heisenberg), the Neural ODE model has changed
+the loss landscape in the lower-left corner to have fewer saddle points and a more even loss landscape. This makes it
+more likely to approach the global minimum when optimising as there are more directions from which one can arrive at
+the local minimum. However, since the change is relatively small, the Neural ODE causes only a small boost in the
+success rate, as shown in Table 1. Finally, notice that for the right panels (Dense NN), the Neural ODE makes almost
+no change to the loss landscape near the global minimum. We see this reflected in the almost equivalent success rates of
+the vanilla model vs the Neural ODE model in Table 1.
+
+
+
+
+
+
+
+
+
+
+
+                                                                     10
+Hamiltonian Learning with NODEs
+
+
+                                          Hamiltonian               N     Vanilla     Neural ODE
+                                                                     3      66%           100%
+                                                                     4      86%           100%
+                                      Heisenberg (Eq.13)             5      94%           100%
+                                                                     6      64%           100%
+                                                                     7      52%           100%
+                                                                     8      52%           100%
+                                                                     3      28%            96%
+                                                                     4      46%            96%
+                                           Anisotropic               5      34%            94%
+                                      Heisenberg (Eq.14)             6      32%            96%
+                                                                     7      18%            96%
+                                                                     8      16%            96%
+                                                                     3      12%           100%
+                                                                     4      12%           100%
+                                          PXP (Eq.17)                5       6%           100%
+                                                                     6       2%           100%
+                                                                     7       0%            98%
+                                                                     8       0%            94%
+                                                                     3      94%           100%
+                                                                     4      98%           100%
+                                       Dense NN (Eq.18)              5      96%            98%
+                                                                     6      98%            98%
+                                                                     7      88%            98%
+                                                                     8      98%            98%
+                                                                     3      18%            98%
+                                                                     4      56%           100%
+                                   Heisenberg NNN (Eq.15)            5      48%            92%
+                                                                     6      50%            86%
+                                                                     7      46%            96%
+                                                                     8      56%            94%
+                                                                     3      54%           100%
+                                                                     4      68%           100%
+                                            3rd order                5      70%           100%
+                                      Heisenberg (Eq.16)             6      68%            86%
+                                                                     7      78%            96%
+                                                                     8      64%            94%
+Table 1: Success rates of the vanilla model in [11] and the proposed neural ODE model for the 6 Hamiltonians indicated,
+calculated over 50 runs with random parameter initialization.
+
+
+
+3.3    Accuracy and Extrapolation Behaviour via New Benchmark
+
+We can also evaluate the performance of our algorithm by testing how it generalises to times unseen in its training.
+Here, we focus exclusively on the neural ODE model, as the vanilla model lacks the robustness needed to reliably learn
+more complex Hamiltonians in the test set Eqs.(13 - 18). For this purpose, we generate random initial computational
+basis states not seen during training, and perform a simulation up toT  = 20 of the learned neural ODE model (20× the
+time used in training). We do this for each of the different Hamiltonians and system sizes, keeping the ground truth
+parameters fixed. We note that this is different from the test set used to establish robustness, where the ground truth
+parameters were varied in order to ensure convergence over a range of different true parameters. The results of this
+testing are shown in Fig. (4).
+We see that the neural ODE model is able to generalize to longer simulation times than seen in training.  For up to
+N = 8 spins and over the Hamiltonians described in Sec. 3.1, Fig.4 shows a fidelity of approximately 99% for ten times
+the training times seen. More interestingly, we observe from Fig. (4) that the infidelity as a function of the simulation
+time can be fitted to a power law:
+
+                                                  1−F |ψ(t)⟩,|ψ′(t)⟩ =Atb,                                                              (21)
+
+
+                                                                   11
+Hamiltonian Learning with NODEs
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 4: Infidelities between the simulated time-evolved state of the neural ODE and the true time-evolved state. The
+boundary of the shaded region on the left represents the training time (i.e. feeding back at this boundary point only),
+and to the right of it are testing times. Here, the red dashed line marks the 1% error boundary, past which the model has
+more than a 1% error. (Left) The fidelities as a function of the simulation time for the 6 Hamiltonians indicated, where
+here we fix the number of spins toN = 8. (Right) The fidelities as a function of the simulation time for different system
+sizes, where here we use the PXP Hamiltonian as this was heuristically found to be the most difficult as per Table 1.
+
+
+where|ψ(t)⟩ and|ψ′(t)⟩ are the ground-truth and predicted states at timet, respectively, andA andb are positive
+constants whose values depend on the particular Hamiltonian and system size. This power law will start to fail at the
+point when the predicted state diverges from the true state. However, Fig.4 shows that for our model, the power law
+holds for sufficiently smallt, at least up to twenty times the evolution time seen during training.
+The coefficientsA andb of the power law can be determined empirically through linear regression. For the numerical
+experiments in Fig.(4), the power law coefficients are shown in Table (2).  The power law in time past the training
+region in Fig.4 shows our algorithm has a global error (measured in terms of the Infidelity Loss from Eq.(21)) which
+empirically scales polynomially with an exponent 1≤b≤ 2 for all the Hamiltonians tested. This indicates that our
+algorithm can generalise with at most a quadratic amount of error in time for the tested examples, implying that the
+neural augmentation indeed does form a representation of the unitary dynamics, rather than overfitting to the training
+data. Furthermore, the accuracy of the exponent, in terms of the error values of Table (2), shows that our method can
+generalise beyond the training time with a predictable amount of uncertainty in its estimates for up to twenty times the
+training data point.
+
+
+Power Laws can Benchmark Hamiltonian Learning Algorithms
+
+Despite the variety of approaches to perform HL in diverse settings, there is not yet a systematic, quantitative means
+of comparison for HL algorithms that is agnostic to their inner workings.   Whilst some metrics of Hamiltonian
+complexity such as the so-called V-score [45] have been defined, the complexity measure is as estimate of simulation
+hardness.  This makes metrics like the V-score appropriate in the black-box scenario of Fig.1, as the main use-case
+of black-box Hamiltonian Learning is to construct a simulation of the ground truth.  In contrast, the V-score does
+not take into account the difficulty in tuning a known structure, as per the white-box scenario in Fig.1.  Nor does
+it consider the sensitivity of successful convergence to a HL algorithm’s initial conditions.  This is because we are
+trying to infer a given system’s unknown Hamiltonian from data, rather than attempt to simulate a known Hamil-
+tonian. Therefore, users and researchers of HL currently face difficulties in deciding which algorithm best fits their needs.
+
+We believe that the scaling behaviour of Eq.(21) provides a reasonable benchmark for the ability of a generic HL
+algorithm to generalise outside training data.  This is because the exponent of the power law shows two important
+aspects of generalisation.  First, a lower value for the exponent implies that a HL algorithm can maintain accuracy
+
+
+                                                                      12
+Hamiltonian Learning with NODEs
+
+
+                             Hamiltonian                              A                                 b
+                              Heisenberg              3.56× 10−4± 7.66× 10−6                1.364± 7.42± 10−3
+                      Anisotropic Heisenberg          5.15× 10−4± 5.56× 10−6                1.384± 3.74× 10−3
+                                  PXP                 7.56× 10−4± 6.74× 10−6                1.678± 3.10× 10−3
+                              Dense NN                5.49× 10−4± 8.75× 10−6                1.504± 5.51× 10−3
+                          Heisenberg NNN              1.10× 10−3± 1.30× 10−5                1.299± 4.09× 10−3
+                        3rd order Heisenberg          1.09× 10−3± 1.07× 10−5                1.347± 3.38× 10−3
+                             System size                       A                                 b
+                                   3           2.93× 10−5± 9.31× 10−7                1.686± 1.09× 10−2
+                                   4           4.72× 10−5± 6.10× 10−7                1.720± 4.47× 10−3
+                                   5           9.02× 10−5± 1.38× 10−6                1.705± 5.28× 10−3
+                                   6           1.80× 10−4± 3.81× 10−6                1.758± 7.30× 10−3
+                                   7           2.73× 10−3± 5.52× 10−6                1.759± 6.97× 10−3
+                                   8           7.56× 10−3± 6.74× 10−6                1.678± 3.10× 10−3
+Table 2: Empirically-determined coefficients of the power law in equation (21) with their standard deviations. (Top)
+The coefficients for the different Hamiltonians with the system size fixed toN  = 8.  (Bottom) The coefficients for
+different system sizes with the Hamiltonian fixed as the PXP model.
+
+
+
+for longer periods in time in a dataset unseen by training. Second, an exponent with low error means we can reliably
+understand the amount of uncertainty in the estimator of the output. With a higher error in the exponent of Eq.(21), we
+see a breakdown in the generalisation capabilities of a HL algorithm; being unable to rely on the uncertainty in the
+scaling behaviour means the algorithm has high variability in its ability to converge, and is not guaranteed to remain
+accurate outside its training data. There are several advantages of using power-laws to benchmark HL algorithms. First,
+Fig.4 shows the scaling law was observed to have similar coefficients over a diverse set of 1D spin-1/2 chains. As such,
+we assert that theb coefficient and its error are indicative of our HL algorithms’s performance beyond our examples
+from Eqs.(13 - 18), and can help future users gauge how well our HL algorithm could perform on different examples not
+covered in this manuscript. Second, seeing a similar range ofb values independently of the number of bodies, indicates
+that our protocol is scalable should we be able to tame the exponential scaling of the input state vector (See Sec. 4 for
+further discussion). These factors indicate that the range of values ofb is a property of the algorithm, rather than the
+ground-truth examples tested. This is important because it distinguishes this benchmark from the so-called V-score
+[45], which is dependent on the Hamiltonian to be learned by construction. Finally, we note that we can calculate theb
+coefficient for any HL algorithm. Regardless of its intricacies, a HL algorithm should return an estimate for the true
+Hamiltonian. With this estimate, we can choose some test states unseen during training and evolve them in time past
+the training region. This is possible for any HL algorithm because the only three objects needed are the initial states, the
+true Hamiltonian, and the estimated Hamiltonian. All of these are available for both scenarios shown in Fig.1.
+
+3.4    Experimental Friendliness
+
+We can evaluate the experimental friendliness of our algorithm by understanding how much training data is required
+to reach a given relative error described in Eq.(20). This is important to ensure that our framework is experimentally
+friendly, since if the number of Pauli measurements required to effectively learn the Hamiltonian is too large, then the
+ground-truth dataset would be difficult to generate and the framework would not be useful in practice.
+Since our set-up in Fig.1 does not allow any optimal control [12], we expect the scaling behaviour for the amount
+of data needed to reach a given relative error to be governed by the Standard Quantum Limit.  To this end, we vary
+the number of Pauli measurementsK∈{3, 10, 30, 100, 300, 1000} and keep the rest of the dataset parameters the
+same as Sec.  3.1.  We evaluate our neural ODE model on the PXP Hamiltonian given in Eq.(17) on a system with
+N  = 8 spins, since this Hamiltonian was empirically found to be the most difficult according to Table (1), giving a
+worst-case-scenario scaling behaviour.  The results can be seen in Fig.5, which evaluates the learning algorithm by
+observing how the robustness and the relative error scale with the number of Pauli measurements used.
+Owing to the results of [12], we see an approximate power law scaling past a certain minimum threshold number
+of measurements.  In this instance for the PXP Hamiltonian of Eq.(17), we see qualitatively that this is around 30
+Pauli bases. This means that we can predictably improve the robustness and the accuracy of the learning algorithm by
+increasing the number of Pauli measurements. More importantly, the fact that we do not see a power law for a small
+number (<30 in Fig.5) of Pauli measurements indicates that there is some minimum number of Pauli measurements in
+
+
+                                                                    13
+Hamiltonian Learning with NODEs
+
+
+order for the learning algorithm to be reliable. We also note here that changing the measurement process to one with
+limited or total quantum control could allow us to surpass the standard quantum limit [73, 74, 12].
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 5:  The impact of the number of Pauli measurements on the robustness and the relative error of the learning
+algorithm using the neural ODE model. Here we use the PXP Hamiltonian on a system of 8 bodies to give a worst-case
+scaling as Table 1 shows this was the most difficult Hamiltonian considered in our examples from Eq.(13 - 18).
+
+
+4    Conclusion and Outlook
+
+In this contribution, we introduced the foundational concepts for how to use Neural ODEs to solve the HL problem
+on quantum many-body spin systems, as well as preliminary results that highlight its reliability and expressibility on
+a number of previously unsolved HL problems in 1D spin-1/2 chains.  In terms of performance, we believe Neural
+Differential Equations open new avenues for solving the HL problem, which will allow researchers to better characterise
+a more diverse set of many-body quantum systems.  Due to its innate interpretability, we focused on the white-box
+scenario. However, as discussed in Sec. 2.3, our architecture is quite capable of forming a black-box representation
+when the NODE component dominates over a Hamiltonian ansatz. From the perspective of quantum simulation, our
+work can hence be used in both the black-box and white-box scenarios. For error mitigation, our work can be used to
+learn the free Hamiltonian of quantum hardware, allowing users to systematically diagnose the most likely Hamiltonian
+in their system, and correct for any unexpected interactions.  This also applies to those wishing to perform device
+certification.  By using our HL framework on controlled quantum operations, we can verify that they are working
+correctly by inferring the Hamiltonian maximising the log-likelihood of observed data. In all four of these uses, we
+believe our new benchmark offers the most informative assessment of the quality of HL algorithms. This is because this
+benchmark can be considered as a property of the algorithm rather than the Hamiltonian to be learned. To perform the
+aforementioned tasks, we need to know how well a neural architecture works outside its training times on unseen basis
+states. The coefficient,b, from Eq.(21) captures these aspects in a fine grained way, irrespective of the V-Score [45] of
+the Hamiltonian to be learned.
+However, we note here that our work has three main challenges to facilitate broader use of HL algorithms. First, our
+method works in the state-vector formalism of unitary quantum dynamics. This means that the Neural ODE’s input size
+scales exponentially with the number of bodies. Second, the loss function relies on being able to accurately estimate the
+log-likelihood of a small number of Pauli strings, potentially inducing biases to the loss function if the number of
+measurement bases is not sufficient, or in the case of noisy measurements. An interesting research direction comes
+from the idea of tracking expectation values in time, for example via techniques like classical shadows [75], to address
+this. Finally, being in the NISQ era of quantum technology, our algorithm should be able to perform reliably in noisy
+dynamical settings, encapsulated by open-system quantum dynamics, rather than the unitary case. As the first paper in a
+planned series, the next works aim to systematically investigate the extent to which Neural ODEs can be used to solve
+
+
+                                                                      14
+Hamiltonian Learning with NODEs
+
+
+the Hamiltonian Learning problem in these settings, addressing the above limitations.
+
+
+Acknowledgments
+
+We would like to extend our thanks to Frederik Wilde, Marcin Plodzien, Mark Thomas, Jose Ramon Martinez for their
+insightful discussions and feedback on the manuscript. This project was supported by Government of Spain (Severo
+Ochoa CEX2019-000910-S, Quantum in Spain, FUNQIP and European Union NextGenerationEU PRTR-C17.I1), the
+European Union (PASQuanS2.1, 101113690 and Quantera Veriqtas), Fundació Cellex, Fundació Mir-Puig, Generalitat
+de Catalunya (CERCA program), the ERC AdG CERQUTE and the AXA Chair in Quantum Information Science.
+
+References
+
+ [1]  Armands Strikis, Dayue Qin, Yanzhu Chen, Simon C Benjamin, and Ying Li.  Learning-based quantum error
+      mitigation. PRX Quantum, 2(4):040330, 2021.
+ [2]  Elizabeth R Bennewitz, Florian Hopfmueller, Bohdan Kulchytskyy, Juan Carrasquilla, and Pooya Ronagh. Neural
+      error mitigation of near-term quantum simulations. Nature Machine Intelligence, 4(7):618–624, 2022.
+ [3]  Yan-Jun Xie, Han-Ning Dai, Zhen-Sheng Yuan, Youjin Deng, Xiaopeng Li, Yu-Ao Chen, and Jian-Wei Pan.
+      Bayesian learning for optimal control of quantum many-body states in optical lattices.   Physical Review A,
+      106(1):013316, 2022.
+ [4]  Shi-Yao Hou, Ningping Cao, Sirui Lu, Yi Shen, Yiu-Tung Poon, and Bei Zeng. Determining system hamiltonian
+      from eigenstate measurements without correlation functions. New Journal of Physics, 22(8):083088, 2020.
+ [5]  Xiao-Liang Qi and Daniel Ranard. Determining a local hamiltonian from a single eigenstate. Quantum, 3:159,
+      2019.
+ [6]  Youle Wang.   Quantum algorithms for Hamiltonian learning problems.   University of Technology Sydney
+      (Australia), 2022.
+ [7]  Nathan Wiebe, Christopher Granade, Christopher Ferrie, and David Cory. Quantum hamiltonian learning using
+      imperfect quantum resources. Physical Review A, 89(4):042314, 2014.
+ [8]  Valentin Gebhart,  Raffaele Santagati,  Antonio Andrea Gentile,  Erik M Gauger,  David Craig,  Natalia Ares,
+      Leonardo Banchi, Florian Marquardt, Luca Pezzè, and Cristian Bonato.  Learning quantum systems.  Nature
+      Reviews Physics, 5(3):141–156, 2023.
+ [9]  Jinjing Shi, Wenxuan Wang, Xiaoping Lou, Shichao Zhang, and Xuelong Li. Parameterized hamiltonian learning
+      with quantum circuit. IEEE Transactions on Pattern Analysis and Machine Intelligence, 45(5):6086–6095, 2022.
+[10]  Andi  Gu,  Lukasz  Cincio,  and  Patrick  J  Coles.   Practical  black  box  hamiltonian  learning.   arXiv  preprint
+      arXiv:2206.15464, 2022.
+[11]  Frederik Wilde, Augustine Kshetrimayum, Ingo Roth, Dominik Hangleiter, Ryan Sweke, and Jens Eisert. Scalably
+      learning quantum many-body hamiltonians from dynamical data. arXiv preprint arXiv:2209.14328, 2022.
+[12]  Alicja Dutkiewicz, Thomas E O’Brien, and Thomas Schuster. The advantage of quantum control in many-body
+      hamiltonian learning. arXiv preprint arXiv:2304.07172, 2023.
+[13]  Eyal Bairey, Itai Arad, and Netanel H Lindner. Learning a local hamiltonian from local measurements. Physical
+      review letters, 122(2):020504, 2019.
+[14]  Anurag Anshu, Srinivasan Arunachalam, Tomotaka Kuwahara, and Mehdi Soleimanifar. Sample-efficient learning
+      of interacting quantum systems. Nature Physics, 17(8):931–935, 2021.
+[15]  Jeongwan Haah, Robin Kothari, and Ewin Tang. Optimal learning of quantum hamiltonians from high-temperature
+      gibbs states. In 2022 IEEE 63rd Annual Symposium on Foundations of Computer Science (FOCS), pages 135–146.
+      IEEE, 2022.
+[16]  Eyal Bairey, Chu Guo, Dario Poletti, Netanel H Lindner, and Itai Arad. Learning the dynamics of open quantum
+      systems from their steady states. New Journal of Physics, 22(3):032001, 2020.
+[17]  Hsin-Yuan Huang, Sitan Chen, and John Preskill. Learning to predict arbitrary quantum processes. PRX Quantum,
+      4(4):040337, 2023.
+[18]  Hsin-Yuan Huang, Yu Tong, Di Fang, and Yuan Su. Learning many-body hamiltonians with heisenberg-limited
+      scaling. Physical Review Letters, 130(20):200403, 2023.
+
+
+                                                                   15
+Hamiltonian Learning with NODEs
+
+
+[19]  Jun Zhang and Mohan Sarovar.  Quantum hamiltonian identification from measurement time traces.  Physical
+      review letters, 113(8):080401, 2014.
+[20]  Agnes Valenti, Evert van Nieuwenburg, Sebastian Huber, and Eliska Greplova. Hamiltonian learning for quantum
+      error correction. Physical Review Research, 1(3):033092, 2019.
+[21]  Matthew DeCross, Reza Haghshenas, Minzhao Liu, Yuri Alexeev, Charles H Baldwin, John P Bartolotta, Matthew
+      Bohn, Eli Chertkov, Jonhas Colina, Davide DelVento, et al. The computational power of random quantum circuits
+      in arbitrary geometries. arXiv preprint arXiv:2406.02501, 2024.
+[22]  M Morgado and S Whitlock. Quantum simulation and computing with rydberg-interacting qubits. AVS Quantum
+      Science, 3(2), 2021.
+[23]Martin Kliesch and Ingo Roth. Theory of quantum system certification.        PRX quantum, 2(1):010201, 2021.
+[24]  Maria Schuld and Francesco Petruccione.  Machine learning with quantum computers, volume 676.  Springer,
+      2021.
+[25]  Giuseppe Carleo, Ignacio Cirac, Kyle Cranmer, Laurent Daudet, Maria Schuld, Naftali Tishby, Leslie Vogt-
+      Maranto, and Lenka Zdeborová.   Machine learning and the physical sciences.   Reviews of Modern Physics,
+      91(4):045002, 2019.
+[26]  Anna Dawid, Julian Arnold, Borja Requena, Alexander Gresch, Marcin Płodzie´n, Kaelan Donatella, Kim A
+      Nicoli, Paolo Stornati, Rouven Koch, Miriam Büttner, et al. Modern applications of machine learning in quantum
+      sciences. arXiv preprint arXiv:2204.04198, 2022.
+[27]Florian Marquardt. Machine learning and quantum devices.        SciPost Physics Lecture Notes, page 029, 2021.
+[28]  Ilia Khait, Juan Carrasquilla, and Dvira Segal.  Optimal control of quantum thermal machines using machine
+      learning. Physical Review Research, 4(1):L012029, 2022.
+[29]  Giacomo Torlai, Guglielmo Mazzola, Juan Carrasquilla, Matthias Troyer, Roger Melko, and Giuseppe Carleo.
+      Neural-network quantum state tomography. Nature physics, 14(5):447–450, 2018.
+[30]  Federico Becca and Sandro Sorella.  Quantum Monte Carlo approaches for correlated systems.  Cambridge
+      University Press, 2017.
+[31]  Xiao-Yu Dong, Frank Pollmann, and Xue-Feng Zhang. Machine learning of quantum phase transitions. Physical
+      Review B, 99(12):121104, 2019.
+[32]  Giuseppe Carleo and Matthias Troyer. Solving the quantum many-body problem with artificial neural networks.
+      Science, 355(6325):602–606, 2017.
+[33]  Michael J Hartmann and Giuseppe Carleo. Neural-network approach to dissipative quantum many-body dynamics.
+      Physical review letters, 122(25):250502, 2019.
+[34]  Maxim Secor, Alexander V Soudackov, and Sharon Hammes-Schiffer. Artificial neural networks as propagators
+      in quantum dynamics. The journal of physical chemistry letters, 12(43):10654–10662, 2021.
+[35]  Arif Ullah and Pavlo O Dral. Speeding up quantum dissipative dynamics of open systems with kernel methods.
+      New Journal of Physics, 23(11):113019, 2021.
+[36]  Arif Ullah and Pavlo O Dral. Predicting the future of excitation energy transfer in light-harvesting complex with
+      artificial intelligence-based quantum dynamics. Nature communications, 13(1):1930, 2022.
+[37]  Nishant Nikhil and Brendan Tran Morris. Convolutional neural network for trajectory prediction. In Proceedings
+      of the European Conference on Computer Vision (ECCV) Workshops, pages 0–0, 2018.
+[38]  Nathan Wiebe, Christopher Granade, Christopher Ferrie, and David G Cory. Hamiltonian learning and certification
+      using quantum resources. Physical review letters, 112(19):190501, 2014.
+[39]  Jianwei Wang, Stefano Paesani, Raffaele Santagati, Sebastian Knauer, Antonio A Gentile, Nathan Wiebe, Mau-
+      rangelo Petruzzella, Jeremy L O’brien, John G Rarity, Anthony Laing, et al. Experimental quantum hamiltonian
+      learning. Nature Physics, 13(6):551–555, 2017.
+[40]  Han Zhang, Huawei Fan, Liang Wang, and Xingang Wang.   Learning hamiltonian dynamics with reservoir
+      computing. Physical Review E, 104(2):024205, 2021.
+[41]  Jing Zhou and DL Zhou. Recovery of a generic local hamiltonian from a degenerate steady state. Physics Letters
+      A, 493:129279, 2024.
+[42]  Liangyu Che, Chao Wei, Yulei Huang, Dafa Zhao, Shunzhong Xue, Xinfang Nie, Jun Li, Dawei Lu, and Tao Xin.
+      Learning quantum hamiltonians from single-qubit measurements. Physical Review Research, 3(2):023246, 2021.
+
+
+                                                                    16
+Hamiltonian Learning with NODEs
+
+
+[43]  Wenjun Yu, Jinzhao Sun, Zeyao Han, and Xiao Yuan. Robust and efficient hamiltonian learning. Quantum, 7:1045,
+      2023.
+[44]  Ayaka Usui, Anna Sanpera, and María García Díaz. Simplifying the simulation of local hamiltonian dynamics.
+      Physical Review Research, 6(2):023243, 2024.
+[45]  Dian Wu, Riccardo Rossi, Filippo Vicentini, Nikita Astrakhantsev, Federico Becca, Xiaodong Cao, Juan Car-
+      rasquilla, Francesco Ferrari, Antoine Georges, Mohamed Hibat-Allah, et al. Variational benchmarks for quantum
+      many-body problems. arXiv preprint arXiv:2302.04919, 2023.
+[46]Daniel Ranard.        Aspects of Locality in Quantum Many-Body Physics. Stanford University, 2021.
+[47]  Julia Kempe, Alexei Kitaev, and Oded Regev. The complexity of the local hamiltonian problem. In FSTTCS 2004:
+      Foundations of Software Technology and Theoretical Computer Science: 24th International Conference, Chennai,
+      India, December 16-18, 2004. Proceedings 24, pages 372–383. Springer, 2005.
+[48]  Christopher E Granade, Christopher Ferrie, Nathan Wiebe, and David G Cory. Robust online hamiltonian learning.
+      New Journal of Physics, 14(10):103013, 2012.
+[49]  Masoud Mohseni, Ali T Rezakhani, and Daniel A Lidar.  Quantum-process tomography: Resource analysis of
+      different strategies. Physical Review A—Atomic, Molecular, and Optical Physics, 77(3):032322, 2008.
+[50]  Anurag Anshu and Srinivasan Arunachalam.  A survey on the complexity of learning quantum states.  Nature
+      Reviews Physics, 6(1):59–69, 2024.
+[51]  Giacomo Torlai, Christopher J Wood, Atithi Acharya, Giuseppe Carleo, Juan Carrasquilla, and Leandro Aolita.
+      Quantum  process  tomography  with  unsupervised  learning  and  tensor  networks.   Nature  Communications,
+      14(1):2858, 2023.
+[52]  Marcel Neugebauer, Laurin Fischer, Alexander Jäger, Stefanie Czischek, Selim Jochim, Matthias Weidemüller,
+      and Martin Gärttner. Neural-network quantum state tomography in a two-qubit experiment. Physical Review A,
+      102(4):042604, 2020.
+[53]  M. Raissi, P. Perdikaris, and G.E. Karniadakis. Physics-informed neural networks: A deep learning framework for
+      solving forward and inverse problems involving nonlinear partial differential equations. Journal of Computational
+      Physics, 378:686–707, 2019.
+[54]  Siddhartha Mishra and Roberto Molinaro.  Estimates on the generalization error of physics informed neural
+      networks (pinns) for approximating a class of inverse problems for pdes, 2023.
+[55]  Daniel Bertschinger, Christoph Hertrich, Paul Jungeblut, Tillmann Miltzow, and Simon Weber.  Training fully
+      connected neural networks is complete on the reals.  Advances in Neural Information Processing Systems, 36,
+      2024.
+[56]  Dennis Elbrächter, Dmytro Perekrestenko, Philipp Grohs, and Helmut Bölcskei. Deep neural network approxima-
+      tion theory. IEEE Transactions on Information Theory, 67(5):2581–2623, 2021.
+[57]  Ricky TQ Chen,  Yulia Rubanova,  Jesse Bettencourt,  and David K Duvenaud.   Neural ordinary differential
+      equations. Advances in neural information processing systems, 31, 2018.
+[58]Patrick Kidger. On neural differential equations.        arXiv preprint arXiv:2202.02435, 2022.
+[59]  Balázs Csanád Csáji et al.   Approximation with artificial neural networks.  Faculty of Sciences, Etvs Lornd
+      University, Hungary, 24(48):7, 2001.
+[60]  Yulong Lu and Jianfeng Lu. A universal approximation theorem of deep neural networks for expressing probability
+      distributions. Advances in neural information processing systems, 33:3094–3105, 2020.
+[61]  Diederik P Kingma and Jimmy Ba. Adam: A method for stochastic optimization. arXiv preprint arXiv:1412.6980,
+      2014.
+[62]  John Charles Butcher and Gerhard Wanner.  Runge-kutta methods: some historical notes.  Applied Numerical
+      Mathematics, 22(1-3):113–151, 1996.
+[63]  Federico Girosi, Michael Jones, and Tomaso Poggio. Regularization theory and neural networks architectures.
+      Neural computation, 7(2):219–269, 1995.
+[64]  Yoshua Bengio, Jérôme Louradour, Ronan Collobert, and Jason Weston. Curriculum learning. In Proceedings of
+      the 26th annual international conference on machine learning, pages 41–48, 2009.
+[65]  Petru Soviany, Radu Tudor Ionescu, Paolo Rota, and Nicu Sebe. Curriculum learning: A survey. International
+      Journal of Computer Vision, 130(6):1526–1565, 2022.
+
+
+                                                                    17
+Hamiltonian Learning with NODEs
+
+
+[66]  Daniel Stilck Franca, Liubov A Markovich, VV Dobrovitski, Albert H Werner, and Johannes Borregaard. Efficient
+      and robust estimation of many-qubit hamiltonians. arXiv preprint arXiv:2205.09567, 2022.
+[67]  Wen Wei Ho and Ðor ¯de Radiˇcevi´c.  The ergodicity landscape of quantum theories.  International Journal of
+      Modern Physics A, 33(04):1830004, 2018.
+[68]  Tomaž Prosen. General relation between quantum ergodicity and fidelity of quantum dynamics. Physical Review
+      E, 65(3):036208, 2002.
+[69]  Maksym Serbyn, Dmitry A Abanin, and Zlatko Papi´c. Quantum many-body scars and weak breaking of ergodicity.
+      Nature Physics, 17(6):675–685, 2021.
+[70]  Yingjian Liu, Piotr Sierant, Paolo Stornati, Maciej Lewenstein, and Marcin Płodzie´n. Quantum algorithms for
+      inverse participation ratio estimation in multi-qubit and multi-qudit systems. arXiv preprint arXiv:2405.03338,
+      2024.
+[71]Hal Tasaki.        Physics and mathematics of quantum many-body systems, volume 66. Springer, 2020.
+[72]David J Thouless.        The quantum mechanics of many-body systems. Courier Corporation, 2014.
+[73]  Vittorio Giovannetti, Seth Lloyd, and Lorenzo Maccone. Quantum-enhanced measurements: beating the standard
+      quantum limit. Science, 306(5700):1330–1336, 2004.
+[74]  Guillermo  García-Pérez,  Matteo  AC  Rossi,  Boris  Sokolov,  Francesco  Tacchino,  Panagiotis  Kl  Barkoutsos,
+      Guglielmo Mazzola, Ivano Tavernelli, and Sabrina Maniscalco. Learning to measure: Adaptive informationally
+      complete generalized measurements for quantum algorithms. Prx quantum, 2(4):040342, 2021.
+[75]  Hsin-Yuan Huang, Richard Kueng, and John Preskill. Predicting many properties of a quantum system from very
+      few measurements. Nature Physics, 16(10):1050–1057, 2020.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                     18
+Hamiltonian Learning with NODEs
+
+
+5    Appendix: Extended curriculum for Hamiltonians with higher complexity
+
+As mentioned in Sec. 2, a general HamiltonianHT∈PN  has 4N−1 coefficients which quickly becomes infeasible as
+the number of spins grows. To render this problem tractable, we seek to work in a setting where the ground truth is
+guaranteed to haveO(M)<N Pauli strings. However, withO(M) Pauli strings, the number of coefficients to tune is
+stillNM . As such, procedures like those found in [11, 66, 10] will only considerM = 2, corresponding to quadratic
+Hamiltonians, with a geometric locality constraint such as nearest neighbour coupling only.  With NODEs, we it is
+possible to go toO(M > 2) Hamiltonians with a curriculum learning strategy as discussed in the main paper. Here, we
+briefly describe a second curriculum that can be applied in case of convergence issues for Hamiltonians with higher
+complexity. To that end, letθm denote the set of trainable parameters associated to anO(m<M) Hamiltonian. For
+example, with
+
+                              HA =X        cxjXjXj+1 +cyjYjYJ+1 +czjZjZj+1
+                                        j
+                                   +XdxkXkXk+1Xk+2 +dykYkYk+1Yk+2 +dzkZkZk+1Zk+2                                                      (22)
+
+                                       k
+                                 ,
+we have θ2  =  (cxj,cyj,czj) and θ3  =  (dxk,dyk,dzk).  This prescription separates parameters to be trained in batches
+according to the polynomial order of their accompanying Pauli string. Having separated different orders, we apply the
+following curriculum:
+
+Curriculum 2
+        i Switch off all θm except the smallest order. i.e. for alln>mmin,θn = 0.
+       iiApply   Curriculum 1 withθm and a NN via Fig.2c. ??.
+      iiiFreeze  θm, and allowθm+1̸= 0
+       iiApply   Curriculum 1 withθm+2 and a NN via Fig.2c. ??.
+       ivRepeat steps [ii], [iii] until the desired polynomial order, θM  is reached.
+
+The result of applying this curriculum is that the measurement outcomes become more sensitive to variation of sub-
+components of the Hamiltonian, mitigating any possible issues that can arise with vanishing gradients. In the main text,
+this curriculum was not applied as our test set of Hamiltonians was convergent using the simpler curriculum in Sec. 2.3.
+However, we believe this more elaborate curriculum is worth mentioning here because future works in this direction
+will need to apply it.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                    19
