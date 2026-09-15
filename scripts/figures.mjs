@@ -10,7 +10,7 @@
 // Colours are the validated default palette of the dataviz method (categorical slots in
 // fixed order, an ordinal blue ramp, recessive greys). Nothing here is picked by eye.
 import fs from "node:fs";
-import { isSampled, recordEligible } from "./units.mjs";
+import { isSampled, recordEligible, perSiteDivisor, perSiteLabel } from "./units.mjs";
 import { collect, recordOf } from "./summary.mjs";
 import { sourceOf, sources } from "./enrich_sources.mjs";
 import { CONTESTED, FAMILIES, family, variationalRows } from "./views.mjs";
@@ -136,8 +136,8 @@ function doc(t, height, title, desc, parts) {
   ].join("\n");
 }
 
-const pow10 = e => "10" + String(e).replace("-", "⁻").replace(/\d/g, d => "⁰¹²³⁴⁵⁶⁷⁸⁹"[d]);
 const pct = (a, b) => `${Math.round((100 * a) / b)}%`;
+const niceStep = raw => { const p = 10 ** Math.floor(Math.log10(raw)); return [1, 2, 5, 10].map(m => m * p).find(m => m >= raw * 0.999); };
 
 const written = [];
 function write(name, render) {
@@ -176,8 +176,9 @@ function frontierPanel([id, title]) {
   const inst = byId.get(id);
   const rec = recordOf(inst);
   const rows = inst.rows.filter(r => r.bound_type in BOUNDS);
+  const f = perSiteDivisor(inst);
   const pts = rows.filter(yearOf).map(r => ({
-    r, year: yearOf(r), eligible: recordEligible(r),
+    r, year: yearOf(r), eligible: recordEligible(r), e: r.energy / f,
     gap: (r.energy - rec.energy) / Math.abs(rec.energy),
   }));
   // Within a year, spread the marks sideways in energy order so none hides another.
@@ -189,23 +190,21 @@ function frontierPanel([id, title]) {
   // The standing record: lowest eligible energy published up to each year.
   const steps = [];
   for (const year of [...byYear.keys()].sort()) {
-    const best = Math.min(...byYear.get(year).filter(p => p.eligible).map(p => p.gap));
-    if (Number.isFinite(best) && (!steps.length || best < steps.at(-1).gap)) steps.push({ year, gap: best });
+    const best = Math.min(...byYear.get(year).filter(p => p.eligible).map(p => p.e));
+    if (Number.isFinite(best) && (!steps.length || best < steps.at(-1).e)) steps.push({ year, e: best });
   }
   const bestProjected = pts.filter(p => p.r.bound_type === "projected").sort((a, b) => a.gap - b.gap)[0];
   for (const p of pts) p.labelled = p.r === rec || p.gap < 0 || p === bestProjected;
-  return { title, pts, steps, undated: rows.length - pts.length };
+  return { title, pts, steps, rec, recE: rec.energy / f, unit: perSiteLabel(inst), undated: rows.length - pts.length };
 }
 
 write("record-over-time", t => {
   const panels = FRONTIER.map(frontierPanel);
-  const all = panels.flatMap(p => p.pts);
-  const hasBelow = all.some(p => p.gap < 0);
-  const years = all.map(p => p.year);
+  const years = panels.flatMap(p => p.pts.map(q => q.year));
   const x0 = Math.min(...years) - 0.6, x1 = Math.max(...years) + 0.6;
 
   const h = header(t, "The record over time on two frontier instances",
-    "Every dated result, placed by how far its energy per site sits above today's record (relative, log scale). " +
+    "Energy per site of every dated result, by publication year. " +
     "Filled marks can hold the record; hollow marks are listed but cannot, for want of an error bar or because the row is flagged.");
   const lg = legend(t, [
     { kind: "dot", color: t.series[0], label: "Variational bound" },
@@ -215,64 +214,52 @@ write("record-over-time", t => {
     { kind: "line", color: t.ink2, label: "Standing record" },
   ], h.bottom + 34);
 
-  const top = lg.bottom + 52, upH = 200, gapH = 15, downH = hasBelow ? 64 : 0;
-  const yRec = top + upH + gapH;
-  const bottom = yRec + (hasBelow ? gapH + downH : 0);
+  const top = lg.bottom + 52, plotH = 280, bottom = top + plotH;
   const panelW = (W - 2 * PAD - 44) / 2;
   const parts = [h.svg, lg.svg];
 
   panels.forEach((panel, k) => {
-    const px = PAD + k * (panelW + 44), left = px + 50, right = px + panelW - 6;
+    const px = PAD + k * (panelW + 44), left = px + 64, right = px + panelW - 6;
     const X = v => left + ((v - x0) / (x1 - x0)) * (right - left);
-    // Each panel gets its own decades. A shared axis put the Hubbard record three empty
-    // decades below its nearest rival, which made a 0.17% gap read as an outlier.
-    const logs = panel.pts.filter(p => p.gap > 0).map(p => Math.log10(p.gap));
-    const below = panel.pts.filter(p => p.gap < 0).map(p => Math.log10(-p.gap));
-    const lo = logs.length ? Math.floor(Math.min(...logs)) - 0.5 : -6.5;
-    const up = [lo, Math.max(Math.ceil(logs.length ? Math.max(...logs) : lo), Math.ceil(lo) + 2)];
-    const down = below.length ? [Math.floor(Math.min(...below)) - 0.5, Math.ceil(Math.max(...below)) + 0.5] : null;
-    const Y = g => {
-      if (g === 0) return yRec;
-      if (g > 0) {
-        const e = Math.min(up[1], Math.max(up[0], Math.log10(g)));
-        return top + ((up[1] - e) / (up[1] - up[0])) * upH;
-      }
-      const e = Math.min(down[1], Math.max(down[0], Math.log10(-g)));
-      return yRec + gapH + ((e - down[0]) / (down[1] - down[0])) * downH;
-    };
+    // Linear in energy. A log scale of the gap to the record cannot place the record itself
+    // (a gap of zero) and has to pin it to an arbitrary floor, which makes every record look
+    // like an outlier however close its rivals are.
+    const es = panel.pts.map(p => p.e);
+    const span = Math.max(...es) - Math.min(...es);
+    const step = niceStep(span / 5);
+    const e0 = Math.floor((Math.min(...es) - span * 0.04) / step) * step;
+    const e1 = Math.ceil((Math.max(...es) + span * 0.04) / step) * step;
+    const Y = e => bottom - ((e - e0) / (e1 - e0)) * plotH;
+    const decimals = Math.max(0, -Math.floor(Math.log10(step)));
     parts.push(text(px, top - 20, panel.title, { size: 13, fill: t.ink, weight: 600 }));
-    for (let e = Math.ceil(up[0]); e <= up[1]; e++) {
-      parts.push(hline(left, right, Y(10 ** e), t.grid));
-      parts.push(text(left - 8, Y(10 ** e) + 4, pow10(e), { size: 11, fill: t.muted, anchor: "end" }));
+    for (let i = 0; i <= Math.round((e1 - e0) / step); i++) {
+      const v = e0 + i * step;
+      parts.push(hline(left, right, Y(v), t.grid));
+      parts.push(text(left - 8, Y(v) + 4, v.toFixed(decimals).replace("-", "−"), { size: 11, fill: t.muted, anchor: "end", nums: true }));
     }
-    if (down) {
-      for (let e = Math.ceil(down[0]); e <= Math.floor(down[1]); e++) {
-        parts.push(hline(left, right, Y(-(10 ** e)), t.grid));
-        parts.push(text(left - 8, Y(-(10 ** e)) + 4, "−" + pow10(e), { size: 11, fill: t.muted, anchor: "end" }));
-      }
-      parts.push(text(left + 4, yRec + gapH + 11, "below the record", { size: 11, fill: t.muted }));
-    } else if (hasBelow) {
-      parts.push(text(left + 4, yRec + gapH + 11, "nothing below the record", { size: 11, fill: t.muted }));
-    }
-    parts.push(hline(left, right, yRec, t.ink2));
-    parts.push(text(left - 8, yRec + 4, "record", { size: 11, fill: t.ink2, anchor: "end", weight: 600 }));
+    parts.push(hline(left, right, Y(panel.recE), t.ink2));
+    // The record is named on its own line, at the left where no mark sits, rather than
+    // beside its marker, which is always crowded by the rivals closest to it.
+    parts.push(text(left + 4, Y(panel.recE) - 6, `record: ${shortLabel(panel.rec)}`, { size: 12, fill: t.ink, weight: 600 }));
     for (let y = Math.ceil(x0); y <= x1; y++) parts.push(text(X(y), bottom + 22, String(y), { size: 11, fill: t.muted, anchor: "middle", nums: true }));
 
     if (panel.steps.length) {
-      let d = `M${n(X(panel.steps[0].year))} ${n(Y(panel.steps[0].gap))}`;
-      for (const s of panel.steps.slice(1)) d += `H${n(X(s.year))}V${n(Y(s.gap))}`;
+      let d = `M${n(X(panel.steps[0].year))} ${n(Y(panel.steps[0].e))}`;
+      for (const s of panel.steps.slice(1)) d += `H${n(X(s.year))}V${n(Y(s.e))}`;
       parts.push(`<path d="${d}H${n(right)}" fill="none" stroke="${t.ink2}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`);
     }
     // Hollow first, so a filled (eligible) mark is never covered by a listed-only one.
     const order = [...panel.pts].sort((a, b) => a.eligible - b.eligible);
-    for (const p of order) parts.push(dot(t, X(p.year + p.dx), Y(p.gap), t.series[BOUNDS[p.r.bound_type]], p.eligible));
+    for (const p of order) parts.push(dot(t, X(p.year + p.dx), Y(p.e), t.series[BOUNDS[p.r.bound_type]], p.eligible));
 
     // Labels only on the marks the story is about: the record, anything below it, and the
     // best projected energy. Nudged apart vertically where two would overlap.
-    const labels = panel.pts.filter(p => p.labelled).map(p => {
-      const s = shortLabel(p.r), w = textWidth(s, 12), x = X(p.year + p.dx), y = Y(p.gap);
+    const labels = panel.pts.filter(p => p.labelled && p.r !== panel.rec).map(p => {
+      const s = shortLabel(p.r), w = textWidth(s, 12), x = X(p.year + p.dx), y = Y(p.e);
       const rightSide = x + 10 + w <= right;
-      return { s, w, x: rightSide ? x + 10 : x - 10, anchor: rightSide ? "start" : "end", y: p.gap === 0 ? y - 8 : y + 4, rec: p.gap === 0 };
+      // A mark just above the record line takes its label above it, off the line.
+      const hugsRecord = y < Y(panel.recE) && Y(panel.recE) - y < 20;
+      return { s, w, x: rightSide ? x + 10 : x - 10, anchor: rightSide ? "start" : "end", y: hugsRecord ? y - 10 : y + 4 };
     }).sort((a, b) => a.y - b.y);
     for (let a = 1; a < labels.length; a++) {
       const prev = labels[a - 1], cur = labels[a];
@@ -280,16 +267,16 @@ write("record-over-time", t => {
       const [p0, p1] = span(prev), [c0, c1] = span(cur);
       if (c0 < p1 && p0 < c1 && cur.y - prev.y < 14) cur.y = prev.y + 14;
     }
-    for (const l of labels) parts.push(text(l.x, l.y, l.s, { size: 12, fill: l.rec ? t.ink : t.ink2, anchor: l.anchor, weight: l.rec ? 600 : undefined }));
+    for (const l of labels) parts.push(text(l.x, l.y, l.s, { size: 12, fill: t.ink2, anchor: l.anchor }));
   });
 
   const undated = panels.map(p => `${p.undated} on ${p.title.split(",")[0]}`).join(" and ");
-  const fn = footnote(t, `Not shown: rows with no paper to date them, ${undated} (VarBench's own reference runs). ` +
-    "Year is the source's publication year. The line steps down only when an eligible row beats the standing record. " +
-    "Each panel has its own vertical scale.", bottom + 52);
+  const units = panels.map(p => `${p.title.split(" ")[0]} as ${p.unit}`).join(", ");
+  const fn = footnote(t, `Energies per site: ${units}. Not shown: rows with no paper to date them, ${undated} (VarBench's own reference runs). ` +
+    "Year is the source's publication year. The line steps down only when an eligible row beats the standing record.", bottom + 52);
   parts.push(fn.svg);
   return doc(t, fn.bottom + 24, "The record over time on two frontier instances",
-    `Relative energy above the current record versus publication year for ${FRONTIER.map(f => f[1]).join(" and ")}.`, parts);
+    `Energy per site versus publication year for ${FRONTIER.map(f => f[1]).join(" and ")}.`, parts);
 });
 
 // ------------------------------------------------------ 2. published rows per instance
