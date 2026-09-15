@@ -165,7 +165,7 @@ when the two disagree.
 Case: arXiv:2607.00398 (conference proceedings) claims -0.49782(3) on 10x10 J1-J2, described in
 its own abstract as "statistically consistent with the variational state of the art". It is 1.3e-4
 below the best variational energy, i.e. an unclaimed record, and on 8x8 it beats the field by
-1.1e-3 while reporting a variance 6x-14x worse - the contradiction in 9.3. Both rows are listed
+1.1e-3 while reporting a variance 6x-14x worse - the tension in 9.3. Both rows are listed
 and flagged `energy-variance-inconsistent`. Note what is *not* claimed: there is no exact
 reference at either size, so nothing here is proof of error, only grounds for objection.
 
@@ -208,7 +208,20 @@ worth attacking, and one of those readings finds them and the other does not.
    frustrated 2D models reaches roughly 6x6, so 8x8 and 10x10 J1-J2 have no exact row and
    never will. Being lower than an *extrapolated* ground state proves nothing on its own,
    since the extrapolation may carry systematic error; being lower than the field while
-   reporting a worse variance is an internal contradiction.
+   reporting a worse variance is grounds for objection.
+
+   **It is not proof, because the inference only runs one way.** A small variance means
+   close to *an* eigenstate, not to the ground state. A state pinned near a competing,
+   excited configuration has little variance and a large energy error, and a better state
+   below it will then report the worse variance. Case (2026-09-15): VarBench's HFDS rows on
+   the four 4xL Hubbard instances at 1/8 doping are each pinned to lambda = 8 stripe order,
+   among near-degenerate stripe states. Their variance per unit energy error is 0.18-1.6,
+   against 6-80 for every other Hubbard row with an exact or DMRG reference - including on
+   the open-boundary instances, where extrapolated DMRG is an independent check. HFPS sits
+   0.47% below HFDS on 4x8 with 25x its variance, and is the better state. Two VarBench DMRG
+   rows on 4x4 (U = 3.5981, 8 and 10 electrons) show the same signature from having
+   converged to an excited state. The check stands; what it establishes is a question to
+   the authors, which is how the HQT case in 8.1 is carried.
 4. **The variational principle**: no `variational` row may sit below an `exact` row in the
    same instance. Sector-resolved ED rows are excluded, since an unconstrained state may
    legitimately sit below the lowest state of one sector. A violation counts only past

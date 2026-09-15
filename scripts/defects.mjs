@@ -32,7 +32,7 @@ DEFECTS.push(
     finding:"Claimed 1.3e-4 below the best variational energy (CNN-MPS) while the paper itself calls the number 'statistically consistent with the variational state of the art' - it is lower by ~4x its own stated error bar, so if real it is an unclaimed record. There is NO exact reference at 10x10 (ED reaches ~6x6 for this model), so this is a contested record claim, not a proven error." },
   { match:{instance:"J1J2/square_64_P_0.5", method:"Holographic Quantum Transformer (HQT)"},
     flag:"energy-variance-inconsistent",
-    finding:"Claims E/N = -0.5001, below RBM+PP's -0.4989635, while reporting a variance that gives a V-score of 5.6e-3 against RBM+PP's 9.81e-4 - 5.7x worse. A state further from an eigenstate cannot also be lower in energy: by the V-score calibration (rel. err ~ V/63) this energy should sit ~1.2e-3 ABOVE where it is reported. The inconsistency is internal to the paper's own E and Var and needs no external reference." },
+    finding:"Claims E/N = -0.5001, below RBM+PP's -0.4989635, while reporting a variance that gives a V-score of 5.6e-3 against RBM+PP's 9.81e-4 - 5.7x worse. Taken at face value a state further from an eigenstate should not be lower in energy: by the V-score calibration (rel. err ~ V/63) this energy would sit ~1.2e-3 ABOVE where it is reported. That is grounds for objection, not proof of error. The inference assumes the lower-variance competitor sits near the ground state; a state pinned near a competing, excited configuration can have a small variance and a large energy error (RULES.md 9, the HFDS stripe case). Nothing suggests RBM+PP is such a state here, but the variance alone cannot rule it out." },
 );
 
 DEFECTS.push(
@@ -45,6 +45,12 @@ DEFECTS.push(
   { match: { instance: "Hubbard/square_64_P_32_8", method: "Transformer backflow + MARCH optimizer" },
     flag: "below-exact-suspected",
     finding: "Reported without an error bar at E/N = -0.52582, 1.6e-4 per site below the stored AFQMC exact row -0.5256563(78): 2.1 sigma of the AFQMC error alone. Not established - the paper's own AFQMC reference for this lattice is -0.5262(5), lower still, and the NQS error is unknown - but a variational energy below a numerically exact one is grounds for objection (RULES.md 10). It holds nothing either way: a sampled energy with no sigma is eligible for nothing (RULES.md 6)." },
+  { match: { instance: "Hubbard/square_64_PA_32_6", method: "VMC Hidden Fermion Determinant State Ansatz (N_hidden = 16. Single hidden layer fully connected net with alpha = 1). Soft mean-field constraint for Neel order." },
+    flag: "below-exact",
+    finding: "VarBench stores -42.676 (E/N = -0.666813) and cites the HFDS paper, Moreno et al., PNAS 119, e2122059119 (2022). The paper gives -0.6574(2) for this lattice (8x8, half filling, U = 6, periodic along one side and antiperiodic along the other) in both the PNAS supplement (Table 5, read via Europe PMC PMC9371695) and the arXiv version (SI Table V). The stored number also sits 0.5 below the sign-free AFQMC total for this lattice, -42.17(2) (Qin, Shi & Zhang, PRB 94, 085103 (2016), Table IV) - 1.2%, about 25 sigma - which no variational energy can do. It breaks the paper's own size trend at U = 6 as well (-0.68135, -0.6609, -0.6574 for L = 4, 6, 8)." },
+  { match: { instance: "Hubbard/square_36_PA_18_2", method: "VMC Hidden Fermion Determinant State Ansatz (N_hidden = 16. Single hidden layer fully connected net with alpha = 1). Soft mean-field constraint for Neel order.", energy: -76.162 },
+    flag: "wrong-instance",
+    finding: "Energy, sigma and variance (-76.162, 0.006, 0.14(2)) are identical to the 8x8 row on square_64_PA_32_2. The HFDS first author uploaded them to the 6x6 file 67 minutes after the 8x8 file (VarBench commits c810bdcd22, then 21f00e54f6), and they never changed. -76.162 / 64 = -1.19003 is the paper's 8x8, U = 2 value, -1.1900(2) (PNAS SI Table 5, arXiv SI Table V). As a 36-site total it is -2.1156 per site: 16.45 below the non-interacting ground state of this lattice, -59.712813, which a U >= 0 Hamiltonian cannot go below, and 32.7 below the sign-free AFQMC total -43.499(2) (Qin, Shi & Zhang, PRB 94, 085103 (2016), Table IV). The paper's 6x6 value, -1.2079(1), is carried as a separate row." },
 );
 
 export const SHARED = {

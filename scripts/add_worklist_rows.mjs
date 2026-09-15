@@ -14,6 +14,7 @@ const PDF = "arXiv PDF text extracted locally with pypdf in layout mode, no LLM 
 const HFPS = { ref: "Chen, Wan, Sengupta & Georges, Neural network-augmented Pfaffian wave-functions for scalable simulations of interacting fermions, Proc. Natl. Acad. Sci. U.S.A. 123, e2535288123 (2026), arXiv:2507.10705", pr: true };
 const RHB = { ref: "Zhou, Zhou & Liu, Locality-Induced Hierarchical Backflow Wavefunctions for Correlated Fermions, arXiv:2606.00924", pr: false };
 const TRF = { ref: "Gu et al., Nat. Commun. (2026), arXiv:2507.02644", pr: true };
+const HFDS = { ref: "Robledo Moreno, Carleo, Georges & Stokes, Fermionic wave functions from neural-network constrained hidden states, Proc. Natl. Acad. Sci. U.S.A. 119, e2122059119 (2022), arXiv:2111.10420", pr: true };
 const RVB = { ref: "Closely competing valence bond crystal orders in the ground state of the spin-1/2 antiferromagnetic Heisenberg model on the pyrochlore lattice: a large scale unrestricted variational study, arXiv:2509.13746", pr: false };
 
 const ADD = {
@@ -30,6 +31,15 @@ const ADD = {
     { eps: -0.52582, err: null, m: "Transformer backflow + MARCH optimizer", bt: "variational", src: TRF,
       reported: "-0.52582 per site, no error bar",
       note: 'Supplementary Table S1 of arXiv:2507.02644, "Benchmark energy in pure Hubbard model at half-filling with PBC", column 8 x 8, row "NQS"; the AFQMC reference in the same table is -0.5262(5). Same method string as this paper\'s 16 x 4 row. No error bar, so it is eligible for nothing (RULES.md 6). It sits 1.6e-4 per site below the stored AFQMC exact row -0.5256563(78) - see the defect flag. Read from the arXiv supplement; the Nat. Commun. version was not compared.' },
+  ]},
+
+  // VarBench's only row here is the 8x8 energy copied into the 6x6 file (defect
+  // `wrong-instance`). This is the number the paper actually gives for 6x6.
+  "Hubbard/square_36_PA_18_2": { fermion: true, rows: [
+    { eps: -1.2079, err: 1e-4, m: "VMC Hidden Fermion Determinant State Ansatz (N_hidden = 8, fully parametrized hidden sub-matrix, hidden-unit density alpha = 78)", bt: "variational", src: HFDS,
+      read: "PNAS supplementary PDF (via Europe PMC, PMC9371695) extracted locally, cross-read against the arXiv version; no LLM transcription",
+      reported: "-1.2079(1) per site, no variance",
+      note: 'PNAS SI Table 5 (identical to arXiv SI Table V), "Variational energy per site in the L x L Hubbard model at half filling with periodic boundary conditions along one of the sides of the square and anti-periodic boundary conditions along the other side", row L = 6, column U = 2. SI Sec. 6: N_hidden = 8, alpha = 78 for 6x6; no projection or constraint stated, nor what the error bar is. Column alignment checked: the VarBench HFDS rows for 6x6 at U = 4, 6, 8 and 8x8 at U = 2, 4, 8 match the printed digits. As a total, -43.4844 sits 3.4e-4 (relative) above the sign-free AFQMC value -43.499(2) for this lattice (Qin, Shi & Zhang, PRB 94, 085103 (2016), Table IV, PBC-APBC) and above the non-interacting bound -59.712813.' },
   ]},
 
   "Heisenberg/pyrochlore-4x4x4_256_P": { rows: [
@@ -57,7 +67,7 @@ for (const [id, spec] of Object.entries(ADD)) {
       bound_type_reason: "variational ansatz; energy is a strict upper bound (assigned during source verification)",
       reference: r.src.ref, peer_reviewed: r.src.pr,
       source: "sweep-worklist-2026-09-15", provenance: "primary",
-      verified: { checked_on: CHECKED, method: PDF, reported_as: r.reported, note: r.note, secondary_of: null },
+      verified: { checked_on: CHECKED, method: r.read ?? PDF, reported_as: r.reported, note: r.note, secondary_of: null },
     });
     added++;
   }

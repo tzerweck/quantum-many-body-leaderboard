@@ -6,7 +6,7 @@ who holds a record. Where a view can only be computed over part of the table, it
 
 ## Records nobody has challenged
 
-**61 of 182 records stand on a single published number.**
+**59 of 181 records stand on a single published number.**
 One group computed an energy, and in the years since, nobody has published a second
 one to compare it against. That is not a criticism of the number — it is a statement
 about the coverage of this table, and of the literature it draws on.
@@ -29,7 +29,7 @@ about the coverage of this table, and of the literature it draws on.
 | `Hubbard/square_256_PA_107_8_t12_UV1V2` | 1.2591797 | mVMC with SU(2) and momentum projections | no paper cited |
 | `Hubbard/rectangular-14x16_224_P_98_8` | -0.7582990 | VAFQMC stripe length=7 | [Sorella (2023)](https://doi.org/10.1103/physrevb.107.115133) |
 
-…and 46 more.
+…and 44 more.
 
 ## Records held: symmetrised vs not
 
@@ -40,7 +40,7 @@ for itself, which beats any single paper's ablation.
 | ansatz | records (all) | records (contested) | records where both kinds were tried |
 |---|---:|---:|---:|
 | explicit symmetry projection | 39 | 7 | 7 |
-| no explicit projection | 143 | 28 | 7 |
+| no explicit projection | 142 | 28 | 7 |
 
 **The last column is the one that means anything**: on 14 instances both a symmetrised and an
 unsymmetrised ansatz have been published, so the record was taken with the alternative
@@ -55,7 +55,7 @@ effect size for the projection itself.
 
 ## The records that have stood longest
 
-Computed over the **86 of 182 records whose source resolves to a year** — the rest cite a run
+Computed over the **84 of 181 records whose source resolves to a year** — the rest cite a run
 script with no paper, so they have no date to rank by.
 
 One line per paper — a single 2017 study holds seven impurity records, and listing them
@@ -71,7 +71,7 @@ all would say more about that paper's scope than about how long records last.
 | 2021 | [Vieijra & Nys (2021)](https://doi.org/10.1103/physrevb.104.045123) | `J1J2/square_64_P_0.55` (-0.4883500) | 1 |
 | 2022 | [Hibat-Allah et al. (2022)](https://doi.org/10.48550/arxiv.2207.14314) | `Heisenberg/square_100_O` (-0.6286560) | 3 |
 | 2022 | [Roth et al. (2022)](https://doi.org/10.48550/arxiv.2211.07749) | `Heisenberg/triangular_108_P` (-0.5531500) | 4 |
-| 2022 | [Moreno et al. (2022)](https://doi.org/10.1073/pnas.2122059119) | `Hubbard/square_16_P_5_3.5981` (-1.2431527) | 9 |
+| 2022 | [Moreno et al. (2022)](https://doi.org/10.1073/pnas.2122059119) | `Hubbard/square_16_P_5_3.5981` (-1.2431527) | 7 |
 | 2022 | [Chen et al. (2022)](https://doi.org/10.48550/arxiv.2206.14307) | `J1J2/square_100_P_0.4` (-0.5238800) | 8 |
 | 2023 | [Pohle et al. (2023)](https://doi.org/10.48550/arxiv.2311.11561) | `Heisenberg/pyrochlore-2x2x2_128_P` (-0.4922012) | 3 |
 | 2023 | [Chen & Heyl (2023)](https://doi.org/10.48550/arxiv.2302.01941) | `Heisenberg/square_100_P` (-0.6715526) | 1 |
@@ -83,7 +83,7 @@ Records by vintage:
 | 2017 | ████████████ 12 |
 | 2020 | █ 1 |
 | 2021 | █████████ 9 |
-| 2022 | ████████████████████████ 24 |
+| 2022 | ██████████████████████ 22 |
 | 2023 | ███████████████████████████ 27 |
 | 2024 | █████ 5 |
 | 2025 | ███ 3 |
@@ -113,7 +113,7 @@ answer has been settled for a decade. The contested column counts only instances
 | CNN / ResNet | 4 | 3 |
 | RNN | 4 | 3 |
 | RBM | 21 | 10 |
-| backflow / Pfaffian | 16 | 1 |
+| backflow / Pfaffian | 15 | 1 |
 | classic VMC | 13 | 0 |
 | AFQMC / GFMC | 22 | 1 |
 | VQE / circuit | 19 | 0 |
@@ -129,19 +129,19 @@ first family that matches, in the order listed above.
 nationality** — a Chinese researcher at ETH counts here as Switzerland, and a paper
 with twelve authors across four countries counts once, for the first author.
 
-Of the 182 records, **96 are VarBench's own baseline runs** — their only reference is a
+Of the 181 records, **96 are VarBench's own baseline runs** — their only reference is a
 run script in `varbench/methods`, so the number came from the benchmark collaboration
 rather than from an independent paper. Those are excluded below and counted separately:
 the [VarBench paper](https://doi.org/10.1126/science.adg9774) has 33 authors across 8 countries, and filing all of them under
 its first author's institution would put half this table in one country on the strength
 of an author-list ordering.
 
-That leaves **86 records from independent papers, of which 86 resolve to a country** and
-0 do not.
+That leaves **85 records from independent papers, of which 84 resolve to a country** and
+1 do not.
 
 | country | records | first-author institutions |
 |---|---:|---|
-| US | 24 | Department of Physics and Astronomy; The University of Texas at Austin… |
+| US | 22 | Department of Physics and Astronomy; The University of Texas at Austin… |
 | IT | 22 | Scuola Internazionale Superiore di Studi Avanzati |
 | AT | 12 | Graz University of Technology |
 | CH | 10 | University of Zurich; Institute of Physics |
