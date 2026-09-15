@@ -99,10 +99,14 @@ const site = perSiteLabel(byId.get("Hubbard/square_256_P_112_8"));
 lines.push("");
 lines.push(`Energies are per site: spin models as \`${spin}\`, Hubbard as \`${site}\` (see`);
 lines.push("[units and conventions](#units-and-conventions)). **Bold** is the record under");
-lines.push("[the ranking rules](#how-the-ranking-works). **&#9675;** marks a row where **we found no error");
-lines.push("metric** (neither an error bar nor an energy variance) in the source we read; **&dagger;** marks a");
-lines.push("sampled energy with a variance but no error bar. Both rows stay in the table and in rank");
-lines.push("order; the marker is an open question, not a criticism (see [error metrics](#error-metrics)).");
+// Tristan's wording and line breaks from the same GitHub edit.
+lines.push("[the ranking rules](#how-the-ranking-works). ");
+lines.push("**&#9675;** marks a row where **we found no error");
+lines.push("metric** (neither an error bar nor an energy variance) in the source we read; ");
+lines.push("**&dagger;** marks a");
+lines.push("sampled energy with a variance but no error bar. ");
+lines.push("Both rows stay in the table and in rank");
+lines.push("order; the marker is an open question regarding ambiguous information (see [error metrics](#error-metrics)).");
 lines.push("");
 const b = s.blocked_on_sigma;
 lines.push(`Across the whole table: **${s.records.held} of ${s.instances} instances have a record**, from ${s.rows} rows.`);
