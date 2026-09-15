@@ -40,10 +40,13 @@ variational bound, a fixed-node estimate or a zero-variance extrapolation).
 
 Energies are per site: spin models as `E/N (S.S)`, Hubbard as `E/site` (see
 [units and conventions](#units-and-conventions)). **Bold** is the record under
-[the ranking rules](#how-the-ranking-works). **&#9675;** marks a row where **we found no error
-metric** — neither an error bar nor an energy variance — in the source we read; **&dagger;** marks a
-sampled energy with a variance but no error bar. Both rows stay in the table and in rank
-order; the marker is an open question, not a criticism (see [error metrics](#error-metrics)).
+[the ranking rules](#how-the-ranking-works). 
+**&#9675;** marks a row where **we found no error
+metric** — neither an error bar nor an energy variance — in the source we read; 
+**&dagger;** marks a
+sampled energy with a variance but no error bar. 
+Both rows stay in the table and in rank
+order; the marker is an open question regarding ambiguous information (see [error metrics](#error-metrics)).
 
 Across the whole table: **182 of 205 instances have a record**, from 681 rows.
 Of the 23 instances without one, 16 are solved exactly and have nothing to compete
