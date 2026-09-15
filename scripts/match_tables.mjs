@@ -56,8 +56,10 @@ const instanceTokens = inst => {
   if (lat === "chain") t.add(`L=${inst.n_sites}`);
   const m = lat.match(/(\d+)x(\d+)(?:x(\d+))?$/);          // rectangular-4x16, kagome-8x8
   if (m) t.add(m[0]);
+  // L x L only when the lattice name states no dimensions of its own: rectangular-4x16 has
+  // 64 sites but is not 8x8, and pyrochlore-4x4x4_256 is not 16x16.
   const r = Math.round(Math.sqrt(inst.n_sites));
-  if (r * r === inst.n_sites) { t.add(`${r}x${r}`); t.add(`L=${r}`); }
+  if (!m && r * r === inst.n_sites) { t.add(`${r}x${r}`); t.add(`L=${r}`); }
   const c = Math.round(Math.cbrt(inst.n_sites / 4));        // pyrochlore: 4 sites per cell
   if (lat.includes("pyrochlore") && 4 * c ** 3 === inst.n_sites) { t.add(`${c}x${c}x${c}`); t.add(`L=${c}`); }
   if (lat.includes("kagome") && inst.n_sites % 3 === 0) {   // kagome: 3 sites per cell
@@ -140,10 +142,19 @@ function statedTprime(txt) {
 
 // A cell that is itself an exact reference or an extrapolation is not a variational
 // record claim; it is still worth seeing, but labelled so it is never imported as one.
-const cellKind = txt =>
-  /\bED\b|exact diag|exact\b|\bDMRG.*m\s*=\s*∞|m\s*=\s*∞/i.test(txt) ? "exact/limit"
+// Certification papers (arXiv:2310.05844, 2604.01555) print SDP relaxation energies, which
+// are LOWER bounds and sit below the ground state by construction - 83 false candidates,
+// most of them "below the record". An explicit label or header decides; the caption only
+// when those name no method, because a caption like "SDP lower bound compared to QMC"
+// covers the reference columns too. A bare "QMC" header is the reference column of a
+// variational paper, not its result.
+const LOWER = /lower[- ]bound|\bE?SDP\b/i;
+const cellKind = (txt, caption = "") =>
+  LOWER.test(txt) ? "lower bound"
+  : /\bED\b|exact diag|exact\b|\bDMRG.*m\s*=\s*∞|m\s*=\s*∞/i.test(txt) ? "exact/limit"
   : /extrap|zero[- ]?var|ξ\s*→\s*∞|→\s*∞/i.test(txt) ? "extrapolated"
-  : /AFQMC|fixed[- ]node|\bGFMC\b|constrained/i.test(txt) ? "projected?"
+  : /AFQMC|\bQMC\b|fixed[- ]node|\bGFMC\b|constrained/i.test(txt) ? "projected?"
+  : LOWER.test(caption) ? "lower bound?"
   : "variational?";
 
 const instances = [];
@@ -164,9 +175,17 @@ const hits = [];
 // iPEPS tables are indexed by bond dimension and the harvester reads a bare "4" row label
 // as a linear size - arXiv:2211.16932's chi_B = 4, 6, 8 rows match the 96-, 216- and
 // 384-site shuriken clusters. Suppressed here, but counted in the summary.
+//
+// The two certification papers are here for the same reason, read 2026-09-15: every energy
+// in them is an SDP lower bound or a reference value quoted from ED, DMRG, QMC or NQS work.
+// The lower-bound rule below catches most of their cells, but layout mode glues the ratio
+// column "(Eexact - ESDP)/|Eexact|" onto its neighbours, and 22 cells came out headed
+// "|Eexact|" or "value" and passed as exact or variational.
 const REJECTED = {
   "2211.16932": "iPEPS/iPESS on the infinite shuriken lattice",
   "2510.04907": "iPEPS on infinite triangular and kagome lattices",
+  "2310.05844": "SDP lower bounds and quoted references",
+  "2604.01555": "SDP lower bounds and quoted references",
 };
 
 for (const inst of instances) {
@@ -254,9 +273,9 @@ for (const inst of instances) {
     const rel = (c.value - recEps) / Math.abs(recEps);
     if (Math.abs(rel) > 0.01) continue;                                // different quantity
     hits.push({ inst: inst.instance_id, fresh, recEps, rec: rec.method, ...c, rel,
-      // classify from the row label and column header only - the caption names every
-      // method in the table, so including it marks every row "exact"
-      kind: cellKind(`${c.label} ${c.col}`), fillNote: fillNote + coupNote,
+      // classify from the row label and column header - the caption names every method in
+      // the table, so it is consulted only for lower bounds and only as a fallback
+      kind: cellKind(`${c.label} ${c.col}`, c.caption), fillNote: fillNote + coupNote,
       verdict: c.value < recEps ? "BEATS" : "FILLS" });
   }
 }
@@ -268,7 +287,8 @@ const all = hits.filter(h => {
   return seen.has(k) ? false : (seen.add(k), true);
 });
 const suppressed = all.filter(h => REJECTED[h.arxiv]);
-const uniq = all.filter(h => !REJECTED[h.arxiv]);
+const bounds = all.filter(h => !REJECTED[h.arxiv] && h.kind.startsWith("lower bound"));
+const uniq = all.filter(h => !REJECTED[h.arxiv] && !h.kind.startsWith("lower bound"));
 uniq.sort((a, b) => (a.verdict === b.verdict ? a.rel - b.rel : a.verdict === "BEATS" ? -1 : 1));
 
 console.log(`${cells.length} harvested cells x ${instances.length} instances -> ${uniq.length} candidates\n`);
@@ -286,4 +306,10 @@ if (suppressed.length) {
   suppressed.forEach(h => (per[h.arxiv] = (per[h.arxiv] || 0) + 1));
   console.log(`${suppressed.length} candidates from rejected papers suppressed: ` +
     Object.entries(per).map(([id, n]) => `arXiv:${id} x${n} (${REJECTED[id]})`).join("; "));
+}
+if (bounds.length) {
+  const per = {};
+  bounds.forEach(h => (per[h.arxiv] = (per[h.arxiv] || 0) + 1));
+  console.log(`${bounds.length} lower-bound cells left out: ` +
+    Object.entries(per).map(([id, n]) => `arXiv:${id} x${n}`).join("; "));
 }
