@@ -31,6 +31,12 @@ for (const r of tsv("sweep-fulltext.tsv")) {
   paperModels[r.arxiv] = r.models || "";
   paperMeta[r.arxiv] = { pr: r.peer_reviewed, jr: r.journal_ref || "", ti: r.title || "" };
 }
+// Papers fetched as PDFs after the full-text scan are missing from sweep-fulltext.tsv, and
+// without a title the lattice exclusion below cannot see what a paper is about: arXiv:
+// 2010.03563's pyrochlore N = 64 energy matched a 64-site Hubbard instance, and they were
+// all labelled preprints. The candidate pool carries title and review status for every one.
+for (const r of tsv("sweep-candidates.tsv"))
+  paperMeta[r.arxiv] ||= { pr: r.peer_reviewed, jr: r.journal_ref || "", ti: r.title || "" };
 
 // Which lattice/model words must appear for a cell to be about this instance.
 const LATTICE_WORD = {
