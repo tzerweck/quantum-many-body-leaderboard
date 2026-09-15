@@ -1,0 +1,1834 @@
+Preprint. Under review.
+
+
+Improving Robustness of Tabular Retrieval via Representa-
+tional Stability
+
+
+ Kushal Raj Bhandari *                                            Adarsh Singh *
+ Department of Computer Science                                   Department of Computer Science
+ Rensselaer Polytechnic Institute                                 Arizona State University
+ Troy, NY, USA                                                    Tempe, Arizona, USA
+ bhandk@rpi.edu                                                   asing725@asu.edu
+
+ Jianxi Gao                                                                  Soham Dan †
+ Department of Computer Science                                              ScaleAI
+ Rensselaer Polytechnic Institute                                            San Francisco, CA, USA
+ Troy, NY, USA
+
+ Vivek Gupta †
+ Department of Computer Science
+ Arizona State University
+ Tempe, Arizona, USA
+
+
+                                               Abstract
+
+         Transformer-based table retrieval systems flatten structured tables into
+         token sequences, making retrieval sensitive to the choice of serialization
+         even when table semantics remain unchanged. We show that semantically
+         equivalent serializations, such as csv, tsv, html, markdown, and ddl, can
+         produce substantially different embeddings and retrieval results across
+         multiple benchmarks and retriever families. To address this instability, we
+         treat serialization embedding as noisy views of a shared semantic signal
+         and use its centroid as a canonical target representation.  We show that
+         centroid averaging suppresses format-specific variation and can recover the
+         semantic content common to different serializations when format-induced
+         shifts differ across tables.  Empirically, centroid representations outrank
+         individual formats in aggregate pairwise comparisons across MPNet, BGE-M3,
+         ReasonIR, and SPLADE. We further introduce a lightweight residual bottle-
+         neck adapter on top of a frozen encoder that maps single-serialization
+         embeddings towards centroid targets while preserving variance and enforc-
+         ing covariance regularization. The adapter improves robustness for several
+         dense retrievers, though gains are model-dependent and weaker for sparse
+         lexical retrieval. These results identify serialization sensitivity as a major
+         source of retrieval variance and show the promise of post hoc geometric
+         correction for serialization-invariant table retrieval.  Our code, datasets,
+         and models are available athttps://github.com/KBhandari11/Centroid-
+         Aligned-Table-Retrieval
+
+
+1    Introduction
+
+Transformer retrievers consume one-dimensional token sequences.  Tables are not one-
+dimensional. Flattening a table into a linear string, serializing its rows, columns, and cell
+values into something an encoder can process, is therefore an unavoidable design choice,
+and one that has been treated as a minor preprocessing detail rather than a variable that
+reshapes the retrieval landscape. Semantically equivalent re-expressions of the same table
+
+    *These authors contributed equally to this work.†These authors jointly supervised this work.
+
+
+                                                     1
+Preprint. Under review.
+
+
+
+
+(CSV, HTML, JSON) produce different embeddings across retriever families even though the
+relational content remains identical, and the downstream ranking consequences of that drift
+are not small (Figure1). This neglect carries a cost that the field has not yet systematically
+measured.
+Progress on table understanding has unfolded in successive layers. Early benchmarks such
+asWTQ(Pasupat & Liang,2015) andWikiSQL(Zhong et al.,2017) established that models
+must reason over row-column structure rather than isolated spans. Open-domain extensions
+such asNQ-Tables(Herzig et al.,2021) then pushed the problem toward retrieval from
+large corpora.
+Transformer-based table models have addressed the mismatch between sequential encoders
+and relational structure through architectural modifications, including refined attention in
+Structure-Aware Transformer(Zhang et al.,2020) andTableFormer(Yang et al.,2022), hierar-
+chical encoding inTUTA(Wang et al.,2021), and through diverse serialization strategies,
+ranging from row-by-row flattening (Herzig et al.,2020;Eisenschlos et al.,2021;Deng et al.,
+2022) to structural token marking (Liu et al.,2022) and joint row-column encoding (Iida
+et al.,2021). Yet how these serialization choices affect retrieval performance has received
+little systematic attention.
+Despite these diverse advancements in data representation, the specific influence of these
+serialization methods on table retrieval performance remains a significant, under-researched
+gap in the literature.
+We re-frame the problem around a more fundamental question:what embedding should a
+retriever assign to a table, independent of its serialization format?We treat multiple serializations
+of the same table as an orbit in representation space and target their centroid as a canonical,
+format-agnostic  representative.   We  show  empirically  and  theoretically  that  averaging
+embeddings across serialization views cancels format-induced perturbations, and that the
+resulting centroid reliably recovers the semantic content shared across formats. To avoid the
+inference cost of encoding every serialization variant, we introduce a lightweight post-hoc
+residual bottleneck adaptertrained to transport single-format embeddings toward centroid
+targets using a variance, and covariance regularized objective (Bardes et al.,2022), incurring
+no additional cost at inference and requiring no re-indexing of the corpus.
+We make three contributions.First, we systematically measure how retrieval performance
+varies when the same table is serialized in different formats, quantifying embedding in-
+stability  across  four  retriever  families  spanning  dense,  sparse,  and  reasoning-oriented
+architectures.Second, we prove that averaging embeddings across serialization views re-
+covers a stable, format-independent representation, and establish the theoretical conditions
+under which this guarantee holds.Third, we introduce the residual bottleneck adapter, a
+lightweight module that approximates this averaging behavior at single-format inference
+cost, and characterize when it succeeds or degrades depending on the retriever architecture
+and the degree of format divergence.
+
+2    The Serialization Bottleneck in Structured Retrieval
+
+Transformer retrievers are predominantly pre-trained on sequential corpora and consume
+token sequences via positional encoding and self-attention. A table, by contrast, is defined
+by row-column interactions, header-cell alignment, and local relational structure. Flattening
+a grid into a sequence inevitably imposes an ordering and a syntactic scaffolding that are
+not intrinsic to the table itself.
+
+Serialization Sensitivity as a First-Order Retrieval Variable.Figure1demonstrates that
+serialization is a first-order factor in retrieval, rather than a minor implementation detail.
+Empirically,  retrieval effectiveness varies substantially across serialization formats and
+datasets. In particular, Table1shows pronounced variation in Recall@1 across serialization
+families, summarized by both the standard deviation and the range, on three benchmarks
+with distinct structural characteristics:WTQ,WikiSQL, andNQ-Tablesand four different
+embedding models:  BGE-M3, MPnet, ReasonIR and SPLADE. (dataset and model details in
+
+
+                                                        2
+                                    Preprint. Under review.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                    Figure 1:Serialization sensitivity in table retrieval.(a)Different serializations of the sameWTQ
+                                    table (csv/200-csv/0) map to distinct regions in the ReasonIR embedding space.(b)A single ta-
+                                    ble shown under multiple serialization views with their adapter transport:  circles denote original
+                                    frozen embeddings, crosses denote adapted embeddings after transport, and diamonds show the
+                                    centroid(CENTROID ALL) embedding. The adapter moves serialization-specific embeddings toward
+                                    a shared region while transporting the centroid coherently within the same representation space.
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                    Table 1:  Retrieval score variation statistics (std, min, max, range) for each model across
+                                    WTQ,WIKISQL, andNQ-Tables.           ♠ marks the joint adapter trained on all three datasets
+                                    (WTQ,WIKISQL, andNQ-Tables), and           ♢ marks the subset adapter trained on a subset of
+                                    datasets (WTQandWIKISQL) for each embedding model.
+
+
+                                    AppendicesA.1–A.2;  serialization  formats  in  AppendixA.3)  The  effect  peaks  on  NQ-
+                                    Tables, where the lexical gap between natural-language queries and target tables is largest.
+                                    In  this  regime  the  retriever  receives  weak  direct  lexical  evidence  and  must  rely  more
+                                    heavily on structural cues introduced by serialization, amplifying the performance cost
+                                    of representation instability. As a result, retrieval becomes more sensitive to how tabular
+                                    content is linearized, and performance degrades more sharply under changes in format.
+                                    More details on the recall score are in AppendixH.
+
+                                    Embedding Instability Under Syntactic Re-expression.Let                           T denote an underlying table
+                                    andS(T)        a finite set of semantics-preserving serializations of  T  i.e.   CSV, TSV, HTML,
+                                    Markdown, JSON, and row or column permutations.  Let  f:  Strings→R                       d  be a frozen
+                                    encoder. For each serializations∈S(T)define
+
+                                                                                       zs(T):=f         (sers(T)   )∈R    d.                                                    (1)
+                                    Serialization sensitivity is the degree to which{z   s(T):s∈S(T)}                  spreads in embedding
+                                    space despite identical underlying semantics. Figure1(a) illustrates this for a single WTQ
+                                    table; Figure 1(b) shows the pattern persists systematically across tables. Because ranking
+                                    is a geometric operation, this spread changes nearest neighbors and reorders the top-K
+                                    retrieved tables, producing the Recall@1 variance visible in Table1.
+
+                            WTQ                                        WIKISQL                                     NQ-Tables
+Model        Std        Min        Max      Range       Std        Min        Max       Range       Std        Min        Max      Range
+MPNet0.052       0.087       0.247       0.160       0.038       0.096       0.215       0.119       0.087       0.013       0.275       0.2623
+  —♠   0.030       0.166       0.249       0.083       0.021       0.141       0.212       0.071       0.070       0.016       0.257       0.241
+  —♢   0.029       0.169       0.246       0.078       0.021       0.150       0.219       0.069       0.078       0.024       0.265       0.241
+ReasonIR0.040       0.224       0.370       0.146       0.041       0.215       0.355       0.139       0.077       0.083       0.342       0.259
+  —♠   0.032       0.261       0.364       0.103       0.029       0.238       0.342       0.105       0.057       0.109       0.333       0.225
+  —♢   0.022       0.286       0.358       0.072       0.022       0.255       0.332       0.077       0.066       0.106       0.347       0.241
+BGE-M30.034       0.220       0.315       0.095       0.029       0.252       0.344       0.092       0.072       0.071       0.335       0.264
+  —♠   0.029       0.220       0.314       0.094       0.027       0.254       0.346       0.092       0.057       0.085       0.316       0.231
+  —♢   0.024       0.234       0.314       0.080       0.024       0.265       0.347       0.082       0.062       0.082       0.321       0.239
+SPLADE0.048       0.288       0.444       0.156       0.060       0.345       0.516       0.171       0.076       0.087       0.331       0.244
+  —♠   0.039       0.263       0.387       0.124       0.047       0.306       0.443       0.137       0.027       0.095       0.197       0.101
+  —♢   0.029       0.282       0.382       0.100       0.038       0.335       0.450       0.114       0.038       0.072       0.222       0.149
+Preprint. Under review.
+
+
+
+3    Centroid-Based Representations as Stable Anchors
+
+A natural implication of serialization sensitivity is that different serializations often lie in
+a localized region of embedding space, which makes centroid averaging a plausible way
+to obtain a more stable representation.  Prior work on invariant representation learning
+motivates averaging across transformed views through orbit averagingChen et al.(2020),
+orbit-based representationsRaj et al.(2017), and formal treatments of invariance and se-
+lectivityAnselmi et al.(2016b;a).  Closely related work on representation averaging also
+shows that mean embeddings across augmentations can improve stabilityAshukha et al.
+(2021) and that centroids of multiple views can serve as useful anchor targetsMoon et al.
+(2023).  For tables, this perspective is especially relevant because recent work shows that
+serialization format materially affects model behaviorSui et al.(2024), making serialization
+a genuine modeling variable rather than a superficial formatting choiceBadaro et al.(2023).
+For a tableTwith serialization familyS(T), we define the centroid
+
+                    c(T):=               1|S(T)|      ∑zs(T),        z         s(T):=f(ser                 s(T))∈R           d.
+                                         s∈S(T)
+
+Modeling Serialization Effects as Centered Perturbations.To interpret the centroid, we
+model each serialization embedding as a combination of a stable semantic signal (µ) shared
+across all formats and a format-specific shift (δ). Averaging across serializations cancels these
+shifts, a strategy supported by prior work on learning representations that stay consistent
+under different views of the same dataRaj et al.(2017);Anselmi et al.(2016b);Chen et al.
+(2020);Ashukha et al.(2021).
+Assumption 1(Approximate Perturbation Centering Across Serializations). For a table                              T
+and serialization familyS(T), we model the embedding of each serialization as
+                                   zs(T) =µ(T) +δ                      s(T),        s∈S(T),
+where µ(T)∈R              d is the stable semantic signal shared across all formats, and δs(T)∈R           d is the
+format-specific shift introduced by a particular serialization. We assume these shifts roughly cancel
+when averaged across the serialization family:
+                                               1             δs(T)≈0.
+                                            |S(T)|      ∑s∈S(T)
+
+Under this assumption, the centroid c(T)       approximates the stable semantic signal µ(T)      . This
+interpretation is motivated by prior work on invariant representations and orbit-based views
+of transformed dataRaj et al.(2017);Anselmi et al.(2016b), by group-theoretic analyses
+of averaging over transformations to reduce variationChen et al.(2020), and by empirical
+work on mean embeddings and centroid targets across augmented viewsAshukha et al.
+(2021);Moon et al.(2023).
+We adopt this as a working assumption, not a property the encoder enforces. The centering
+condition holds when the format-specific shifts vary from table to table, so that averaging
+across serializations suppresses them.  It can degrade, however, when the serialization
+family includes formats whose shifts remain largely the same regardless of table content.
+Schema-oriented and markup-heavy serializations, for example, introduce syntactic tokens
+and structural vocabulary that displace every table’s embedding in a similar way, producing
+a table-independent component in the format-specific shift that centroid averaging can-
+not cancel.  When such formats enter the serialization family, the centroid absorbs their
+shared displacement rather than recovering the stable semantic signal µ(T)      . We decompose
+the format-specific shift into its table-independent and table-dependent components and
+characterize the conditions under which the centering condition holds or breaks down in
+AppendixC.
+Theorem 1(Euclidean optimality of the centroid). For any table            T with serialization family
+S(T), the centroid
+                                          c(T) =            1|S(T)|      ∑zs(T)
+                                                             s∈S(T)
+
+                                                          4
+Preprint. Under review.
+
+
+
+
+is the unique point inR    d closest to all serialization embeddings simultaneously, in the sense that it
+minimizes
+                                                  ∑     ∥u−z       s(T) ∥22
+                                                s∈S(T)
+over all u∈R       d. Equivalently, for every u∈R       d,
+                                ∑      ∥c(T)−z              s(T) ∥22≤  ∑ ∥u−z       s(T) ∥22 .
+                              s∈S(T)                             s∈S(T)
+
+Refer to the proof in AppendixD.1.
+Proposition 1(Approximate recovery of the shared component). Now, we define the average
+format-specific shift
+                                           ¯δ(T):=               1      δs(T),
+                                                      |S(T)|      ∑s∈S(T)
+
+then,
+                                               c(T) =µ(T) +                 ¯δ(T).
+In particular, when the format-specific shifts roughly cancel acrossS(T), then
+                                                    c(T)≈µ(T).
+
+Refer to the proof in AppendixD.2.
+Theorem1and Proposition1read the centroid from two angles.  Geometrically, it sits at
+the least-squares center of all serialization embeddings.  Under the assumption above, it
+also approximates the stable semantic signal µ(T)      , with the gap controlled by how well
+the format-specific shifts cancel on average. Centroid averaging, therefore, pushes format-
+specific shifts toward zero while holding onto the signal that persists across all formats of
+the same table.
+Proposition 2(Centroid as an average over a transformation family). Let    GT  denote a fi-
+nite family of meaning-preserving transformations applied to T, where each serialization inS(T)
+corresponds to one transformed format g·T for some g∈G       T. Then
+
+                                            c(T) =          1|GT| ∑ f(g·T).
+                                                             g∈G   T
+The centroid is therefore the average encoder output across all meaning-preserving transformations of
+the same table.
+
+This connects centroid averaging to data augmentation, where averaging across transformed
+formats retains what stays stable while washing out what changes.  The difference here
+is that the transformations are meaning-preserving table serializations rather than image
+augmentationsChen et al.(2020).
+Corollary 1(Reduction of serialization-induced score variance). Let                     q∈R      d  be a query
+embedding, where relevance depends on the stable semantic signal µ(T)      . Then for any serialization s,
+                                      ⟨q,z    s(T) ⟩ =⟨q,µ(T)  ⟩ +⟨q,δ    s(T) ⟩ .
+Using the centroid instead yields,
+                                              ⟨q,c(T)  ⟩≈⟨q,µ(T)  ⟩ .
+Centroid targeting, therefore, approximates the removal of the average format-specific shift from the
+retrieval score.
+
+Under Assumption1, the corollary shows concretely why centroid-based targets produce
+more stable retrieval scores. Format-specific shifts that would otherwise push scores around
+cancel each other out, leaving a score driven solely by semantic content.
+
+
+                                                            5
+Preprint. Under review.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 2:Pairwise comparison of table formats aggregated over matched evaluation instances across
+all models and datasets.  Panel(a):  Average paired rank difference per cell, where positive values
+indicate the column format outperforms the row.   Formats are ordered by mean rank,  strongest
+toward the upper-left. Panel(b): Benjamini-Hochberg FDR-adjusted                p-values from pairwise Wilcoxon
+signed-rank tests on the same instances. (*) denotes    centroid embedding (AppendixA.3); evaluation
+metric details appear in AppendixB. Centroid-based representations occupy the top of the ordering,
+with*ALLperforming best overall and showing broadly reliable advantages over many individual
+serializations.
+
+
+Empirical Evidence for Stable Anchoring.Multiple serializations of the same table largely
+carry the same semantic content, differing mainly in surface form. Averaging across these
+serializations pulls the stable semantic signal forward while format-specific shifts cancel out,
+producing a representation that holds steadier across different ways of writing the same
+table. Figure2provides direct empirical evidence for this claim in our table-retrieval setting.
+For each matched evaluation instance, we record the retrieval rank of each table format and
+compare formats pairwise via the average paired rank difference
+
+                                        ∆i,j  =E[rank(i)−rank(j)],
+
+where a positive cell (i  , j)   means format  j outranks format i on average.  The matrix is
+ordered by mean rank, placing stronger formats toward the upper-left.
+We find that centroid-based representations occupy the strongest region.  centroid                            all
+performs best overall, followed by other centroid variants built from different serialization
+groupings (AppendixA.3). These variants outperform individual serializations by substan-
+tial rank margins, with the largest gaps against markup-heavy or order-perturbed formats
+such as HTML and JSON, as well as shuffled variants.  The strongest non-centroid baseline,
+TSV, remains competitive but trails the best centroid constructions in aggregate. Benjamini-
+Hochberg-corrected Wilcoxon signed-rank tests confirm that centroid advantages over
+weaker single-format alternatives are statistically significant. Differences among centroid
+variants themselves are smaller, pointing to the consistent superiority of centroid-based
+targets as a family rather than to the dominance of any single construction.  This pattern
+directly fits the working assumption. Averaging across serializations cancels format-specific
+shifts while retaining the stable semantic signal, and the rank comparisons bear this out
+across models and datasets.
+
+4    Post-Hoc Centroid Transport with a Residual Bottleneck Adapter
+
+Although centroid-based representations are theoretically attractive, they are costly to use
+at a production scale.Each table requires multiple serialized formats,  multiple encoder
+passes, and either aggregated or per-format storage, with overhead scaling linearly across
+tokenization, encoding, and indexing. A practical system, therefore, needs to approximate
+centroid-level robustness while using only a single format at inference and indexing time.
+
+
+                                                        6
+Preprint. Under review.
+
+
+
+
+Design Principle.Motivated by Assumption1in Section3, we do not retrain the base
+retriever  f , but instead keep it frozen and learn a lightweight adapter that operates di-
+rectly on the dense embedding zs(T)    .  The adapter learns to correct the format-specific
+shift δs(T)     so that each serialization embedding moves closer to the shared semantic sig-
+nal µ(T)        without altering the semantics already captured by  f .  Concretely, the adapter
+takes a serialization-specific embedding zs(T)∈R           d, normalizes it, projects it into a lower-
+dimensional bottleneck, applies a GELU nonlinearity and dropout, then projects back to
+the original dimensionality. A scaled residual connection adds this correction to the input
+embedding, yielding
+                  ˜zs(T) =z          s(T) +αUp    DropOut(GELU(Down(LN(z                                                            s(T))))) .
+The bottleneck keeps the correction low-capacity, while the residual path holds the original
+representation as the dominant signal.   Implementation and training details appear in
+AppendixGand AppendixF, respectively.
+
+VICReg-Inspired Objective for Stable Transport.A naive regression objective that simply
+minimizes the squared distance between the adapted embedding and the centroid would
+be unstable. In particular, the network could drift away from the original query-compatible
+space or collapse multiple inputs into an undifferentiated cluster. To avoid this, we optimize
+a composite objective inspired by VICReg (Bardes et al.,2022).
+Let zi denote adapted embeddings in a batch, ei their original frozen embeddings, and let ct
+denote the centroid target for tablet. The overall objective is
+                           L=ω        invLinv +ω    varLvar +ω    covLcov +ω    idLid.
+Each term serves a distinct role. The invariance term pulls different serializations of the
+same table toward their shared centroid.  The identity term keeps adapted embeddings
+anchored to the frozen query-compatible space.  The variance term prevents collapse by
+preserving spread across the embedding space. The covariance term reduces redundancy
+across dimensions. Full loss definitions are explained in AppendixE.
+Figure1bshows that embeddings from different serializations of the same table, initially
+dispersed, cluster more tightly after adaptation while the centroid moves coherently, sug-
+gesting the adapter learns a structured correction rather than an arbitrary displacement.
+Figure6confirms this across ten tables where adapted representations tighten around their
+respective centroids while inter-table separation holds. The variance and covariance terms
+keep the geometry expressive enough for retrieval throughout. Detailed results appear in
+AppendixH.
+
+5    Serialization-Invariant Adapter
+Adapter effects are selective, with clear gains across dense retrievers.Table1highlights
+that the standard deviation and range of Recall@1 across serialization formats decrease
+significantly with the adapter, indicating reduced sensitivity to serialization choice overall
+(additional embedding visualizations appear in Figure6).  Figure3shows that across all
+dense retrievers, the adapter mostly yields improvement or remains neutral under joint
+training,  with negative ∆log -rank  values confined to serializations that already perform
+strongly in the base model, most notably ReasonIR on xml (WTQ:−0.04, WikiSQL:−0.11).
+Table2illustrates the gains for          MPNet: onWTQ-               html, Recall@1 rises from 0.09 to 0.18 with
+joint training and remains at 0.17 with subset training (∆  log -rank of 0.41), and onWikiSQL-
+html it improves from 0.11 to 0.17 in both regimes (∆log -rank: 0.32).  BGE-M3 shows a more
+selective pattern, with modest ∆log -rank values across most WTQ and WikiSQL serializations
+(0.05–0.14), yet reaching 0.92 and 0.82 on shuffled             rows and shuffled        cols forNQ-Tables,
+confirming that the adapter concentrates its effect where the base representation is least
+robust.
+Among the dense models, MPNet shows the most stable positive pattern across datasets.
+On format-heavy serializations, ∆log -rank gains on xml reach 0.59 (WTQ), 0.69 (WikiSQL),
+and 0.70 on html forNQ-Tablesunder joint training.                ReasonIR also benefits on structurally
+
+
+                                                        7
+Preprint. Under review.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 3:Heatmaps comparing adapter-based rank changes relative to the base model across three
+datasets,WTQ,WikiSQL, andNQ-Tables. Panelsa-cshow Adapter vs Base, and panelsd-fshow
+Adapter Subset vs Base. Rows correspond to input formats and columns to retriever backbones. Each
+cell reports the mean log-rank improvement, computed as ∆log-rank(base  -  adapter)    as detailed in
+AppendixB.Redindicates improvement (adapter better), whileblueindicates degradation (adapter
+worse).
+
+
+
+perturbed inputs, where shuffled            rows Recall@1 increases from 0.22 to 0.26 onWTQand
+0.22 to 0.24 onWikiSQLwith the joint adapter, reaching 0.29 and 0.26 with subset training.
+OnNQ-Tables,                shuffledrows reaches ∆log -rank of 0.71 and shuffled       cols 0.69 under joint
+training, even where Recall@1 gains are modest (0.08→ 0.10). The ddl serialization declines
+slightly under the joint adapter (Recall@1: 0.31→ 0.29) and is flat under subset training,
+which is consistent with the VICReg invariance objective pulling embeddings toward the
+centroid most forcefully when the base representation sits far from it, while the identity
+term limits disruption when the base serialization already occupies a well-ranked region of
+the embedding space.
+
+
+
+Out-of-Distribution generalization to an unseen dataset and mixed serialization pertur-
+bations.The subset-trained adapter, trained only onWTQandWikiSQLbut evaluated on
+unseenNQ-Tables, provides a direct test of cross-dataset generalization. Results in Table2
+show that useful transfer is possible, though its character varies by serialization quality. For
+ReasonIR, the subset adapter recovers the worst-performing serialization (shuffled  cols:
+0.08→ 0.11) while leaving the strongest unchanged (ddl: 0.31), outperforming joint training
+on both. A similar trade-off holds for BGE-M3, where shuffled  rows improves under joint
+training but xml degrades. More broadly, where adaptation is harmful, the subset adapter
+consistently produces smaller degradation than joint training, as seen for MPNet on csv
+and ReasonIR on ddl.  This pattern is consistent with the VICReg identity term:  without
+NQ-Tablesexamples in the training batch, the invariance objective exerts a weaker pull
+on NQ-specific serializations, leaving the identity term more dominant and thus limiting
+disruption to already-strong configurations.
+We further stress-test retrieval robustness under mixed serialization, where rows within a
+table use different formats (eg. CSV, TSV, JSON). This perturbation consistently degrades
+performance in base retrievers. The adapter mitigates this effect and generalizes well despite
+being trained on all single data. Additional details and results are provided in AppendixH.
+
+
+                                                        8
+                                       Preprint. Under review.
+
+
+
+
+
+
+                                                                                                                                Base                  Joint Adapter       Subset Adapter
+                                          Dataset                            Model                              Format                             R@1       Centroid       R@1  ∆        R@1   ∆
+                                                                    MPNet                               html              0.09            0.25            0.18 +0.090.17  +0.08
+                                                                                               tsv                        0.25                              0.25        +0.00        0.25         +0.00
+                                          WTQ                       ReasonIR                         shuffled  row        0.22            0.36            0.26 +0.040.29  +0.07
+                                                                                               xml                        0.37                              0.36−0.010.36−0.01
+                                                                    BGE-M3                             shuffled  row      0.22            0.35            0.22        +0.00        0.24  +0.02
+                                                                                               pipe                       0.31                              0.31        +0.00        0.31         +0.00
+                                                                    SPLADE                             json               0.30            0.44            0.28−0.020.31  +0.01
+                                                                                               tsv                        0.44                              0.39−0.05       0.38−0.06
+                                                                    MPNet                               html              0.11            0.24            0.17 +0.060.17  +0.06
+                                                                                               tsv                        0.21                              0.20−0.010.21         +0.00
+                                          WikiSQL                   ReasonIR                         shuffled  row        0.22            0.33            0.24 +0.020.26  +0.04
+                                                                                               xml                        0.34                              0.33−0.010.32−0.02
+                                                                    BGE-M3                             shuffled  row      0.26            0.37            0.26        +0.00        0.27  +0.01
+                                                                                               tsv                        0.34                              0.34        +0.00        0.34         +0.00
+                                                                    SPLADE                             json               0.35            0.44            0.32−0.030.36  +0.01
+                                                                                               tsv                        0.52                              0.44−0.080.45−0.07
+                                                                    MPNet                               mschema           0.01            0.01            0.02 +0.010.02  +0.01
+                                                                                               csv                        0.28                              0.22−0.060.25−0.03
+                                          NQ                        ReasonIR                         shuffled  col        0.08            0.29            0.10 +0.020.11  +0.03
+                                                                                               ddl                        0.31                              0.29−0.020.31         +0.00
+                                                                    BGE-M3                             shuffled  row      0.12            0.28            0.17 +0.050.13  +0.01
+                                                                                               xml                        0.33                              0.31−0.020.32−0.01
+                                                                    SPLADE                             tsv                0.32            0.26            0.17−0.150.19−0.13
+                                                                                               csv                        0.33                              0.16−0.170.19−0.14
+
+                                       Table 2:Recall@1 across datasets, models, and selected serializations.  For each model, two serial-
+                                       izations are shown:  the best- (↑) and worst-performing (↓) under the base model, illustrating the
+                                       sensitivity range. Centroid is the mean Recall@1 acrossallserializations.        ∆ denotes change relative to
+                                       the base R@1 for that serialization. Full results in AppendixH.
+
+
+                                       Sparse retrieval shows less compatibility with this adapter.    SPLADE shows more limited
+                                       gains under adaptation. In Table2, Recall@1 onWTQ-                        tsv changes from 0.44 to 0.39 with
+                                       the joint adapter and 0.38 with the subset adapter, whileNQ-Tables-                   csv changes from 0.33
+                                       to 0.16 and 0.19, respectively.
+                                       This result is consistent with the mismatch between a dense residual correction mechanism
+                                       and sparse activation geometry. A bottleneck MLP mixes coordinates and tends to densify
+                                       sparse activation vectors by introducing low-amplitude nonzero values into previously
+                                       inactive dimensions. Such transformations can disrupt the sparsity structure that enables
+                                       effective lexical retrieval. In dense embedding spaces, an interpolated or corrected target
+                                       can still represent a meaningful semantic intermediate. In sparse lexical spaces, however,
+                                       averaging across serializations may blend markup artifacts, structural tokens, and lexical
+                                       signals into a target that is less coherent for inverted-index retrieval. The observed degrada-
+                                       tion for SPLADE is consistent with this incompatibility. Figure6(d) highlights the collapse of
+                                       adapter transport in the embedding space.
+                                       Hence, we find that serialization sensitivity is large and systematic across retriever families.
+                                       The lightweight residual adaptation can improve ranking robustness, but primarily in a
+                                       model- and format-dependent manner rather than as a universal fix. The strongest gains are
+                                       not concentrated in a single training regime, where joint supervision is often beneficial, while
+                                       subset training can still transfer meaningfully to unseen data for dense retrievers. Overall,
+                                       the results suggest that the adapter can improve a frozen retriever in selected settings, with
+                                       outcomes shaped by retriever geometry, training distribution, and serialization family.
+
+                                       6    Conclusion
+
+                                       Table retrieval is still constrained by the need to linearize a two-dimensional object into
+                                       a one-dimensional sequence, which can introduce meaningful representation bias across
+                                       formats,  models,  and benchmarks.  Our results show that serialization is therefore not
+                                       merely a preprocessing detail but a factor that can materially alter retrieval quality in the
+                                       embedding space.
+
+
+                                                                                                               9
+
+
+
+
+↓↑↓↑↓↑↓↑↓↑↓↑↓↑↓↑↓↑↓↑↓↑↓↑
+Preprint. Under review.
+
+
+
+
+To address this issue, we introduced a centroid-based perspective on serialization, treating
+different serializations of the same table as transformed views of a shared semantic object.
+This led to a lightweight residual bottleneck adapter that, from a single serialization, learns
+to approximate centroid-level robustness at inference time while keeping the base retriever
+frozen. Across dense retrievers such as MPNet, ReasonIR, and BGE-M3, this approach yields
+consistent robustness gains under a VICReg-inspired objective.
+Across retrievers, the method improved robustness, with especially strong gains in dense
+retrieval models, while SPLADE was substantially less compatible with this transport mech-
+anism, suggesting a gap between sparse lexical geometry and the dense correction used
+here. More broadly, these findings suggest that serialization should be treated as a modeling
+choice with geometric consequences, and that future work on table retrieval should account
+for this sensitivity directly rather than assuming a single serialization is sufficient.
+
+7    Acknowledgment
+
+We are grateful to the members of the Complex Data Analysis and Reasoning Lab for
+their helpful discussions. We also acknowledge the support of the USA National Science
+Foundation under grant #2047488 and the Rensselaer IBM Future of Computing Research
+Collaboration (FCRC).
+
+References
+Fabio Anselmi, Joel Z. Leibo, Lorenzo Rosasco, Jim Mutch, Andrea Tacchetti, and Tomaso
+  Poggio. Unsupervised learning of invariant representations.Theoretical Computer Science,
+  633:112–121, 2016a.  ISSN 0304-3975.  doi:  10.1016/j.tcs.2015.06.048.  URL https://www.
+  sciencedirect.com/science/article/pii/S0304397515005587.
+
+Fabio  Anselmi,  Lorenzo  Rosasco,  and  Tomaso  Poggio.   On  invariance  and  selectivity
+  in representation learning.Information and Inference, 5(2):134–158, 2016b.   ISSN 2049-
+  8764, 2049-8772. doi: 10.1093/imaiai/iaw009. URL https://academic.oup.com/imaiai/
+  article-lookup/doi/10.1093/imaiai/iaw009.
+
+Arsenii Ashukha, Andrei Atanov, and Dmitry Vetrov. Mean Embeddings with Test-Time
+  Data Augmentation for Ensembling of Representations, July 2021.
+
+Gilbert Badaro,  Mohammed Saeed,  and Paolo Papotti.   Transformers for Tabular Data
+  Representation:   A  Survey  of  Models  and  Applications.Transactions  of  the  Associa-
+  tion  for  Computational  Linguistics,  11:227–249,  2023.    ISSN  2307-387X.    doi:   10.1162/
+  tacl  a 00544.  URL https://direct.mit.edu/tacl/article/doi/10.1162/tacl                         a  00544/
+  115239/Transformers-for-Tabular-Data-Representation-A.
+
+Adrien Bardes, Jean Ponce, and Yann LeCun. VICRegL: Self-supervised learning of local
+  visual features. In Alice H. Oh, Alekh Agarwal, Danielle Belgrave, and Kyunghyun Cho
+  (eds.),Advances in Neural Information Processing Systems, 2022.
+
+Yoav Benjamini and Yosef Hochberg.  Controlling the False Discovery Rate:  A Practical
+  and Powerful Approach to Multiple Testing.Journal of the Royal Statistical Society Series
+  B: Statistical Methodology, 57(1):289–300, 1995. ISSN 1369-7412, 1467-9868. doi: 10.1111/
+  j.2517-6161.1995.tb02031.x. URL https://academic.oup.com/jrsssb/article/57/1/289/
+  7035855.
+
+Jianlyu  Chen,  Shitao  Xiao,  Peitian  Zhang,  Kun  Luo,  Defu  Lian,  and  Zheng  Liu.   M3-
+  embedding:  Multi-linguality,  multi-functionality,  multi-granularity text embeddings
+  through self-knowledge distillation. In Lun-Wei Ku, Andre Martins, and Vivek Srikumar
+  (eds.),Findings of the Association for Computational Linguistics: ACL 2024, pp. 2318–2335,
+  Bangkok, Thailand, August 2024. Association for Computational Linguistics.  doi:  10.
+  18653/v1/2024.findings-acl.137.
+
+
+                                                     10
+Preprint. Under review.
+
+
+
+
+Shuxiao Chen, Edgar Dobriban, and Jane Lee.  A Group-Theoretic Framework for Data
+  Augmentation.   InAdvances  in  Neural  Information  Processing  Systems,  volume  33,  pp.
+  21321–21333. Curran Associates, Inc., 2020.
+Xiang Deng, Huan Sun, Alyssa Lees, You Wu, and Cong Yu.  Turl:  Table understanding
+  through representation learning.SIGMOD Rec., 51(1):33–40, June 2022. ISSN 0163-5808.
+  doi: 10.1145/3542700.3542709. URLhttps://doi.org/10.1145/3542700.3542709.
+Julian Eisenschlos, Maharshi Gor, Thomas M ¨uller, and William Cohen. MATE: Multi-view
+  attention for table transformer efficiency.  In Marie-Francine Moens, Xuanjing Huang,
+  Lucia Specia, and Scott Wen-tau Yih (eds.),Proceedings of the 2021 Conference on Empirical
+  Methods in Natural Language Processing, pp. 7606–7619, Online and Punta Cana, Dominican
+  Republic, November 2021. Association for Computational Linguistics. doi: 10.18653/v1/
+  2021.emnlp-main.600. URLhttps://aclanthology.org/2021.emnlp-main.600/.
+Thibault Formal, Benjamin Piwowarski, and St´ephane Clinchant. SPLADE: Sparse Lexical
+  and Expansion Model for First Stage Ranking.   InProceedings of the 44th International
+  ACM SIGIR Conference on Research and Development in Information Retrieval, SIGIR ’21, pp.
+  2288–2292, New York, NY, USA, July 2021. Association for Computing Machinery. ISBN
+  978-1-4503-8037-9. doi: 10.1145/3404835.3463098.
+Jonathan Herzig, Pawel Krzysztof Nowak, Thomas M ¨uller, Francesco Piccinno, and Julian
+  Eisenschlos. TaPas: Weakly Supervised Table Parsing via Pre-training. InProceedings of the
+  58th Annual Meeting of the Association for Computational Linguistics, pp. 4320–4333, Online,
+  2020. Association for Computational Linguistics. doi: 10.18653/v1/2020.acl-main.398.
+Jonathan Herzig, Thomas M ¨uller, Syrine Krichene, and Julian Eisenschlos. Open Domain
+  Question Answering over Tables via Dense Retrieval. InProceedings of the 2021 Conference of
+  the North American Chapter of the Association for Computational Linguistics: Human Language
+  Technologies, pp. 512–519, Online, 2021. Association for Computational Linguistics. doi:
+  10.18653/v1/2021.naacl-main.43.
+Hiroshi Iida, Dung Thai, Varun Manjunatha, and Mohit Iyyer. TABBIE: Pretrained represen-
+  tations of tabular data. In Kristina Toutanova, Anna Rumshisky, Luke Zettlemoyer, Dilek
+  Hakkani-Tur, Iz Beltagy, Steven Bethard, Ryan Cotterell, Tanmoy Chakraborty, and Yichao
+  Zhou (eds.),Proceedings of the 2021 Conference of the North American Chapter of the Association
+  for Computational Linguistics: Human Language Technologies, pp. 3446–3456, Online, June
+  2021. Association for Computational Linguistics. doi: 10.18653/v1/2021.naacl-main.270.
+  URLhttps://aclanthology.org/2021.naacl-main.270/.
+Qian Liu, Bei Chen, Jiaqi Guo, Morteza Ziyadi, Zeqi Lin, Weizhu Chen, and Jian-Guang Lou.
+  TAPEX: Table pre-training via learning a neural SQL executor. InInternational Conference
+  on Learning Representations, 2022. URLhttps://openreview.net/forum?id=O50443AsCP.
+Suhong  Moon,  Domas  Buracas,  Seunghyun  Park,  Jinkyu  Kim,  and  John  Canny.    An
+  Embedding-Dynamic Approach to Self-Supervised Learning. In2023 IEEE/CVF Winter
+  Conference on Applications of Computer Vision (WACV), pp. 2749–2757, Waikoloa, HI, USA,
+  January 2023. IEEE. ISBN 978-1-6654-9346-8. doi: 10.1109/WACV56688.2023.00277.
+Panupong Pasupat and Percy Liang. Compositional Semantic Parsing on Semi-Structured
+  Tables.   InProceedings  of  the  53rd  Annual  Meeting  of  the  Association  for  Computational
+  Linguistics and the 7th International Joint Conference on Natural Language Processing (Volume
+  1:  Long  Papers),  pp.  1470–1480,  Beijing,  China,  2015.  Association  for  Computational
+  Linguistics. doi: 10.3115/v1/P15-1142.
+Anant Raj, Abhishek Kumar, Youssef Mroueh, Tom Fletcher, and Bernhard Schoelkopf.
+  Local group invariant representations via orbit embeddings. In Aarti Singh and Jerry Zhu
+  (eds.),Proceedings of the 20th International Conference on Artificial Intelligence and Statistics,
+  volume 54 ofProceedings of Machine Learning Research, pp. 1225–1235. PMLR, April 2017.
+Rulin Shao, Rui Qiao, Varsha Kishore, Niklas Muennighoff, Xi Victoria Lin, Daniela Rus,
+  Bryan Kian Hsiang Low, Sewon Min, Wen-tau Yih, Pang Wei Koh, and Luke Zettlemoyer.
+
+
+                                                     11
+Preprint. Under review.
+
+
+
+
+  ReasonIR:  Training  retrievers  for  reasoning  tasks.   InSecond  Conference  on  Language
+  Modeling, 2025.
+Kaitao Song, Xu Tan, Tao Qin, Jianfeng Lu, and Tie-Yan Liu. MPNet: Masked and permuted
+  pre-training for language understanding. InProceedings of the 34th International Conference
+  on Neural Information Processing Systems, NIPS ’20, pp. 16857–16867, Red Hook, NY, USA,
+  December 2020. Curran Associates Inc. ISBN 978-1-7138-2954-6.
+Yuan Sui, Mengyu Zhou, Mingjie Zhou, Shi Han, and Dongmei Zhang. Table Meets LLM:
+  Can Large Language Models Understand Structured Table Data?  A Benchmark and
+  Empirical Study. InProceedings of the 17th ACM International Conference on Web Search and
+  Data Mining, WSDM ’24, pp. 645–654, New York, NY, USA, March 2024. Association for
+  Computing Machinery. ISBN 979-8-4007-0371-3. doi: 10.1145/3616855.3635752.
+Zhiruo Wang, Haoyu Dong, Ran Jia, Jia Li, Zhiyi Fu, Shi Han, and Dongmei Zhang. Tuta:
+  Tree-based transformers for generally structured table pre-training.   InProceedings of
+  the 27th ACM SIGKDD Conference on Knowledge Discovery & Data Mining, KDD ’21, pp.
+  1780–1790,  New York,  NY, USA, 2021. Association for Computing Machinery.   ISBN
+  9781450383325. doi: 10.1145/3447548.3467434. URL https://doi.org/10.1145/3447548.
+  3467434.
+Jingfeng  Yang,  Aditya  Gupta,  Shyam  Upadhyay,  Luheng  He,  Rahul  Goel,  and  Shachi
+  Paul. TableFormer: Robust transformer modeling for table-text encoding. In Smaranda
+  Muresan, Preslav Nakov, and Aline Villavicencio (eds.),Proceedings of the 60th Annual
+  Meeting of the Association for Computational Linguistics (Volume 1: Long Papers), pp. 528–537,
+  Dublin, Ireland, May 2022. Association for Computational Linguistics. doi: 10.18653/v1/
+  2022.acl-long.40. URLhttps://aclanthology.org/2022.acl-long.40/.
+Hongzhi Zhang, Yingyao Wang, Sirui Wang, Xuezhi Cao, Fuzheng Zhang, and Zhongyuan
+  Wang. Table fact verification with structure-aware transformer. In Bonnie Webber, Trevor
+  Cohn,  Yulan  He,  and  Yang  Liu  (eds.),Proceedings  of  the  2020  Conference  on  Empirical
+  Methods in Natural Language Processing (EMNLP), pp. 1624–1629, Online, November 2020.
+  Association for Computational Linguistics. doi: 10.18653/v1/2020.emnlp-main.126. URL
+  https://aclanthology.org/2020.emnlp-main.126/.
+Victor Zhong, Caiming Xiong, and Richard Socher. Seq2SQL: Generating Structured Queries
+  from Natural Language using Reinforcement Learning, November 2017.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                    12
+Preprint. Under review.
+
+
+
+A    Dataset, Embedding Models and Representation Details
+
+A.1    Dataset
+
+The empirical analysis spans three table retrieval benchmarks with increasing structural
+difficulty.
+
+WikiTableQuestions (WTQ) (Pasupat & Liang,2015).    WTQcontains more heterogeneous
+Wikipedia tables and more challenging question semantics. Multi-row headers, irregular
+formatting, and broader reasoning demands make serialization effects more visible.
+
+WikiSQL   (Zhong  et  al., 2017).    WikiSQLcontains  relatively  simple  tables  and  SQL-
+like queries with comparatively tight lexical alignment to the target tables.  Serialization
+sensitivity is present but generally less chaotic because the tables are cleaner and structurally
+shallower.
+
+Natural Questions Tables (NQ-Tables) (Herzig et al.,2021).    NQ-Tablesis the harshest
+stress test because natural user queries often exhibit a large lexical gap from the target table.
+Structural complexity and weak lexical overlap amplify the consequences of representation
+instability.
+
+                                  Dataset           Questions      Tables
+                                  WTQ              4,200         2,044
+                                  WikiSQL  15,878         5,069
+                                  NQ-Tables        966     169,898
+
+                    Table 3: Dataset scale reported in the supporting material.
+
+
+A.2    Retriever Embeddings Models
+
+The retrievers considered areMPNet,BGE-M3,ReasonIR, andSPLADE.
+
+      1.MPNet    is a dense transformer retriever based on permuted masked language model-
+          ing, known for producing strong general-purpose sentence and document embed-
+          dings (Song et al.,2020).
+      2.BGE-M3    is a multilingual and multi-function embedding model designed for dense
+          retrieval, lexical matching, and multi-vector scoring across diverse retrieval set-
+          tings (Chen et al.,2024).
+      3.ReasonIR    is a retrieval model optimized for reasoning-intensive search tasks, with
+          a stronger emphasis on compositional and multi-hop query understanding (Shao
+          et al.,2025).
+      4.SPLADE    is a learned sparse retriever that projects text into a high-dimensional lexical
+          space, enabling retrieval through sparse term expansion and inverted-index style
+          matching rather than dense vector similarity  (Formal et al.,2021).
+
+A.3    Serialization Formats
+
+Serialization methods considered in this work are summarized in Table4. As shown in the
+table, they cover multiple ways of expressing the same underlying dataframe, ranging from
+flat linearizations such as pipe        serialized, token       serialized, and space         serialized, to
+standard data exchange formats including csv, tsv, html, markdown, latex, dict, json, and
+xml. The table also includes structural variants such as shuffled                rows, shuffled      cols, and
+transpose, which preserve the underlying values while altering layout or ordering, as well
+as schema-oriented forms such as mschema, macschema, and ddl, which emphasize metadata
+and type information in addition to cell contents. These representations capture differences
+in delimiter choice, structural explicitness, schema visibility, and ordering, providing a broad
+
+
+                                                       13
+Preprint. Under review.
+
+
+
+
+set of transformations for studying how tabular data can be rendered across heterogeneous
+formats.
+
+  Category                     Representation           Brief template example
+                             pipe   serialized         col1  |  col2  |  val11  |  val12  |  val21  |  val22
+  Popular                    token   serialized       <Header,  0,  0> col1 <Header,  0,  1> col2 <CellValue,
+  Representation                                         1,  0>  val11  <CellValue,  1,  1>  val12
+                             space   serialized       col1  col2  val11  val12  val21  val22
+                             csv                                 ,col1,col2\n0,  val11,  val12\n1,val21,val22
+                             tsv                                 col1\tcol2\n  val11\t  val12\nval21\t  val22
+                             html                               <table>   <tr>   <th>col1</th>   <th>col2</th>   </tr>
+                                                         <tr>  <td>val11</td>  <td>val12</td>  </tr>  </table>
+  Data                       markdown                       |  col1  |  col2  |\n|---|---|\n|  val11  |  val12  |
+  Representation             latex                    \begin{tabular}{ll}col1  &  col2\\val11  &  val12
+                                                         \\  \end{tabular}
+                             dict                        {’col1’:{0:   ’val11’,   1:   ’val21’},   ’col2’:{0:
+                                                         ’val12’,  1:  ’val22’}}
+                             json                        {"col1":{"0":  "val11",  "1":  "val21"},  "col2"  :
+                                                         {"0":  "val12",  "1":  "val22"}}
+                             xml                                 <data>   <row>   <col1>   val11   </col1>   <col2>   val12
+                                                         </col2>  </row>  </data>
+                             shuffled     rows             [row2;  row1;  row3;  ...]
+  Structural                 shuffled     cols             [col2,  col1,  col3,  ...]
+  Transformations            transpose                     0  1  col1  val11  val21  col2  val12  val22
+
+                             mschema            {‘schema’:             DataFrameSchema(...),         ‘data’:
+  Schema and                                             [{‘col1’:  val11,  ‘col2’:  val12}]}
+  Definition Types           macschema   {‘fields’:    [...],   ‘primaryKey’:    [...],   ‘data’:
+                                                         [{‘col1’:  val11,  ‘col2’:  val12}]}
+                             ddl                                 CREATE  TABLE  Table  (col1  TEXT,  col2  TEXT);  INSERT
+                                                         INTO  Table  VALUES  (‘val11’,‘val12’);
+                    Table 4: Table representation methods grouped by a specific category
+
+
+
+pipe   serialized    Linearized table where headers and row values are concatenated using
+the pipe symbol.  Produced inside serialize                      dataframe(...).  The implementation does
+not insert row delimiters, so the output is a single flat string rather than a clean row-wise
+format.
+
+token    serialized    Tokenized linearization with explicit structural markers for headers
+and cells. Each header is encoded as <Header,  0,  j> and each cell as <CellValue,  i,  j>.
+This is the most structurally explicit of the custom serializations.
+
+space    serialized    Space-separated linearization of headers and cell values. In the code
+this is returned as none          serialized, so this label is an external naming choice rather than
+the function’s native name.
+
+csv    Standard comma-separated values export using df.to                               csv().   This is a plain-text
+tabular serialization with delimiters and optional row index.
+
+tsv    Tab-separated values export using df.to                    csv(sep="\t")                    . Same idea as CSV but with
+tab delimiters.
+
+
+                                                              14
+Preprint. Under review.
+
+
+
+
+html    HTML table serialization using df.to            html().  Preserves table structure with tags
+such as<table>,<tr>, and<td>.
+
+markdown    Markdown  table  serialization  using  df.to              markdown().     Human-readable,
+lightweight, and common in documentation.
+
+latex    LaTeX tabular serialization using df.to            latex().  Useful for papers, though the
+exact formatting depends on pandas defaults and options.
+
+dict    Python dictionary representation using df.to             dict(). By default, pandas returns a
+column-oriented dictionary mapping each column to an index-value mapping.
+
+json    JSON serialization using df.to         json(). By default, pandas uses a column-oriented
+JSON structure unless configured otherwise.
+
+xml    XML serialization using df.to        xml(...). Produces a hierarchical markup representa-
+tion of rows and fields.
+
+shuffled    rows    Row   permutation   using   df.sample(frac=1).reset                index(drop=True).
+Preserves schema and values but changes row order.
+
+shuffled    cols    Column permutation using df.sample(frac=1,   axis=1).  Preserves the
+data but changes column order.
+
+transpose    Matrix-style transposition using df.T. Rows become columns and columns
+become rows.
+
+mschema    Pandera-based schema-plus-data representation. The function infers a Pandera
+column type for each dataframe column and returns both the schema object and row-
+oriented records.
+
+macschema    Metadata-aware     schema     using     pandas     JSON     Table     Schema     via
+pd.io.json.build       table   schema(df),  then  augmented  with  row  data.    This  is  closer
+to a machine-readable schema specification than a plain serialization.
+
+ddl    SQL-style schema and instance representation.  The function emits a CREATE  TABLE
+statement followed byINSERT  INTOstatements for all rows.
+
+Centroid Representations
+To complement the individual serialization formats described above, we also define centroid
+representations for each category and an aggregate centroid across all formats. Each centroid
+is computed as the average embedding across all serializations in that category and is
+intended to capture the prototypical semantic signature of that group of representations.
+
+centroid    popular(*POPULAR).  The Popular Representation centroid averages the embed-
+dings of pipe    serialized, token      serialized, and space       serialized. These formats share a
+common characteristic of flat, delimiter-driven linearization with minimal structural over-
+head, so their centroid reflects a compact, token-level encoding of tabular content where
+column-row relationships are implied by position or lightweight delimiters rather than
+explicit markup.
+
+centroid    data(*DATA).  The Data Representation centroid averages the embeddings of   csv,
+tsv, html, markdown, latex, dict, json, and xml.  This is the most heterogeneous category,
+spanning plain-text delimited formats, markup languages, and structured data interchange
+formats.   Despite their surface differences,  these serializations all encode the full table
+content with explicit structural boundaries between cells and rows.  Their centroid thus
+
+
+                                                     15
+Preprint. Under review.
+
+
+
+
+represents a format-neutral, content-complete embedding of the underlying tabular data,
+averaging across delimiter styles and nesting conventions.
+
+centroid    structural(*STRUCTURAL).  The Structural Transformations centroid averages the
+embeddings of shuffled           rows, shuffled      cols, and transpose. Unlike the other categories,
+these representations do not introduce new encoding vocabularies but instead permute the
+layout of existing data. Their centroid captures how positional reordering and axis transpo-
+sition affect the embedding space relative to a canonical ordering, and serves as a measure
+of a retrieval model’s sensitivity or robustness to row, column, and axis permutations.
+
+centroid    schema(*SCHEMA).  The Schema Definition Types centroid averages the embed-
+dings of mschema, macschema, and ddl.  These formats emphasize structural metadata —
+column types, primary keys, and table definitions — alongside or in lieu of raw cell values.
+Their centroid encodes a schema-oriented view of the table, weighting type information and
+relational structure more heavily than the verbatim content of individual cells, and reflects
+how a retrieval model responds to declarative rather than instance-level descriptions of
+tabular data.
+
+centroid    all(*ALL).  Finally, the   centroid         all representation is computed as the average
+embedding across all serialization formats from all four categories.
+
+B    Evaluation Metrics
+
+We evaluate retrieval performance using three complementary metrics.
+
+Recall@1.We use Recall@1 to validate rank-based metrics, it measures whether the gold
+table is ranked first by the retriever. Formally, for a questionqwith gold tablet        ∗:
+                                      Recall@1=1      rank(t   ∗|q) =1                                                  (2)
+This is a strict measure of retrieval precision and directly reflects whether downstream
+QA task can proceed without re-ranking.  We compare the standard deviation and min
+difference of recall values to validate the sensitivity of different representations.
+
+Rank and Pairwise Score Difference.We report the raw rank              r=rank(t     ∗|q)    of the gold
+table within the retrieved list, which captures retrieval quality beyond the binary Recall@1
+signal and is more sensitive to near-miss failures. To compare serialization formats directly,
+we further compute the mean pairwise score difference between two representations si and
+sj over all questions:
+                         ¯δ(s     i,s  j) =    1score(t ∗|q,s     i)−score(t   ∗|q,s      j)                             (3)
+                                      |Q|   ∑q∈Q
+
+where score(t ∗|q , s)   is the retrieval score assigned to the gold table t∗ under serialization s
+for question q. A positive  ¯δ(s     i, sj) indicates that serialization si yields higher retrieval scores
+than sj on average, and vice versa. Unlike Recall@1, which collapses all retrieval outcomes
+outside the top position into a single failure signal, the pairwise score difference retains the
+full resolution of the retriever’s scoring function and is sensitive to systematic preferences
+between serializations even when both fail to rank the gold table first. This makes it a more
+discriminative basis for comparing representations, particularly in settings where Recall@1
+differences are small or statistically noisy.
+
+Log-Rank Delta.To quantify the effect of serialization-aware adaptation, we define the
+log-rank improvement as:
+                             ∆log -rank =log(1+r                     base)−log(1+r                       adapted)                                   (4)
+where rbase  and radapted  denote the rank of the gold table under the base and adapted
+retriever, respectively. A positive value indicates that adaptation improves retrieval, while
+
+
+                                                        16
+Preprint. Under review.
+
+
+
+
+a  negative  value  indicates  degradation.   The  logarithmic  transformation  dampens  the
+influence of large rank values in the tail of the distribution. We report the mean ∆log -rank
+grouped by serialization format and model.  Recall@1 is insensitive to the magnitude of
+rank changes:  a gold table moving from rank 100 to rank 2 and from rank 2 to rank 1
+contribute equally to Recall@1, yet represent qualitatively different degrees of improvement.
+∆log -rank addresses this by measuring adaptation gains continuously across the full rank
+distribution, while the logarithmic compression ensures that large absolute rank differences
+in the tail do not dominate the comparison, yielding a more balanced and informative signal
+for evaluating serialization sensitivity.
+
+Measuring the Format-Specific Shift.To empirically test the centering condition in As-
+sumption1,  we  decompose  each  format-specific  shift                   δs(T)      into  two  parts  that  reveal
+whether  the  shift  depends  on  the  table  content  or  on  the  format  alone.   For  a  serial-
+ization  format  s,  the  format-specific  shift  for  table  T  relative  to  the  global  centroid  is
+δs(T) =z          s(T)−c(T)               . We separate this shift into a table-independent component, obtained
+by averaging across all tables:
+                                             µδs =    1|T| ∑    δs(T),                                                         (5)
+                                                          T∈T
+and a table-dependent component ϵs(T) =δ          s(T)−µ           δs, which captures the portion of the
+shift that changes from table to table. The table-independent component µδs represents the
+part of the format-specific shift that stays the same regardless of what the table contains,
+the displacement that format s introduces for every table it encodes.  We summarize the
+table-dependent component by its mean magnitude across tables:
+
+                                            ¯ϵs =    1|T| ∑   ∥ϵ   s(T)∥.                                                        (6)
+                                                        T∈T
+The norm∥µ   δs∥ measures how large the table-independent part of the format-specific shift
+is. The mean ¯ϵs measures how much the shift varies from table to table beyond that constant
+component.  The ratio∥µ   δs∥/   ¯ϵs  connects directly to whether Assumption1holds for a
+given format. Centroid averaging cancels format-specific shifts by summing them across
+formats. Shifts that change from table to table cancel efficiently because they do not share
+a common direction, and their aggregate contribution shrinks as the serialization family
+grows. Shifts that remain the same across tables do not cancel because they displace every
+table’s embedding in the same way, and averaging two such displacements that differ in
+orientation produces a shifted centroid rather than a corrected one. When∥µ   δs∥/   ¯ϵs > 1, the
+format-specific shift is driven primarily by the format itself, and centroid averaging cannot
+remove it. When∥µ   δs∥/   ¯ϵs < 1, the shift varies enough from table to table that averaging
+suppresses it as Assumption1predicts. We report these quantities per format, retriever, and
+dataset in AppendixC.
+
+Statistical Significance.To assess whether differences in rank across serialization formats
+are statistically reliable, we apply pairwise Wilcoxon signed-rank tests over per-question
+ranks, corrected for multiple comparisons using the Benjamini–Hochberg false discovery
+rate (FDR) procedure (Benjamini & Hochberg,1995). We consider a difference significant at
+α=0.01.
+
+C    Scope of the Format-Specific Shift
+
+
+
+
+
+
+
+
+
+
+
+
+                                                         17
+Preprint. Under review.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 4: Analysis of the format-specific shift δs(T)     into its table-independent component
+∥µ   δs∥ (Equation5) and table-dependent component                     ¯ϵs (Equation6), shown per serialization
+format across four retrievers and three datasets. Each point represents one format, colored
+by its serialization family. The diagonal marks∥µ   δs∥/   ¯ϵs = 1. Formats above the diagonal
+carry format-specific shifts that remain largely the same regardless of table content, violating
+the centering condition in Assumption1. Formats below the diagonal carry shifts that vary
+from table to table, which centroid averaging can suppress.
+
+
+
+
+
+
+
+                                                         18
+Preprint. Under review.
+
+
+
+
+Across the dense retrievers, we find a consistent pattern.  Schema-based formats appear
+above the diagonal in most panels, showing that they introduce a stable format-specific shift
+rather than harmless noise. For MPNet, mschema and macschema reach|µ δs|≈ 0.65 while  ¯ϵs
+stays around (0.40) to (0.45), giving ratios of about (1.45) to (1.59).  This shows that these
+formats push tables in a similar direction regardless of content. Markup-heavy formats such
+ashtml,latex, andxmlalso lie above the diagonal forMPNet, though to a lesser extent.
+BGE-M3 shows the same overall structure but with smaller magnitudes.  Most formats lie
+closer to the origin, which helps explain their weaker sensitivity to the choice of serialization
+in  retrieval.   The  main  exception  is  ddl,  whose  ratio  remains  above  1  across  datasets,
+suggesting that SQL-style schema definitions still occupy a distinct region of the embedding
+space.
+We also find that ReasonIR is more sensitive to formatting structure than BGE-M3. OnWTQ,
+several data-oriented formats,  including token   serialized,  tsv,  html,  markdown,  latex,
+json, and xml, move close to or above the boundary. This suggests that even lightweight
+formatting choices can introduce a table-independent directional effect.  In contrast, the
+shuffled variants remain clearly below the diagonal, indicating table-specific noise that
+averaging can reduce.
+SPLADE shows a very different pattern. Both|µ δs| and ¯ϵs are much larger, and every format
+falls above the diagonal. We interpret this as evidence that, in the sparse lexical setting, all
+serialization choices produce systematic directional effects that dominate random variation.
+In this case, the centering condition does not hold.
+The structural variants provide the clearest case where the assumption works as intended.
+shuffled  rows and shuffled  columns consistently show low systematic bias and higher
+random residuals, which matches the kind of perturbation that centroid averaging can
+suppress.  transpose lies slightly higher because it introduces a more regular structural
+change.
+Finally, the relative layout of formats remains highly stable across datasets within each
+retriever.  We take this as evidence that the observed biases are mainly properties of the
+retriever-format interaction rather than artifacts of a particular dataset. This result supports
+the broader claim that a bias-correction method learned on one dataset can transfer, at least
+partially, to another.
+
+D    Proofs
+
+D.1    Euclidean optimality of the centroid
+
+Theorem1(Euclidean optimality of the centroid). For any table                   T with serialization family
+S(T), the centroid
+                                         c(T) =            1|S(T)|      ∑zs(T)
+                                                             s∈S(T)
+is the unique point in Rd closest to all serialization embeddings simultaneously, in the sense
+that it minimizes
+                                                ∑     ∥u−z       s(T) ∥22
+                                              s∈S(T)
+over allu∈R            d. Equivalently, for everyu∈R                    d,
+                               ∑     ∥c(T)−z              s(T) ∥22≤  ∑∥u−z       s(T) ∥22 .
+                             s∈S(T)                           s∈S(T)
+
+Proof.Define
+                                        J(u):=      ∑      ∥u−z       s(T) ∥22 .
+                                                  s∈S(T)
+
+                                                         19
+Preprint. Under review.
+
+
+
+
+Expanding gives
+                       J(u) =|S(T)|    ∥u∥22−2u  ⊤  ∑               zs(T) +    ∑        ∥zs(T) ∥22 .
+                                                            s∈S(T)              s∈S(T)
+Taking the gradient with respect tou,
+                                     ∇u J(u) =2|S(T)|u−2               ∑       zs(T).
+                                                                      s∈S(T)
+Setting the gradient to zero yields
+
+                                       u⋆ =      1|S(T)|      ∑   zs(T) =c(T).
+                                                         s∈S(T)
+Because J(u)      is strictly convex in u, this stationary point is the unique global minimizer. The
+inequality follows immediately from global optimality.
+
+Theorem1shows that the centroid is the least-squares optimal representative of the finite set
+of serialization-specific embeddings. This fact is unconditional: regardless of whether the
+semantic decomposition is exact, the centroid is the most central Euclidean representative
+of the serialization family.
+
+D.2    Conditional Semantic Interpretation
+
+Proposition1(Approximate recovery of the shared component).  We define the average
+format-specific shift
+                                           ¯δ(T):=               1|S(T)|      ∑δs(T).
+                                                                 s∈S(T)
+Then
+                                                c(T) =µ(T) +                 ¯δ(T).
+In particular, when the format-specific shifts roughly cancel acrossS(T), then
+                                                     c(T)≈µ(T).
+
+Proof.By the definition of the centroid and the decomposition in Assumption1,
+                     c(T) =            1           zs(T) =          1             µ(T) +δ             s(T) .
+                                |S(T)|      ∑s∈S(T)            |S(T)|      ∑s∈S(T)
+
+Sinceµ(T)does not depend ons, this becomes
+
+                           c(T) =µ(T) +                     1|S(T)|      ∑δs(T) =µ(T) +               ¯δ(T).
+                                                           s∈S(T)
+Therefore, when the average perturbation  ¯δ(T)       is small, the centroid is correspondingly
+close toµ(T).
+
+E    VICReg Loss Function
+
+E.1    Identity Preservation
+
+The identity term anchors the transported representation to the original embedding so that
+the adapted document vector remains compatible with frozen query vectors:!
+
+                                                      n∑
+                                        Lid =  1n          1−         z⊤i  ei∥zi∥2∥ei∥2.
+                                                    i=1
+This discourages large geometric drift.  Since only document-side table embeddings are
+adapted, preserving alignment with the original space is essential.
+
+
+                                                             20
+Preprint. Under review.
+
+
+
+
+E.2    Invariance to the Centroid
+
+The core transport objective maps each view-specific embedding toward the corresponding
+centroid:                                           "                           #
+                                 Linv =   1            1      ∥zi−sg(c            t)∥2,
+                                           |B| ∑t∈B   nt ∑i∈S     t            2
+
+where St indexes the serializations of table t in the batch and sg(·)        denotes stop-gradient
+on the centroid target.  This term suppresses view-specific noise by explicitly collapsing
+multiple serializations toward a shared semantic anchor.
+
+E.3    Variance Regularization
+
+To prevent dimensional collapse, the standard deviation of each feature across the batch is
+pushed above a thresholdγusing a hinge-like penalty:
+
+                                                 d∑
+                                   Lvar =  1d       max 0,γ−Std(z                     :,j )2.
+                                                j=1
+This ensures that the representation maintains sufficient spread for nearest-neighbor re-
+trieval.
+
+E.4    Covariance Regularization
+
+To preserve feature capacity and discourage redundancy, the covariance of centered adapted
+embeddings is decorrelated:
+
+                                      Lcov =        1d(d−1)      ∑Cov(Z            c)2pq,
+                                                           p̸=q
+where Zc  denotes the batch of centered adapted embeddings.  Minimizing off-diagonal
+covariance reduces feature entanglement and encourages a more expressive geometry.
+
+ Component            Primary function                                Geometric implication
+ Identity(L                    id)           Keeps the adapted embeddingPrevents severe misalignment
+                          close to the original signal.                 with frozen query embeddings.
+ Invariance(Linv)     Pulls disparate serializations of                 Cancels format-specific noise and
+                          the same table toward one                     enforces representation
+                          centroid.                                     robustness.
+ Variance(L                   var)        Maintains minimum spread      Prevents dimensional collapse
+                          across feature dimensions.                    into an indistinguishable cluster.
+ Covariance(Lcov)   Penalizes feature redundancy.          Decorrelates coordinates and
+                                                                        preserves usable embedding
+                                                                        capacity.
+
+                       Table 5: Interpretation of the adapter loss components.
+
+
+Table5provides a detailed purpose and geometric interpretation of each of the loss function.
+
+F    Training Procedure
+
+Figure5is consistent with the relative weighting of the training objective. In particular, the
+two dominant coefficients are λinv =  100 and λid =  100, so training is primarily driven
+by a balance between cross-view alignment and preservation of the original embedding
+geometry.  This is exactly what the curves show.  The invariance loss decreases sharply
+during the early stage of training,  indicating that the adapter quickly learns to reduce
+
+
+                                                         21
+Preprint. Under review.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 5: Training trajectories of the adapter under the loss weighting in Table6, with         λinv,
+λvar,λ cov, andλ         id.
+
+
+discrepancies among different serialized views of the same table.  At the same time, the
+identity loss rises slightly and then plateaus, while the cosine similarity between adapted
+and original embeddings remains high. This behavior is expected under a strong identity
+regularizer: the model is allowed to move embeddings enough to improve view consistency,
+but not enough to drift far from the frozen retriever space.
+The smaller coefficient on the variance term, λvar = 25, means that variance preservation
+acts as a secondary constraint rather than the main optimization target. Accordingly, Lvar
+remains relatively stable throughout training instead of changing dramatically. This suggests
+that the representation maintains sufficient per-dimension spread and avoids collapse while
+the stronger invariance term drives alignment. The covariance term has the smallest weight,
+λcov = 1, so it mainly serves as a light regularizer against redundant feature correlations.
+Consistent with this role, Lcov stays very small across training and does not dominate the
+optimization trajectory.
+Overall,  the training dynamics reflect the intended prioritization of the objective:  λinv
+pushes different views together, λid prevents overly aggressive deformation of the frozen
+space, λvar stabilizes feature dispersion, and λcov lightly suppresses redundancy. The result
+is a fast early drop in total loss, stable non-collapsed training, and a conservative adaptation
+that improves view agreement while preserving high similarity to the original embeddings.
+
+
+G    Implementation Details
+
+G.1    Algorithmic Summary
+
+Input:frozen retriever             f , representation setR, cached table-embedding corpora from one
+or more datasetsD                   1, . . . ,D m, adapterA                θ, and training configuration cfg.
+Training:
+
+      1.  For each dataset, load cached embeddings for all available table representations
+          r∈R   and align them by table ID, retaining only tables that have at least two
+          available representations.
+
+      2.  Build a multi-view training set where each sample corresponds to one table and
+          contains up to max      views representation embeddings{e   i} drawn from its aligned
+          cached views.
+
+
+                                                       22
+Preprint. Under review.
+
+
+
+
+       3.  For each minibatch, collect all view embeddings ei, their associated table IDs, and
+           compute adapted embeddings
+                                                          zi =A    θ(e  i).
+       4.ℓ    2-normalize the adapted embeddings:
+
+                                                          zi←     zi∥z   i∥2 .
+
+       5.  For each table appearing in the minibatch, compute its batch centroid in the adapted
+           space:
+                                                  c(T) =            1|V(T)|      ∑zi,
+                                                                       i∈V(T)
+          whereV(T)denotes the views of tableTpresent in the minibatch.
+       6.Normalize the original frozen embeddings for identity preservation:
+
+                                                           ˆei =     ei∥e   i∥2 .
+
+       7.Optimize the adapter parameters using
+                   L=λ        invLinv(z, table IDs) +λ                 varLvar(z) +λ         covLcov(z) +λ         idLid(z,     ˆe),
+          whereLinv pulls views of the same table toward their within-batch centroid,Lvar
+           enforces feature-wise variance above a threshold,Lcov penalizes feature redundancy,
+           andL         id preserves similarity to the frozen embedding space.
+       8.  Update θ with AdamW, apply gradient clipping, and periodically save checkpoints
+           and training logs.
+
+Inference:
+
+       1.  Serialize each table once using a chosen base representation and compute its frozen
+           embedding
+                                                        e=f(ser(T)).
+       2.Produce the adapted table vector
+                                                           z=A      θ(e).
+
+       3.  Index z in the vector database, while queries remain encoded by the frozen retriever.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                           23
+Preprint. Under review.
+
+
+
+
+G.2    Hyperparameters
+
+                             Hyperparameter     Value
+                             steps                          20000
+                             batch     size                 512
+                             lr                                3×10  −4
+                             weight      decay           1×10  −4
+                             device            cuda  if  available,  else  cpu
+                             max     views     len(REPRESENTATIVE                          ORDER)
+                             lam    inv                     100.0
+                             lam    var                     25.0
+                             lam    cov                    1.0
+                             lam    id                       100.0
+                             id   mode          cos
+                             gamma        std               0.05
+                             hidden      mult            4
+                             r                                 512
+                             use    bias             True
+                             alpha                         0.01
+                             dropout                    0.05
+                             log   every                  200
+                             ckpt    every                200
+
+                                         Table 6: Training hyperparameters.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                  24
+Preprint. Under review.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 6: Adapter transport across ten tables and four retrieval models. Each panel shows
+PCA projections of serialization embeddings for ten distinctWTQtables under(a)                                  MPNet,(b)
+ReasonIR,(c)  BGE-M3, and(d)        SPLADE. Circles denote frozen embeddings across serialization
+views, crosses denote adapted embeddings after transport, and diamonds show the centroid
+before and after adaptation. Across all models, the adapter tightens serialization-specific
+embeddings around their respective centroids while preserving separation between different
+tables.
+
+H    Additional Results
+
+Table8reports the full Recall@1 breakdown for all retriever families and serialization groups.
+While the main text emphasizes aggregate rank movement, this detailed view exposes the
+underlying absolute performance differences and provides a more fine-grained picture.
+
+Baseline sensitivity across models and datasets.The base retrievers exhibit substantial
+variation across serialization formats, but the magnitude of that variation depends strongly
+on the retriever family. The largest swings appear for MPNet and SPLADE. OnWTQ,                 MPNet
+ranges from 0.09 on html to 0.25 on pipe and tsv, a spread of 0.16, while onWikiSQLit
+ranges from 0.10 on xml to 0.21 on tsv. The pattern is even sharper onNQ-Tables, where
+MPNet drops to 0.01 on mschema but reaches 0.28 on csv.  A similar sensitivity appears for
+SPLADE, which onWikiSQLranges from 0.35 on                   json to 0.52 on tsv. By contrast, BGE-M3 is
+much more stable within each dataset, for example, staying between 0.29 and 0.31 across all
+data representations onWTQ. These results support the central claim that serialization is
+not a neutral preprocessing choice, but a first-order determinant of table retrieval quality.
+
+Retriever-dependent gains.The effects of adaptation are strongly retriever-dependent,
+and the gains are not uniform across datasets. The clearest improvements appear for dense
+models in selected serialization families, especially for MPNet onWTQandWikiSQLunder
+syntactically heavier formats. For example, onWTQwith               html, MPNet rises from 0.09 to 0.18
+with the joint adapter and to 0.17 with the subset adapter; onWikiSQLwith                   latex, it rises
+from 0.12 to 0.17 under both adapters; and onWikiSQLwith                   xml, it improves from 0.10
+to 0.17. ReasonIR also benefits in several cases, especially for structural perturbations: on
+WTQ, shuffled rows improve from 0.22 to 0.26 and then 0.29, and shuffled columns improve
+from 0.24 to 0.27 and then 0.29. OnWikiSQL, the same pattern appears with shuffled rows
+moving from 0.22 to 0.24 and 0.26. BGE-M3 shows smaller and more localized gains, such as
+NQ Tablesshuffled rows improving from 0.12 to 0.17 under the joint adapter. In contrast,
+SPLADE usually degrades under adaptation. OnWTQ, its overall centroid score falls from
+0.44 to 0.38 and 0.36, and onNQ Tablesit drops from 0.26 to 0.17 and 0.21.  This pattern
+is consistent with the claim that the transport-based correction aligns better with dense
+embedding geometries than with sparse lexical representations.
+
+Sensitivity to serialization complexity.   Adapter gains are most visible when the original
+serialization introduces substantial syntactic overhead or perturbation, but this trend is
+not universal. For MPNet, the strongest gains often occur in markup-heavy or schema-style
+representations:  onWTQ,                html improves from 0.09 to 0.18, latex from 0.15 to 0.20, and
+mschema from 0.10 to 0.17; onWikiSQL,                  html improves from 0.11 to 0.17 and macschema from
+0.12 to 0.17. This suggests that, without changing much, the adapter improves performance
+for those serializations that initially perform poorly.  For cleaner data-oriented formats
+
+
+                                                       25
+Preprint. Under review.
+
+
+
+
+such as tsv, the base model is often already comparatively strong, leaving limited room
+for improvement: MPNet stays at 0.25 onWTQand shifts only from 0.21 to 0.20 or 0.21 on
+WikiSQL. The same interpretation broadly holds for               ReasonIR, where gains are typically
+larger for shuffled or schema-oriented variants than for already strong formats such as html
+or xml. Overall, the evidence suggests that the adapter primarily attenuates format-specific
+variation rather than providing a uniform semantic improvement across all inputs.
+
+Cross-dataset robustness and transfer.   The subset-trained adapter, learned only onWTQ
+andWikiSQL, shows partial transfer to the unseenNQ Tablesbenchmark, but its effec-
+tiveness depends strongly on the retriever. For dense models, transfer is visible in several
+settings. For MPNet, the subset adapter outperforms the base model on html (0.06 to 0.09),
+latex (0.13 to 0.15), json (0.16 to 0.16, effectively neutral), xml (0.22 to 0.24), transpose (0.27
+to 0.28), and ddl (0.08 to 0.11), although it still underperforms the base model on several
+popular formats such as pipe (0.25 to 0.22). Transfer is stronger for ReasonIR: its overall cen-
+troid score rises from 0.29 to 0.32, with gains onpipe(0.21 to 0.25),space(0.19 to 0.24),csv
+(0.25 to 0.28), tsv (0.22 to 0.27), and transpose (0.28 to 0.31). BGE-M3 transfer is mixed and
+modest, while SPLADE remains substantially worse than the base model even with the subset
+adapter.  These results indicate that some serialization-induced perturbations generalize
+across datasets, but the transfer is incomplete and retriever-specific.  Figure6highlights
+how SPLADE’s adapter transport collapses into the same embedding orbit, resulting in poor
+performance withSPLADE.
+
+Robustness  under  Table  Perturbation.We  stress-test  retrieval  robustness  under  a
+mixed-representation  setting,  where  each  table  is  perturbed  by  assigning  each  row  a
+randomly sampled serialization format from a fixed set of representations:
+Sperturb ={csv, tsv, html, markdown, latex, json, pipe, token, space}
+removing global structural consistency.  We construct a fully mixed-format corpus and
+encode it using frozen dense retrievers (MPNet, BGE-M3, ReasonIR) and the sparse retriever
+SPLADE, as described in SectionA.2. The adapter is then applied post hoc to these embed-
+dings, producing corrected representations without re-encoding. Retrieval is performed by
+ranking tables using cosine similarity:
+
+                                      score(q,T) =               f(q)·z(T)∥f(q)∥·∥z(T)∥
+
+where  f(q)      is the query embedding and z(T)       is either the base or adapted table embedding.
+Both adapter variants are trained exclusively on clean, single-format tables using the same
+training setup and frozen encoder described in AppendixG.
+Table7shows that this perturbation induces substantial degradation in base models. The
+largest instability appears onNQ, where lexical cues are weakest:            MPNet drops by−11.3%,
+while ReasonIR improves by +25.8% (full) and +28.0% (subset). OnWTQ, gains are more
+moderate but consistent, with ReasonIR improving by +15.2%, while SPLADE and BGE-M3
+show smaller but stable improvements (+1.5% and +2.5%). OnWikiSQL, which is struc-
+turally simpler, improvements are smaller (e.g., ReasonIR: +10.3%), indicating that adapta-
+tion does not over-correct when perturbation impact is limited.
+Across datasets, improvements concentrate where base representations are least stable,
+while relatively stable baselines show only mild changes (e.g., MPNet on WTQ:−1.1%).
+The subset adapter matches or exceeds full adaptation in several cases, suggesting that
+the learned transformation captures representation-invariant structure rather than format-
+specific patterns. At the same time, mixed behavior in BGE-M3 onNQ(   −5.7% under subset)
+indicates that effectiveness depends on the underlying embedding geometry.
+Overall,  the  results  show  that  the  adapter  is  most  effective  in  high-noise,  structurally
+unstable regimes, while remaining conservative when the base representation is already
+well-formed, and generalizes to heterogeneous inputs despite being trained only on clean
+data.
+
+
+                                                       26
+Preprint. Under review.
+
+
+
+
+
+
+
+                                                                                            Base            Adapted Full            Adapted Subset
+
+  Dataset                                                     Model                                                        R@1          R@1   ∆%            R@1   ∆%
+                                              MPNet                                              0.2393       0.2367−1.1%        0.2331−2.6%
+  WTQ                                         ReasonIR                                  0.2774       0.3195+15.2%0.3181+14.7%
+                                              SPLADE                                          0.3726       0.3783        +1.5%        0.3738        +0.3%
+                                              BGE-M3                                          0.3102       0.3181        +2.5%        0.3143        +1.3%
+                                              MPNet                                              0.2847       0.2526−11.3%       0.2526−11.3%
+  NQ                                          ReasonIR                                  0.1925       0.2422+25.8%0.2464+28.0%
+                                              SPLADE                                          0.2101       0.2112        +0.5%        0.2360       +12.3%
+                                              BGE-M3                                          0.3240       0.3323        +2.6%        0.3054−5.7%
+
+                                              MPNet                                              0.2020       0.1950−3.5%        0.2000−1.0%
+  WikiSQL                                     ReasonIR                                  0.2616       0.2885+10.3%0.2873+9.8%
+                                              SPLADE                                          0.4103       0.4187        +2.0%        0.4248        +3.5%
+                                              BGE-M3                                          0.3331       0.3300−0.9%        0.3327−0.1%
+
+Table 7:Table retrieval Recall@1 under mixed-format perturbation, where every table in the dataset
+has its row-level serialization randomly corrupted by mixing formats (e.g., CSV, TSV, JSON) within a
+single table. Results are reported for the base encoder, full adapter the subset adapter. ∆% denotes
+percentage change in R@1 relative to the base model.Boldentries indicate the largest gains per
+dataset.
+
+
+Robustness rather than universal improvement.Overall, the adapter results support
+a robustness interpretation rather than a universal improvement claim.  The method can
+materially improve dense retrievers in difficult serialization settings, especially for MPNet
+and ReasonIR, but it does not consistently improve every dataset, retriever, or representation
+family.   In  particular,  ReasonIR  is  one  of  the  strongest  performers  onNQ  Tableseven
+before adaptation, with base scores of 0.34 on xml and 0.31 on ddl, and the subset adapter
+further raises its overall centroid from 0.29 to 0.32. By contrast, SPLADE shows systematic
+degradation across almost all categories. The evidence, therefore, supports the narrower
+claim that centroid-guided transport can improve robustness within dense retrieval families
+under serialization shift, but sparse lexical representations limit the adapter’s ability to do
+so.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                          27
+Preprint. Under review.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                    28

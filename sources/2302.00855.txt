@@ -1,0 +1,749 @@
+                                   Molecular Geometry-aware Transformer
+                                   for accurate 3D Atomic System modeling
+
+
+
+
+             Zheng Yuan 1  Yaoyun Zhang 1  Chuanqi Tan 1  Wei Wang 1  Fei Huang 1  Songfang Huang 1
+
+                            Abstract                                       provide highly accurate estimations, it is extremely slow
+      Molecular dynamic simulations are important in                       to apply to large atomic systems due to numerous iterate
+      computational physics, chemistry, material, and                      steps (Jones,2015).  Machine learning methods can esti-
+      biology.  Machine learning-based methods have                        mate molecular system energy from ab initio states which
+      shown strong abilities in predicting molecular en-                   do not need to inference multiple times and have satisﬁed
+      ergy and properties and are much faster than DFT                     performances.  Machine learning methods use positional
+      calculations. Molecular energy is at least related                   information and atomic numbers of atoms and estimate po-
+      to atoms, bonds, bond angles, torsion angles, and                    tential energy using neural networks (Sch  ¨utt et al.,2018;
+      nonbonding atom pairs.   Previous Transformer                        Shi et al.,2022).
+      models only use atoms as inputs which lack ex-                       The basic form of force ﬁeld for the molecular system en-
+      plicit modeling of the aforementioned factors. To                    ergy can be decomposed into a sum of functions based on
+      alleviate this limitation, we propose Moleformer,                    factors including bonds, bond angles, torsion angles, and
+      a novel Transformer architecture that takes nodes                    nonbonding interactions (including electrostatic and van der
+     (atoms) and edges (bonds and nonbonding atom                          Waals) (Gasteiger et al.,2020b;Leach,2001). To include
+      pairs) as inputs and models the interactions among                   aforementioned factors for energy estimation, a neural net-
+      them using rotational and translational invariant                    work needs to learn interactions among atom-atom (forming
+      geometry-aware spatial encoding. Proposed spa-                       bonds and nonbonding atom pairs), atom-bond (forming
+      tial encoding calculates relative position informa-                  bond angles), and bond-bond (forming torsion angles). Pre-
+      tion including distances and angles among nodes                      vious Transformer-based models learn interactions among
+      and edges. We benchmark Moleformer on OC20                           atom-atom in each Transformer layer (Shi et al.,2022;Liao
+      and QM9 datasets, and our model achieves state-                      & Smidt,2022). Since one Transformer layer cannot model
+      of-the-art on the initial state to relaxed energy                    interactions of more than two atoms, high-order interactions
+      prediction of OC20 and is very competitive in                        (interactions among three or four atoms) are only modeled
+      QM9 on predicting quantum chemical properties                        implicitly across Transformer layers.
+      compared to other Transformer and Graph Neural                       To alleviate this limitation and leverage the power of Trans-
+      Network (GNN) methods which proves the effec-                        formers, we propose Moleformer which explicitly models in-
+      tiveness of the proposed geometry-aware spatial                      teractions among atoms and atom pairs in each Transformer
+      encoding in Moleformer.                                              layer.  Moleformer takes atoms, bonds, and non-bonding
+
+                                                                           atom pairs as inputs and applies a novel translational and
+1. Introduction                                                            rotational invariant geometry-aware spatial encoding to cap-
+Molecular  dynamic  simulations  (MDS)  are  essential  in                 ture geometry relations among these inputs. The proposed
+many subjects including physics, chemistry, biology, and                   spatial encoding is calculated by relative distances and an-
+materials  (Karplus  &  Petsko, 1990; Van  Gunsteren  &                    gles of the atoms and atom pairs which is enough to deter-
+Berendsen, 1990;Frenkel  &  Smit, 2002;Luding, 2005;                       mine the relative spatial geometry information among them.
+Durrant & McCammon,2011).  Density function theory                         Interactions among atom-bond include the bond angle fac-
+(DFT) is the most commonly used computational tool for                     tor from the force ﬁeld, and interactions among bond-bond
+simulating atomic systems and estimating the energy of                     include the torsion angle factor in the force ﬁeld. DimeNet
+molecular systems (Cohen et al.,2012).  While DFT can                      (Gasteiger et al.,2020b) had introduced directional embed-
+                                                                           dings which learn bond representation from the neighbor
+
+    1Alibaba  Group.     Correspondence  to:    Songfang  Huang            bonds. Compared to DimeNet, Moleformer can further learn
+<songfang.hsf@alibaba-inc.com>.                                            atom pairs representation from nonadjacent atoms and atom
+                                                                           pairs which may better model the nonbonding interactions
+                          Molecular Geometry-aware Transformer for accurate 3D Atomic System modeling
+
+introduced from the force ﬁeld.                                              3.1. Architeture of Moleformer
+We demonstrate our method on Open Catalyst 2020 (OC20)                       Moleformer (Figure1            (b)) is a rotation- and translation-
+dataset (Chanussot et al.,2021) and the QM9 dataset (Ra-                     invariant Transformer (Vaswani et al.,2017) for 3D molecu-
+makrishnan et al.,2014) and achieve competitive results                      lar energy and property prediction. Moleformer uses nodes
+to previous methods. Moleformer achieves state-of-the-art                    (atoms) and selected edges (including bonding and nonbond-
+performance in predicting catalyst system relaxed energy                     ing atom pairs) as inputs. If an atomic system containsN
+from ab initio states using only ab initio states training data.             atoms, there are C2N  possible edges.  Involving all possi-
+We also propose a periodic boundary condition correction                     ble edges into the models is computational-heavy and may
+missed in previous machine learning methods which can                        introduce uninformative edges.  We choose atom pairs as
+improve the performances of relaxed states and energy pre-                   edges with top-M closest distances. For an atomic system
+diction in OC20.   Moleformer also performs better than                      like a catalyst system comprising an adsorbate and a surface
+recent state-of-the-art methods including SEGNN (Brand-                      (Figure1           (a)), we prefer edges between adsorbate-adsorbate
+stetter et al.,2021) and EQGAT (Le et al.,2022) in QM9                       atom  pairs  and  adsorbate-surface  atom  pairs  rather  than
+quantum chemical properties predictions and shows strong                     surface-surface atom pairs.  The reason is that the edges
+abilities to predict molecular orbital energy.                               between such atom pairs are more diverse in edge lengths
+                                                                             and atom types and may contain more information in energy
+2. Related Work                                                              modeling.  We will penalize distances in surface-surface
+                                                                             atom pairs for edge selection.
+Machine learning-based MDS methods are gaining increas-
+ing attention due to their fast inference speed and good per-                Input  Embedding    We  embed  edge  (i,j)  by  nuclear
+formance (Sch  ¨utt et al.,2018;Zhang et al.,2020;Gasteiger                  charges zi,zj  and distances between two atoms‖−→rij‖  =
+et al.,2020a;Sch                ¨utt et al.,2021;Shui & Karypis,2020;        ‖xi− xj‖ intoh0ij using RBF (Sch  ¨utt et al.,2018).
+Wang et al.,2022;Liu et al.,2021).  Recent works in this
+direction can be mainly divided into two groups accord-                                           h0ij = RBF(zi,zj,‖−→rij‖)                      (1)
+ing to backbone neural network architectures: Graph Neu-
+ral Networks (GNNs) (Gasteiger et al.,2020b;Hu et al.,
+2021;Gasteiger et al.,2021;Shuaibi et al.,2021;Zitnick                       FollowingShi et al.(2022), we embed atom         i intoh0i  by
+et al.,2022) and Transformers (Fuchs et al.,2020;Ying                        nuclear chargeszi and distances among all other atoms:
+et al.,2021;Shi et al.,2022;Liao & Smidt,2022). GNNs                                                          ∑
+construct graphs based on atom positions treating atoms                        h0i  = Embed(zi) + WR               (RBF(zi,zj,‖−→rij‖)) + bR
+as nodes and bonds as edges.   Node representations are                                                         j
+iteratively updated by messages aggregated nodes neighbor-                                                                                        (2)
+hoods. However, GNNs can only interact with pre-deﬁned                       where WR and bR are parameters of the linear layer which
+neighborhoods in each layer.  Compared to GNN models,                        aligns the dimension of embedding and RBF.
+Transformers can model interactions between all atom-atom                    Geometry-aware Transformer Layer    We  concatenate
+pairs through the self-attention mechanism in each Trans-                    {h0i}Ni=1  and{h0ij} together as inputs and apply L layer
+former layer (Vaswani et al.,2017), which enables the model                  geometry-aware Transformer block to interact nodes and
+to learn complex relations between nonbonding atom pairs.                    edges.   For lth  layer,  the  inputs  are{hli}Ni=1  and{hlij}.
+Graphormer (Ying et al.,2021;Shi et al.,2022) takes atoms                    Transformers in the natural language processing domain
+as inputs and modiﬁes absolute positional encoding in Trans-                 (Vaswani et al.,2017;Devlin et al.,2019) usually encode
+formers by using the relative distance between atoms to rep-                 absolute position information (i.e.  word order) by adding
+resent geometric information. Different from Graphormer,                     positional embedding into the input representations.  For
+Moleformer uses atoms and edges as inputs and uses the                       3D atomic modeling, representations need to be rotation-
+relative geometry information between atoms and edges.                       and translation-invariant or equivariant, so relative position
+3. Methods                                                                   information is favored. We encode relative position informa-
+                                                                             tion in each geometry-aware Transformer layer by adding a
+Consider  a  3D  atom  system  with N  atoms  (i.e.   nodes)                 bias into the self-attention computation:
+described by nuclear charges{z1,...,zN},zi∈ Z and 3D
+positions{x1,..., xN}, xi∈ R3.  The target is to predict                                    Aij = (hliWq)(hljWk)T√
+scalar propertyy∈ R of the system (e.g.  system energy,                                                         d            +b(i,j)              (3)
+dipole moment, and heat capacity).
+                                                                                                     aij =     expAij∑
+                                                                                                                 k expAik                            (4)
+                           Molecular Geometry-aware Transformer for accurate 3D Atomic System modeling
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 1. The overview of Moleformer. (a) A toy example of a catalyst system where CH3 is the adsorbate and the surface is composed
+of copper atoms.  Moleformer prefers edges between adosrbate-adsorbate atoms and adsorbate-surface atoms as model inputs.  (b)
+Architecture of Moleformer: Nodes and selected edges are embedded by an embedding layer and an RBF layer. Stacks of geometry-aware
+transformer layers are used for interacting information from nodes and edges. An MLP layer is used for generating node-level or edge-level
+outputs, and the scalar property is predicted by summation of them. (c)-(e) show how geometry-aware spatial encoding interacts among
+node-node, edge-node, and edge-edge in transformer layers respectively. Dotted lines denote edges and solid yellow lines denote geometry
+information (i.e. distances and angles) used in the spatial encoding. (c) Distances between node-node are used. (d) Distances and angles
+between edge-node are used. (e) Distances and angles between edge-edge are used.
+
+
+                                                                                 four other sides to encodeb(ij,kl).  Furthermore, we en-
+                       hl+1i     = ∑(hliWv)aij                        (5)        hance the spatial encoding by the angle of edges (i,j) and
+                                   j                                             (k,l) to explicitly embed the angle information (Figure1
+where indexi,j,k can represent a node or a edge andb(i,j)                        (e)).
+is our proposed geometry-aware spatial encoding. b(i,j)                            b(ij,kl) =RBF(‖−→rik‖) + RBF(‖−→rjk‖) + RBF(‖−→ril‖)
+requires to capture the relative geometry information.                                         +RBF(‖−→rjl‖) + RBF(cos(−→rij,−→rkl))
+Speciﬁcally,  if i and j  are both nodes,  the only relative                                                                                            (8)
+geometry information is their distance (Figure1            (c)), so we
+use RBF of distance to calculateb(i,j):                                          The  ﬁnal  representations  of  nodes hi  and  edges hij  are
+                   b(i,j) = RBF(zi,zj,‖−→rij‖)                    (6)            obtained by repeatedly sending the representations into a
+                                                                                 stack of Transformer layers following the work in (Jumper
+An edge (i,j) and a nodek form a trianglei,j,k, and the                          et al.,2021;Shi et al.,2022). This procedure improves the
+relative geometry information is determined by the lengths                       model performance without enlarging parameter counts.
+
+of two sides‖−→rik‖,‖−→rjk‖ and the included angle ∠ikj (Fig-                    Predictions    Inspired  by  the  force  ﬁeld  which  includes
+ure1      (d)). We calculate biasb(ij,k) by RBF of them:                         bonds as factors of molecular system energy, we use not
+b(ij,k) = RBF(‖−→rik‖) + RBF(‖−→rjk‖) + RBF(cos∠ikj)                             only node representations{hi} but also edge representations
+                                                                       (7)       {hij} for energy (and other scalar properties) predictions:
+
+Two  edges  (i,j)  and  (k,l)  connecting  different  node                                      ˆy = ∑    MLP(hi) + ∑MLP(hij)             (9)
+pairs  form  a  quadrilateral,   and  the  relative  geometry                                          i                    ij
+information  is  determined  by  lengths  of  six  sides  (i.e.
+(i,j), (i,k), (i,l), (j,k), (j,l), and (k,l)). Lengths of (i,j)                  where MLP is a 2-layer multi-layer perceptron with non-
+and (k,l) are already encoded inhlij andhlkl.  We use the                        linearity.
+                          Molecular Geometry-aware Transformer for accurate 3D Atomic System modeling
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 2. PBC Correction. (a)-(c) An example of a catalyst system where CH3 is the adsorbate and the surface is composed of copper
+atoms viewed along the<110>orientation. The dotted lines show the borders of the unit cell. Grey-colored small atom is a hydrogen
+atom that goes across the unit cell and the dotted circle is its initial position. (a) Initial positions. (b) Relaxed positions. The grey hydrogen
+atom moves across the boundary and reappears on the opposite side. (c) PBC correction positions. The grey hydrogen atom lies outside
+the unit cell and has a smaller distance from the initial position.
+
+
+3.2. Periodic boundary condition correction                                    dicts molecular properties and relaxed energies accurately
+Periodic boundary conditions (PBC) are commonly used                           and outperforms prior arts.
+in molecule system simulation for a large system (Makov                        4.1. Benchmarks on OC20 relaxed energy prediction
+& Payne,1995). To implement PBC, a unit cell (which is
+also referred as a periodic box) is surrounded by translated                   Overall, the OC20 dataset (Chanussot et al.,2021) is tar-
+copies in all directions to approximate an inﬁnitely large                     geted to model the computational catalyst discovery process
+system. When one molecule diffuses across the boundary of                      which is important in solar fuels synthesis, renewable fertil-
+the periodic box, it reappears on the opposite side. Falling                   izer production, and energy storage (Nørskov & Bligaard,
+to handle such cases will cause errors in atomic distance                      2013;Nørskov et al.,2014;Seh et al.,2017). OC20 contains
+calculation.  Since distance is one of the most important                      large amounts of samples in diverse adsorbates and surfaces.
+input features for machine learning methods, this error is                     A large amount of training samples is suitable to test the
+nonnegligible. For example, when considering the relative                      generation ability of a machine-learning method.
+distance between an initial positionxi and a relaxed position                  Speciﬁcally, OC20 provides a small molecule called adsor-
+xri in a relaxation process, a long distance will be mistakenly                bate composed of H, C, N, and O atoms, and a large surface
+calculated if the relaxed position appears on the opposite                     slab composed of multiple atoms in each sample. The slab is
+side of the boundary. To correctly model the local geometry,                   periodic in all directions with a vacuum layer towards to ad-
+the relaxed positionxri  is estimated by ﬁnding the smallest                   sorbate. OC20 deﬁnes three different prediction tasks: S2EF
+possible movement distance from the initial positionxi.                        (State to energy and force), IS2RS (Initial state to relaxed
+
+                                                                               state), and IS2RE (Initial state to relaxed energy). We focus
+             ˜xri  =  arg min                                                  our experiments on IS2RE direct setting which is the most
+                    xri +cell∗δ(‖xri +cell∗δ−xi‖)          (10)                common task in catalysis since the relaxed energy is related
+wherexi is the initial position,cell are three primitive trans-                to catalyst properties (Chanussot et al.,2021).  The direct
+lation vectors deﬁning the unit cell, andδ = (δ1,δ2,δ3)∈                       setting is an end-to-end task that takes the initial state (i.e.
+R3  indicates  the  directions  of  atomic  movement  across                   atom positions) as inputs and predict the relaxed energy of
+boundaries in which directions (δi∈{−1, 0, 1}). We cor-                        systems. Relaxed energy is computed via DFT as the targets.
+rect the relaxed positions of atoms which do not guarantee                     The models need to compute the relaxed energy from the ini-
+relaxed positions are within the unit cell but preserve the                    tial state directly without relaxation. Energy mean absolute
+correct relative position information between initial posi-                    error (MAE) and energy within threshold (EWT) are used
+tions and relaxed positions.  Figure2shows examples of                         as evaluation metrics. The training set contains 470K sam-
+PBC corrections of a catalyst system. In the ablation study,                   ples with 46 different adsorbates. The development set and
+we will show PBC corrections improve the performances                          the test sets are divided into four sub-splits including one
+on catalyst system energy estimation.                                          in-domain (ID, sampled from the training distribution) split
+                                                                               and three out-of-domain (OOD) splits, namely OOD adsor-
+4. Experiments                                                                 bates (unseen adsorbates), OOD catalysts (unseen element
+                                                                               compositions for catalysts), and OOD both (both unseen
+In this section, we show the results of Moleformer tested on                   adsorbate and unseen catalyst compositions). OOD adsor-
+the OC20 IS2RE and the QM9 datasets.  Moleformer pre-
+                           Molecular Geometry-aware Transformer for accurate 3D Atomic System modeling
+
+
+Table 1. Results on OC20 IS2RE test set using direct approach-based methods. The unit for energy MAE is meV, and the unit for Energy
+Within Threshold (EWT) is percentage. * means ensembled results. ID and OOD mean in-domain and out-of-domain data split. ADS,
+CAT, and BOTH mean out-of-domain adsorbate, catalyst, and both (i.e.  adsorbate and catalyst) data splits respectively.  AVG means
+average results among different splits. Bolded results are the best results among non-ensembled results.
+
+          Methods                                                                Energy MAE ↓                                                 EWT ↑
+                                                      ID                    OOD                   AVG       ID                     OOD                   AVG
+                                                             ADS     CAT     BOTH                               ADS     CAT     BOTH
+          GNS (Godwin et al.,2021)                422      568       437        465         473                   9.12      4.25      8.01       4.64       6.51
+          Graphormer * (Shi et al.,2022)         398      572       417        503         472      8.97      3.45      8.18       3.79        6.10
+          Equiformer (Liao & Smidt,2022)     417      548                         425        474         466      7.71      3.70      7.15       4.07        5.66
+          Moleformer                                    413      535       428        458        459      8.79     4.67      7.58       4.87        6.48
+
+
+
+bates split and OOD both split include 6 different adsorbates:                   and results of the development set are listed in Appendix
+CHO, CH, NH2, C2H3O2, HNO2, and C2H4(NH2)2.  Each                                A. Moleformer obtains a new direct approach IS2RE state-
+sub-split contains 25K samples. The three OOD splits serve                       of-the-art by achieving average energy MAE with 459 meV
+as a good validation of the transportability and generation                      in  the  test  set,  which  outperforms  GNS  with  473  meV,
+ability of our proposed architecture.                                            Graphormer with 472 meV, and Equiformer with 466 meV
+Notably, the training samples of OC20 are generated by the                       (with an 1.5% relative improvement). To be noticed, Mole-
+ASE tool (Atomic Simulation Environment) (Larsen et al.,                         former outperforms the ensembled models Graphormer with
+2017) which uses PBC to provide atomic positions within                          a single model.  For average EWT, Moleformer performs
+the unit cell. As mentioned above, atomic positions at the                       better than Graphormer and Equiformer and performs on
+opposite side of the unit cell need to be corrected ﬁrst for                     par with GNS. For out-of-domain distribution, Moleformer
+an accurate geometric calculation. Therefore, the proposed                       achieves the lowest energy MAE and the highest EWT in
+PBC correction method is implemented here for data pre-                          OOD-ADS,  and  OOD-Both  subsets  among  all  methods,
+processing, which has been neglected in the previous study                       which shows Moleformer can better generalize to out-of-
+(Shi et al.,2022).  Besides, we augment the training data                        domain adsorbates.
+with noisy node data augmentation following (Godwin et al.,                      4.2. Benchmarks on QM9 properties prediction
+2021;Liao & Smidt,2022), which ﬁrst applies a linear in-
+terpolation between initial and relaxed positions and adds                       The QM9 dataset (Ramakrishnan et al.,2014) consists of
+Gaussian noise on the interpolated positions as input.  In                       organic molecules made up of H, C, N, O, and F with 3D
+addition to the main object of relaxed energy prediction in                      atom positions. The target of the QM9 dataset is to predict
+IS2RE, the IS2RS is used as an auxiliary node-level object                       the energetic, electronic, and thermodynamic-related proper-
+to predict relaxed states (i.e., structures) (Shi et al.,2022;                   ties. Different from previous works that consider each target
+Liao & Smidt,2022). Moreover, bond lengths are quadratic                         as single-task learning, we experiment Moleformer with
+terms in the force ﬁeld of molecular system energy. Given                        a multi-task learning setting which reduces training time
+geometric information related to edges is used explicitly in                     greatly.Gasteiger et al.(2020b) ﬁnd that multi-task learning
+Moleformer, we also add an edge-level object as an auxiliary                     harm the performances on QM9 signiﬁcantly which does
+loss, which needs to predict relaxed edge lengths. Contribu-                     not happen to Moleformer.  Results compared to previous
+tions of PBC correction, data augmentation, and especially                       works are listed in Table2. Some works (Sch          ¨utt et al.,2018;
+the auxiliary task of relaxed edge length prediction will be                     Gasteiger et al.,2020b;a;Sch                   ¨utt et al.,2021;Th              ¨olke & Fab-
+analyzed in the ablation study below.                                            ritiis,2022) use random splits with 110K, 10K, and 10K
+We  compare  Moleformer  with  GNS  (Sanchez-Gonzalez                            samples in train, development, and test sets respectively. We
+et al.,2020;Godwin et al.,2021), Graphormer (Shi et al.,                         list their results as references.
+2022),  and Equiformer (Liao & Smidt,2022) on IS2RE                              Moleformer outperforms recent state-of-the-art methods in-
+direct  setting.   GNS  is  a  GNN  designed  for  simulating                    cluding SEGNN (Brandstetter et al.,2021) and EQGAT (Le
+complex  physics  with  an  encoder-decoder  architecture.                       et al.,2022) on ﬁve targets. Moleformer achieves MAE of
+Graphormer modiﬁes Transformer with centrality encoding,                         0.058a30, 30 meV, 21 meV, 21 meV, 0.039 D, and 0.026
+spatial encoding, and edge encoding to adapt to graph data.                      cal/mol K on isotropic polarizabilityα, the gap ∆ϵ between
+Equiformer  is  a  rotational-  and  translational-equivariant                   ϵHOMO andϵLUMO, highest occupied molecular orbital en-
+Transformer based on irreducible representations.                                ergyϵHOMO, lowest unoccupied molecular orbital energy
+Results of the test set of OC20 IS2RE are listed in Table1                       ϵLUMO, dipole momentµ, and heat capacity at 298.15KCv
+                            Molecular Geometry-aware Transformer for accurate 3D Atomic System modeling
+
+
+            Table 2. Results on QM9 test set compared to previous works. Both random split and ﬁx split results are reported.
+                      Model                      α     ∆ϵ  ϵHOMO  ϵLUMO   µ     Cv
+                      Unit                       a30       meV        meV         meV         D       cal/mol K
+                      Random Split
+                      SchNet (Sch  ¨utt et al.,2018)                       .235       63           41             34         .033          .033
+                      DimeNet (Gasteiger et al.,2020b)             .047       35           28             20         .029          .025
+                      DimeNet++ (Gasteiger et al.,2020a)         .044       33           25             20         .030          .023
+                      PaiNN (Sch  ¨utt et al.,2021)                        .045       46           28             20         .012          .024
+                      ET (Th  ¨olke & Fabritiis,2022)                    .059       36           20             18         .011          .026
+                      EQGAT (Le et al.,2022)                            .053       32           20             16         .011          .024
+                      Fix Split
+                      Cormorant (Anderson et al.,2019)             .085       61           34             38         .038          .026
+                      SE(3)-Transformer (Fuchs et al.,2020)     .142       53           35             33         .051          .054
+                      EGNN (Satorras et al.,2021)                     .071       48           29             25         .029          .031
+                      SEGNN (Brandstetter et al.,2021)             .060       42           24                         21         .023          .031
+                      EQGAT (Le et al.,2022)                            .063       44           26             22                      .014          .027
+                      Moleformer                                            .058       30          21            21         .039         .026
+
+
+
+respectively. Moleformer has signiﬁcant improvement on                              5.2. Moleformer Interpretation
+predicting ∆ϵ, which is MAE of 30 meV compared to MAE                               To understand how Moleformer models nodes and edges
+of 42 meV from SEGNN. Moleformer does not achieve                                   together, we plot the attention map for a sampled catalyst
+state-of-the-art on predicting µ. Sch ¨utt et al.(2021) pro-                        system from OC20 in Figure4.  For each input pair, we
+poses a speciﬁc decoder for predictingµ, while we only use                          calculate the attention similarities A between them.  We
+a 2-layer MLP. The speciﬁc decoder may further enhance                              summarize the attention similarities in each layer and each
+the performance of Moleformer. For more results on QM9                              head by counting the times that attention similarities exceed
+of Moleformer, we refer readers to Appendix B.                                      a threshold. The deep blue color indicates two inputs inter-
+                                                                                    act frequently, the blue color indicates two inputs interact
+5. Discussion                                                                       occasionally, and the grey color indicates two inputs interact
+5.1. Initial Structure to Relaxed Structure                                         infrequently.  It can be seen from Figure4           (a) that adsor-
+                                                                                    bate atoms interact with adsorbate atoms frequently, and
+To show the performance of molecular dynamic simulations,                           slab atoms interact with slab atoms frequently. Adsorbate
+we visualize Moleformer predicted relaxed structures of                             atoms interact less with slab atoms but interact more with
+catalyst systems from the OC20 dataset based on initial                             adsorbate-related edges. This shows Moleformer uses edges
+structures in Figure3. Typically, relaxed structures are sim-                       to communicate the adsorbate and the slab.  In Figure4
+ulated by iteratively estimating atomic forces via DFT and                          (b), we calculate the attention similarities of the last layer
+updating atom positions. This may require hundred times for                         from Moleformer. The Oxygen atomα has the highest at-
+convergence, however, predicting relaxed structures based                           tention similarity to the edge A connecting the Hydrogen
+on initial structures only needs one step inference.  From                          atom and the nearest Gallium atom.  The Carbon atomβ
+Figure3           (a)-(c), we ﬁnd that Moleformer predicts relaxed                  has the highest attention similarity to the edge B connect-
+structures of in-domain adsorbates accurately. The predicted                        ing the Hydrogen atom and the nearest Manganese atom.
+states of C2H4 are similar to the target relaxed states, and the                    These two edges are nonbonding atom pairs which may be
+predicted energy is also close to the target relaxed energy.                        neglected by other machine-learning models which only
+For out-of-domain adsorbates shown in Figure3          (d)-(f), the                 consider bonded atom pairs. These attentions involve three
+prediction states of Moleformer are not close enough to                             different atoms at once, which shows that Moleformer has
+the relaxed states and the energy difference is higher than                         the ability to model complex atom interactions.
+in-domain energy estimation. We can see that Moleformer
+has the ability for ab initio relaxed state prediction, and the                     5.3. Ablation Study
+task of energy estimation is highly correlated to the task of                       In order to measure the contributions of PBC correction,
+state estimation.                                                                   noisy node data augmentation and an auxiliary edge-level
+
+                                                                                    loss, we perform ablation studies on the OC20 dataset. The
+                                                                                    experiments  are  conducted  repeatedly,  with  one  module
+                                                                                    removed each time. The results are listed in Table3.
+                           Molecular Geometry-aware Transformer for accurate 3D Atomic System modeling
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 3.  IS2RS examples for Moleformer. (a),(d) Initial states. (b),(e) Relaxed states and adsorption energies in relaxed states (i.e.
+targets). (c), (f) Predicted states and predicted energies from Moleformer. (a)-(c) An in-domain catalyst system with adsorbate C2H4
+and slab composed of Chromium, Zirconium, and Tantalum. (d)-(f) An out-of-domain catalyst system with adsorbate HNO2 and slab
+composed of Arsenic and Rhodium.
+
+
+As shown in Figure5, PBC corrections reduce the position                       Table 3. Ablation studies on OC20 IS2RE development set with
+MAE of IS2RS by calculating moving distances correctly.                         energy MAE. The unit for energy MAE is meV.
+As a result, in in-domain split, an energy MAE improvement                       Splits                                 ID                    OOD                   AVG
+of 0.014 eV and an EWT improvement of 0.7% in IS2RE                              Settings                                       ADS     CAT     BOTH
+are obtained, validating the effectiveness of PBC corrections.                   Moleformer                    413      523       432        473        460
+From Table3, we observe training without PBC correction,                         - PBC Correction             427      551       441        495         479
+the energy MAE of the in-domain split and out-of-domain                          - Data Augmentation       417      587       429        530         491
+splits increase consistently.                                                    - Edge Auxiliary Loss     433      576       441        529         495
+Moreover,  without noisy node augmentation,  the energy
+MAE of the out-of-domain adsorbate split increases signiﬁ-
+cantly, while the energy MAE of the out-of-domain catalyst                      ing the effectiveness of integrating geometric information
+split has a minor change.  The OC20 dataset has only 82                         related to edges into the Moleformer architecture.
+adsorbates (this number is different from the IS2RE dataset
+since other adsorbates appear in the S2EF dataset) and up
+to 105  various catalyst slabs.   Training on OC20 is easy                      6. Conclusion
+to overﬁt on limited adsorbates. Noisy node augmentation                       This work introduces Moleformer, a novel Transformer ar-
+provides different initial states of adsorbates and improves                    chitecture to estimate 3D atomic system energy and proper-
+the generalization abilities.                                                   ties. Moleformer is inspired by the force ﬁeld for molecular
+Given that Moleformer introduces graph edges as inputs,                         system energy calculation which considers bonds, bond an-
+and we add an auxiliary edge-level loss by predicting relaxed                   gles, torsion angles, and nonbonding interactions as factors.
+edge lengths. Removing edge-level auxiliary loss increases                      Moleformer leverages atoms and atom pairs as inputs, and
+energy MAE in both in-domain split and out-of-domain                            models factors above by geometry-aware spatial encoding.
+splits. Previous works (Godwin et al.,2021;Shi et al.,2022;                    We have shown that Moleformer is more accurate in predict-
+Liao & Smidt,2022) have proven that adding node-level                           ing atomic system energy and properties than other GNN
+auxiliary loss helps energy estimation, here we ﬁnd that                        and Transformer models.  GNNs have dominated the 3D
+adding edge-level auxiliary loss also works.  Consider all                      atomic system modeling due to the nature of molecules
+atoms in a system as a set, the system energy is contributed                   which are composed of atoms (nodes) and bonds (edges).
+by all elements in the power set (including atoms, bonds                       Transformers are powerful in sequential data, especially in
+(2 atoms), angles (3 atoms), etc.).  Since bond lengths are                     texts, which need speciﬁc domain inductive bias to adapt
+highly related to energy, introducing supervision for bonds                     to other data formats. The inductive biases in Moleformer
+naturally helps the estimation of energy.                                       are (1) interactions among nodes, bonds, and nonbonding
+Overall, adding the auxiliary edge-level loss achieved the                      atoms contribute to system energy; (2) interactions among
+largest performance gain among the three modules indicat-                       several atoms are determined by their atomic numbers, rel-
+                                                                                ative distances, and angles.  These inductive biases make
+                          Molecular Geometry-aware Transformer for accurate 3D Atomic System modeling
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 4.  A catalyst system sampled from the OC20 dataset where H2C                 CHOH is the adsorbate molecule (Hydrogen atom in white,
+Carbon atom in grey, and Oxygen atom in red) and the slab is composed of Manganese (in purple), Rhodium (in dark green), and Gallium
+(in dark red) atoms. (a) The attention map calculated by Moleformer in this catalyst system. In X and Y-axes, ad means adsorbate and sf
+means the surface of the slab. The deeper color indicates more attention between these inputs. (b) 3D visualization of the catalyst system,
+two adsorbate-surface edges (A and B) have the highest attention value with an Oxygen atomα and a Carbon atomβ of the adsorbate.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 5. Ablation study on PBC Correction.  With PBC correction, Moleformer achieves better position MAE in IS2RS and better
+energy MAE and EWT in IS2RE. Results of MAE and EWT are obtained in the OC20 in-domain validation set.
+
+
+Moleformer suited for 3D atomic system modeling. A pos-                        For machine learning methods, generalization ability is an
+sible direction for future work is to introduce higher-order                   important factor.  Moleformer shows consistent improve-
+factors that contributed to system energy into the model.                      ment in in-domain molecular and out-of-domain molecular
+Moleformer improves molecular energy estimation perfor-                        for energy prediction in the OC20 dataset. Moleformer im-
+mance  by  involving  edges  and  performing  the  attention                   proves out-of-domain molecular by extending edge features
+mechanism among nodes and edges. However, this leads to                        and interactions.  However, energy predictions of out-of-
+more memory and computational requirements. Compared                           domain  molecular  still  have  a  performance  gap  with  in-
+to GNNs, Transformer-based models are memory and com-                          domain molecular. Another direction is to further improve
+putationally intensive. The further development direction of                   the generalization ability for unseen molecules which will
+Moleformer can be adapting to a light-weight Transformer.                      be useful in the design of de novo molecular.
+                         Molecular Geometry-aware Transformer for accurate 3D Atomic System modeling
+References                                                                 Gasteiger, J., Giri, S., Margraf, J. T., and G¨unnemann, S.
+Anderson,  B.,  Hy,  T.  S.,  and  Kondor,  R.    Cormorant:                  Fast and uncertainty-aware directional message passing
+  Covariant  molecular  neural  networks.     In  Wallach,                    for non-equilibrium molecules. In Machine Learning for
+  H.,  Larochelle,  H.,  Beygelzimer,  A.,  d'Alch´e-Buc,  F.,                Molecules Workshop, NeurIPS, 2020a.
+  Fox,  E.,  and  Garnett,  R.  (eds.),  Advances  in  Neural              Gasteiger,  J.,  Groß,  J.,  and G¨unnemann,  S.   Directional
+  Information Processing Systems, volume 32. Curran As-                       message passing for molecular graphs. In International
+  sociates, Inc., 2019.  URL https://proceedings.                             Conference on Learning Representations (ICLR), 2020b.
+  neurips.cc/paper/2019/file/                                              Gasteiger, J., Becker, F., and G¨unnemann, S. Gemnet: Uni-
+  03573b32b2746e6e8ca98b9123f2249b-Paper.                                     versal directional graph neural networks for molecules.
+  pdf.                                                                        Advances in Neural Information Processing Systems, 34:
+Brandstetter, J.,  Hesselink,  R., van der Pol,  E.,  Bekkers,                6790–6802, 2021.
+  E., and Welling, M.  Geometric and physical quantities
+  improve e(3) equivariant message passing. 2021.                          Godwin,   J.,   Schaarschmidt,   M.,   Gaunt,   A.,   Sanchez-
+Chanussot,  L.,  Das,  A.,  Goyal,  S.,  Lavril,  T.,  Shuaibi,               Gonzalez, A., Rubanova, Y., Velivckovi’c, P., Kirkpatrick,
+  M., Riviere, M., Tran, K., Heras-Domingo, J., Ho, C.,                       J., and Battaglia, P. W. Simple gnn regularisation for 3d
+  Hu, W., Palizhati, A., Sriram, A., Wood, B., Yoon, J.,                      molecular property prediction and beyond.  In Interna-
+  Parikh,  D.,  Zitnick,  C.  L.,  and  Ulissi,  Z.    Open  cat-             tional Conference on Learning Representations, 2021.
+  alyst  2020  (oc20)  dataset  and  community  challenges.                Hu,  W.,  Shuaibi,  M.,  Das,  A.,  Goyal,  S.,  Sriram,  A.,
+  ACS  Catalysis,  11(10):6059–6072,  2021.     doi:    10.                   Leskovec, J., Parikh, D., and Zitnick, C. L.   Forcenet:
+  1021/acscatal.0c04525. URL https://doi.org/10.                              A graph neural network for large-scale quantum calcula-
+  1021/acscatal.0c04525.                                                      tions. arXiv preprint arXiv:2103.01436, 2021.
+Cohen, A. J., Mori-S´anchez, P., and Yang, W.  Challenges                  Jones, R. O. Density functional theory: Its origins, rise to
+  for density functional theory. Chemical reviews, 112(1):                    prominence, and future. Reviews of Modern Physics, 87:
+  289–320, 2012.                                                              897–923, 2015.
+Devlin, J., Chang, M.-W., Lee, K., and Toutanova, K. BERT:                 Jumper, J. M., Evans, R., Pritzel, A., Green, T., Figurnov,
+  Pre-training of deep bidirectional transformers for lan-                    M., Ronneberger, O., Tunyasuvunakool, K., Bates, R.,
+  guage understanding. In Proceedings of the 2019 Confer-                     Z´ıdek, A., Potapenko, A., Bridgland, A., Meyer, C., Kohl,
+  ence of the North American Chapter of the Association for                   S. A. A., Ballard, A., Cowie, A., Romera-Paredes, B.,
+  Computational Linguistics: Human Language Technolo-                         Nikolov, S., Jain, R., Adler, J., Back, T., Petersen, S.,
+  gies, Volume 1 (Long and Short Papers), pp. 4171–4186,                      Reiman, D. A., Clancy, E., Zielinski, M., Steinegger, M.,
+  Minneapolis,  Minnesota,  June  2019.  Association  for                     Pacholska, M., Berghammer, T., Bodenstein, S., Silver,
+  Computational Linguistics. doi: 10.18653/v1/N19-1423.                       D., Vinyals, O., Senior, A. W., Kavukcuoglu, K., Kohli,
+  URL https://aclanthology.org/N19-1423.                                      P., and Hassabis, D.  Highly accurate protein structure
+Durrant, J. D. and McCammon, J. A. Molecular dynamics                         prediction with alphafold. Nature, 596:583 – 589, 2021.
+  simulations and drug discovery. BMC biology, 9(1):1–9,                   Karplus, M. and Petsko, G. A. Molecular dynamics simula-
+  2011.                                                                       tions in biology. Nature, 347(6294):631–639, 1990.
+Frenkel, D. and Smit, B.  Understanding Molecular Sim-                     Larsen,  A.  H.,  Mortensen,  J.  J.,  Blomqvist,  J.,  Castelli,
+  ulation: From Algorithms to Applications, volume 1 of                       I. E., Christensen, R., Dułak, M., Friis, J., Groves, M. N.,
+  Computational  Science  Series.   Academic  Press,  San                     Hammer, B., Hargus, C., et al.  The atomic simulation
+  Diego, second edition, 2002.                                                environment—a python library for working with atoms.
+Fuchs,   F.,   Worrall,   D.,   Fischer,   V.,   and  Welling,   M.           Journal of Physics: Condensed Matter, 29(27):273002,
+  Se(3)-transformers:     3d   roto-translation   equivariant                 2017.
+  attention  networks.    In  Larochelle,  H.,  Ranzato,  M.,              Le, T., No´e, F., and Clevert, D.-A. Equivariant graph atten-
+  Hadsell,   R.,   Balcan,   M.,   and  Lin,   H.  (eds.),   Ad-              tion networks for molecular property prediction.  arXiv
+  vances   in   Neural   Information   Processing   Systems,                  preprint arXiv:2202.09891, 2022.
+  volume    33,    pp.    1970–1981.    Curran    Associates,
+  Inc.,     2020.           URL   https://proceedings.                     Leach,  A.   Molecular  Modelling:  Principles  and  Appli-
+  neurips.cc/paper/2020/file/                                                 cations.   Prentice Hall,  2001.   ISBN 9780582382107.
+  15231a7ce4ba789d13b722cc5c955834-Paper.                                     URL      https://books.google.com/books?
+  pdf.                                                                        id=kB7jsbV-uhkC.
+                         Molecular Geometry-aware Transformer for accurate 3D Atomic System modeling
+
+Liao, Y. and Smidt, T. E.  Equiformer:  Equivariant graph                  Sch¨utt, K. T., Unke, O. T., and Gastegger, M. Equivariant
+  attention  transformer  for  3d  atomistic  graphs.   ArXiv,                message passing for the prediction of tensorial properties
+  abs/2206.11990, 2022.                                                       and molecular spectra.  In International Conference on
+                                                                              Machine Learning, 2021.
+Liu, Z., Lin, L., Jia, Q., Cheng, Z., Jiang, Y., Guo, Y., and
+  Ma, J. Transferable multilevel attention neural network                  Sch¨utt,   K.   T.,   Sauceda,   H.   E.,   Kindermans,   P.-J.,
+  for accurate prediction of quantum chemistry properties                     Tkatchenko, A., and M¨uller, K.-R. Schnet – a deep learn-
+  via multitask learning. Journal of Chemical Information                     ing architecture for molecules and materials.  The Jour-
+  and Modeling, 61(3):1066–1082, 2021. doi: 10.1021/acs.                      nal of Chemical Physics,  148(24):241722,  2018.   doi:
+  jcim.0c01224. URL https://doi.org/10.1021/                                 10.1063/1.5019779.    URL https://doi.org/10.
+  acs.jcim.0c01224. PMID: 33629839.                                           1063/1.5019779.
+
+Loshchilov, I. and Hutter, F. Decoupled weight decay regu-                 Seh, Z. W., Kibsgaard, J., Dickens, C. F., Chorkendorff, I.,
+  larization. In 7th International Conference on Learning                     Nørskov, J. K., and Jaramillo, T. F. Combining theory and
+  Representations,  ICLR  2019,  New  Orleans,  LA,  USA,                     experiment in electrocatalysis: Insights into materials de-
+  May 6-9, 2019, 2019.                                                        sign. Science, 355(6321):eaad4998, 2017. doi: 10.1126/
+                                                                              science.aad4998.     URL  https://www.science.
+Luding, S.   Molecular dynamics simulations of granular                       org/doi/abs/10.1126/science.aad4998.
+  materials. In The physics of granular media, pp. 297–324.                Shazeer,  N.    Glu  variants  improve  transformer.    arXiv
+  Wiley, 2005.                                                                preprint arXiv:2002.05202, 2020.
+
+Makov, G. and Payne, M.  Periodic boundary conditions                      Shi,  Y.,  Zheng,  S.,  Ke,  G.,  Shen,  Y.,  You,  J.,  He,  J.,
+  in ab initio calculations. Physical Review B, 51(7):4014,                   Luo, S., Liu, C., He, D., and Liu, T.-Y.  Benchmarking
+  1995.                                                                       graphormer on large-scale molecular modeling datasets.
+Nørskov, J. K. and Bligaard, T. The catalyst genome, 2013.                    arXiv preprint arXiv:2203.04810, 2022.  URL https:
+                                                                              //arxiv.org/abs/2203.04810.
+Nørskov, J. K., Studt, F., Abild-Pedersen, F., and Bligaard, T.            Shuaibi, M., Kolluru, A., Das, A., Grover, A., Sriram, A.,
+  Fundamental concepts in heterogeneous catalysis. John                       Ulissi, Z., and Zitnick, C. L.  Rotation invariant graph
+  Wiley & Sons, 2014.                                                         neural networks using spin convolutions. arXiv preprint
+Paszke, A., Gross, S., Massa, F., Lerer, A., Bradbury, J.,                    arXiv:2106.09575, 2021.
+  Chanan, G., Killeen, T., Lin, Z., Gimelshein, N., Antiga,                Shui,   Z.   and   Karypis,   G.       Heterogeneous   molecu-
+  L., Desmaison, A., Kopf, A., Yang, E., DeVito, Z., Raison,                  lar  graph  neural  networks  for  predicting  molecule
+  M., Tejani, A., Chilamkurthy, S., Steiner, B., Fang, L.,                    properties.       In   2020   IEEE   International   Confer-
+  Bai, J., and Chintala, S.  Pytorch:  An imperative style,                   ence  on  Data  Mining  (ICDM),  pp.  492–500,   Los
+  high-performance deep learning library.   In Advances                       Alamitos,   CA,   USA,   nov   2020.   IEEE   Computer
+  in Neural Information Processing Systems 32, pp. 8024–                      Society.  doi:  10.1109/ICDM50108.2020.00058.  URL
+  8035. Curran Associates, Inc., 2019.                                        https://doi.ieeecomputersociety.org/
+Ramakrishnan, R., Dral, P. O., Rupp, M., and Von Lilienfeld,                  10.1109/ICDM50108.2020.00058.
+  O. A.  Quantum chemistry structures and properties of                    Th¨olke,  P.  and  Fabritiis,  G.  D.    Equivariant  transform-
+  134 kilo molecules. Scientiﬁc data, 1(1):1–7, 2014.                         ers for neural network based molecular potentials.   In
+Sanchez-Gonzalez,  A.,  Godwin,  J.,  Pfaff,  T.,  Ying,  R.,                 International Conference on Learning Representations,
+  Leskovec, J., and Battaglia, P. Learning to simulate com-                   2022.  URL https://openreview.net/forum?
+  plex physics with graph networks. In III, H. D. and Singh,                  id=zNHzqZ9wrRB.
+  A. (eds.), Proceedings of the 37th International Confer-                 Van Gunsteren, W. F. and Berendsen, H. J. Computer simu-
+  ence on Machine Learning, volume 119 of Proceedings                         lation of molecular dynamics: methodology, applications,
+  of Machine Learning Research, pp. 8459–8468. PMLR,                          and perspectives in chemistry. Angewandte Chemie Inter-
+  13–18 Jul 2020. URL https://proceedings.mlr.                                national Edition in English, 29(9):992–1023, 1990.
+  press/v119/sanchez-gonzalez20a.html.
+                                                                           Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones,
+Satorras, V. G., Hoogeboom, E., and Welling, M. E(n) equiv-                   L.,  Gomez,  A. N.,  Kaiser,  Ł.,  and Polosukhin,  I.   At-
+  ariant graph neural networks. In International Conference                   tention is all you need. Advances in neural information
+  on Machine Learning, 2021.                                                  processing systems, 30, 2017.
+                          Molecular Geometry-aware Transformer for accurate 3D Atomic System modeling
+
+Wang,  Z.,  Wang,  C.,  Zhao,  S.,  Xu,  Y.,  Hao,  S.,  Hsieh,
+   C. Y., Gu, B.-L., and Duan, W. Heterogeneous relational
+   message passing networks for molecular dynamics simu-
+   lations. npj Computational Materials, 8(1):1–9, 2022.
+
+Ying, C., Cai, T., Luo, S., Zheng, S., Ke, G., He, D., Shen,
+  Y., and Liu, T.-Y. Do transformers really perform bad for
+   graph representation?  In NeurIPS, 2021.
+
+Zhang, B. and Sennrich, R.  Root mean square layer nor-
+   malization. Advances in Neural Information Processing
+  Systems, 32, 2019.
+
+Zhang, S., Liu, Y., and Xie, L. Molecular mechanics-driven
+   graph neural network with multiplex graph for molecular
+   structures. In NeurIPS-W, 2020.
+
+Zitnick, C. L., Das, A., Kolluru, A., Lan, J., Shuaibi, M.,
+   Sriram,  A.,  Ulissi,  Z.,  and Wood,  B.   Spherical chan-
+   nels for modeling atomic interactions.   arXiv preprint
+   arXiv:2206.14331, 2022.
+                          Molecular Geometry-aware Transformer for accurate 3D Atomic System modeling
+A. Training Details
+The proof of rotational and translational invariance for Moleformer is naive since all positional features (i.e.  atom pair
+lengths and angle among vectors) used in Moleformer are rotational and translational invariant.
+
+Architeture Details    We apply the layer normalization and the feed-forward network after the multi-head attention in each
+Transformer layer. We adopt root mean square (RMS) layer normalization (Zhang & Sennrich,2019) followingLiao &
+Smidt(2022). We use GEGLU (Shazeer,2020) as the activation function in the feed-forward network.
+
+OC20    For training on the OC20 IS2RE dataset, we applied noisy nodes data augmentation following (Godwin et al.,
+2021) which augment the initial positions by linear interpolation between the initial positions and relaxed positions and add
+Gaussian noisesN(0,σ2) to adsorbate atoms and surface atoms of the slab whereσ = 0.3 ˚A.
+For edges used as inputs, we calculated distances between all node pairs. In the OC20 dataset, adsorbate molecules have few
+atoms while slabs have more atoms. If we use all node pairs as inputs, edges will be dominated by two atoms from slabs.
+Interactions among slab atoms are monotone, and involving too many edges from two slab atoms is not informative. We
+group nodes (i.e. atoms) into three groups: adsorbate atoms, surface atoms of the slab, and other atoms of the slab. Since we
+wanted to pay more attention to adsorbates and interactions among adsorbates and surface atoms of slabs, we group all
+node pairs into six groups based on node types: adsorbate-adsorbate, adsorbate-surface, surface-surface, adsorbate-other,
+surface-other, and other-other. We sorted all node pairs based on group types and distances and selected the topM node
+pairs as edges. We heuristically selectedM equal to the node count, which will ignore some other-other edges which are not
+informative. Attention mechanism in Transformers models haveO(N2) time complexity, addingM =N edges into inputs
+will not change the order of time complexity.
+The models were trained with IS2RE loss (system level), IS2RS auxiliary loss (node level), and relaxed edge length
+prediction auxiliary loss (edge level). These losses are calculated using MAE and weighted summed as the total loss:
+
+
+                                                                  N∑    3∑                           M∑
+                                   L  =λS| ˆE−E| + λN3N                    |ˆxri,α−xri,α| + λEM          |ˆle−le|                                       (11)
+                                                                 i=1  α=1                           e=1
+
+whereN andM are node count and edge count,E is the relaxed system energy,xri,α is the relaxed position ofith atom
+on directionα,le is the relaxed length ofeth edge, ˆ· is the prediction from the model, andλS,λN , andλE are weights of
+system, node, and edge level loss respectively. For training IS2RS auxiliary task, the model needs to predict the moving
+position of each atom ∆xi = xri− xi∈ R3, where xri  is the relaxed position. We apply a rotational equivariant attention−→rij
+layer from (Shi et al.,2022) to predict             ∆xi which multiplies unit relative position [   ‖−→rij‖]i,j by standard multi-head attention
+probabilities. For the relaxed edge length prediction auxiliary task, we use a 2-layer MLP onhij to regress the relaxed edge
+lengthl. The prediction targets ofE andxri,α had been normalized to zero mean and unit variance.λS was set to 1. The
+weights of auxiliary lossesλN  andλE were set to 15 and 5 at the beginning of the training and linearly decayed to 1 within
+the ﬁrst quarter of training and remained at 1.
+
+
+QM9    For the QM9 dataset, we use the split from (Anderson et al.,2019) which contain 100K, 18K, and 13K samples in
+train, development, and test sets respectively.
+For edges used as inputs, we select the topM =N nearest node pairs as input edges. We apply multi-task training on all
+12 targets of QM9, and the total losses are calculated by summing of Smooth L1 Loss for each target. Smooth L1 Loss
+performs better than MSE and MAE Loss during our preliminary experiments.  We ﬁrst apply a linear regression with
+nuclear charges and targets on the training set, and the coefﬁcients of the linear regression are used as atom references. For
+training Moleformer, we subtracted atom references for each target and normalize each target to zero mean and unit variance.
+Subtracting atom references signiﬁcantly reduces the target variances and helps models converge quickly.
+
+
+Optimization    All models are implemented in PyTorch (Paszke et al.,2019) and trained with 8 NVIDIA A100 GPUs. We
+use AdamW (Loshchilov & Hutter,2019) to optimize models with a linear learning rate warmup and decay. We evaluate the
+model at the end of training.
+                                Molecular Geometry-aware Transformer for accurate 3D Atomic System modeling
+B. Results of development set in the OC20 dataset
+We display the results of the development set of OC20 IS2RE in Table4. To be noticed, Equiformer with noisy nodes data
+augmentation seems overﬁtted on the development set which has a much larger difference between the development set and
+the test set energy MAE than other methods.
+
+C. Results of remaining targets in the QM9 dataset
+
+We display the results of six other targets in Table5. Moleformer achieves ﬁve of six targets’ best results among the ﬁx
+split setting. Moleformer does not perform well in predicting⟨R2⟩ which may be improved via using a specialized decoder
+introduced by PaiNN (Sch  ¨utt et al.,2021).
+
+D. Hyper-parameters for training Moleformer
+
+We display the used hyper-parameters for training Moleformer in Table6.
+
+
+Table 4. Results on OC20 IS2RE development set using direct approach-based methods. The unit for energy MAE is meV, and the unit
+for Energy Within the Threshold (EWT) is percentage. † indicates using noisy nodes data augmentation. ID and OOD mean in-domain
+and out-of-domain data split. ADS, CAT, and BOTH mean out-of-domain adsorbate, catalyst, and both data splits. AVG means average
+results among different splits.
+
+           Methods                                                                Energy MAE ↓                                                 EWT ↑
+                                                               ID                    OOD                   AVG       ID                     OOD                   AVG
+                                                                        ADS     CAT     BOTH                               ADS     CAT     BOTH
+           GNS (Godwin et al.,2021)                540      650       550        590         583         -            -            -             -             -
+           GNS †                                                 470      510       480        460         480         -           -            -             -             -
+           Graphormer (Shi et al.,2022)            433      585       444        530         498         -            -            -             -             -
+           Equiformer (Liao & Smidt,2022)     422      542       423        475         466      7.23      3.77      7.13       4.10        5.56
+           Equiformer †                                      416      498       417        434        441      7.47     4.64      7.19       4.84       6.04
+           Moleformer †                                 413      523       432        473         460      8.01      3.04      7.66       3.19        5.48
+
+
+
+                                   Table 5. Results on remaining targets of QM9 test set compared to previous works.
+                                Model                     U0    U    H    G       ⟨R2⟩      ZPVE
+                                Unit                                                         meV     meV     meV     meV   a20         meV
+                                Random Split
+                                SchNet (Sch  ¨utt et al.,2018)                     14         19         14         14        .073         1.7
+                                DimeNet (Gasteiger et al.,2020b)             8           8           8           9         .331         1.3
+                                DimeNet++ (Gasteiger et al.,2020a)        6           6           7           9         .331         1.2
+                                PaiNN (Sch  ¨utt et al.,2021)                       6           6           6           7         .066         1.3
+                                ET (Th  ¨olke & Fabritiis,2022)                   6           6           6           8         .033         1.8
+                                EQGAT (Le et al.,2022)                          25         25         24         23        .382         2.0
+                                Fix Split
+                                Cormorant (Anderson et al.,2019)           22         21         21         20        .961         2.0
+                                EGNN (Satorras et al.,2021)                   12         12         12         12        .106         1.6
+                                SEGNN (Brandstetter et al.,2021)           15         13         16         15        .660         1.6
+                                EQGAT (Le et al.,2022)                          13         13         13         12        .257         1.5
+                                Moleformer                                          10        10        12        11       1.848       1.2
+        Molecular Geometry-aware Transformer for accurate 3D Atomic System modeling
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Table 6. Hyper-parameters used for training Moleformer on the OC20 dataset and the QM9 dataset.
+                                  Parameters                                            OC20      QM9
+                                  Embedding Dimension                          768         768
+                                  Feed-forward Network Dimension        768         768
+                                  RBF Dimension                                     128         128
+                                  Attention Heads                                      48           48
+                                  Transformer Layers                                12            6
+                                  Repeat Count                                           4             4
+                                  Epochs                                                    70          800
+                                  Warmup Steps                                     10,000     1,000
+                                  Peak Learning Rate                               2e-4        5e-4
+                                  Batch Size                                               32          256
+                                  Adamϵ                                                  1e-6        1e-6
+                                  Weight Decay                                        1e-3        1e-3
+                                  Clipping Gradient                                    5             5

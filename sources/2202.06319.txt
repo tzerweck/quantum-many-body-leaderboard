@@ -1,0 +1,1717 @@
+   A group-equivariant autoencoder for identifying spontaneously broken symmetries
+
+                Devanshu Agrawal,1  Adrian Del Maestro,2, 3, 4  Steven Johnston,2, 4  and James Ostrowski1
+           1Department  of  Industrial  and  Systems  Engineering,  University  of  Tennessee,  Knoxville,  TN  37996,  USA
+                  2Department  of  Physics  and  Astronomy,  University  of  Tennessee,  Knoxville,  TN  37996,  USA
+3Min H. Kao Department of Electrical Engineering and Computer Science, University of Tennessee, Knoxville, TN 37996, USA
+       4Institute for Advanced Materials and Manufacturing,  University of Tennessee,  Knoxville,  Tennessee 37996,  USA
+
+                   We  introduce  the  group-equivariant  autoencoder  (GE-autoencoder)  –  a  deep  neural  network
+                (DNN)  method  that  locates  phase  boundaries  by  determining  which  symmetries  of  the  Hamilto-
+                nian have spontaneously broken at each temperature.  We use group theory to deduce which sym-
+                metries of the system remain intact in all phases,  and then use this information to constrain the
+                parameters  of  the  GE-autoencoder  such  that  the  encoder  learns  an  order  parameter  invariant  to
+                these “never-broken” symmetries.  This procedure produces a dramatic reduction in the number of
+                free parameters such that the GE-autoencoder size is independent of the system size.  We include
+                symmetry regularization terms in the loss function of the GE-autoencoder so that the learned or-
+                der parameter is also  equivariant to the remaining  symmetries  of the system.  By examining the
+                group representation by which the learned order parameter transforms, we are then able to extract
+                information about the associated spontaneous symmetry breaking.  We test the GE-autoencoder on
+                the 2D classical ferromagnetic and antiferromagnetic Ising models, ﬁnding that the GE-autoencoder
+                (1) accurately determines which symmetries have spontaneously broken at each temperature;  (2)
+                estimates the critical temperature in the thermodynamic limit with greater accuracy,  robustness,
+                and time-eﬃciency than a symmetry-agnostic baseline autoencoder;  and (3) detects the presence
+                of an external symmetry-breaking magnetic ﬁeld with greater sensitivity than the baseline method.
+                Finally, we describe various key implementation details, including a new method for extracting the
+                critical temperature estimate from trained autoencoders and calculations of the DNN initialization
+                and learning rate settings required for fair model comparisons.
+
+
+                    I.    INTRODUCTION                                           In  the  Landau  paradigm,  a  phase  transition  is  char-
+                                                                              acterized  by  an  order  parameter  –  a  measurable  quan-
+  Mapping a material’s phase diagram is an important                          tity encoding some macroscopic property of the system
+endeavor in condensed-matter physics and materials sci-                       that undergoes a discontinuous change at a critical point
+ence [1,2].  This is a crucial step towards practical appli-                  (e.g., a critical temperature, critical pressure, etc.).  The
+cations as such diagrams can act as a road map to ma-                         change  in  the  order  parameter  is  tied  to  an  associated
+nipulating a material’s functionality.  From a theoretical                    symmetry breaking, where the order parameter is zero in
+perspective, predicting the locations of phase boundaries                     the high-symmetry disordered phase and nonzero in the
+for a given material can provide important insights into                      low-symmetry ordered phase.  Identifying when a phase
+the microscopic physics that govern its behavior and can                      transition occurs thus requires knowledge of an appropri-
+provide crucial validation of proposed low-energy models.                     ate order parameter or the corresponding symmetry.
+                                                                                 Physical  intuition  or  experimental  input  can  provide
+  In some cases (e.g., structural transitions), phase tran-                   insight towards the identiﬁcation of the correct order pa-
+sitions are governed by high-energy processes and can be                      rameter and its relevant symmetry.  However, there are
+reasonably predicted with eﬃcient computational meth-                         well known examples of order parameters that are nonlo-
+ods  [3]  like  density  functional  theory  [4–8]  or  molecu-               cal or exist in a more abstract space.  Notable examples
+lar dynamics simulations [9–11].  However, there are also                     include  the  Haldane  transition  in  spin-1  antiferromag-
+numerous  examples  of  phase  transitions  between  novel                    netic  chains  [22, 23],  the  breaking  of  gauge  symmetry
+states  of  matter  that  are  completely  governed  by  low-                 across the superconducting transition [24], or the emer-
+energy properties, which can be much harder to predict.                       gence of topological order in the quantum Hall states [25].
+Notable examples include the Mott and other metal-to-                         In cases like these, there is no general method for iden-
+insulator  transitions  [12],  unconventional  superconduc-                   tifying  order  parameters  and  their  associated  symme-
+tivity [13–15],  and quantum magnetism and spin liquid                        tries.  There are also materials where cross-over behav-
+behavior [16,17].  For example, predicting the low-energy                     ior is observed that may or may not be associated with
+properties  of strongly  correlated  systems  has  proven  to                 a  true  phase  transition.   Perhaps  the  most  famous  ex-
+be extremely challenging, even with the advent of state-                      ample  of  this  is  the  pseudogap  “phase”  of  the  high-Tc
+of-the-art computational algorithms and the widespread                        cuprates  [26].   Thus,  it  would  be  very  advantageous  to
+availability  of  high-performance  computing.   A  case  in                  have  a  general  method  of  identifying  an  order  param-
+point is the single band Hubbard model, whose doping-                         eter,  detecting  sudden  changes  in  its  value,  and  deter-
+temperature phase diagram is rich with many competing                         mining  the  corresponding  broken  symmetry  across  the
+and intertwined orders [15,18] and may or may not con-                        transition.  Our goal here is to introduce such a method.
+tain a superconducting ground state [19–21].                                     In recent years, techniques from machine learning—in
+                                                                                                                                                   2
+
+particular, deep neural networks (DNNs) [27]—have been                       is that it does not require us to have knowledge of the
+used  to  successfully  identify  phase  transitions  in  both               relevant  order  parameter,  but  this  does  not  mean  we
+classical  and  quantum  many-body  lattice  systems  in  a                  should forget the knowledge we may have– such as sym-
+purely data-driven manner [28–35].  DNNs are complex                         metries of the high-energy microscopic Hamiltonian. Sec-
+parametric models consisting of an alternating composi-                      ond, thanks to the never-broken symmetries constraining
+tion of linear and nonlinear transformations; such models                    the GE-autoencoder as well as training with symmetry
+now constitute the state-of-the-art for a variety of prob-                   regularization, we expect the GE-autoencoder to locate
+lems in domains such as computer vision and natural lan-                     phase  transitions  with  greater  accuracy,  eﬃciency,  and
+guage understanding [36–38].  To date, most applications                     robustness than symmetry-agnostic methods.  Third and
+using DNNs to detect phase transitions have focused on                       ﬁnally,  as  already  mentioned,  the  GE-autoencoder  not
+Monte Carlo (MC) simulations of lattice models, which                        only identiﬁes phase transitions but provides information
+is natural given that large volumes of training and vali-                    about the associated SSB, thereby elucidating its mech-
+dation data can be easily generated [35].                                    anism.   Having  access  to  details  on  broken  symmetries
+  More   recently,   methods   from   unsupervised   learn-                  provides information on how to couple to the order pa-
+ing  have  been  applied  to  the  problem  of  identifying                  rameter via a conjugate ﬁeld– a requirement for probing
+phase transitions [39–43].  Unsupervised learning is the                     associated phase transitions in the laboratory.
+paradigm used to ﬁnd structure in unlabeled data, such                         Since  the  GE-autoencoder  is  a  new  method,  we  fo-
+as  its  intrinsic  dimensionality.   Perhaps  the  most  well-              cus on the details of the methodology in this paper and
+known  methods  for  dimensionality  reduction  are  prin-                   test  it  as  a  proof-of-principle  on  the  2D  ferromagnetic
+cipal components analysis (PCA) and the autoencoder,                         and  antiferromagnetic  Ising  models.   Moreover,  we  dis-
+where the latter is a DNN with an encoder-decoder ar-                        cuss  numerous  implementation  details  throughout  the
+chitecture that may be thought of as a nonlinear gener-                      paper  that  were  essential  for  obtaining  conclusive  re-
+alization of PCA [44,45].                                                    sults.  The paper is organized as follows:  In Sec.II, we
+  The  main  contribution  of  this  paper  is  a  new  DNN                  review as background the mathematical notion of SSB,
+method  for  identifying  phase  transitions,  which  we  call               the  Ising  model,  and  autoencoders.   In  Sec.III,  we  de-
+the  group-equivariant  autoencoder  (GE-autoencoder).                       scribe the GE-autoencoder method in detail, focusing on
+In  contrast  to  previous  methods  cited  above,  the  GE-                 the  case  of  a  1D  order  observable  for  clarity;  we  also
+autoencoder  is  speciﬁcally  designed  to  identify  which                  describe  the  experimental  setup,  including  calculations
+symmetries of a  given system are broken at  each point                      of the DNN initialization and learning rate settings re-
+in  a  region  of  its  phase  diagram;  the  identiﬁcation  of              quired for fair experimental comparisons.  In Sec.IV, we
+the  corresponding  phase  transition  is  thus  a  corollary.               present  our  experimental  results;  we  ﬁnd  that  the  GE-
+In this way, the GE-autoencoder not only locates phase                       autoencoder  accurately  identiﬁes  which  symmetries  are
+transitions but gives insight into its mechanism via the                     broken  at  each  temperature  and  estimates  the  critical
+associated  spontaneous  symmetry  breaking  (SSB).  Our                     temperature  with  greater  accuracy,  time-eﬃciency,  and
+method  only  assumes  that  (1)  we  have  knowledge  of                    robustness than a baseline autoencoder. We concurrently
+the  symmetry  group G  of  the  system  Hamiltonian  and                    give additional details of the data analysis,  including a
+that (2) we have selected a latent dimensionality for the                    new method for extracting stable critical temperature es-
+GE-autoencoder;  the  key  steps  of  the  GE-autoencoder                    timates from statistics of trained autoencoder models.  In
+method are then the following:                                               Sec.V,  we  extend  the  GE-autoencoder  to  support  ar-
+   1.Use group theory to deduce the subgroup  GNB  of                        bitrary ﬁnite symmetry groups and vector-valued order
+       “never-broken symmetries”– i.e., the symmetries in                    observables, paving the way for future applications.  Fi-
+       G that remain in tact in all phases of the system.                    nally, in Sec.VI, we conclude the paper with a discussion
+                                                                             of its key ﬁndings, implications, and directions for future
+   2.Constrain the GE-autoencoder such that it learns                        work.1
+       a GNB-invariant order parameter.
+   3.Train the GE-autoencoder using “symmetry regu-                                               II.    BACKGROUND
+       larization” such that it learns aG-equivariant order
+       parameter.                                                                      A.    Spontaneous symmetry breaking
+During  training,  the  GE-autoencoder  learns  the  repre-
+sentation ofG by which the order parameter transforms,                         In this section, we review the concept of spontaneous
+and from this we can extract information about the as-                       symmetry breaking (SSB) from a mathematical perspec-
+sociated SSB.
+  The  advantage  of  the  GE-autoencoder  over  previous
+symmetry-agnostic  DNN  methods  is  three-fold.   First,
+the GE-autoencoder exploits knowledge about the sym-                         1 Code  to  reproduce  all  results  in  this  paper  can  be  found  at
+metries  of  the  system  that  would  otherwise  be  wasted.                  https://github.com/dagrawa2/ssb_detection_ising.    Perma-
+The point of using ML for identifying phase transitions                        nent link:  https://doi.org/10.5281/zenodo.6055507.
+                                                                                                                                                  3
+
+tive, which will help us formulate the method.  This dis-                   parameters (d = 1); for the case of higher-dimensional or-
+cussion is based on the one given in Ref. [46].                             der parameters (d≥ 2), see Sec.V. In the scalar case, the
+  Consider  a  classical  many-body  system  on  a  lattice                 expected absolute value⟨|O|⟩ν is suﬃcient to distinguish
+whose size is parameterized by L (e.g., for a hypercubic                    the two phases, taking a value of zero in the disordered
+lattice,L is the size of one dimension).  Let X denote the                  phase (in the thermodynamic limit) and a nonzero value
+space of all lattice conﬁgurations, and suppose the sys-                    in the ordered phase.  Although a misnomer, we will refer
+tem Hamiltonian is invariant under the action of a group                    to⟨|O|⟩ν  throughout this paper as the order parameter
+G  on X.   An  equilibrium  state  is  then  a  distribution  of            and  will  drop  the  subscript      ν.   In  the  limited  case  of
+lattice  conﬁgurations  that  maximizes  the  entropy  sub-                 d = 1, the representation ψ takes values in{−1, 1} with
+ject to a ﬁxed expected internal energy.  In other words,                   ψg =−1 for at least one g∈G since the representation
+the  equilibrium  state  solves  a  constrained  convex  opti-              must be nontrivial.
+mization  problem.   For  ﬁnite  systems,  the  equilibrium
+state is uniquely the well-known Boltzmann distribution
+over lattice conﬁgurations.  In the thermodynamic limit                                          B.    The Ising model
+(L→∞), on the other hand, uniqueness is no longer nec-
+essary, and in general we have a polyhedral solution set                       One of the simplest and most well-studied lattice sys-
+S  of equilibrium states.  An abrupt change in the struc-                   tems  is  the  classical  Ising  model  in  2D;  it  is  both  rich
+ture (e.g.,  dimensionality) of this setS  with respect to                  enough to exhibit a second-order phase transition while
+temperature or any other tuning parameter in the Hamil-                     also  admitting  an  exact  solution  [47].   We  consider  the
+tonian is called a phase transition.  Here we restrict our-                 Ising model on a square L×L lattice with L even and
+selves to disorder-order phase transitions, where the equi-                 periodic  boundary  conditions.   A  lattice  conﬁguration
+librium state changes from being unique (disordered) to                     is  obtained  by  assigning  to  each  lattice  site  a  classical
+not unique (ordered).                                                       spin xi  =±1,  where i = (ix,iy) are the spatial indices
+  When viewed in this framework, every symmetry (ele-                       of  the  site.    The  space  of  all  lattice  conﬁgurations  is
+ment) in G sends an equilibrium state to an equilibrium                     X ={−1, 1}L×L.  The Ising Hamiltonian is
+state.  Thus, in the disordered phase, the unique equilib-
+rium state is itself G-invariant.  However, in the ordered                                         H(x) =−J∑          xixj,                        (1)
+phase,  the  equilibrium  states  are  no  longer  necessarily                                                    ⟨i,j⟩
+G-invariant, as they may permute under the action of an
+element of G.  This phenomenon is often called  sponta-                     where x is an L×L matrix with entries xi∈{−1, 1}, J
+neous symmetry breaking  (SSB).                                             is  the  coupling  constant,  and  the  sum  is  taken  over  all
+  The abstract polyhedral setS  of equilibrium states is                    pairs of neighboring lattice sites.  We set J =±1, where
+made  concrete  by  way  of  an  order  parameter  –  a  lin-               J  =  1  (resp. J  =−1)  corresponds  to  a  ferromagnetic
+ear  embedding  ofS  into  a  Euclidean  space  of  dimen-                  (resp. antiferromagnetic) magnetic interaction.
+sion d  =  dim(S),  with  the  centroid  of  the  polyhedron                   Equation (1) has both spatial (translations, reﬂections,
+mapped  to  the  origin.   By  the  Riesz-Markov-Kakutani                   and orthogonal rotations) and spin-ﬂip (x→−x) inter-
+Representation  Theorem,  there  exists  an  order  observ-                 nal symmetries.  The Ising symmetry group G admits a
+ableO  : X↦→ Rd  such  that  the  order  parameter  sends                   presentation  with  independent  generators α, ρ, τ,  and
+each equilibrium state ν to the expectation                                 σ (see Fig.1).  Picturing the Ising lattice as a matrix,    α
+                               ∫                                            can be interpreted as a downward (cyclic) translation; ρ
+                     ⟨O⟩ν =                                                 is a 90◦-counterclockwise rotation about the origin; τ  is
+                                XO(x) dν(x).                                a reﬂection about the vertical line of symmetry;  and σ
+Without  loss  of  generality,O  can  be  chosen  such  that                is the spin-ﬂip internal symmetry (not shown in Fig.1).
+(1)⟨O⟩ν  =  0  in  the  disordered  phase  and  (2)  it  is G-              Every symmetry operation of the Ising model can be ex-
+equivariant; byG-equivariant, we meanO(gx) =ψgO(x)                          pressed in terms of the four generators ofG. For example,
+for  all g ∈ G,x ∈ X,  where ψ  is  a  nontrivial  real-                    a rightward translation can be expressed as ραρ−1 while
+orthogonal representation of G.  Every symmetry g∈ G                        a reﬂection about the diagonal can be expressed as τρ,
+for which ψg = 1 is then said to be never-broken  and is                    as shown in Fig.1.  Algebraicly, this presentation of    G is
+otherwise broken in the ordered phase.                                      deﬁned by the following relations:
+
+  Markov  Chain  Monte  Carlo  (MCMC)  simulations  of                                           αL =ρ4 =τ 2 =σ2 = 1
+lattice systems are designed to converge to the average                                           ρτ =τρ3
+equilibrium state     ν  (the centroid of the setS), which is                                   αρ2 =ρ2α−1
+G-invariant and satisﬁes⟨O⟩ν = 0 in both the disordered
+and ordered phases.  Hence, the order parameter as de-                                           ατ =τα
+ﬁned above cannot be used to distinguish the two phases.                                          gσ =σg∀g∈G.
+It is possible, however, to deﬁne a general expression in
+terms of the observableO  that can.  For simplicity,  for                      In both the ferromagnetic and antiferromagnetic cases,
+most of this work we focus our exposition on scalar order                   the 2D Ising model exhibits a second-order phase tran-
+                                                                                                                                                                          4
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                                                     FIG. 2.    Schematic illustration of the autoencoder architec-
+                                                                                                     ture.
+
+
+                                                                                                     tion or “compression.”  Given a dataset{xn∈ Rm}Nn=1,
+                                                                                                     it  is  a  common  assumption  in  the  traditional  domains
+                                                                                                     of computer vision and natural language understanding
+                                                                                                     that  the  data  points  lie  on  a  low-dimensional  manifold
+                                                                                                     embedded in Rm.  The autoencoder is a means to discov-
+                                                                                                     ering this intrinsic manifold structure.  An autoencoder
+                                                                                                     consists of a pair of DNNs — an encoderO : Rm↦→ Rd
+                                                                                                     (which will ultimately represent an observable in our ap-
+                                                                                                     plication)  and  a  decoderD  : Rd↦→ Rm,  where d < m
+                                                                                                     is the assumed dimensionality of the intrinsic data man-
+                                                                                                     ifold (Fig.2).  The encoder thus maps its input to a low-
+                                                                                                     dimensional “latent” or “compressed” representation in
+                                                                                                     terms of intrinsic coordinates on the manifold,  and the
+                                                                                                     decoder attempts to reconstruct the original input given
+                                                                                                     the  latent  representation  by  learning  the  embedding  of
+                                                                                                     the  manifold  into Rm.   The  autoencoder  is  trained  by
+                                                                                                     minimizing the reconstruction loss
+                         FIG. 1.   Generators (top) of the spatial Ising symmetries act-
+                         ing on a square lattice, and some example compound spatial                                               N∑
+                         symmetries (bottom) that can be formed from the generators.                           L(O,D) =  1           Lmetric(D(O(xn)), xn),
+                                                                                                                             N  n=1
+
+                                                                                     √2
+                         sition  at  the  critical  temperature Tc/J  =          log(1+√2)  =        whereL(O,D) means thatL is a function of the network
+                         2.269...  [47].   The  phase  transition  is  associated  with              parameters ofO andD, andLmetric is some metric (such
+                         the spontaneous breaking of the x↦→−x internal sym-                         as mean square error or binary cross-entropy) that mea-
+                         metry.  The associated order parameter is the expected                      sures the diﬀerence between the reconstructed and orig-
+                         absolute value⟨|M|⟩ (resp.⟨|Mstag|⟩) of the magnetiza-                      inal  inputs.   Once  trained,  the  encoder  can  be  used  to
+                         tionM  (resp. staggered magnetization Mstag) in the fer-                    obtain low-dimensional “summaries” of the data.  Below
+                         romagnetic (resp. antiferromagnetic) case, where                            we describe how this aspect can be used for identifying
+                                                ∑                                                    phase transitions.
+                                 M(x) =   1L2        xi,  and                                     (2)
+                                                i                                                                          III.    METHODS
+
+                             Mstag(x) =   1L2     ∑            xi−  ∑            xi.     (3)
+                                                   ix+iy even         ix+iy odd                       A.    Detecting phase transitions with autoencoders
+
+                         CompoundsNote  that  both M  and Mstag  are  equivariant  functions            In our autoencoder, the encoder is exactly the sought-
+                    ραρ  −1with respect to the spatial and internal Ising symmetries.Generators      after  order  observable O  : X ↦→ Rd  as  introduced  in
+                                                                                                     Sec.II A,  except  that  we  do  not  require  it  to  be     G-
+          αα                                                                                         equivariant  at  present.   The  decoderD  : Rd× R↦→ X
+                                                C.    Autoencoders                                   then  represents  the  conditional  Boltzmann  distribution
+                                                                                                     of lattice conﬁgurations given a value of the observableO
+             Encoder        The   core   of   our   method   is   the   autoencoder,   aDecoder      and a temperatureT . Note that in contrast to traditional
+                  ρτρ −1DNN  architecture  used  for  various  unsupervised  learn-τρ                autoencoders, this decoder accepts a second argument —
+                         ing tasks [44,45], which we use for dimensionality reduc-                   the temperature — as a direct input; we do this because
+
+
+
+Input                       Latentτ                      Output
+                                                   ρ
+                                                                                                                                                5
+
+we know the Boltzmann distribution of lattice conﬁgura-                    purpose of demonstrating the eﬃcacy of our method, we
+tions depends on temperature.  This explicit temperature                   assume no knowledge of the system except a dataset of
+dependence is the ﬁrst novelty of our method, as previous                  MC-sampled lattice conﬁgurations over a range of tem-
+works on autoencoders for identifying phase transitions                    peratures  and  the  group G  of  Ising  model  symmetries.
+assumed a temperature-independent architecture.  Once                      We therefore consider an architecture deliberately more
+the autoencoder is trained, we may interpret any abrupt                    complex than a linear autoencoder, and one that would
+change  in  the  distribution  of  the  learned  observableO               be a reasonable initial choice given no additional infor-
+with respect to temperature as indicative of a phase tran-                 mation about the system.
+sition.                                                                       Now,  given  a  dataset{(xn,Tn)∈ X× [0,∞)}Nn=1  of
+  Even in the absence of any knowledge about the sym-                      lattice  conﬁgurations xn  at  temperatures Tn,  we  train
+metries  of  the  Hamiltonian,  previous  works  found  that               the autoencoder by minimizing the loss
+autoencoders could identify phase transitions with some
+accuracy [42].  However, the reason for the autoencoder’s                                             N∑
+eﬃcacy remains unclear at this time. Rather than relying                           L(O,D) =  1N           LBCE(D(O(xn),Tn), xn),      (7)
+only on the empirical success of autoencoders, we moti-                                              n=1
+vate their use with the following intuition:  Using general                where LBCE : (−1, 1)L×L×{−1, 1}L×L↦→ (0,∞) is the
+information  theory,  we  can  show  that  training  an  au-               binary cross-entropy loss function deﬁned as
+toencoder is equivalent to maximizing the entropy of the
+observableO learned by the encoder, where we regardO                                                   [(1 +xi)           (1 + ˆxi)
+as a function of the random lattice conﬁguration across                       LBCE(ˆx, x) =−∑                 2      log       2
+diﬀerent temperatures.  Thus,  training the autoencoder                                             i      (1−xi     )      (1− ˆxi   )]
+moves the distribution ofO closer to a uniform distribu-
+tion with  as large of a  support  as possible,  and this in                                            +       2       log       2       ,    (8)
+turn  means  thatO  learns  to  aggregate  low-probability
+states together.  This property seems to mimic the type                    where ˆx is the output of the autoencoder.
+of coarse-graining performed in Landau theory, where the
+competition  between  high-probability  states  and  aggre-
+gations of low-probability states drives a phase transition.                        B.    The group-equivariant autoencoder
+  For  the  example  application  of  the  Ising  model,  we
+deﬁne  the  encoder  and  decoder  to  have  shallow  neural                  We  now  extend  the  baseline  autoencoder  introduced
+network architectures, each with one hidden layer of non-                  in  Sec.III Ato  a            group-equivariant  autoencoder  (GE-
+linear activation units:                                                   autoencoder) by incorporating our prior knowledge about
+
+                     h∑                                                    the symmetries of the system’s Hamiltonian into the net-
+    O(x) = c +          akφ(⟨wk, x⟩F +bk)                       (4)        work architecture.  Once trained, we will then be able to
+                   k=1                                                   interpret the GE-autoencoder to infer which symmetries
+                             h′∑                                           are spontaneously broken at any temperature.
+ D(z,T ) = tanh      c′ +       a′kφ(⟨w′k, z⟩F +b′k +b′′T ),
+
+                            k=1
+                                                                  (5)               1.    The subgroup of never-broken symmetries
+
+where bk ∈ R,  ak, c ∈ Rd,  wk ∈ RL×L; b′k,b′′ ∈ R,                           The ﬁrst step is to see if we can identify a subgroup
+a′k, c′ ∈ RL×L, w′k ∈ Rd; h  and h′  are  the  number  of                  of “never-broken symmetries” – symmetries that do not
+hidden neurons in the encoder and decoder, respectively;                   spontaneously  break  at  any  temperature.    Identifying
+⟨·,·⟩F  denotes  the  Frobenius  inner  product  (Hadamard                 these will reduce the number of symmetries that we will
+product of matrices followed by a sum over all entries);                   ultimately have to check.  Our approach for this step is
+tanh()  is  applied  elementwise;  and φ  : R ↦→ R  is  the                entirely group-theoretic.
+elementwise leaky rectiﬁed linear unit (ReLU) activation                      Recall from Sec.II Athat a symmetry    g∈ G will re-
+function deﬁned as                                                         main  unbroken  as  a  function  of  model  parameters  and
+                          {                                                temperature  if ψg  =  1.   In  the  absence  of  any  knowl-
+                 φ(y) =     0.01y,     if y< 0                             edge about the true representationψ associated with the
+                            y,           otherwise.                  (6)   order  parameter,  we  can  deduce  a  subgroup  of  never-
+                                                                           broken symmetries by ﬁnding all symmetries g∈G such
+The  tanh  function  is  used  in  the  decoder  to  guarantee             that ψg  =  1  for  all  representations ψ  : G↦→{−1, 1}.
+each output component lies in the interval (−1, 1).  We                    We  establish  such  a  subgroup  for  the  Ising  symmetry
+set h = 4 and h′ = 64.  We also set d = 1, as stated in                    group in Prop.1(see AppendixA 1); we denote the sub-
+Sec.II A. Since the magnetization and staggered magne-                     group as SCB(L) =⟨α2,ρ2, (αρ)2⟩ and refer to it as the
+tization are linear functions, a linear encoder and linear                 special  checkerboard  group, as it represents the group of
+decoder  would  have  been  suﬃcient.   However,  for  the                 all  proper  (i.e.,  no  reﬂections)  symmetries  of  an L×L
+                                                                                                                                                                                 6
+
+                            checkerboard that map black (resp. white) squares onto
+                            black (resp. white) squares2.  Thus, all even-parity trans-
+                            lational  symmetries  and  the  180◦-rotational  symmetry
+                            are never spontaneously broken in the Ising model.
+                               Having established a subgroup of never-broken symme-
+                            tries, it can be shown (see AppendixA 1) that the only
+                            symmetries we have to check for SSB areαm1ρm2τm3σm4
+                            formi∈{0, 1}.  This represents a reduction from 16L2 to
+                            16 symmetries to check, so that the complexity of detect-
+                            ing SSB is now independent of lattice size; an important
+                            advance of the proposed method.
+
+
+                                     2.    Incorporating symmetries into the encoder
+
+                               The  next  step  of  our  method  is  to  incorporate  the
+                            deduced  subgroup  of  never-broken  symmetries  into  our
+                            autoencoder.  Recall from Sec.II Athat the observable
+                            O : X↦→ Rd, which is modeled by the encoder network of
+                            the autoencoder, must beG-equivariant; we start by ﬁrst
+                            constraining the  parameters of  the encoderO  [Eq. (4)]                      FIG.  3.       Top:   Schematic  illustration  of  an  encoder  con-
+                            such that it is invariant to the subgroup of never-broken                     strained to be invariant to a group of symmetries (even-unit
+                            symmetries  SCB(L).   However,  it  turns  out  that  there                   cyclic translations in the illustration).  Network edges of same
+                            are many inequivalent ways to do this, and it is unclear                      color and shade are constrained to have equal weight.  Bot-
+                            which set of constraints is optimal.  A complete classiﬁ-                     tom:  Reduced  representation  of  the  same  encoder.   Rather
+                            cation of all ways this information can be incorporated,                      than  replicating  weights  in  the  ﬁrst  layer,  lattice  sites  that
+                            as well as the development of a metric by which to deter-                     feed into the same input neuron are ﬁrst averaged.
+                            mine which way is best, is beyond the scope of this paper
+                            and is left for future work.  Here, we enforce invariance                     We  refer  to  (ˇxB, ˇxW)  as  the  “checkerboard  average”  of
+                            in a simple way and ﬁnd that it yields good results.  The                     the lattice conﬁguration x, i.e., the average value over all
+                            general idea is illustrated in the top panel of Fig.3.                        “black squares” and the average value over all the “white
+                               We start with Eq. (4) for the observable encoder O :                       squares”.  Then we have
+                            X↦→ R.  We constrain the elements wk,i  of each matrix
+                            wk to be                                                                                          ⟨wk, x⟩F  =ukˇxB +vkˇxW,
+                                                       {
+                                          wk,i =   2      uk,     if ix +iy is even                       which allows for a more eﬃcient implementation of the
+                                                   L2     vk,     otherwise.                      (9)     encoder.  We deﬁne the reduced encoder  ˇO : [−1, 1]2↦→ R
+                                                                                                          by
+                            Each wk  is  thus  constrained  to  have  a  “checkerboard”
+                            pattern  and  is  invariant  under  the  action  of  SCB(L).                                                h∑
+                            Since  it  can  be  shown  that G  acts  orthogonally  on  all                    ˇO((ˇxB, ˇxW)) =c +          akφ(ukˇxB +vkˇxW +bk).    (10)
+                            of RL×L, then the invariance ofO under SCB(L) imme-                                                       k=1
+                            diately follows.                                                              This result allows us to evaluate the encoder in Eq. (4)
+                               The constraints imposed on the wk allow for a signiﬁ-                      in  two  separate  steps:   First,  we  compute  the  checker-
+                            cant simpliﬁcation of the expression for the encoder; this                    board average (ˇxB, ˇxW) of the input lattice conﬁguration
+                            is  illustrated  in  Fig.3(bottom).   For  an    L×L  lattice                 x.  This task is a one-time calculation and can be done
+                            conﬁguration x, deﬁne                                                         across  the  entire  available  dataset  of  lattice  conﬁgura-
+                                                                   ∑                                      tions  as  a  preprocessing  step.   Second,  we  evaluate  the
+                                                   ˇxB =   2L2              xi                            reduced encoder [Eq. (10)] on these checkerboard aver-
+                                                               ix+iy even                                 ages.   This  task  is  now  independent  of  the  lattice  size
+                                                  ˇxW =   2        ∑       xi.                            L.   Note  that  the  checkerboard  average  of  x  is  mani-
+                                                           L2                                             festly invariant under the action of SCB(L), and thus so
+                                                               ix+iy odd                                  is the reduced encoder  ˇO.  Moreover, the form of the re-
+ Constrained encoderReduced encoder                                                                       duced encoder [Eq. (10)] places additional constraints on
+InputInput       EncoderEncoder                                                                           the spatial symmetries and implies ψα  = ψρ  = ψτ  (see
+                                                                                                          Prop.2in AppendixA 2for details).  The upshot is that
+                            2 The set of black squares (resp. white squares) is also referred to          we now need only estimateψσ and one ofψα,ψρ, andψτ
+                              as sublattice A (resp. sublattice B) in the literature.                     from the data;  we choose ψτ  without loss of generality.
+                                                                                                                                                 7
+
+If ψτ  = 1, then all spatial symmetries in⟨α,ρ,τ⟩ never                      ˇO(gˇx) =ψg ˇO(ˇx) for allg∈{α,ρ,τ,σ}.  By Prop.2, it is
+break spontaneously.  Estimating ψσ and ψτ  is discussed                    suﬃcient to consider only τ  and σ, and since ψg  =±1,
+in Sec.III B 4.                                                             then  we  want   ˇO(gˇx)  =± ˇO(x)  for  all g ∈{τ,σ}.   We
+                                                                            impose this as a soft constraint by including regulariza-
+                                                                            tion terms in the loss function used to train the reduced
+        3.    Incorporating symmetries into the decoder                     autoencoder:
+  As  with  the  encoder,  we  now  incorporate  the  sub-                                              N∑
+group  of  never-broken  symmetries  into  the  decoder  of                          ˇL( ˇO, ˇD) =  1N     LBCE( ˇD( ˇO(ˇxn),Tn), ˇxn)
+our autoencoder.  The starting point is Prop.3(see Ap-                                                 n=1   (                 )2
+pendixA 3), which states that under suitable conditions,                                       +λ ∑             1−‖ ˇO◦g‖
+if  an  unsupervised  model  is  ﬁt  to  a  dataset  contain-                                                          ‖ ˇO‖
+ing  symmetries,  then  the  ﬁt  model  will  be  invariant  to                                      g∈{τ,σ}
+those symmetries at least when restricted to the dataset.                                      +λ ∑          [1−Lcos( ˇO,  ˇO◦g)2]
+Proposition3provides  a  strong  motivation  to  assume                                              g∈{τ,σ}
+that our autoencoderf =D◦O isG-invariant; forg∈G,                                              +λ   ming∈{τ,σ}[1 +Lcos( ˇO,  ˇO◦g)],          (12)
+
+                gD(O(x),T ) =D(O(gx),T )
+                gD(O(x),T ) =D(ψgO(x),T ).                                  whereλ≥ 0 is a regularization coeﬃcient andLcos is the
+                                                                            cosine similarity between observables deﬁned as
+We demand this hold for allO(x) and make the stronger
+assumption                                                                                    Lcos(O1,O2) = ⟨O1,O2⟩
+                                                                                                                  ‖O1‖‖O2‖,
+           gD(z,T ) =D(ψgz,T ), ∀g∈G,z∈ R.
+                                                                            where
+We have already deduced thatψg = 1 for allg∈ SCB(L),                                                         N∑
+giving us the constraint                                                                 ⟨O1,O2⟩ =  1           O1(xn)⊤O2(xn).
+                     gD =D,∀g∈ SCB(L).                                                                  N   n=1
+
+This  constraint  necessitates  the  output  of  the  decoder               The  ﬁrst  regularization  term  [i.e.,  the  second  term  in
+to have a checkerboard pattern as in Eq. (9), and thus it                   Eq.  (12)]  enforces  the  soft  constraint  ‖ ˇO◦g‖ ≈ ‖ ˇO‖.
+suﬃces to have the decoder return only two values — one                     The  second  regularization  term  drives  the  cosine  simi-
+representing the value on the black squares and the other                   larity to one of its extreme values±1.  Together,  these
+for the white squares.  Therefore, we deﬁne the reduced                     two terms encode the constraint  ˇO◦g≈±1 ˇO as desired.
+decoder  ˇD : R× (0,∞)↦→ (−1, 1)2 as                                        To  explain  the  ﬁnal  regularization  term,  recall  that  we
+                                                                          require ψg  =−1 for some g∈ G to avoid a trivial rep-
+                              h′∑                                           resentation.  The last term drives at least one of ψτ  and
+  ˇD(z,T ) = tanh    c′ +        a′kφ(w′kz +b′k +b′′T ),   (11)           ψσ to−1 to satisfy this requirement.
+                             k=1                                               Once trained, we estimate ψg  for g∈{τ,σ} with the
+                                                                            ﬁnal cosine similarity:
+where a′k, c′∈ R2 andw′k,b′k,b′′∈ R;h′ is the number of                                            ψg≈Lcos( ˇO,  ˇO◦g).                      (13)
+hidden neurons (we set h′ = 64); and the functions tanh
+and φ are applied elementwise.  We interpret the output
+as  the  checkerboard  average  of  the  output  of  the  unre-                                C.    Experimental setup
+duced  decoderD.   Note  that  like  the  reduced  encoder,
+the  reduced  decoder  is  now  independent  of  the  lattice                                           1.    Datasets
+size L.  The reduced encoder [Eq. (10)] and reduced de-
+coder [Eq. (11)] together comprise a reduced autoencoderˇD◦  ˇO,  which  can  now  be  trained  directly  on  the  pre-
+                                                                               We generate datasets of lattice conﬁgurations by MC-
+processed and reduced dataset of checkerboard-averaged                      sampling  the  2D  ferromagnetic  and  antiferromagnetic
+lattice conﬁgurations.                                                      Ising models.  We impose periodic boundary conditions
+                                                                            on  an L×L  lattice  and  consider L  =  16,  32,  64,  and
+                                                                            128.  For each lattice size, we consider 100 temperatures
+                  4.    Symmetry regularization                             with 25 values in [1.04, 2] in increments of 0.04, 50 val-
+                                                                            ues in [2.01, 2.5] in increments of 0.01, and 25 values in
+  The ﬁnal step is to ensure that the (reduced) encoder                     [2.54, 3.5] in increments of 0.04.  This distribution of tem-
+is not only invariant to the subgroup SCB(L) of never-                      peratures is evenly distributed about the theoretical crit-
+broken symmetries but is in fact G-equivariant; we want                     ical temperature Tc  =          2log(1+√2)  = 2.269... and denser
+                                                                                                                                                     8
+
+near Tc.   Although  not  uniform,  the  temperature  sam-                           order  observable.   We  also  interpret  its  represen-
+ples are constant across all order observable models and                             tation  of G  to  identify  which  symmetries  spon-
+thus do not eﬀect the model comparison; we sample more                               taneously  break.   Finally,  as  the  GE-autoencoder
+temperatures near Tc  only to ensure we achieve results                              acts  on  checkerboard-averaged  lattice  conﬁgura-
+suﬃciently  stable  to  draw  meaningful  conclusions.   For                         tions,  the  same  network  architecture  can  be  ap-
+each lattice size and temperature,  we run the Wolﬀ al-                              plied  to  diﬀerent  sizes  of  lattices.   Therefore,  we
+gorithm  ﬁrst  for  10, 000  iterations  to  allow  for  thermal                     will  also  consider  the  case  of  a  “multiscale  GE-
+equilibration and then for an additional 50, 000 iterations                          autoencoder”,  which  is  trained  simultaneously  on
+during which we record the lattice conﬁguration every 10                             all four lattice sizes in our dataset while using only
+iterations.   We  thus  obtain  5, 000  samples  for  each  lat-                     one-quarter of the MCMC data for each lattice size.
+tice size and temperature and for each of the ferromag-                      We  evaluate  magnetization  and  the  trained  baseline-
+netic  and  antiferromagnetic  cases  (although  in  practice                encoder and GE-encoder observables on all lattice con-
+we only use 4, 096 samples).  We also preprocess copies                      ﬁgurations  in  our  datasets  to  obtain  measurement  dis-
+of these datasets by checkerboard-averaging the lattices,                    tributions  and  subsequently  order  parameters.   Further
+which  will  be  used  to  train  the  GE-autoencoder.   We                  details on using these order parameters to estimate the
+evenly split each set of 4, 096 lattice conﬁgurations into                   critical temperature are given in Sec.IV.
+a  training-validation  set  and  a  test  set,  and  we  further
+partition the 2, 048 training-validation samples into eight
+“folds” each of size 256 that will be used to measure sam-                                            3.    Training details
+pling variance.
+                                                                                Independent   of   the   lattice   size L   and   training-
+                       2.    Order observables                               validation foldj, we train and validate the baseline- and
+                                                                             GE-autoencoders  on  a  dataset  of  100N  lattice  conﬁgu-
+  Given  only  the  MCMC  datasets  and  the  Ising  sym-                    rations, where 50% of the data set is randomly selected
+metry group G, our objective is to detect when a phase                       for  training  and  the  remaining  50%  is  used  for  valida-
+transition occurs by (1) identifying the associated spon-                    tion.   This  dataset  consists  of  the  last N  MC-sampled
+taneous symmetry breaking and (2) estimating the tem-                        lattice conﬁgurations (out of the total 256 conﬁgurations
+perature where it occurs (i.e. the critical temperature).                    in  the jth  fold)  at  each  of  the  100  temperatures  con-
+Importantly,  we  assume  no  prior  knowledge  about  the                   sidered.   We  test  various  values  of N  (ranging  from  8
+Ising model beyond the given datasets and the symme-                         to 256 in powers of 2) to measure the data eﬃciency of
+try group.                                                                   the GE-autoencoder vs. baseline-autoencoder, as well as
+  We test three “order observables” from which we hope                       the dependence of estimatedTc on the training-validation
+to derive order parameters:                                                  sample size.  We train all autoencoders using the Adam
+                                                                             optimizer with learning rate of 0.001 (or equivalent; see
+   1.Magnetization [Eqs. (2) & (3)]:  (In the antiferro-                     below) and minibatch size N  for 64 epochs;  this choice
+       magnetic case, “magnetization” will be understood                     guarantees 50 iterations in each epoch and ensures that
+       to  mean  the  staggered  magnetization.)   This  ob-                 the  scale  of  the  noise  generated  from  stochastic  gradi-
+       servable is the standard order parameter used for                     ent descent is the same for all experiments [48].  While
+       the  Ising  model.    Here,  we  use  it  to  provide  a              training the GE-autoencoder, we include the symmetry
+       ground-truth estimate for the critical temperature                    regularization terms in the loss function [Eq. (12)] only
+       in comparison to the exact value obtained from the                    for the second half of training epochs; this practice pre-
+       Onsager solution.                                                     vents the randomly initialized GE-autoencoder from get-
+   2.Baseline-autoencoder  [Eqs.  (4),  (5),  &  (7)]:  This                 ting  trapped  in  the  nearest  local  minimum  of  the  loss
+       autoencoder does not exploit the symmetry group                       landscape that possibly corresponds to an incorrect group
+       G and is used as a machine learning baseline.  We                     representation ψ (i.e., the breaking of incorrect symme-
+       will  refer  to  its  encoder  and  decoder  as  baseline-            tries).  We note that switching on regularization halfway
+       encoder  and  baseline-decoder,  respectively.   Once                 through training is, in a sense, the simplest schedule from
+       trained, we interpret the output of the encoder as                    weak to strong regularization, and our choice of regular-
+       an  order  observable.   Note  that G-equivariance  is                ization schedule can be further validated in the same way
+       not guaranteed a priori.                                              as all other optimizer hyperparameter settings – namely,
+                                                                             in  terms  of  the  validation  loss.   We  test  three  diﬀerent
+   3.GE-autoencoder [Eqs. (10), (11), & (12)]:  This au-                     seeds to randomly initialize the autoencoder network pa-
+       toencoder takes advantage of the symmetry group                       rameters.   Together  with  eight  training  data  folds,  we
+       G, and we thus expect it to be more accurate and                      thus have 24 trials of each autoencoder experiment.
+       more  eﬃcient  than  the  baseline-autoencoder.   We                     Nontrivial  parameter  initialization  and  learning  rate
+       will refer to its encoder and decoder as GE-encoder                   settings  were  needed  to  obtain  reasonable  comparisons
+       and GE-decoder, respectively.  Once trained, we in-                   (see  AppendixBfor  details).    We  initialize  the  GE-
+       terpret the output of the encoder as aG-equivariant                   autoencoder as usual and set the learning rate to 0.001
+                                                                                                                                                        9
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+FIG.  4.     Distributions  of the  order  observable  values  at  each  temperature T  on  a lattice  of size L  = 128  for one  example
+training  data  fold  and  initialization  seed  and  using N  =  256  training-validation  samples  per  temperature.   Note  that  the
+observable scales (y-axes) of the baseline-encoder and GE-encoder are arbitrary, as any nonzero rescaling of the encoder can
+be compensated by the inverse scaling in the decoder; thus, only the relative shapes of these distributions are meaningful.  All
+three order observables suggest a phase transition in both the ferromagnetic and antiferromagnetic cases near the theoretical
+critical temperature (dashed red).
+
+
+based  on  validation  learning  curves.    However,  to  en-                                            IV.    RESULTS
+sure  a  fair  comparison  between  the  baseline-  and  GE-
+autoencoders, and to avoid artifactual and noisy results                                     A.    Identifying phase transitions
+due  to  hand-tuned  hyperparameter  settings,  we  initial-
+ize  the  baseline-autoencoder  such  that  it  is  function-                     Figure4is  representative  of  the  observed  distribu-
+ally  equivalent  to  the  initial  GE-autoencoder;  i.e.,  the                tions of the magnetization, baseline-encoder output, and
+baseline-autoencoder  satisﬁes  the  same  symmetry  con-                      GE-encoder output over all lattice conﬁgurations in our
+straints as the GE-autoencoder at initialization time.  We                     dataset at each temperature.  For brevity, we present the
+then  set  a  separate  learning  rate  for  each  layer  of  the              distributions  only  for  the  largest  lattice  size L  =  128
+baseline-autoencoder  such  that,  it  would  remain  equiv-                   and  the  largest  number  of  training-validation  samples
+alent  to  the  GE-autoencoder  throughout  training  if  we                   per  temperature N  =  256.   In  contrast  to  magnetiza-
+maintained  the  symmetry  constraints  on  the  baseline-                     tion and the GE-encoder, the distribution of the baseline-
+autoencoder.  This requires setting smaller learning rates                     encoder is not symmetric about zero in the antiferromag-
+for larger layers to prevent large sums of parameter up-                       netic case.  This asymmetry is a consequence of a redun-
+dates ﬂowing through the network.  As a result of these                        dancy  in  the  autoencoder  network:  The  (baseline)  en-
+settings,  the  baseline-autoencoder  and  GE-autoencoder                      coder may be freely transformed by any invertible aﬃne
+are  identical  in  terms  of  their  initial  values  and  their              function  since  the  ﬁrst  layer  of  the  decoder  can  always
+learning dynamics and diﬀer only in the symmetry con-                          undo it.  The center of the baseline-encoder distribution
+straints  and  symmetry  regularization  imposed  on  the                      is therefore arbitrary.  Although previous works [42] have
+GE-autoencoder.                                                                reported approximately symmetric encoder distributions
+                                                                               for  the  Ising  model,  our  results  show  that  this  is  not
+                                                                               guaranteed unless some form of explicit symmetry regu-
+                                                                               larization is used,  as in the GE-encoder.  Similarly,  the
+                                                                               scale of the encoder is arbitrary as well (even in the GE-
+                                                                                                                                                   10
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+FIG. 5.   Order parameters (mean absolute value of the distributions in Fig.4) vs. temperature    T  on a lattice of size L = 128
+for one example training data fold and initialization seed and usingN = 256 training-validation samples per temperature.  Note
+that the curves have been normalized to the same scale as Onsager’s solution for comparison.  The standard deviation curves
+(dashed) were obtained using the jackknife resampling method (these may be diﬃcult to see as the standard deviations are
+small).  All three order parameters suggest a phase transition in both the ferromagnetic and antiferromagnetic cases near the
+theoretical critical temperature (dashed red).  However, the order parameters derived from magnetization and the GE-encoder
+are smoother and give better approximations to Onsager’s solution (dashed blue).
+
+
+encoder) although the scale is not relevant for SSB. Nev-                     dynamic limit [47]
+ertheless, all distributions exhibit an abrupt qualitative                                       {[1− sinh−4( 2        )] 1
+change near the theoretically known critical temperature                                                                  8 ,     if T <Tc
+Tc  =          2                                                                 MONS(T ) =                          T
+        log(1+√2)  = 2.269...,  and hence all three observ-                                         0,                                otherwise,     (14)
+ables are able to identify the phase transition in the Ising
+model to some degree.                                                         which is plotted as the dashed blue line in Fig.5.  The
+                                                                              smooth  order  parameter  of  the  GE-encoder  provides  a
+                                                                              better approximation to Onsager’s solution compared to
+  We derive an order parameter from each of the three                         the baseline-encoder (Fig.5).  Moreover, the GE-encoder
+observables by calculating the mean absolute value under                      in  the  thermodynamic  limit  converges  to  Onsager’s  so-
+each distribution at each temperature (Fig.5).  Note that                     lution with less error than the baseline-encoder (see Ap-
+while this procedure is justiﬁed for magnetization and the                    pendixCfor details).  As an immediate consequence, the
+GE-encoder as these are G-equivariant observables, it is                      GE-encoder  is  able  to  identify  the  phase  transition  as
+not justiﬁed a priori for the asymmetric baseline-encoder                     being second-order, which previous works [42] could not
+observable  in  the  antiferromagnetic  case.   Nevertheless,                 do.
+we do it anyways to provide a baseline case where symme-
+tries were not taken into consideration.  Thanks to sym-
+metry  constraints  and  regularization,  the  GE-encoder                       B.    Identifying spontaneously broken symmetries
+learns a smoother order parameter that is almost iden-
+tical to the magnetization order parameter up to a scale                         Can we identify at each temperature which symmetries
+factor  (this  is  made  quantitative  in  AppendixC).  We                    of the system have spontaneously broken?  We have seen
+also  compare  each  order  parameter  to  Onsager’s  exact                   that the GE-encoder order parameter becomes nonzero
+solution  for  spontaneous  magnetization  in  the  thermo-                   below some critical temperature (Fig.5), and thus breaks
+                                                                                                                                                      11
+
+TABLE I.   Estimated latent representation ψg  of the spatial                     We begin by estimatingTc independently for each lat-
+symmetry generators (g =α,ρ,τ) and the internal symmetry                       tice size based on the fourth Binder cumulant [49]:
+generator (g =σ).  Estimates were averaged over all 24 trials
+(eight training data folds and three initialization seeds) as well                                       U4 = 1− ⟨O4⟩3⟨O2⟩2,
+as over all lattice sizesL and training-validation sample sizes
+N  as they showed little variation; the reported uncertainties                 whereO is the order observable.  We obtain Binder cu-
+are standard deviations.  In the antiferromagnetic case, odd                   mulant vs. temperature curves for each of the three order
+spatial symmetries and the internal symmetry spontaneously                     observables (Fig.6).  (Once again, for brevity, we present
+break at some temperature;  in the ferromagnetic case,  only
+the internal symmetry spontaneously breaks.                                    the curves only for the largest lattice size L = 128 and
+                                   Spatial           Internal                  number  of  training-validation  samples  per  temperature
+                                                                               N  = 256.)  We emphasize that we are simulating a sce-
+         Ferromagnetic       0.999 96(27)−1.000 01(29)                         nario in which we only have access to a dataset of lattice
+       Antiferromagnetic−0.999 82(42)−0.999 93(40)                             conﬁgurations and the symmetries of the system and are
+                                                                               not aware that the system is in fact the Ising model.  Our
+                                                                               choice to look at the Binder cumulant should therefore
+the Z2 =ψG symmetry.  It follows that every Ising sym-                         be interpreted only as a “guess”, and its only justiﬁcation
+metry g∈ G such that ψg  =−1 breaks below this crit-                           is the aposteriori observation that the Binder cumulant
+ical  temperature,  while ψg  =  1  implies  that g  remains                   curves all display an abrupt change near the theoretical
+unbroken.  Using Eq. (13), we estimate   ψg  for each gen-                     critical temperature.
+erator of G (TableI). In the ferromagnetic case, we ﬁnd                           We perform least-squares regression to ﬁt a step func-
+thatψg≈−1 only forg =σ, and hence only the internal                            tion to each jackknife-sample Binder cumulant vs. tem-
+spin-ﬂip symmetry breaks. In the antiferromagnetic case,                       perature dataset.  We then interpret the location of the
+we obtain ψg≈−1 for every generator g∈{α,ρ,τ,σ}.                               jump  discontinuity  of  the  step  function  as  a  jackknife-
+In  other  words,  the  internal  spin-ﬂip  symmetry  as  well                 sample estimate of Tc.  However, if our dataset includes
+as  every  spatial  symmetry  not  in  the  special  checker-                  temperaturesT1,T2,...,T100 and if we ﬁnd the jump dis-
+board subgroup SCB(L) breaks.  Our results are in agree-                       continuity to lie in the open interval Ti,Ti+1) for some
+ment with the known SSB in the Ising model across the                          i, then moving the jump discontinuity to any other tem-
+magnetic transition, and thus we conclude that our GE-                         perature  in  (Ti,Ti+1)  would  result  in  a  ﬁt  that  is  just
+autoencoder method can correctly and accurately detect                         as  good  as  the  original  step  function.   This  approach
+SSB.                                                                           therefore  only  allows  us  to  obtain  interval  estimates  of
+   For contrast, we also measure the degree to which the                       the critical temperature.  To obtain point estimates, we
+baseline-encoder is equivariant; we again use Eq. (13) but                     set up and solve a convex optimization problem in which
+replace the GE-encoder  ˇO with the baseline-encoderO.                         we seek to minimize the jackknife standard deviation in
+As  with  the  GE-encoder,  we  average  estimates  over  all                  the  estimate  subject  to  the  constraints  deﬁned  by  the
+24  trials  (eight  training  data  folds  and  three  initializa-             jackknife-sample interval estimates (see AppendixDfor
+tion seeds) as well as over all lattice sizesL and training-                   details).   In  this  way,  for  each  lattice  size L  and  num-
+validation  sample  sizes N.   In  the  ferromagnetic  case,                   ber of training-validation samples per temperatureN, we
+we  ﬁnd  that ψg≈  0.9998(2)  for  spatial  symmetry  gen-                     obtain a critical temperature estimate as the jackknife3
+erators g∈{α,ρ,τ} and ψσ≈−0.92(8) for the internal
+spin-ﬂip symmetry generatorσ.  In the antiferromagnetic
+case, we obtainψg≈−0.87(5) for both spatial and inter-                          3 We remark on an important detail in the jackknife calculation:
+nal symmetry generators.  The baseline-encoder is thus                            It  is  common  to  reduce  the  bias  in  the  jackknife  estimate  by
+approximately  equivariant  and  transforms  by  approxi-                         combining the jackknife mean with the estimate obtained with-
+mately  the  correct  group  representation.   However,  the                      out  resampling.   The  argument  for  this,  however,  relies  on  a
+GE-autoencoder learns the representation ψ with signif-                           Taylor expansion of the underlying estimator [50], and it turns
+icantly  greater  accuracy  and  sometimes  with  orders  of                      out  that  our  critical  temperature  estimator  is  not  everywhere-
+magnitude  more  robustness  than  the  baseline,  particu-                       diﬀerentiable;  under a small perturbation of the Binder cumu-
+                                                                                  lant estimates, our critical temperature estimate either remains
+larly in the antiferromagnetic case.                                              constant or changes abruptly if the jackknife-sample interval es-
+                                                                                  timates change.  Indeed, in our original Tc  estimates, we found
+                                                                                  that the bias estimate was either zero or so extreme that it of-
+                                                                                  ten pushed the critical temperature estimate outside the range of
+        C.    Estimating the critical temperature                                 temperatures included in our dataset.  In contrast, when we did
+                                                                                  not  reduce  the  bias,  we  obtained  more  stable  results.   Overall,
+                                                                                  since the bias estimate is known to scale as  1n  while the jackknife
+   We now turn to our second question:  Is an SSB-based                           standard deviation scales as    1√
+approach to identifying phase transitions from data more                                                            n  — so that the bias is typically
+                                                                                  much smaller than the standard deviation for a suﬃciently large
+accurate than a purely data-driven approach?  In partic-                          sample size n and can often be ignored [50] — we were conﬁdent
+ular, does the GE-encoder give a more accurate estimate                           that  our  extreme  bias  estimates  were  spurious.   Therefore,  we
+of Tc than the baseline-encoder?                                                  have not adjusted for them in the results presented (Figs.7-8).
+                                                                                                                                                     12
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+FIG. 6.   Fourth-order Binder cumulantsU4 of the order observables at each temperatureT  on a lattice of sizeL = 128 for one
+example training data fold and initialization seed and usingN = 256 training-validation samples per temperature. The standard
+deviation curves (dashed) were obtained using the jackknife resampling method (these may be diﬃcult to see since the standard
+deviations are small).  In all cases, the Binder cumulant drops abruptly near the theoretical critical temperature (dashed red).
+Step functions (blue) are ﬁt to the Binder cumulants using least-squares, and the locations of their jump discontinuities are
+taken as estimates of the critical temperature.
+
+
+mean averaged over all 24 trials (eight training data folds                   squashes (resp. inﬂates) the value assigned to lattice con-
+and three initialization seeds), along with a standard de-                    ﬁgurations with low (resp. high) absolute magnetization,
+viation (Figs.7-8).                                                           then  the  mean  absolute  value  of  the  baseline-encoder
+  In both the ferromagnetic and antiferromagnetic cases,                      vs.  temperature  curve  will  be  more  “bowed”  compared
+the  baseline-encoder  consistently  achieves  lower  error                   to  Onsager’s  solution.   Such  bowing  is  indeed  what  we
+in  its  critical  temperature  estimates  than  do  the  GE-                 see  (Fig.5).   This  observation  is  consistent  with  previ-
+encoders (Figs.7-8).  Moreover,  in contrast to the GE-                       ous  works  reporting  that  deeper  and  more  ﬂexible  au-
+encoders, the baseline-encoder makes better use of more                       toencoders incorrectly classify the Ising phase transition
+training data, as its error decreases with increasing train-                  as  ﬁrst-order  [42],  and  this  could  also  explain  why  the
+ing dataset size.  The GE-encoders,  on the other hand,                       baseline-encoder estimates the critical temperature with
+achieve errors closer to that of magnetization, and their                     greater accuracy, even though it does worse when extrap-
+estimates are also more stable in terms of lower standard                     olated to the thermodynamic limit (see Sec.IV D).
+deviations.  Multiscale training (i.e., all four lattice sizes
+in the training dataset) results in an additional reduction
+in error.                                                                            D.    Extrapolating the critical temperature
+  We  speculate  that  the  baseline-encoder  achieves  the                                                  estimates
+lowest error inTc estimation because it is a more ﬂexible
+network in comparison to the GE-encoder.  As such,  it                           Here we perform ﬁnite-size scaling analysis on the criti-
+may  be  able  to  express  certain  nonlinearities  that  the                cal temperature estimates presented in the last section in
+GE-encoder  cannot.    From  the  proximity  of  the  GE-                     order to obtain estimates at inﬁnite lattice size – i.e., in
+encoder to magnetization, we infer that its four hidden                       the thermodynamic limit. For each training data fold and
+neurons have aligned such that the GE-encoder is approx-                      initialization  seed,  order  observable,  training-validation
+imately a linear function of its input.  In contrast, if the                  sample size,  and each of the ferromagnetic and antifer-
+baseline-encoder has learned a nonlinearity such that it                      romagnetic cases, we perform least-squares linear regres-
+                                                                                                                                                       13
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+FIG. 7.     Ferromagnetic critical temperature estimates (ex-                  FIG.  8.      Antiferromagnetic  critical  temperature  estimates
+pressed as percent errors relative to the exact theoretical crit-              (expressed as percent errors relative to the exact theoretical
+ical temperature).  The error bars represent standard devia-                   critical temperature).  The error bars represent standard de-
+tions  that  combine  the  standard  deviation  of  means  across              viations that combine the standard deviation of means across
+24  trials  (eight  training  data  folds  and  three  initialization          24  trials  (eight  training  data  folds  and  three  initialization
+seeds)  and  the  jackknife  standard  deviations  for  each  fold             seeds)  and  the  jackknife  standard  deviations  for  each  fold
+and  seed,  with  most  of  the  variance  coming  from  the  for-             and  seed,  with  most  of  the  variance  coming  from  the  for-
+mer.  The standard deviation associated to magnetization is                    mer.  The standard deviation associated to magnetization is
+0.  The baseline-encoder consistently achieves the lowest er-                  0.  The baseline-encoder consistently achieves the lowest er-
+ror and improves with more training data.  The GE-encoders,                    ror and improves with more training data.  The GE-encoders,
+on the other hand,  are more similar to magnetization,  with                   on the other hand,  are more similar to magnetization,  with
+multiscale training reducing error slightly, and are also more                 multiscale training reducing error slightly, and are also more
+stable in terms of their standard deviations.                                  stable in terms of their standard deviations.
+
+
+sion on the critical temperature estimates against inverse                     and  baseline-autoencoder  methods  for  each  lattice  size.
+lattice size (r2 value≈ 1 for all ﬁts).  We plot an exam-                      These  values  include  the  time  to  generate  all  the  data
+ple of these ﬁts for N  = 256 training-validation samples                      (i.e.,  run  the  MC  simulation),  all  preprocessing  time
+per temperature in Fig.9.  The    y-intercepts of the linear                   such  as  checkerboard-averaging  the  lattice  conﬁgura-
+ﬁts  are  then  taken  to  be  the  critical  temperature  esti-               tions, and the time needed to train and validate the au-
+mates at L−1  = 0 – i.e., the thermodynamic limit.  We                         toencoder  and  to  evaluate  the  trained  encoder  on  the
+ﬁnd that while the baseline-encoder achieves the lowest                        entire dataset of lattice conﬁgurations.  Importantly, the
+error in its estimation of the critical temperature for in-                    training-validation-evaluation time is a  sum  over all 24
+dividual ﬁnite lattice sizes (Figs.7-8), the GE-encoders                       trials  (eight  training  data  folds  and  three  initialization
+are signiﬁcantly more accurate once their estimates are                        seeds) to reﬂect the computation needed to obtain error
+extrapolated to inﬁnite lattice size (Fig.10).                                 bars  on  the  critical  temperature  estimates.   Note  that
+                                                                               whether we are looking at the ferromagnetic or antifer-
+             E.    Measuring the time eﬃciency                                 romagnetic case has no impact on execution time, as the
+                                                                               autoencoder architectures and learning hyperparameter
+                                                                               settings are identical in both cases.  Moreover, as a con-
+   We   compare   the   time   eﬃciencies   of   the   GE-                     sequence of allowing the minibatch size to proportionally
+autoencoder  and  baseline-autoencoder  methods.   Since                       vary with the training-validation sample sizeN, we found
+we were able to exploit never-broken symmetries to re-                         that the execution time depended very little onN.  Thus,
+duce the network size of the GE-autoencoder, we expect                         we report each execution time as an average over all sam-
+it  to  be  signiﬁcantly  more  eﬃcient.   Figure11reports                     ple sizes N  and over the ferromagnetic vs. antiferromag-
+the  total  computation  times  for  the  GE-autoencoder                       netic cases.  We ﬁnd that the GE-autoencoder method is
+                                                                                                                                                      14
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+FIG. 9.   Linear dependence of critical temperature estimates                  FIG. 10.    Critical temperature estimates (expressed as per-
+(expressed as percent errors relative to the exact theoretical                 cent  errors  relative  to  the  exact  theoretical  critical  temper-
+critical  temperature)  on  inverse  lattice  size  using N  =  256            ature)  extrapolated  to  inﬁnite  lattice  size.   The  error  bars
+training-validation  samples  per  temperature  and  averaged                  represent standard deviations that combine the standard de-
+over 24 trials (eight training data folds and three initialization             viation of means across 24 trials (eight training data folds and
+seeds).  Although the baseline-encoder achieves lower error for                three initialization seeds) and the jackknife standard devia-
+each lattice size individually, the linear extrapolation of its es-            tions for each fold and seed, with most of the variance coming
+timates to inﬁnite lattice size (y-intercept) is a worse estimate              from the former.  The standard deviation associated to mag-
+compared to the GE-encoders.                                                   netization is 0.  Although the baseline-encoder achieves lower
+                                                                               error on ﬁnite lattices (Figs.7-8), the GE-encoder estimates
+                                                                               extrapolate to have lower error in the thermodynamic limit.
+signiﬁcantly faster than the baseline-autoencoder.  More-
+over, multiscale training gives an additional boost in ef-                     the coupling constant in the Ising Hamiltonian). For each
+ﬁciency in the computation time needed to extrapolate                          case, as well as the case of no external ﬁeld at all, we use
+estimates  to  inﬁnite  lattice  size,  as  the  multiscale  GE-               the Wolﬀ algorithm with a “ghost site” [51] to simulate
+autoencoder  needs  to  be  trained  only  once  across  the                   the  Ising  model  with  lattice  size L  =  128  in  an  exter-
+four ﬁnite lattice sizes.  We therefore conclude that our                      nal magnetic ﬁeld; we generateN = 2, 000 sample lattice
+GE-autoencoder method is indeed more eﬃcient than the                          conﬁgurations for each temperature and ﬁeld strength.  If
+baseline-autoencoder method.                                                   x01,...,x0N  (resp. x1,...,xN) are the sample lattice con-
+                                                                               ﬁgurations in the absence (resp.  presence) of an external
+        F.    Detecting an external magnetic ﬁeld                              magnetic ﬁeld, then for each encoderO, we compute the
+                                                                               statistic          ⏐⏐⏐⏐⏐                                  ⏐⏐⏐⏐⏐.         (16)
+   Finally, we investigate if the baseline-encoder and GE-                                          1    N∑                  N∑
+encoder order observables can be used to detect the pres-                                   D =     N       O(xn)−  1N           O(x0n)
+                                                                                                       n=1                  n=1
+ence of a weak external magnetic ﬁeldh in the ferromag-                        Using the baseline-encoder and GE-encoder already ﬁt-
+netic Ising model by adding a term to Eq. (1):                                 ted to data as described in previous sections, we obtain
+
+                    H(x)→H(x)−h∑xi.                  (15)                      24  measurements  of D  for  each  encoder  (eight  training
+                                              i                                data folds and three initialization seeds).  We then deﬁne
+                                                                               the “conﬁdence score”
+We assume the magnetic ﬁeld is uniform and note that                                                   ξ =   ⟨D⟩√
+it breaks the internal symmetry of the Ising model.  We                                                        ⟨D2⟩−⟨D⟩2.                      (17)
+consider two temperatures—2.0 and 2.5—slightly below
+and above the critical temperature, and we consider three                      Intuitively,  a  value  suﬃciently  far  from  zero  indicates
+ﬁeld strengths 0.001J, 0.01J, and 0.1J  (where J  = 1 is                       that  the  order  parameter  has  shifted  and  hence  there
+                                                                                                                                                      15
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+FIG.  11.      Computation  times  to  generate  data  (red)  and              FIG. 12.   “Conﬁdence scores” ξ (see Eq.17) of the baseline-
+train (not red) the autoencoders for each lattice size L.  Note                encoder (green) and GE-encoder (blue) at detecting the pres-
+that the time to measure magnetization is reported as equiv-                   ence of an external magnetic ﬁeld at two diﬀerent tempera-
+alent  to  data  generation  time  as  these  measurements  were               tures and for three diﬀerent ﬁeld strengths.  The error bars
+taken  on-the-ﬂy  during  the  MC  simulation.   Note  also  that              represent  standard  deviations  estimated  using  10, 000  boot-
+each training time is a  sum  over all eight training folds and                strap draws from the 24 trials used to calculate ξ.  The GE-
+RNG seeds.  The training times were then averaged over all                     encoder  consistently  detects  the  external  ﬁeld  with  greater
+training-validation  sample  sizes N  and  over  both  the  ferro-             conﬁdence than does the baseline-encoder.
+magnetic and antiferromagnetic cases, as these factors did not
+contribute to signiﬁcant variation in execution time.  The GE-
+autoencoder  is  signiﬁcantly  more  time-eﬃcient  (lower  time)                    V.    ON VECTOR ORDER OBSERVABLES
+than the baseline-autoencoder.  The times reported for inﬁ-
+nite lattice size are just sums of the times for the ﬁnite lat-                                  A.    A 2D order observable
+tice  sizes,  although  the  multiscale  GE-autoencoder  exhibits
+greater  eﬃciency  as  it  only  requires  a  single  network  to  be             We  have  thus  far  assumed  that  the  order  observable
+trained across all ﬁnite lattice sizes.
+                                                                               is  scalar-valued  or  equivalently  that  a  suﬃcient  choice
+                                                                               for the latent dimension of the autoencoder networks is
+                                                                               1.  In this section, we justify this assumption by instead
+                                                                               assuming  a  2D  vector  order  observable;  if  the  real  2D
+                                                                               orthogonal  representation ψ  : G ↦→  O(2,R)  by  which
+is  an  external  symmetry-breaking  ﬁeld.   We  normalize                     the order observable transforms—as learned by the GE-
+by  the  standard  deviation  of D  so  that ξ  is  indepen-                   autoencoder—is equivalent to a 1D representation, then
+dent  of  the  arbitrary  scale  learned  by  each  encoder;  it               we  may  conclude  that  a  1D  order  observable  is  suﬃ-
+also boosts the score when the measurement of D is ro-                         cient  to  describe  the  phase  transition.   The  exposition
+bust across the 24 trials.  Figure12shows the       ξ  scores                  in  this  section  will  also  help  to  illustrate  how  our  GE-
+for  the  baseline-encoder  and  GE-encoder  at  each  tem-                    autoencoder  method  can  be  extended  to  a  somewhat
+perature  and  external  ﬁeld  strength.   In  all  cases,  the                more complex scenario.
+GE-encoder attains a signiﬁcantly higher score than does                          We construct the 2D GE-autoencoder in direct analogy
+the  baseline-encoder,  meaning  that  it  is  more  sensitive                 to the 1D case.  First, we calculate the subgroup of never-
+to  and  detects  with  greater  conﬁdence  the  presence  of                  broken symmetries and ﬁnd it to beH =⟨α2,β2⟩, which
+a weak external magnetic ﬁeld.  At temperature 2.5, we                         is the subgroup generated by the even horizontal trans-
+note  that  the  baseline-encoder  does  become  more  con-                    lations and even vertical translations (see Prop.5in Ap-
+ﬁdent (increasing score) in its detection as the external                      pendixE 1). This subgroup has     L2/4 symmetries for even
+ﬁeld becomes stronger, which is to be expected; however,                       lattice sizeL, and the corresponding quotient groupG/H
+the GE-encoder remains conﬁdent even in its detection                          of possibly-broken symmetries has 16L2/(L2/4) = 64 el-
+of the weakest ﬁeld.                                                           ements.  Compare this to the 1D case, in which there are
+                                                                                                                                                  16
+
+L2 never-broken symmetries and only 16 possibly-broken                       TABLE II.  Estimated 2D latent representation ψg by which
+symmetries.                                                                  the  learned  2D  order  observable  (i.e.,  GE-encoder)  trans-
+  Next, we constrain the GE-autoencoder so that its en-                      forms, for g∈{ρ,τ,σ}.  Estimates were averaged over all 24
+coder  is  invariant  to  the  subgroup H  of  never-broken                  trials (eight training data folds and three initialization seeds)
+symmetries.    Instead  of  constraining  each  weight  ma-                  as well as over all lattice sizes L and training-validation sam-
+trix wk  (associated  to  the kth  hidden  neuron)  to  have                 ple sizes N  as they showed little variation; the reported un-
+a checkerboard pattern as in the 1D case, we constrain it                    certainties are standard deviations.  In both the ferromagnetic
+to be a tiling of a 2× 2 submatrix; the resulting weight                     and antiferromagnetic cases, the learned representations are
+matrix is then invariant to the action of the subgroupH,                     equivalent to the 1D representations presented in Sec.IV B.
+and hence so is the encoder.  Applying this constrained                                      Ferromagnetic           Antiferromagnetic
+encoder to an inputL×L lattice conﬁguration x is then                                   [   1.0000(2)  0.000(0)]  [−0.96(5)  0.000(0)]
+equivalent to the following procedure: First, we construct                          ψρ      0.0000(9)  1.000(0)         0.00(0)  0.994(9)
+a reduced 4D representation  ˇx = (ˇx1, ˇx2, ˇx3, ˇx4) of x as
+follows:                                                                                [   1.0000(2)  0.000(0)]  [−0.96(5)  0.000(0)]
+                                      ∑                                             ψτ      0.0000(8)  1.000(0)         0.00(0)  0.994(9)
+                   ˇx1 =   4L2                    xi                                    [−1.0000(8)  0.000(0)]  [−0.96(5)  0.000(0)]
+                              ix even, iy even                                      ψσ
+                   ˇx2 =   4         ∑           xi                                         0.0000(0)  1.000(2)         0.00(0)  0.994(9)
+                          L2
+                              ix even, iy odd
+                   ˇx3 =   4         ∑           xi                          ferromagnetic and antiferromagnetic cases, the elements
+                          L2                                                 ψρ,ψτ, andψσ—and hence the entire representationψ—
+                              ix odd, iy even                                are approximately diagonal (TableII). More precisely, we
+                                     ∑                                       see that the learned representation ψ approximately ad-
+                   ˇx4 =   4L2                  xi.                          mits  the  decomposition ψ  = ψ1⊕ψ2  where ψ1  is  the
+
+                              ix odd, iy odd                                 representation learned in the 1D case and ψ2 is the triv-
+The representation ˇx is just the 2× 2 block-average of x.                   ial representation.  Thus, the learned 2D representation
+Then,  we  feed  ˇx  into  a  reduced  unconstrained  encoder                is equivalent to the 1D representation in Sec.IV B, and
+ˇO  : [−1, 1]4↦→ R2.  Finally,  we use the 4D output of a                    hence a 1D order observable is suﬃcient.
+
+reduced decoder  ˇD to reconstruct an L×L lattice con-
+ﬁguration by tiling a 2× 2 block in the horizontal and                                          B.    A general procedure
+vertical directions.
+  Let ψ : G↦→ O(2,R) be the 2D latent representation                            We  end  this  section  with  some  remarks  on  a  general
+of G by which the 2D order observable transforms.  We                        procedure  for  calculating  the  subgroup  of  never-broken
+already know ψg = I∀g∈ H, where I  is the 2× 2 iden-                         symmetries  and  applying  the  GE-autoencoder  method.
+tity matrix. Our particular choice of the GE-autoencoder                     Consider  an  arbitrary  statistical-mechanical  system  in
+architecture as described above places an additional con-                    thermal equilibrium with ﬁnite symmetry group G, and
+straint on ψ:                                                                suppose we assume an order observable of the system to
+                          ψα ˇO =ψρ2τ ˇO.                                    have dimension d (we can regard d as a hyperparameter
+                                                                             that  we  select  as  part  of  the  GE-autoencoder  architec-
+(see Prop.6in AppendixE 1).  Thus, we need only learn                        ture).  Then by Prop.7(see AppendixE 2), the subgroup
+three of the four generators of ψ while training the GE-                     Hd of never-broken symmetries can be calculated as
+autoencoder: ψρ, ψτ,  and ψσ.  This result is analogous                                         Hd =   ⋂                 ker(χ),                 (18)
+to Prop.2for the 1D case.
+  We train the 2D GE-autoencoder with the loss function                                                 χ∈ ˆG|degR(χ)≤d
+[Eq. (20)] given below in Sec.V B; it is a generalization                    where  ˆG is the set of all (complex-)irreducible characters
+of the loss function [Eq. (12)] and holds for any order ob-
+servable dimension d.  We train the 2D GE-autoencoder                        ofG; ker(χ) is the kernel of the characterχ deﬁned as the
+with the same datasets and optimizer settings as in the                      preimage set χ−1(deg(χ)) of the degree deg(χ) = χ(1);
+1D case.  After training, we obtain the learned latent rep-                  and we deﬁne degR(χ) to be the degree of the smallest
+resentation ψ  of G using the estimator [Eq. (19)] given                     real character built out of χ:
+below in Sec.V B. Observe that the GE-autoencoder is                                                            {
+invariant  under  the  transformation   ˇO(·)→ A ˇO(·)  and                              degR(χ) = deg(χ)         1,     if  IFS(χ) = 1
+ˇD(·,·)→  ˇD(A−1·,·)  for  any  invertible  2× 2  matrix A.                                                       2,     otherwise,
+Thus, without loss of generality, we transform the learned
+representation ψ  into  the  eigenbasis  of ψσ,  so  that ψσ                 where IFS(χ) is the Frobenius-Schur indicator of χ.  We
+is  diagonal  with  sorted  diagonal  elements.   In  both  the              can  therefore  quickly  calculate  the  subgroup  of  never-
+                                                                                                                                                 17
+
+TABLE III.  SubgroupHd of never-broken symmetries of the                     tion that generalizes Eq. (12) for 1D order observables to
+Ising symmetry groupG assuming various dimensionsd of the                    order observables of any dimension d.  The loss function
+order observable.  Here β = ραρ−1  is the horizontal transla-                is given below.
+tion generator.  The subgroups were computed using our GAP                     Suppose we have a dataset ofN lattice conﬁgurations.
+implementation of Eq. (18) for lattice sizes   L∈{4, 8, 16}.                 For  every g ∈ G,  let Zg ∈ RN×d  whose nth  row  is
+                                                                             ˇO(g−1ˇxn);  i.e., Zg  is  the  matrix  of  outputs  of  the  GE-
+                 d |Hd| |G/Hd|    Hd                                         encoder evaluated on the dataset, where all lattice con-
+                 1 L2       16  ⟨α2,ρ2, (αρ)2⟩                               ﬁgurations  were  ﬁrst  transformed  by g−1  (we  use g−1
+                 2 L2/4     64   ⟨α2,β2⟩                                     instead ofg because the GE-encoder outputs are stacked
+                 3 L2/4     64   ⟨α2,β2⟩                                     as row vectors in Zg).  For the identity element g  = 1,
+                 4     1      16L2   {1}                                     let Z =Z1 for further brevity.  Let P  be the orthogonal
+                                                                             projection operators onto the null space of Z:
+broken symmetries once we have the character table of                                                  P  =I−Z+Z,
+G.                                                                           where Z+ is the Moore-Penrose pseudoinverse of Z  and
+  An  immediate  corollary  of  Eq.  (18)  (and  Prop.7)  is                 I the identity matrix.  Finally, let A be ad×d learnable
+that we have the normal seriesH1 ⊵H2 ⊵··· ⊵{1}; i.e.,                        matrix parameter, and deﬁne the following estimator of
+the  subgroup  of  never-broken  symmetries  shrinks  with                   ψg:
+increasing dimension of the order observable and eventu-
+ally becomes trivial, so that beyond some ﬁnite value of                                             ˆψg =Z+Zg +PA.                       (19)
+d,  the GE-autoencoder is no longer able to exploit any
+never-broken symmetries and is as large as the baseline-                     Then the general loss function for a GE-autoencoder with
+autoencoder.                                                                 latent dimension d has the form
+  We implemented Eq. (18) in GAP      4  and used our im-                                                 N∑
+plementation to calculate the subgroup of never-broken                              ˇL( ˇO, ˇD,A) =  1        LBCE( ˇD( ˇO(ˇxn),Tn), ˇxn)
+symmetries for the Ising symmetry group G for various                                                 N  n=1
+dimensionsd of the order observable (TableIII). We note                                           +λ∑(Rg +Sg),                            (20)
+that a limitation of this computational approach is that
+it requires a numerical value for the lattice sizeL, and the                                           g∈Γ
+computation time increases with L.  We ran our code for                      where Γ⊂G is the minimal set of symmetry generators
+lattice sizes L∈{4, 8, 16} and observed that the presen-                     necessary to check (e.g., for Ising symmetries, Γ ={τ,σ}
+tations of the returned subgroups in terms of generators                     for d = 1 and Γ ={ρτσ} for d = 2) and
+and  relations  were  independent  of  lattice  size,  allowing                                    Rg =‖I−  ˆψ⊤g  ˆψg‖2F                        (21)
+us to conclude empirically that these presentations hold
+for arbitrarily large even lattice size L.
+  The subgroups of never-broken symmetries of the Ising                                             Sg =‖Zg−Z ˆψg‖2F‖Zg‖2F   ,                      (22)
+symmetry group for d∈{1, 2} agree with the theoreti-
+cal calculations in Props.1,5(TableIII). For          d = 3, we              and where‖·‖2F  is the squared Frobenius matrix norm
+get  the  same  subgroup  as  with d  =  2.   For d  =  4,  the              (sum of squared matrix elements).  These regularization
+subgroup of never-broken symmetries becomes trivial, so                      terms are obtained by relaxing the hard equivariance con-
+that the GE-autoencoder is just as large as the baseline-                    straint Zg = Zψg  to the minimization of‖Zg−Zψg‖2F .
+autoencoder; this remains the case for alld≥ 4 since the                     Speciﬁcally,  ˆψg is the minimizer (i.e., linear least squares
+subgroups form a descending series with increasing d.                        estimator); Rg ensures  ˆψg is (approximately) an orthog-
+  Once we have determined the subgroup Hd  of never-                         onal representation; andSg ensures‖Zg−Z ˆψg‖2F  is min-
+broken symmetries, we constrain the GE-autoencoder so                        imized.  Note the denominator in Eq. (22) is included so
+that the encoder isHd-invariant and the decoder returns                      the optimizer does not simply rescale the GE-encoder.
+anHd-invariant lattice conﬁguration.  If the encoder and                       The above loss function is an approximate generaliza-
+decoder each have one hidden layer of neurons, then the                      tion of the loss function for the case of a 1D order ob-
+starting  point  for  determining  the  appropriate  param-                  servable [Eq. (12)].  Speciﬁcally, if   d = 1, thenRg andSg
+eter  constraints  is  a  recent  classiﬁcation  of  all  invari-            reduce to expressions equivalent to the ﬁrst and second
+ant shallow neural networks [53].  Finally, once the GE-                     regularization terms in Eq. (12),  with   Sg  matching the
+autoencoder architecture is selected, we train the network                   second  regularization  term  exactly.   (see  AppendixE 3
+by minimizing a loss function with symmetry regulariza-                      for  details).   Note  that  Eq.  (12)  includes  a  third  regu-
+                                                                             larization  term  whose  original  purpose  was  to  ensure  a
+                                                                             nontrivial representationψ is learned; however, based on
+4 GAP  is  a  computer  algebra  system  for  computational  discrete        a  small  sample  of  numerical  tests,  we  believe  that  this
+  algebra  with  particular  emphasis  on  computational  group  the-        third  regularization  term  is  not  strictly  necessary,  and
+  ory [52].                                                                  we have thus omitted its generalization from Eq. (20).
+                                                                                                                                                  18
+
+                      VI.    DISCUSSION                                      ideas of block decimation from the renormalization group
+                                                                             as a way to more eﬃciently extrapolate to the thermo-
+  We   introduced   the   group-equivariant   autoencoder                    dynamic limit [33].  The GE-autoencoder,  on the other
+(GE-autoencoder) – a deep neural network (DNN) archi-                        hand,  is scale-independent and could therefore be well-
+tecture that can be used to locate phase transitions by                      suited for this transfer-learning task.  Indeed,  we found
+detecting the associated spontaneous symmetry breaking                       that the multiscale GE-autoencoder is more time-eﬃcient
+(SSB). We demonstrated its eﬃcacy for the 2D classical                       and  slightly  more  accurate  than  the  single-scale  GE-
+ferromagnetic and antiferromagnetic Ising models, ﬁnd-                       autoencoder.  In future work, we aim to improve the mul-
+ing that the GE-autoencoder (1) accurately determines                        tiscale GE-autoencoder until it saves us from having to
+which symmetries are broken at each temperature, and                         simulate the largest lattice size (e.g., L = 128) entirely.
+(2)  estimates  the  critical  temperature  with  greater  ac-               For  example,  researchers  have  used  diﬀerent  generative
+curacy and time-eﬃciency than an SSB-agnostic autoen-                        ML methods to learn the distribution of lattice conﬁgu-
+coder.                                                                       rations of a system, allowing them to simulate the system
+  We  also  found  the  GE-autoencoder  to  be  more  ro-                    more eﬃciently than with traditional MC methods [54–
+bust  than  the  baseline-autoencoder  in  an  interesting                   59].  Combining these methods with ideas introduced in
+sense.  Recall that we deliberately selected nonlinear ar-                   this paper could allow us to generate large sample lattices
+chitectures for the autoencoders, even though (staggered)                    based  only  on  a  dataset  of  small-to-moderate  lattices,
+magnetization—the “true” order observable—is a linear                        possibly oﬀering a signiﬁcant speedup over MC methods.
+function  of  the  lattice  conﬁguration.   This  models  the                   The  superior  accuracy  of  the  GE-autoencoder  could
+likely scenario in real applications where the DNN being                     also  translate  into  greater  robustness  against  the  sign
+used is more expressive than the unknown order observ-                       problem.   There  is  empirical  evidence  suggesting  that
+able we are seeking.  Ideally, if the DNN is robust, then                    DNNs  could  overcome  the  sign  problem  in  the  single-
+it should be able to reduce its expressivity to ﬁt the tar-                  band  Hubbard  model  to  some  extent  [29].   Subsequent
+get order observable.  As discussed in Sec.IV C, we sus-                     work, however, showed that the sign problem returns at
+pect that the baseline-autoencoder performs better than                      more  extreme  temperatures  and  doping  [30],  although
+the  GE-autoencoder  on  ﬁnite  lattices  but  worse  in  the                this work also demonstrates that transfer-learning from
+thermodynamic  limit  because  it  learned  an  inappropri-                  sign-problem-free regions to sign-problem-prone regions
+ate nonlinear order observable; that the GE-autoencoder                      in  the  phase  diagram  could  work  for  small  amounts  of
+could accurately learn magnetization without overﬁtting                      doping.   If  the  GE-autoencoder  is  indeed  more  robust
+attests to its superior robustness.  This robustness is also                 than previous DNN methods,  then perhaps it could al-
+reﬂected  in  the  GE-autoencoder’s  greater  sensitivity  to                low  us  to  access  even  more  extreme  temperatures  and
+the presence of an external symmetry-breaking magnetic                       doping levels.
+ﬁeld (Sec.IV F).                                                                Finally,  knowledge  of  the  SSB  associated  to  a  phase
+  There   are   several   implementation   details   in   our                transition has value beyond a means to phase detection
+method  that  are  worth  noting.   First,  in  our  proof-of-               alone.  For example, identifying the relevant symmetries
+principle  example,  we  found  that  the Tc  estimation  by                 could help elucidate the mechanism driving subtle phase
+ﬁtting  a  step  function  to  the  fourth  Binder  cumulant                 transitions  and  thus  oﬀer  a  means  to  control  them  in
+vs.  temperature  curve  works  well,  and  it  still  allows                practice to realize real-world applications.
+for  ﬁnite-size  scaling  analysis  (see  Sec.IV D).  In  con-                  Lastly,  we  end  with  remarks  on  some  potential  im-
+trast, the intersection of second Binder cumulant curves                     provements  to  our  approach  to  be  addressed  in  the  fu-
+across  lattice  sizes  is  not  guaranteed  for  autoencoders,              ture.  First, we would like to formalize, further develop,
+and  the  intersection  points  of  fourth  Binder  cumulant                 and better understand the general procedure presented
+curves across lattice sizes is not guaranteed to be unique.                  in  Sec.V B.  For  example,  the  computational  approach
+Second,  proper  initialization  and  learning  rate  settings               described in Sec.V Afor ﬁnding the subgroup of never-
+(see AppendixB) were critical for a fair comparison of                       broken symmetries of an arbitrary ﬁnite symmetry group
+the baseline-autoencoder and GE-autoencoder.  Our ap-                        requires that we specify a value for the system size; un-
+proach to determining these settings could be useful for                     derstanding how the never-broken symmetries depend on
+deep  learning  experiments  in  general,  where  one  DNN                   system size would thus require us to test various system
+is a constrained copy of another.  Finally, in contrast to                   sizes and then search for a pattern, and it is unclear how
+ML methods for phase detection that are entirely data-                       feasible this would be for general systems.  On the other
+driven,  our  method  includes  group-theoretic  considera-                  hand, if we only consider a class of systems for which the
+tions that allow us to exploit some of the structure avail-                  dependence  of  the  symmetry  group  on  the  system  size
+able in the problem, namely symmetries; given the bene-                      takes a particular form, then it may be feasible to derive
+ﬁts we have identiﬁed here, we think this practice should                    a specialized algorithm for calculating the never-broken
+always be followed whenever possible.                                        symmetries for arbitrary system sizes.
+  Our  work  has  several  physical  implications  as  well.                    Second,  we  would  like  to  consider  example  systems
+For example, recent progress has been made in transfer-                      with  more  complicated  symmetry  groups.   This  could
+learning  from  small  to  large  lattice  sizes  implementing               include  those  with  continuous  internal  symmetries  and
+                                                                                                                                             19
+
+gauge symmetries; however, a ﬁrst step would be to con-                   representation ψ  associated  with  the  order  parameter,
+sider  ﬁnite  nonabelian  internal  symmetry  groups  that                we  can  deduce  a  subgroup  of  never-broken  symmetries
+must act on vector-valued lattice conﬁgurations.                          by ﬁnding all symmetries g∈ G such that ψg  = 1 (i.e.,
+  Third   and   ﬁnally,   we   would   like   to   better   un-           g∈ ker(ψ)) for all representations ψ :G↦→{−1, 1}.  The
+derstand  how  to  choose  the  representation  by  which                 following proposition establishes such a subgroup for the
+the  never-broken  symmetries  are  imposed  on  the  GE-                 Ising symmetry group.
+autoencoder.   Relating  to  this  is  our  ﬁnding  that  the             Proposition 1.  Let Ψ be the set of all real scalar repre-
+baseline-autoencoder estimates the critical temperature                   sentations ψ :G↦→{−1, 1} of the Ising symmetry group
+with greater accuracy than the GE-autoencoder for indi-                   G.  Then⋂
+vidual lattice sizes (i.e., without ﬁnite-size scaling anal-                            ψ∈Ψ ker(ψ) =⟨α2,ρ2, (αρ)2⟩.
+ysis).  This aspect was discussed in Sec.IV C. As specu-                  Proof. Letg∈G such thatg =h2 for someh∈G.  Then
+lated there, this observation could be due to the greater                 for every ψ∈ Ψ, we have
+ﬂexibility of the baseline-autoencoder.  However, we sus-
+pect that this greater ﬂexibility is also why the baseline-                                ψg =ψh2 =ψ2h = (±1)2 = 1,
+autoencoder exhibits a slightly sharper transition in its
+order  parameter  vs.  temperature  curve,  while  the  GE-               and hence g∈⋂ψ∈Ψ ker(ψ); in particular, we have
+autoencoder learns an order parameter very close to that
+of  magnetization.   We  thus  suspect  that  the  baseline-                               ⟨α2,ρ2, (αρ)2⟩⊆ ⋂          ker(ψ).
+autoencoder is more prone to incorrectly classifying the
+Ising  phase  transition  as  ﬁrst-order  instead  of  second-                                                  ψ∈Ψ
+order (as was observed in Ref. [42]) when compared to                     All  that  remains  to  show  is  the  reverse  inclusion.   Let
+the  GE-autoencoder.    If  greater  ﬂexibility  is  desired,             g∈⋂
+we  believe  the  better  way  is  to  use  a  more  ﬂexible              the deﬁning relations of G, g admits the expression g =ψ∈Ψ ker(ψ), so that ψg  = 1 for every ψ∈ Ψ.  By
+GE-autoencoder; this could become important for cases                     hτm3σm4, whereh is a product ofm1 copies ofα andm2
+where  the  nature  of  the  phase  transition  (i.e.   continu-          copies of ρ in some order.  Now since ψ  takes values in
+ous or weakly ﬁrst order) is under dispute.  The network                  an Abelian group, then for all g1,g2∈G,
+complexity  required  for  the  GE-autoencoder  to  match
+the  critical-temperature-estimation  performance  of  the                              ψg1g2 =ψg1ψg2 =ψg2ψg1 =ψg2g1.
+baseline-autoencoder is likely related to our choice of how
+we  impose  the never-broken symmetries.  We  intend  to                  Using this fact, we have
+investigate this relationship in future work.
+  Much  work  remains  to  be  done  to  establish  the  GE-                                ψg =ψhψτm3ψσm4
+autoencoder  as  a  mature  and  trusted  machine  learning                                     =ψαm1ρm2ψτm3ψσm4
+model;  however,  the  proof-of-principle  application  pre-                                    =ψm1α ψm2ρ ψm3τ ψm4σ    = 1.                (A1)
+sented here provides optimism for its utility in address-
+ing open problems related to the search for spontaneous                                                                                   (A2)
+symmetry breaking in the pseudogap phase of the high                      This  holds for  every ψ∈  Ψ.  Now  each ψ∈  Ψ  is com-
+temperature cuprates, or at topological phase transitions.                pletely determined by its values on the generatorsα,ρ,τ,
+
+                                                                          andσ.  Moreover, it is easy to verify that if we applyψ to
+                ACKNOWLEDGEMENTS                                          every deﬁning relation ofG, then the resulting equations
+                                                                          are satisﬁed for all choices of ψα, ψρ, ψτ, and ψσ.  Thus,
+  Work  by  S.  J.  and  A.  D.  was  supported  by  the  U.S.            Ψ is precisely the set of homomorphismsψ :G↦→{−1, 1}
+Department of Energy, Oﬃce of Science, Oﬃce of Basic                      determined by every combination of values in{−1, 1} on
+Energy Sciences, under Award Number DE-SC0022311.                         the four generators of G.  Let ψi∈ Ψ such that ψi is−1
+Work  by  D.  A.  and  J.  O.  was  supported  by  the  U.S.              on theith generator and 1 on the other three generators.
+Department of Energy, Oﬃce of Science, Advanced Sci-                      Evaluating Eq. (A1) at   ψ =ψi, we get (−1)mi  = 1, im-
+entiﬁc Computing Research,  under award Number DE-                        plying that each mi  is even.  The element g  thus takes
+SC0018175.                                                                the formg =hτ 2n3σ2n4 =h, whereh is a product of 2n1
+                                                                          copies of α and 2n2 copies of ρ in some order.
+                                                                             On the other hand, letβ =ραρ−1, and note thatα and
+                 Appendix A: Propositions                                 β  commute.  Then G = (⟨α,β⟩ ⋊⟨ρ,τ⟩)×⟨σ⟩, implying
+                                                                          that each g∈G admits the unique representation
+   1.    Subgroup of never-broken Ising symmetries                                              g =αq1βq2ρq3τq4σq5.
+
+  Recall from Sec.II Athat a symmetry    g∈G is never-                    Ifψg = 1, then we have already deduced thatg must be a
+broken if ψg = 1 (i.e., if g is in the kernel of ψ, denoted               product ofα’s andρ’s, and henceg =αq1βq2ρq3.  Noting
+ker(ψ)).  In the absence of any knowledge about the true                  thatβq2 =ραq2ρ−1, this expression ofg hasq1+q2 copies
+                                                                                                                                            20
+
+of α and 1− 1 +q3 = q3 copies of ρ.  Equating these to                    Proof. Clearly α   (downward   translation),  ρ   (90◦-
+the previously obtained exponents in the expression ofg,                  rotation), and τ  (reﬂection) map black squares to white
+we have q1 +q2 = 2n1 and q3 = 2n2, implying that q3 is                    squares and vice versa on an L×L checkerboard where
+even and thatq1 andq2 have the same parity.  Now using                    L is even.  Thus, for all g∈{α,ρ,τ},
+the fact that α and β commute, g admits the form
+                                                                                                g(ˇxB, ˇxW) = (ˇxW, ˇxB)
+                 g =αq1−q2αq2βq2ρq3                                                         ˇO(g(ˇxB, ˇxW)) =  ˇO((ˇxW, ˇxB))
+                    =αq1−q2(αβ)q2ρq3                                                     ψg ˇO((ˇxB, ˇxW)) =  ˇO((ˇxW, ˇxB)),
+                    = (α2)n1−q2(αβ)q2(ρ2)n2,
+                                                                          and hence,
+implying g∈⟨α2,ρ2,αβ⟩.  Finally, note that
+                                                                            ψα ˇO((ˇxB, ˇxW)) =ψρ ˇO((ˇxB, ˇxW)) =ψτ ˇO((ˇxB, ˇxW)).
+                         αβ =αραρ−1
+                              =αραρ3                                      Evaluating this on a lattice conﬁguration x for which  ˇO
+                              =αραρρ2                                     is nonzero, we obtain ψα =ψρ =ψτ  as desired.
+
+                              = (αρ)2ρ2.                                     The key idea is that g(ˇxB, ˇxW) = (ˇxW, ˇxB) for all g∈
+                                                                          {α,ρ,τ}.  The upshot is that we now need only estimate
+Since ρ2∈⟨α2,ρ2,αβ⟩,  then⟨α2,ρ2, (αρ)2⟩,  and there-                     ψσ and one of ψα, ψρ, and ψτ  from the data.
+fore g∈⟨α2,ρ2, (αρ)2⟩, establishing
+                  ⋂   ker(ψ)⊆⟨α2,ρ2, (αρ)2⟩.                                     3.    Unsupervised-learning of symmetries
+
+
+                 ψ∈Ψ
+                                                                             The  following  proposition  states  that  under  suitable
+                                                                          conditions,  if an unsupervised model is ﬁt to a dataset
+                                                                          containing symmetries, then the ﬁt model will be invari-
+  Intuitively, even for a general observable dimension d,                 ant to those symmetries at least when restricted to the
+the observableO : X↦→ Rd reduces dimensionality from                      dataset.
+L2 tod whereL may be arbitrarily large in the thermody-                   Proposition 3.  Let G be a ﬁnite group andX  ={xn∈
+namic limit.  Ifd is less than the minimum dimensionality                 Rm}Nn=1  a G-invariant  dataset;  i.e., gxn∈X  for  every
+required for ψ to be a faithful representation, then some
+subgroup of G will necessarily be modded out by ψ.                        g∈ G  and xn∈X .  LetF  be  a  convex  set  of  functions
+  It can be shown that SCB(L) ⊴G, and hence we have                       f  :X↦→ Rm  such  that gfg−1∈F  for  every f∈F  and
+the quotient group                                                        g∈G.  LetLmetric : Rm×X↦→ R be a function such that
+
+        G/H =⟨αH,ρH,τH,σH⟩                                                   1. Lmetric(gx,gx′) = Lmetric(x, x′)  for  all g∈ G  and
+               ={αm1ρm2τm3σm4H :mi∈{0, 1}},                                      (x, x′)∈ Rm×X , and
+
+            H = SCB(L).                                            (A3)      2. Lmetric  is strictly convex in its ﬁrst argument.
+
+This quotient group represents the reduction in the num-                  Then every global minimizer f∗∈F  of the loss function
+ber of symmetries we will need to check for SSB; indeed,                  L :F↦→ R given by
+|G| = 16L2 and|H| =L2, so that|G/H| = 16.
+                                                                                                       N∑
+                                                                                        L(f) =  1N        Lmetric(f(xn), xn)
+   2.    Constraint on the representations of spatial                                                 n=1
+                           symmetries                                     is G-equivariant on the datasetX .
+
+  The form of the reduced encoder [Eq. (10)] places ad-                   Proof. First we establish that the loss functionL is both
+ditional constraints on the spatial symmetries in the quo-                strictly convex and G-invariant.  For each n = 1,...,N,
+tient group [Eq. (A3)], as speciﬁed in the following propo-               it  is  easy  to  show  that  the  map  fromF  to R  given  by
+sition.                                                                   f→Lmetric(f(xn), xn) is strictly convex.  (Note that this
+                                                                          relies on the hypothesis that the domain of the functions
+Proposition 2.  Suppose  ˇO : [−1, 1]2↦→ R is nonzero for                 inF  is  the  datasetX ,  so  that  for f1,f2∈F, f1  = f2
+at  least  one  lattice  conﬁguration.  For  every ψ∈ Ψ  such             if  and  only  if f1(xn)  = f2(xn)  for  all n  =  1,...,N.)
+that  ˇO(gˇx) =ψg ˇO(ˇx) for all Ising symmetries g∈G, we                 Moreover, sinceL is a convex combination of such maps,
+have ψα =ψρ =ψτ .                                                         then it is also strictly convex.  Now for every f∈F  and
+                                                                                                                                                 21
+
+g∈G, we have                                                                a single autoencoder inF.  In practice, however, we make
+                      N∑                                                    the assumption that the global minimizer f∗∈F  can be
+ L(gfg−1) =  1            Lmetric(gf(g−1xn), xn)                            accessed by the single autoencoder architecture we pro-
+                 N                                                          posed. There are additional caveats to Prop.3: First, our
+                     n=1                                                    dataset of lattice sets is probably only approximately G-
+                      N∑                                                    invariant;  second,  actually ﬁnding f∗  is nontrivial since
+              =  1N       Lmetric(gf(g−1xn),g(g−1xn))                       the map from its network parameters to the autoencoder
+                     n=1                                                    f  is in general nonconvex.  Nevertheless, we take Prop.3
+                      N∑                                                    as  strong  motivation  to  make  the  assumption  that  our
+              =  1N       Lmetric(gf(xn),gxn)  (g−1xn→ xn)                  autoencoder f =D◦O is G-invariant.
+                     n=1
+                      N∑
+              =  1N       Lmetric(f(xn), xn)
+                     n=1                                                       Appendix B: Network initialization and learning
+              =L(f),                                                                                         rates
+
+where we used the fact that the datasetX  isG-invariant
+in  the  reindexing  step.   Thus, L  is G-invariant,  where                   Here  we  provide  details  on  the  network  parameter
+each g∈G acts onL by conjugation of its argument.                           initialization  and  learning  rate  settings  needed  for  a
+  Now  let f∗∈F  be  a  global  minimizer  ofL.   By G-                     fair  comparison  of  the  baseline-autoencoder  and  GE-
+invariance, gf∗g−1  is  also  a  global  minimizer  for  every              autoencoder.   The  GE-autoencoder  is  a  small  network
+g∈G, and by convexity, f∗+gf∗g−12        is a global minimizer              that is equivalent to the larger baseline-autoencoder with
+for eachg∈G as well.  On the other hand, convexity and                      the  parameters  of  its  ﬁrst  encoding  layer  and  last  de-
+G-invariance together imply that                                            coding layer constrained to a checkerboard pattern (ig-
+            (f∗ +gf∗g−1       )                                             noring  the  symmetry  regularization  terms  in  the  GE-
+          L                      ≤L(f∗) +L(gf∗g−1)                          autoencoder loss function).  The idea is to initialize and
+                      2                         2                           set  the  learning  rates  of  the  baseline-autoencoder  such
+                                                                            that,  if  the  checkerboard  constraint  were  imposed  and
+                                 =L(f∗) +L(f∗)2                             maintained  on  the  baseline-autoencoder,  then  it  would
+                                 =L(f∗),                                    be and would remain functionally equivalent to the GE-
+                                                                            autoencoder at initialization time and throughout train-
+but since f∗  and f∗+gf∗g−1                                                 ing.
+                            2        are both global minimizers,               Initialization    We  initialize  the  weight  matrix  and
+then this inequality is in fact an equality:                                bias  vector  of  each  layer  of  the  GE-autoencoder  with
+            (f∗ +gf∗g−1       )                                             IID  values  sampled  under  a  uniform  distribution  over
+         L                       =L(f∗) +L(gf∗g−1)                          [                ]
+                     2                          2      .                      −    1√hin,    1√hin,  where hin  is the input dimension of the
+Finally, sinceL is strictly convex, then this necessitates                  layer.   If  (uk,vk)  are  the  initial  weights  of  the  ﬁrst  en-
+f∗  = gf∗g−1  or  equivalently f(gxn)  = gf(xn)  for  all                   coding layer of the GE-autoencoder incident to the kth
+g∈G and xn∈X , thereby proving the claim.                                   hidden neuron, then we initialize the weights of the ﬁrst
+                                                                            encoding layer of the baseline-autoencoder according to
+  Note  that  the  functions  in F  are  restricted  to  the                Eq. (9).  We initialize the weight matrix and bias vector
+datasetX ; the minimizer f∗ is therefore not guaranteed                     of the last decoding layer of the baseline-autoencoder by
+to be G-equivariant oﬀ the dataset.                                         simply tiling the initialized parameters of the last decod-
+  For our particular case, the functionLmetric is the bi-                   ing layer of the GE-autoencoder according to a checker-
+nary cross-entropyLBCE [Eq. (8)].  By its form in Eq. (8),                  board pattern.  All remaining parameters of the baseline-
+LBCE  is  clearly  invariant  under  the  spin-ﬂip  symmetry                autoencoder  are  structurally  equivalent  to  those  of  the
+(ˆx, x) →  (−ˆx,−x),  and  it  is  manifestly  invariant  un-               GE-autoencoder, and we thus initialize them to be equal
+der  all  spatial  symmetries  as  it  is  a  sum  over  the  lat-          to  the  corresponding  initialized  parameters  in  the  GE-
+tice sites; thus, LBCE isG-invariant whereG is the Ising                    autoencoder.
+symmetry  group.   The  strict  convexity  of LBCE  is  evi-                   Learning rate    We set the learning rate of all parame-
+dent;  since xi  =±1,  then  each  summand  in  Eq.  (8)  is) or− log( 1−ˆxi), and in either case, itsters of the GE-autoencoder to ηGE = 0.001.  We proceed
+either− log( 1+ˆxi2                   2                                     to deduce the appropriate learning rateη for the weights
+second derivative with respect to  ˆxi  is strictly positive,               in  the  ﬁrst  encoding  layer  of  the  baseline-autoencoder;
+so that each summand is strictly convex.  The setF  is                      we  do  this  for  the  weights  on  “black  squares”  (ix +iy
+the set of functions (restricted to our dataset) express-                   even;  see Eq. (9));  the argument for “white squares” is
+ible as autoencoders of ﬁxed depth but arbitrary widths;                    analogous.  Assuming full-batch gradient descent for sim-
+we  allow  for  arbitrary  widths  to  ensure  that  any  con-              plicity and ignoring symmetry regularization, the update
+vex combination of autoencoders is again expressible as                     rules  for  the  weights  in  the  ﬁrst  encoding  layers  of  the
+                                                                                                                                                 22
+
+baseline-autoencoder and GE-autoencoder are
+
+         ∆wk,i =−η ∂L∂wk,i  and ∆uk =−ηGE ∂L∂uk.
+
+However, by Eq. (9), we have ∆ wk,i =   2L2 ∆uk and hence
+
+                     η ∂L∂wk,i  =   2L2ηGE ∂L∂uk.
+
+Applying the chain rule to the right side, we have
+                                   ∑          ∂L    ∂wk,j
+        η ∂L∂wk,i  =   2L2ηGE               ∂wk,j    ∂uk
+                               jx+jy even
+                                                          
+                                 2       ∑          ∂L    .
+                  =   2L2ηGE      L2               ∂wk,j
+                                      jx+jy even
+
+The quantity in parentheses is the average gradient over
+black squares.  By averaging both sides over j withjx+jy
+even,  we  can  obtain  such  an  average  gradient  on  both
+sides; cancelling then leaves us with the desired learning
+rate:                                                                       FIG. 13.   Measure of error between the baseline-encoder and
+                            η =   2                                         magnetization.   Error  bars  indicate  the  standard  deviation
+                                  L2ηGE.                                    across  24  trials  (eight  training  data  folds  and  three  initial-
+                                                                            ization seeds).  The baseline-encoder is distinct from magne-
+As an example, for lattice sizeL = 128, the learning rate                   tization (positive error ν) and becomes increasingly distinct
+of the weights in the ﬁrst encoding layer of the baseline-                  with increasing number of training-validation samples in the
+autoencoder should be set to approximately 1.2× 10−7–                       ferromagnetic case.
+a value unlikely to be found by hand.  By the same ar-
+gument as above, we can show that the learning rate of
+the parameters in the last decoding layer of the baseline-                  sampled at each of 100 temperatures) to obtain a vector
+autoencoder  should  be  set  equal  to ηGE.    Finally,  all               of measurements  ˆO∈ Rn.  We then evaluate ν( ˆO,   ˆOM)
+remaining  parameters  of  the  baseline-autoencoder  are                   for  each  order  observableO,  whereOM  is  magnetiza-
+structurally equivalent to those of the GE-autoencoder,                     tion.   We  trivially  have ν(  ˆOM,   ˆOM)  =  0,  but  we  also
+and hence we set all of their learning rates equal to ηGE                   obtain an error around 0.0− 0.1% or 0.001 for both the
+as well.                                                                    single-scale and multiscale GE-encoders across all lattice
+                                                                            sizes and training-validation sample sizes, indicating that
+                                                                            the GE-encoders learn a function very similar to magne-
+         Appendix C: Functional comparison to                               tization.   In  contrast,  the  baseline-encoder  results  in  a
+          magnetization and Onsager’s solution                              larger  error  and  is  thus  more  distinct  from  magnetiza-
+                                                                            tion (Fig.13); in the ferromagnetic case, this error even
+  Here  we  regard  the  order  observables  (magnetiza-                    increases  with  training-validation  sample  size,  meaning
+tion, baseline-encoder, and GE-encoder) as elements of a                    that  the  baseline-encoder  moves  away  from  magnetiza-
+Hilbert space and measure the distance from each of them                    tion  as  it  sees  more  data.   This  is  also  consistent  with
+to magnetization.  Given any Euclidean vector space Rn                      the  divergence  between  the  baseline-encoder  and  mag-
+with  inner  product⟨·,·⟩,  we  deﬁne  a  measure  of  error                netization  in  terms  of  their  critical  temperature  esti-
+ν : Rn×Rn↦→ [0, 1] as follows:                                              mates (Fig.7).
+                                         ( ⟨v, w⟩     )2                       We  now  compare  the  order  parameter⟨|O|⟩  derived
+            ν(v, w) = sin2θ = 1−                          ,                 from  each  order  observable  (Fig.5)  to  Onsager’s  solu-
+                                            ‖v‖‖w‖                          tion MONS  [Eq.  (14)].   We  evaluate  the  order  parame-
+                                                                            ters and Onsager’s solution on the 100 temperatures in
+where θ  is  the  angle  between  vectors  v  and w.   As ν                 our dataset to obtain vectors in R100.  We then evaluate
+takes  values  in  [0, 1],  we  will  express  it  as  a  percent-          ν(⟨|O|⟩,MONS) independently for each jackknife-sample
+age.  Note that ν(v, w) is independent of the signs and                     of the order parameter⟨|O|⟩.  We perform least-squares
+norms of v and w– a desirable property for our purpose.                     regression on the calculated errorν against inverse lattice
+We  evaluate  each  order  observableO  on  a  test  set  of                size,  ﬁnding  an  approximately  linear  relationship  with
+n = 204, 800 lattice conﬁgurations (2, 048 conﬁgurations                    the baseline-encoder having a slightly weaker linear de-
+                                                                                                                                                 23
+
+                                                                            from theith jackknife-sample Binder cumulant curve, for
+                                                                            i = 1,...,N.  We seek the critical temperature point es-
+                                                                            timate that is optimally stable; we do so by minimizing
+                                                                            the jackknife variance subject to the interval estimates:
+
+                                                                                                           N∑
+                                                                                                   mint0,...,tN(ti−t0)2 s.t.
+                                                                                                          i=1
+
+                                                                                         Tmi≤ti≤Tmi+1,  for i = 0,...,N.
+
+                                                                            This problem can be expressed more elegantly with vec-
+                                                                            tor  notation.    Let  t, a, b ∈  RN+1  with  elements ti,
+                                                                            Tmi, and Tmi+1 respectively, and deﬁne the matrix A∈
+                                                                            R(N+1)×(N+1) with elements
+
+                                                                                               A00 =N
+                                                                                                Ai0 =A0i =−1
+                                                                                                Aii = 1,  for i = 1,...,N,
+
+                                                                            and  zero  for  all  remaining  elements.   Then  the  above
+                                                                            optimization problem can be expressed as
+
+FIG.  14.      Measure  of  error  between  the  order  parameters                              mint   t⊤At s.t. a≤ t≤ b.
+derived  from  each  order  observable  and  Onsager’s  solution
+using N  = 256 training-validation samples per temperature                     The  matrix  A  admits  the  factorization  A  =  B⊤B,
+and averaged over 24 trials (eight training data folds and three            where B∈ RN×(N+1)  with block structure B = [1| I],
+initialization seeds).  The error exhibits an approximately lin-            where 1 is an N-dimensional vector of 1’s and I is the
+ear dependence on inverse lattice size, with stronger linearity             N×N  identity matrix.  The matrix B clearly has rank
+for  magnetization  and  the  GE-encoders.   At  inﬁnite  lattice           N, and hence A is a symmetric positive semideﬁnite ma-
+size (L−1 = 0), magnetization and the GE-encoders converge                  trix  of  corank  1.   The  above  constrained  optimization
+more  closely  to  Onsager’s  solution  than  does  the  baseline-          problem is thus a convex quadratic program,  which we
+encoder.                                                                    eﬃciently solve numerically using the coneqp solver avail-
+                                                                            able in cvxopt [60].
+pendence (in terms of r2 value) than magnetization and                         Let tsol  be the numerical solution obtained.  Since A
+the GE-encoders; we visualize this for the maximal case                     has corank 1,  then the solution set of the optimization
+of N   =  256  training-validation  samples  per  tempera-                  problem  is  at  most  a  line  segment  (one  degree  of  free-
+ture (Fig.14).  Extrapolating to inﬁnite lattice size (i.e.,                dom).  It is easy to see that if tsol is an interior solution,
+the thermodynamic limit), we ﬁnd that the order param-                      then tsol±ε1 is a solution as well for suﬃciently small
+eters  derived  from  magnetization  and  the  GE-encoders                  ε > 0, where 1 is an (N + 1)-dimensional vector of 1’s.
+almost converge to Onsager’s solution, while the baseline-                  If we set
+encoder converges further away from Onsager’s solution.                              ε1 = min(tsol− a) and ε2 = min(b− tsol),
+
+                                                                            then the complete solution set is
+    Appendix D: Obtaining point estimates of the                                 {(1−α)(tsol−ε11) +α(tsol +ε21) : 0≤α≤ 1}.
+                      critical temperature
+  Here we provide the details of obtaining a point esti-                    We select the midpoint t∗ as the vector of jackknife crit-
+mate of the critical temperature given interval estimates                   ical temperature point estimates.
+as  described  in  Sec.IV C.  Let     T1 < T2 < ... < TM                       The jackknife mean and variance of the critical tem-
+be  the  temperatures  at  which  we  ran  MC  simulations                  perature estimate are then
+
+to  generate  our  dataset,  and  suppose  we  have N  MC-                                     mean =     t∗ +B
+sampled  lattice  conﬁgurations  from  each  of  these  tem-                                               N∑
+peratures.  Lett0∈ [Tm0,Tm0+1] be the interval estimate                                     variance =        (t∗i−   t∗)2 + B2N ,
+of the critical temperature obtained from the Binder cu-                                                  i=1
+mulant curve based on all available data, in the way de-                                      ∑N
+scribed  in  Sec.IV C,  and  let     ti ∈  [Tmi,Tmi+1]  be  the             where   t∗ =  1N     i=1t∗i is the mean of the jackknife sam-
+interval  estimate  of  the  critical  temperature  obtained                ples (not including the overall estimate based on all N
+                                                                                                                                             24
+
+samples), and B =N(t0−           t∗) is a term added to reduce            First supposeA2 has the form (***) andA the form (*).
+the bias in the jackknife mean,  at the cost of incurring                 Then  equating  the  diagonal  terms  of  (*)  squared  and
+additional variance.  Note that the above expression for                  (***), and doing similar with the oﬀ-diagonal terms, we
+the variance is equivalent to the objective function of the               obtain the equations
+optimization  problem  we  solved.   As  already  discussed
+in  Sec.IV C,  our  estimates  of    B  were  unstable  due  to                               cos2θ− sin2θ =± cosφ
+the  non-diﬀerentiability  of  our  underlying  critical  tem-                                   2 cosθ sinθ =± sinφ.
+perature estimator; we therefore set B = 0 in the above
+equations  to  obtain  our  ﬁnal  expressions  for  the  mean             These equations imply
+critical temperature point estimate and variance.
+                                                                                                cos2θ− sin2θ =±0
+       Appendix E: On vector order observables                                                      2 cosθ sinθ =±0,
+
+                                                                          and hence cosθ = sinθ = 0, which is impossible.
+                 1.    A 2D order observable                                 Suppose on the other hand A2 has the form (***) and
+                                                                          A the form (**).  Equating the diagonal terms of (***)
+  Before stating Prop.5, we need the following lemma,                     squared and (**), we obtain
+which characterizes the real orthogonal square and fourth                                  (± cosθ)2 + sin2θ =± cosφ
+roots of the 2× 2 identity matrix.
+Lemma 4.  Let A be a 2× 2 real orthogonal matrix such                                                           1 =± cosφ,
+that A4 =I, where I  denotes the 2× 2 identity matrix.                    which is also impossible.  Thus,A2 cannot have the form
+  (a)If   A2 =I, then                                                     (***).
+                          [cosθ    sinθ    ]                                 We now turn to the case A2  =−I.  If A2  =−I  and
+      A =±I  or A =                          ,  θ∈ [0, 2π).               A has the form (**), then cos2θ + sin2θ =−1, which is
+                            sinθ − cosθ                                   impossible.  On the other hand,  if A2  =−I  and A has
+                                                                          the form (*), then
+  (b)If   A2⁄=I, then
+                                 [0 −1]                                                             cos2θ− sin2θ =−1
+                        A =±      1    0   .                                                 cos2θ− (1− cos2θ) =−1
+                                                                                                       2 cos2θ− 1 =−1
+  (c) A2 =±I.                                                                                                 cos2θ = 0,
+Proof. Since A is orthogonal, then it has one of the two                  and  hence  sin2θ  =  1.   The  form  (*)  thus  implies  the
+following forms for some real θ:                                          expression for A claimed in (b).
+                         [cosθ − sinθ]                                       Finally, to prove (c), simply observe ifA2 =I, then we
+                   A =    cosθ    sinθ      ,  or                      (*)are done; otherwise, A has the form given in (b), whose
+                         [cosθ    sinθ    ]                               square is−I.
+                   A =     sinθ − cosθ      .                        (**)    We now state and prove Prop.5, which gives the sub-
+
+  To  prove  (a),  suppose A2  = I.   If A  has  the  form                group of never-broken symmetries for a 2D order observ-
+(**),  then  it  is  easy  to  check  that A2  = I  holds  triv-          able.   Let β  = ραρ−1;  i.e.,  the  generator  of  horizontal
+ially.  Suppose instead A has the form (*).  Then A2 =I                   translations.  Let O(2,R) be the group of 2× 2 real or-
+necessitates                                                              thogonal matrices.
+                          cos2θ− sin2θ = 1                                Proposition 5.  Let Ψ be the set of all real 2D represen-
+                                                                          tations ψ :G↦→ O(2,R) of the Ising symmetry group G.
+                   cos2θ− (1− cos2θ) = 1                                  Then⋂ψ∈Ψ ker(ψ) =⟨α2,β2⟩.
+                                    cos2θ = 1,                            Proof. LetI be the 2× 2 identity matrix, and letψ∈ Ψ.
+and  hence  sin2θ  =  0.   By  (*),  this  implies A  =±I  as             Sinceρ4 = 1 by deﬁnition, thenψ4ρ =I. By Lemma4(c),
+claimed in (a).                                                           ψ2ρ  =±I.  The deﬁning relation αρ2  = ρ2α−1  thus im-
+  To prove (b), suppose A2⁄=I.  Since A4 = (A2)2 =I,                      plies
+then by (a), we must have either A2 =−I orA2 has the                                               ψαψ2ρ =ψ2ρψ−1α
+following form for some real φ:
+                            [cosφ    sinφ    ]                                                         ψα =ψ−1α
+                    A2 =     sinφ − cosφ       .                   (***)                               ψ2α =I.
+                                                                                                                                               25
+
+Ergo, α2∈ ker(ψ).  We can similarly show β2∈ ker(ψ),                        Based on these permutations,  it is easy to verify αˇx =
+and hence                                                                   ρ2τ ˇx.  Thus,
+                     ⟨α2,β2⟩≤ ⋂         ker(ψ).                                                     ˇO(αˇx) =  ˇO(ρ2τ ˇx)
+
+                                   ψ∈Ψ                                                                ψα ˇO =ψρ2τ ˇO,
+All that remains is to prove the reverse inclusion.                         completing the proof.
+  Let Φ be the set of all real scalar representations φ :
+G↦→{−1, 1}, and deﬁne the set
+                   Ψ1 ={g↦→φgI :φ∈ Φ}.                                      2.    Never-broken symmetries in terms of characters
+
+Then by Prop.1, we have                                                       The following proposition gives a way to compute the
+         ⋂                                                                  subgroup of never-broken symmetries of an arbitrary ﬁ-
+             ker(ψ)≤ ⋂          ker(ψ)≤⟨α2,ρ2, (αρ)2⟩.                      nite group G in terms of its character table.
+        ψ∈Ψ              ψ∈Ψ1                                               Proposition 7.  Let G  be  a  ﬁnite  group.  Let Ψd  be  the
+If we can show                                                              set of all real orthogonal representations of G with degree
+                                                                            d.   Let   ˆG  be  the  set  of  all  irreducible  characters  of G.
+                      ρ2,αβ /∈ ⋂       ker(ψ),                        (*)   Then    ⋂
+                                 ψ∈Ψ                                                            ker(ψ) =   ⋂                ker(χ).
+then this will imply                                                                     ψ∈Ψd              χ∈ ˆG|degR(χ)≤d
+                      ⋂                                                     Proof. Let χ∈  ˆG such that degR(χ)≤ d.  Let ψ  be the
+                          ker(ψ)≤⟨α2,β2⟩,
+                     ψ∈Ψ                                                    irreducible  representation  with  character χ.   Let ψR  be
+which  will  then  establish  the  claim.   Consider ψ ∈  Ψ                 the smallest real representation built out of ψ:
+deﬁned such that                                                                                 ψ,              if  IFS(χ) = 1
+                                 [−1  0]                                                 ψR =      ψ⊕    ψχ,     if  IFS(χ) = 0
+                          ψα =                                                                   ψ⊕ψ,       if  IFS(χ) =−1.
+                                 [0 −10    1]
+                          ψρ =             .                                Note deg(ψR) = degR(χ)≤d.  Let n =d− deg(ψR)≥ 0
+                                   1    0                                   and ψ1  the  trivial  representation.   Then  construct  the
+Note these are valid representations as ψαψ2ρ  = ψ2ρψ−1α  .                 representation
+
+                                                                                                                   n⨁
+Then we have ψ2ρ =−I as well as                                                                    ψχ =ψR⊕             ψ1.
+                      ψαψβ =ψαψρψαψ−1ρ                                                                            i=1
+                              =−I,                                          The  kernel  of  this  representation  is  clearly  ker(ψχ)  =
+                                                                            ker(ψR)  =  ker(χ).    Moreover,  deg(ψχ)  = d  so  that
+so that ρ2,αβ /∈ ker(ψ).  This establishes (*) and hence                    ψχ∈  Ψd.   Since  a  real  representation ψχ∈  Ψd  can  be
+the proposition.                                                            constructed for every χ∈  ˆG| degR(χ)≤d, then
+  Recall the description of the GE-autoencoder architec-                                  ⋂
+ture in Sec.V A, where the input into the network is a                                          ker(ψ)≤   ⋂                 ker(χ).            (*)
+                                                                                         ψ∈Ψd              χ∈ ˆG|degR(χ)≤d
+4D block-average ˇx of a lattice conﬁguration x.  The fol-
+lowing  proposition  states  that  our  particular  choice  of              All that remains is to prove the reverse inclusion as well.
+architecture places an additional constraint on the rep-                      Let ψ∈ Ψd.  Then ψ admits the decomposition
+resentation ψ.                                                                                     ψ =ψ1⊕···⊕ψk,
+Proposition 6.  The  GE-encoder  described  in  Sec.V A                     where  each ψi  is  a  real-irreducible  representation  (i.e.,
+satisﬁes ψα ˇO =ψρ2τ ˇO.                                                    irreducible  over R).   For  each i∈{1,...,k},  there  ex-
+Proof. Let  ˇx = (ˇx1, ˇx2, ˇx3, ˇx4) be the block-average of a             ists a (complex-)irreducible representation ψ′i  such that
+lattice conﬁguration x over non-overlapping 2×2 blocks.                     ψi   = ψ′i, ψi   = ψ′i⊕       ψ′i,  or ψi   = ψ′i⊕ ψ′i.    Since
+Then                                                                        ker(ψ′i) = ker(ψ′i), thne in any of these three cases, we
+                      αˇx = (ˇx3, ˇx4, ˇx1, ˇx2)                            have ker(ψi) = ker(ψ′i).  Thus,
+                      ρˇx = (ˇx2, ˇx4, ˇx1, ˇx3)                                                       k⋂               k⋂
+                      τ ˇx = (ˇx2, ˇx1, ˇx4, ˇx3).                                        ker(ψ) =        ker(ψi) =        ker(ψ′i).
+                                                                                                     i=1              i=1
+                                                                                                                                            26
+
+Now  let χi  and χ′i  be  the  characters  of ψi  and ψ′i  re-            Proof. We ﬁrst consider Sg.  By Lemma8,
+spectively.     Clearly,  degR(χ′i)   =   deg(χi) ≤ d  since
+deg(ψi)≤ deg(ψ) =d for each i∈{1,...,k}.  Thus,                                                Sg = 1−‖ZZ+Zg‖2
+                                                                                                              ‖Zg‖2  ,
+                                  k⋂
+                      ker(ψ) =       ker(χ′i),                            where we replaced the Frobenius matrix norm with the
+                                 i=1                                      usual vector norm sinceZ andZg are nowN-dimensional
+where  each χ′i  is  irreducible  and  degR(χ′i) ≤ d.   This              column vectors.  Since ZZ+  is an orthogonal projection
+establishes the reverse inclusion of (*).                                 operator, then (ZZ+)⊤(ZZ+) =ZZ+ so that
+
+
+                                                                                               Sg = 1− Z⊤g ZZ+Zg‖Zg‖2  .
+               3.    Symmetry regularization
+                                                                          Now unless the GE-encoder is exactly zero on every sam-
+  Here  we  relate  the  general  symmetry  regularization                pled lattice conﬁguration, Z  is a nonzero column vector
+terms Rg and Sg [Eqs. (21)-(22)] to the ﬁrst and second                   and thus full-rank.  Its pseudoinverse is thus the row vec-
+regularization terms in Eq. (12) for 1D order observables.                tor
+This  will  provide  insight  into  how  Eq.  (20)  generalizes
+Eq. (12).  We use the notation as in Eqs. (19)-(22).                                                 Z+ = Z⊤
+  First,   however,   we  simplify  the  expression  for Sg                                                  ‖Z‖2.
+[Eq. (22)] for arbitrary order dimension   d.                             Substituting this into our expression for Sg, we obtain
+
+Lemma 8.  The regularization termSg [Eq. (22)     ] admits
+the expression                                                                                Sg = 1− Z⊤g ZZ⊤Zg
+                                                                                                          ‖Z‖2‖Zg‖2
+                     Sg = 1−‖ZZ+Zg‖2F                                                                    ( Z⊤Zg        )2
+                                    ‖Zg‖2F  .                                                    = 1−       ‖Z‖‖Zg‖        ,
+
+Proof. Recalling the expression [Eq. (19)] for the linear                 as claimed.
+least squares estimator  ˆψg, the squared residual is                        We now move toRg.  SinceZ is full-rank, then its null
+         ‖Zg−Z ˆψg‖2F  =‖Zg−Z(Z+Zg +PA)‖2F                                space is trivial so thatP  = 0. The estimator  ˆψg [Eq. (19)]
+                          =‖Zg−ZZ+Zg‖2F                                   thus simpliﬁes to
+
+                          =‖(I−ZZ+)Zg‖2F.                                                      ˆψg =Z+Zg + 0
+
+SinceI−ZZ+ is an orthogonal projection operator, then                                             = Z⊤Zg‖Z‖2
+by the Pythagorean Theorem we obtain
+           ‖Zg−Z ˆψg‖2F  =‖Zg‖2F−‖ZZ+Zg‖2F,                                                       =‖Zg‖‖Z‖ ·  Z⊤Zg‖Z‖‖Zg‖.
+
+
+and thus                                                                  Substituting this into Eq. (21) and noting       ˆψg is a scalar,
+                                                                          we have
+                     Sg = 1−‖ZZ+Zg‖2F‖Zg‖2F  ,                                         Rg = (1−  ˆψ2g)2
+                                                                                              (               ( Z⊤Zg       )2)2
+completing the proof.                                                                      =    1−‖Zg‖2
+  We now derive the simpliﬁed expressions for the regu-                                               ‖Z‖2      ‖Z‖‖Zg‖
+larization terms Rg and Sg for 1D order observables.                                          (                        )2
+                                                                                           =    1−‖Zg‖2‖Z‖2 (1−Sg)         ,
+Proposition  9.  Let d  =  1.    Then  the  regularization
+terms Rg  and Sg  [Eq. (21)     -(22)     ] admit the expressions         completing the proof.
+                        (                        )2                          Observe that the expressions for Rg andSg in Prop.9
+                Rg =      1−‖Zg‖2‖Z‖2 (1−Sg)                              match   the   ﬁrst   and   second   regularization   terms   in
+                            ( Z⊤Zg        )2                              Eq.  (12),  except  for  the  factor  (1  −Sg)  in Rg.   Even
+                 Sg = 1−                      .                           still,  in the optimal case Sg  = 0,  the expression for Rg
+                               ‖Z‖‖Zg‖                                    matches the ﬁrst regularization term in Eq. (12).
+                                                                                                                                                             27
+
+
+
+
+
+ [1]N. W. Ashcroft and N. D. Mermin,      Solid  State  Physics                         Qin,  R. M. Noack,  H. Shi,  S. R. White,  S. Zhang, and
+     (Holt-Saunders, 1976).                                                             G. K.-L. Chan, Stripe order in the underdoped region of
+ [2]S. Friedli and Y. Velenik,     Statistical mechanics of lattice                     the two-dimensional Hubbard model,Science      358, 1155
+     systems:   a  concrete  mathematical  introduction  (Cam-                          (2017).
+     bridge University Pres, 2017).                                               [21]H.-C. Jiang and T. P. Devereaux, Superconductivity in
+ [3]H. Gomez, M. Bures, and A. Moure, A review on compu-                                the  doped  Hubbard  model  and  its  interplay  with  next-
+     tational modelling of phase-transition problems,Philos.                            nearest hopping t′,Science  365, 1424 (2019).
+     Trans. Roy. Soc. A 377, 20180203 (2019).                                     [22]F. Haldane, Continuum dynamics of the 1-D Heisenberg
+ [4]  ´A.  Nagy,  M.  Calixto,  and  E.  Romera,  A  density  Func-                     antiferromagnet:  Identiﬁcation with the O(3) nonlinear
+     tional  Theory  View  of  Quantum  Phase  Transitions,J.                           sigma model,Phys. Lett. A      93, 464 (1983).
+     Chem. Theory Comput. 9, 1068 (2013).                                         [23]T. Kennedy and H. Tasaki, Hidden symmetry breaking
+ [5]L.-A. Wu, M. S. Sarandy, D. A. Lidar, and L. J. Sham,                               and the Haldane phase in S  = 1 quantum spin chains,
+     Linking  entanglement  and  quantum  phase  transitions                            Comm. Math. Phys. 147, 431 (1992).
+     via  density-functional  theory, Phys.  Rev.  A  74,  052335                 [24]P. W. Anderson, Plasmons, gauge invariance, and mass,
+     (2006).                                                                            Phys. Rev. 130, 439 (1963).
+ [6]A. Nagy and E. Romera, Quantum phase transitions via                          [25]X.  G.  Wen,  Topological  Orders  in  Rigid  Stages,Int.  J.
+     density-functional  theory:  Extension  to  the  degenerate                        Mod. Phys. B 04, 239 (1990).
+     case,Phys. Rev. A        88, 042515 (2013).                                  [26]S. A. Kivelson and S. Lederer, Linking the pseudogap in
+ [7]C. Shahi, J. Sun, and J. P. Perdew, Accurate critical pres-                         the cuprates with local symmetry breaking:  A commen-
+     sures for structural phase transitions of group IV, III-V,                         tary,Proc. Nat. Acad. Sci.  116, 14395 (2019).
+     and II-VI compounds from the SCAN density functional,                        [27]I. Goodfellow, Y. Bengio, and A. Courville,       Deep learning
+     Phys. Rev. B 97, 094111 (2018).                                                    (MIT pres, 2016).
+ [8]R.  J.  Maurer,  C.  Freysoldt,  A.  M.  Reilly,  J.  G.  Bran-               [28]J. Carrasquilla and R. G. Melko, Machine learning phases
+     denburg, O. T. Hofmann, T. Bj¨orkman, S. Leb`egue, and                             of matter,Nature Phys.           13, 431 (2017).
+     A.  Tkatchenko,  Advances  in  Density-Functional  Calcu-                    [29]P. Broecker, J. Carrasquilla, R. G. Melko, and S. Trebst,
+     lations for Materials Modeling,Ann. Rev. Mat. Res.          49,                    Machine learning quantum phases of matter beyond the
+     1 (2019).                                                                          fermion sign problem,Scientiﬁc Rep.             7, 1 (2017).
+ [9]J. M. Haile,     Molecular dynamics simulation:  elementary                   [30]K. Ch’ng, J. Carrasquilla, R. G. Melko, and E. Khatami,
+     methods (John Wiley & Sons, Inc., 1992).                                           Machine learning phases of strongly correlated fermions,
+[10]R. Sasaki, Y. Hayashi, and S. Kawauchi, Acceleration of                             Phys. Rev. X 7, 031038 (2017).
+     liquid-crystalline  phase  transition  simulations  using  se-               [31]S. J. Wetzel and M. Scherzer, Machine learning of explicit
+     lectively scaled and returned molecular dynamics, Jour-                            order parameters:  From the Ising model to SU(2) lattice
+     nal of Chemical Information and Modeling,J. Chem. Inf.                             gauge theory,Phys. Rev. B  96, 184410 (2017).
+     Model. 60, 3499 (2020).                                                      [32]A. Morningstar and R. G. Melko, Deep learning the ising
+[11]K.  V.  Shanavas  and  S.  M.  Sharma,  Molecular  dynam-                           model near criticality,J. Mach. Learn. Res.  18, 1 (2018).
+     ics simulations of phase transitions in argon-ﬁlled single-                  [33]S. Efthymiou, M. J. S. Beach, and R. G. Melko, Super-
+     walled  carbon  nanotube  bundles  under  high  pressure,                          resolving the Ising model with convolutional neural net-
+     Phys. Rev. B 79, 155425 (2009).                                                    works,Phys. Rev. B        99, 075113 (2019).
+[12]M. Imada, A. Fujimori, and Y. Tokura, Metal-insulator                         [34]N. Walker, K.-M. Tam, and M. Jarrell, Deep learning on
+     transitions,Rev. Mod. Phys.                70, 1039 (1998).                        the  2-dimensional  Ising  model  to  extract  the  crossover
+[13]D. C. Johnston, The puzzle of high temperature super-                               region with a variational autoencoder,Scientiﬁc Rep.      10,
+     conductivity in layered iron pnictides and chalcogenides,                          1038 (2020).
+     Adv. in Phys. 59, 803 (2010).                                                [35]S. Johnston,  E. Khatami, and R. Scalettar, A perspec-
+[14]G.  R.  Stewart,  Unconventional  superconductivity, Ad-                            tive  on  machine  learning  and  data  science  for  strongly
+     vances in Physics 66, 75 (2017).                                                   correlated  electron  problems,Carbon  Trends               9,  100231
+[15]B. Keimer, S. A. Kivelson, M. R. Norman, S. Uchida, and                             (2022).
+     J.  Zaanen,  From  quantum  matter  to  high-temperature                     [36]A. Krizhevsky, I. Sutskever, and G. E. Hinton, Imagenet
+     superconductivity  in  copper  oxides,Nature          518,  179                    classiﬁcation  with  deep  convolutional  neural  networks,
+     (2015).                                                                            in  Advances  in  neural  information  processing  systems
+[16]Y. Zhou, K. Kanoda, and T.-K. Ng, Quantum spin liquid                               (2012) pp. 1097–1105.
+     states,Rev. Mod. Phys.          89, 025003 (2017).                           [37]G. Antipov, S.-A. Berrani, N. Ruchaud, and J.-L. Duge-
+[17]L.  Savary  and  L.  Balents,  Quantum  spin  liquids:  a  re-                      lay, Learned vs. hand-crafted features for pedestrian gen-
+     view,Rep. Prog. Phys.        80, 016502 (2016).                                    der recognition, in Proceedings of the 23rd ACM interna-
+[18]E. Fradkin, S. A. Kivelson, and J. M. Tranquada, Collo-                             tional conference on Multimedia (ACM, 2015) pp. 1263–
+     quium: Theory of intertwined orders in high temperature                            1266.
+     superconductors,Rev. Mod. Phys.                  87, 457 (2015).             [38]H. Liang, X. Sun, Y. Sun, and Y. Gao, Text feature ex-
+[19]T. A. Maier, M. Jarrell, T. C. Schulthess, P. R. C. Kent,                           traction  based  on  deep  learning:   a  review,EURASIP
+     and J. B. White, Systematic study of d-wave supercon-                              Journal  on  Wireless  Communications  and  Networking
+     ductivity in the 2D repulsive Hubbard model,Phys. Rev.                             2017, 1186 (2017).
+     Lett. 95, 237001 (2005).                                                     [39]L.  Wang,  Discovering  phase  transitions  with  unsuper-
+[20]B.-X. Zheng, C.-M. Chung, P. Corboz, G. Ehlers, M.-P.                               vised learning,Phys. Rev. B     94, 195105 (2016).
+                                                                                                                                                               28
+
+[40]S. J. Wetzel, Unsupervised learning of phase transitions:                       [50]P.  Young,        Everything  you  wanted  to  know  about  data
+     From principal component analysis to variational autoen-                             analysis  and  ﬁtting  but  were  afraid  to  ask  (Springer,
+     coders,Phys. Rev. E    96, 022140 (2017).                                            2015).
+[41]K.  Ch’ng,  N.  Vazquez,  and  E.  Khatami,  Unsupervised                       [51]A. Coniglio, F. de Liberto, G. Monroy, and F. Peruggi,
+     machine learning account of magnetic transitions in the                              Exact  relations  between  droplets  and  thermal  ﬂuctua-
+     Hubbard model,Phys. Rev. E      97, 013306 (2018).                                   tions in external ﬁeld, Journal of Physics A: Mathemat-
+[42]C.   Alexandrou,   A.   Athenodorou,   C.   Chrysostomou,                             ical and General 22, L837 (1989).
+     and  S.  Paul,  The  critical  temperature  of  the  2D-ising                  [52]GAP,  GAP  –  Groups,  Algorithms,  and  Programming,
+     model  through  deep  learning  autoencoders,The  Euro-                              Version 4.11.1, https://www.gap-system.org (2021).
+     pean Physical Journal B 93, 1140 (2020).                                       [53]D.  Agrawal  and  J.  Ostrowski,  A  classiﬁcation  of   G-
+[43]D.  Yevick,  Variational  autoencoder  analysis  of  ising                            invariant  shallow  neural  networks,  Advances  in  Neural
+     model  statistical  distributions  and  phase  transitions,                          Information Processing Systems 35 (2022).
+     arXiv:2104.06368  (2021).                                                      [54]J. Liu, Y. Qi, Z. Y. Meng, and L. Fu, Self-learning Monte
+[44]G. E. Hinton and R. R. Salakhutdinov, Reducing the di-                                Carlo method,Phys. Rev. B    95, 041101 (2017).
+     mensionality of data with neural networks,Science        313,                  [55]H.  Shen,  J.  Liu,  and  L.  Fu,  Self-learning  Monte  Carlo
+     504 (2006).                                                                          with  deep  neural  networks,Phys.  Rev.  B        97,  205140
+[45]D.  Kingma  and  M.  Welling,  Auto-encoding  variational                             (2018).
+     Bayes,  in  International  Conference  on  Learning  Repre-                    [56]S. Li,  P. M. Dee,  E. Khatami, and S. Johnston, Accel-
+     sentations  (2014).                                                                  erating  lattice  quantum  Monte  Carlo  simulations  using
+[46]H.-O. Georgii,       Gibbs measures and phase transitions  (de                        artiﬁcial  neural  networks:   Application  to  the  Holstein
+     Gruyter, 2011).                                                                      model,Phys. Rev. B      100, 020302 (2019).
+[47]L.  Onsager,  Crystal  Statistics.  I.  A  Two-Dimensional                      [57]M. S. Albergo,  G. Kanwar, and P. E. Shanahan, Flow-
+     Model with an Order-Disorder Transition,Phys. Rev.              65,                  based generative models for Markov chain Monte Carlo
+     117 (1944).                                                                          in lattice ﬁeld theory,Phys. Rev. D  100, 034515 (2019).
+[48]S. L. Smith, P. Kindermans, C. Ying, and Q. V. Le, Don’t                        [58]Y.  Nagai,  M.  Okumura,  and  A.  Tanaka,  Self-learning
+     decay  the  learning  rate,  increase  the  batch  size,  in  6th                    Monte  Carlo  method  with  behler-parrinello  neural  net-
+     International  Conference  on  Learning  Representations,                            works,Phys. Rev. B        101, 115111 (2020).
+     ICLR  2018,  Vancouver,  BC,  Canada,  April  30  -  May                       [59]C.  Chen,  X.  Y.  Xu,  J.  Liu,  G.  Batrouni,  R.  Scalettar,
+     3, 2018, Conference Track Proceedings (OpenReview.net,                               and Z. Y. Meng, Symmetry-enforced self-learning Monte
+     2018).                                                                               Carlo method applied to the Holstein model,Phys. Rev.
+[49]K.  Binder,  D.  Heermann,  L.  Roelofs,  A.  J.  Mallinck-                           B 98, 041102 (2018).
+     rodt, and S. McKay, Monte Carlo simulation in statistical                      [60]L.   Vandenberghe,   The   cvxopt   linear   and   quadratic
+     physics, Computers in Physics 7, 156 (1993).                                         cone   program   solvers,   Online:     http://cvxopt.org/
+                                                                                          documentation/coneprog.pdf  (2010).

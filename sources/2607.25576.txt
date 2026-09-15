@@ -1,0 +1,1243 @@
+           Matrix-Free Photoacoustic Image Reconstruction via
+                                  Sensor-Token Self-Attention
+
+     Mary Johna,*, Shibili Saidb, Imad Barhumib, Sherzod Turaevb, Mohamed Yahiaa
+
+                        aAbu Dhabi Polytechnic, Abu Dhabi, United Arab Emirates
+
+                     bUnited Arab Emirates University, Al Ain, United Arab Emirates
+
+                               *Corresponding author: mary.john@actvet.gov.ae
+
+
+
+                                                     Abstract
+           Photoacoustic tomography (PAT) couples optical absorption contrast with ultrasound
+       resolution, but reconstructing the initial pressure distribution from sparse-view measure-
+       ments is an ill-posed inverse problem. Iterative compressive-sensing solvers and unrolled
+       deep networks both retain a dependence on the system matrix at inference, leaving real-
+       time clinical use computationally expensive.  This paper proposes the Sensor Attention
+       Network (SAN), a Transformer-based architecture that treats each sensor’s time series as
+       a token and maps raw measurements directly to the reconstructed image without invoking
+       the system matrix at inference. For training and benchmarking, an analytical k-space H-
+       matrix is constructed and validated against the k-Wave solver, achieving a mean per-sensor
+       Pearson correlation of¯r= 0.919±0.049. Trained with a vessel-weighted loss on 488 aug-
+       mented samples and evaluated on 46 held-out samples against ISTA, split-Bregman total
+       variation (SBTV), and learned ISTA (LISTA), SAN attains the highest mean SSIM (0.522)
+       and PSNR (22.09 dB) and the lowest NMSE (0.233). Paired t-tests and Wilcoxon signed-
+       rank tests confirm SAN’s superiority over LISTA on PSNR, NMSE, and Pearson correlation
+       atp<10     −8 , and over ISTA and SBTV on all fidelity metrics. By bypassing the H-matrix
+       at inference, SAN reduces reconstruction time by at least an order of magnitude, supporting
+       real-time PAT reconstruction.
+
+Keywords:Photoacoustic tomography; Deep learning; Transformer; Self-attention; Sparse-
+view imaging; Compressive sensing
+
+
+1  Introduction
+
+Photoacoustic tomography (PAT) has emerged over the past two decades as one of the most
+promising hybrid biomedical imaging modalities, combining the rich endogenous optical ab-
+sorption contrast of haemoglobin, melanin, and lipids with the deep tissue penetration and high
+spatial resolution of ultrasound [1,2]. A nanosecond pulsed laser illumination of biological tissue
+causes localised heating and thermoelastic expansion, generating broadband acoustic pressure
+waves that are detected by an array of ultrasound transducers placed around the tissue. The
+recovered initial pressure distribution provides a quantitative spatial map of optical absorbers
+and underpins emerging clinical applications including breast cancer screening, vascular imag-
+ing, melanoma detection, and functional neuroimaging [3,4].
+    The reconstruction of the initial pressure distribution from the time-resolved sensor signals
+is governed by the linear acoustic wave equation and, under the assumption of a homogeneous
+lossless medium, can be expressed compactly as a linear inverse problemy=Hx                       0 +n, where
+His the discretised forward (system) operator,x                  0 is the vectorized image (gray-scale) pixels
+andnis the noise.  In practice,His severely under-determined or ill-posed because (i) the
+
+                                                          1
+sensor array geometry is sparse and frequently subtends less than2πaround the tissue, (ii)
+the time-sampling and grid-discretisation introduce numerical artefacts, and (iii) measurement
+noise compounds at high spatial frequencies [5,6]. Consequently, naive inversion (e.g., back-
+projection or filtered back-projection) yields reconstructions corrupted by streaking artefacts,
+smearing, and poor resolution of fine vascular detail [7].
+    To overcome ill-posedness, the PAT community has invested heavily in compressive sensing
+formulations that exploit the spatial sparsity of vessel-like structures. Iterative algorithms such
+as Iterative Shrinkage-Thresholding Algorithm (ISTA) and the split-Bregman total-variation
+(SBTV) method have been shown to outperform classical back-projection in limited-view set-
+tings, recovering coarse structure with high spatial correlation [8,9]. A systematic comparison of
+these reconstruction algorithms under full-view and limited-view conditions was reported in [7],
+where iterativel  1-regularised solvers were shown to be the most robust baselines. Our own com-
+parative analysis [7] found SBTV to be the most accurate of these classical solvers, but at the
+cost of a preprocessing step and a per-iteration complexity that scales with the dimensions of
+H, limiting its use as grid and sensor counts increase. Plug-and-play frameworks that integrate
+learned denoising priors with classical iterative updates further improved fidelity for limited-
+sample regimes [10]. More recently, deep learning has been applied to PAT reconstruction in
+two principal modes [11–14]. The first uses convolutional encoder-decoder networks as post-
+processing stages applied to an initial classical estimate, reducing artefacts but retaining the
+system-matrix dependence in the front-end. The second is algorithm unrolling, in which a fixed
+number of iterations of an iterative algorithm is unfolded into a trainable deep network with
+each layer corresponding to one iteration [15]. Unrolled networks preserve the physics of the
+forward operator while exploiting data-driven priors, and have demonstrated strong reconstruc-
+tion performance under sparse-view PAT conditions [5,11,14]. Despite these advances, both
+paradigms retain repeatedHxandH                       T multiplications at inference time, which for clinically
+relevant grid resolutions can dominate the per-reconstruction cost [16]. This paper proposes a
+complementary line of attack: a direct, data-driven mapping from raw sensor measurements to
+the reconstructed image that completely bypasses the system-matrix at inference. The proposed
+architecture, named the Sensor Attention Network (SAN), treats each sensor’s full time-series
+as a token in a Transformer encoder [17]. Multi-head self-attention allows every sensor to in-
+teract with every other sensor, capturing the non-local acoustic correlations that the analytical
+H-matrix encodes implicitly. A learned spatial decoder maps the attended sensor representation
+back to the image domain. In inference, reconstruction reduces to a single forward pass through
+the network, taking milliseconds on a single GPU. Crucially, the analytical system-matrix is
+not discarded but repurposed: it encodes the acoustic physics that make the forward problem
+well-defined, and is used to synthesise physically faithful training data from which the network
+learns the inverse mapping. The system matrix therefore underpins training, while inference is
+freed of its per-reconstruction cost.
+    The principal contributions of this work are summarised as follows:
+
+   1.An analytical k-space forward model is constructed and validated against the k-Wave
+       pseudo-spectral time-domain solver under matched geometry, achieving a mean per-sensor
+       Pearsoncorrelationof¯r= 0.919±0.049. Twotargetedregularisations: k-spaceapodization
+       and Gaussian temporal damping are introduced and shown by ablation to act synergisti-
+       cally, reducing the energy-normalised mismatch by49%.
+
+   2.The Sensor Attention Network (SAN), a sensor-as-token Transformer encoder followed
+       by a learned spatial decoder, is proposed as a direct (non-iterative, system-matrix-free)
+       reconstruction architecture for PAT.
+
+   3.A comprehensive empirical comparison is reported against three representative baselines,
+       ISTA,SBTV,andLearnedIterativeShrinkageAlgorithm(LISTA),onthesame46-sample
+
+
+                                                          2
+       held-out test set, using Structural Similarity Index Measure (SSIM), Peak Signal-to-Noise
+       Ratio (PSNR), Normalized Mean Squared Error (NMSE), and Pearson correlation. The
+       SAN achieves the highest mean SSIM and PSNR and the lowest mean NMSE of the four
+       methods, with paired statistical tests confirming significance atp<10        −8  for the principal
+       claims.
+
+The remainder of the paper is organised as follows: Section2reviews related work in PAT
+reconstruction.  Section3describes the analytical H-matrix construction, its regularisation,
+and the validation methodology. Section4introduces the proposed Sensor Attention Network.
+Section5reports the experimental setup and full numerical comparison. Section6discusses
+interpretation, limitations, and clinical implications. Section7concludes the paper and outlines
+directions for future work.
+
+2  Related Works
+
+Reconstruction algorithms for PAT can be broadly grouped into four families: analytical back-
+projection methods, classical iterative compressive-sensing methods, model-based deep-learning
+methods, and direct (end-to-end) deep-learning methods. The proposed Sensor Attention Net-
+work belongs to the fourth family. We briefly review each below.
+
+2.1  Analytical and Iterative Compressive-Sensing Reconstruction
+
+Analytical reconstruction by universal back-projection [18] provides closed-form image esti-
+mates under idealised geometry assumptions, but degrades rapidly under sparse or limited-view
+sensing. Compressive-sensing-based iterative methods address this limitation by exploiting the
+sparsity of vessel images in suitable transform domains. ISTA [19] solves anl           1-regularised least-
+squares problem and has been widely applied to PAT [7]. The SBTV formulation [20] enforces
+piecewise-smooth structure on the reconstructed image and has been particularly effective in
+suppressing high-frequency artefacts arising from sparse sensor arrays. Total-variation-based re-
+construction for PAT specifically was studied in [8], where the choice of regularisation parameter
+and stopping criterion were shown to strongly influence reconstruction fidelity. A systematic
+comparison of full-view and limited-view iterative methods was reported in [9], demonstrating
+that no single algorithm dominates across all sensing configurations and that the appropriate
+method depends on the sparsity geometry. In our earlier comparative work, ISTA-based recon-
+struction was examined in [11] and split-Bregman total variation in [7], establishing the classical
+iterative baselines used in the present study.
+
+2.2  Limited-View and Limited-Sample PAT
+
+The limited-view regime, in which the sensor array subtends less than the full2πaround the tis-
+sueintroducesadditionalill-posednessbecausespatialfrequenciesalignedwiththemissingaper-
+ture directions cannot be recovered. Compressive sensing techniques tailored to this scenario
+have been studied in [9], where iterativel      1 solvers were combined with carefully chosen sensor
+sub-sampling patterns to maintain reconstruction quality at reduced sensor counts. The com-
+plementary problem of limited-sample PAT, recovering the initial pressure from a small training
+corpus, which is the regime relevant to many clinical settings, was addressed in [10,21–23] using
+a plug-and-play framework that combines a classical iterative solver with a learned denoiser.
+The handling of missing data in limited-view PAT, where some sensor signals are corrupted or
+absent, was addressed by a compressive-sensing-driven deep-learning approach in [5].
+
+
+
+
+                                                         3
+2.3  Model-Based Deep Learning and Algorithm Unrolling
+
+Algorithm unrolling [15] unfolds a fixed number of iterations of an iterative reconstruction
+algorithm into a trainable deep network, with each layer corresponding to one iteration. The
+proximal operator within each layer (typically a soft-threshold forL      1-regularised problems) is
+replaced by a learnable mapping, while the data-fidelity step retains the forward operatorHand
+its adjointH  T explicitly. The LISTA [19,24] is the canonical example. Unrolled networks for
+PAThavebeenstudiedin[11], wherethearchitecturewasmadeintelligiblebyexposingper-layer
+thresholds for clinical interpretation, and in [5], where unrolled networks were applied to breast-
+cancer-related limited-view PAT data. While these methods offer substantial improvements in
+reconstruction quality over classical solvers and retain physical interpretability, they share an
+important inference-time limitation: every layer requires anHxandH                    T multiplication (each an
+O(MN)matrix-vector product), so the per-image computational cost still scales asKO(MN),
+whereKistheunrolleddepth. Forclinicallyrealisticimagesizesandsensorcounts, thisremains
+a bottleneck for real-time use.
+
+2.4  Direct (End-to-End) Deep Learning for Image Reconstruction
+
+A more recent line of work seeks to avoid the H-matrix at inference entirely, by training a deep
+network to map sensor measurements directly to the reconstructed image. Convolutional neural
+networks and U-Net variants have been used in this role [2,11,25–27], but their treatment of
+the sensor array as a regular grid does not exploit the nonlocal acoustic relationships between
+sensors. In a related generative direction, diffusion-based models have recently been investi-
+gated for PAT reconstruction, with comparative studies benchmarking several such frameworks
+against classical solvers [28]. More recently, attention-based mechanisms have been explored
+in PAT reconstruction to improve feature extraction and information fusion from sparse mea-
+surements [29,30]. However, these approaches typically apply attention within learned feature
+representations rather than explicitly modelling interactions among individual sensors.  The
+proposed Sensor Attention Network belongs to this family but uses a Transformer-based archi-
+tecture [28] in which each sensor is represented as a token and global self-attention captures
+the cross-sensor relationships explicitly. The benefit of this design is two-fold: it preserves the
+physical role of the sensor array (sensors are unordered entities communicating via the acoustic
+field) and it enables fully parallel inference without iterative dependence onH.
+
+2.5  Positioning of the Proposed Work
+
+Thepresentworkdiffersfrompriorcompressive-sensingPATreconstructioninthattheH-matrix
+is not invoked at inference; it differs from prior unrolled-network PAT reconstruction in that
+no per-layer forward/adjoint operation is required and it differs from prior CNN-based direct
+reconstruction in that the sensor array is treated as a set of tokens with explicit self-attention
+rather than as a structured 2-D input. The validated analytical H-matrix from Section3is used
+only at the training-data generation stage to synthesise sensor measurements from phantom
+images, after which the network learns the inverse mapping without further reference to H.
+
+3  METHODOLOGY
+
+3.1  Problem Formulation
+
+In PAT, a short-pulsed laser illuminates a biological tissue sample, inducing a localised tem-
+perature rise that generates a broadband acoustic pressure wave through the thermoacoustic
+effect. The spatial distribution of this initial acoustic pressure, denotedx                0∈R   NxNy (whereN             x
+
+
+                                                         4
+andN       y are the vectorized image grid dimensions in pixels), encodes the optical absorption map
+of the tissue and constitutes the quantity of interest. A surrounding array ofN    s ultrasound
+transducers records the time-varying pressure field overN    t discrete time steps, producing the
+measurement vectory∈R               NsNt. Under the assumption of a lossless, homogeneous medium with
+constant speed of soundc, the forward problem is linear and may be written compactly as:
+
+                                                     y=Hx      0 +n                                (1)
+
+    whereH∈R                  NsNt×N xNy is the system matrix (hereafter the H-matrix) mapping the vec-
+torised imagex            0 to all sensor measurements, andnrepresents additive measurement noise.
+The reconstruction problem estimatingx                     0 fromyis an ill-posed linear inverse problem, the so-
+lution quality of which depends critically on the accuracy ofH. The construction and validation
+of this matrix is the primary concern of this section.
+
+3.2  Analytical k-Space Forward Model Construction
+
+The H-matrix is constructed analytically using a pseudospectral k-space method, which exploits
+the spatial Fourier decomposition of the initial pressure field.  In the k-space domain, the
+solution to the lossless acoustic wave equation for a two-dimensional homogeneous medium can
+be expressed at each sensor locationr           s and timet        n as
+
+                                  p(r    s,tn) =W    inv diag[cos(c|k|t              n)]W   fwd x0                     (2)
+
+whereW            fwd∈C   (N  2out×N xNy) is the two-dimensional forward discrete Fourier transform (DFT)
+matrix that projects the image onto thek-space grid of sizeN                out×N    out, withmandlindexing
+thek-space;W                       inv∈C   (N s×N    2out) is the inverse DFT matrix evaluated at the sensor coordinates
+{r  s}; and|k|denotes the magnitude of the two-dimensional spatial frequency vector
+                                   √
+                            |k|=      k2x +k    2y    ; k x =   2πmNoutdx    ; k y =    2πlNoutdy
+
+               [−N x            ]            [−N y            ]
+wherem∈           2 , Nx2 −1       andl∈         2 , Ny2 −1     . The cosine term encodes the time evolution
+of each spectral component under free-space wave propagation. Stacking this expression across
+allN     s sensors andN       t time steps, the H-matrix takes the factored form
+
+                                                     H=KW        fwd                                 (3)
+
+    whereK∈R                  NsNt×N    2out is the time-domain propagation kernel, whose row corresponding to
+sensorsat timet                      n is thes-th row ofW            inv scaled by the cosine propagation factorcos(c|k|t                         n).
+This formulation yields the full system matrix in a single construction pass without iterative
+simulation, making it computationally efficient for repeated use in the inverse problem.
+
+3.3  Simulation Grid, Time Array, and Sensor Configuration
+
+The imaging domain is discretised on a uniform Cartesian grid ofN    x×N   y pixels with isotropic
+grid spacingd              x =d   y. The choice ofd   x governs both the spatial resolution of the reconstructed
+image and the temporal sampling requirements imposed by the Courant-Friedrichs-Lewy (CFL)
+stability criterion. For a two-dimensional acoustic problem, the maximum stable time step is
+
+                                                     dt,max   = dxc√2                                 (4)
+
+
+
+
+                                                             5
+Figure 1: PAT System Geometry: imaging grid (64×64) and square sensor array(N             s  = 71).
+dx = 0.100mm.
+
+    To ensure that all wavefronts originating within the imaging domain reach the sensor bound-
+ary before the simulation terminates, the total measurement durationTand the number of time
+samplesN               t are determined jointly as
+
+                                                    Nt = Tξdt,max ,                                 (5)
+
+whereξ= 1.25is a safety factor that provides a temporal margin to prevent signal truncation
+artefacts. The sensor array consists ofN    s  =  71transducers distributed uniformly along the
+four edges of a 70×70 boundary grid that encloses the 64×64 imaging domain, with sensors
+placed at every fourth grid point; the imaging domain, the sensor boundary, and the sensors
+are all centred within the larger 140×140 k-space simulation grid (N           out). Because sensors are
+placed at grid indices 1, 5, ..., 69 along each 70-point edge, the index 70 is never sampled;
+consequently only the shared corner (1,1) is common to two edges, while the remaining three
+corners fall outside the sampling pattern.  This yields4×18−1  =  71unique transducers.
+Sensor Cartesian coordinates were extracted using the k-Wavegrid2cart()function and used
+consistently in both the analytical model and the numerical reference simulation. The complete
+set of simulation parameters is listed in Table1. The system geometry, including the imaging
+grid and sensor array configuration, is illustrated in Figure1and Table1.
+
+3.4  Regularisation of the Analytical Model
+
+In its raw form, the analytical model exhibits two systematic artefacts.  First, the trunca-
+tion of the DFT matrices at the boundaries of the k-space grid introduces Gibbs-like aliasing,
+manifesting as large-amplitude spikes in the computed sensor signals.  Second, without any
+temporal envelope, the model produces non-physical oscillations at late time samples that have
+no counterpart in a physically bounded measurement. Two targeted regularisations are applied
+to suppress these artefacts as stated below:
+   1.K-Space Apodization (Windowing): A two-dimensional window functionw(k)is applied
+       element-wise to both the forward and inverse DFT matrices prior to construction ofH:
+                                                Wfwd←W     fwd⊙w(k),                         (6a)
+                                                Winv←W     inv⊙w(k)           T,                        (6b)
+
+
+                                                           6
+      Table 1: Simulation Parameters for the Analytical Forward Model (d  x = 0.100 mm)
+Parameter                                          Symbol                          Value
+Image grid size                N       x×N   y                              64×64pixels
+Grid spacing (selected)       d                  x =d   y                                0.100 mm
+K-space grid size               N       out                                     140×140
+Speed of sound               c                                         1500 m/s
+Max. stable time step           d        t,max                                     4.71×10           −8  s
+Measurement duration        T                                        6µs
+Time samples (CFL,ξ= 1.5)         N                    t                                        160
+Number of sensors            N             s                                        71
+Sensor grid boundary                   —                                     70×0, skip = 4
+H-matrix dimensions        N                    sNt×N   xNy                      11360×4096
+PML thickness / coefficient              —                      40 layers,α= 2
+
+
+       where⊙denotes the Hadamard (element-wise) product. The window tapers the DFT
+       coefficients smoothly to zero at the k-space boundary, suppressing Gibbs-like aliasing
+       without introducing significant spectral leakage. Three standard apodization functions
+       are candidates for this role: the Hann window, which provides a smooth cosine-squared
+       taper and is the conventional choice for k-space apodization in spectral methods; the
+       Hamming window, which raises the minimum sidelobe level relative to Hann by adding
+       a constant offset; and the Blackman window, which achieves lower sidelobe levels at the
+       cost of a wider main lobe.
+
+   2.Gaussian Temporal Damping: A Gaussian envelope g(t) is applied to the cosine propaga-
+       tion kernel to enforce realistic signal decay within the measurement window:
+                                                        (    (t   )2)
+                                           g(t) = exp     −     τ       ,  τ= 0.9T                    (7)
+
+
+       whereτis the damping time constant (measured in seconds), set to 90% of the total
+       measurement durationT. This ensures the analytical signal decays smoothly before the
+       end of the measurement window, preventing the non-physical late-time oscillations that
+       arise in the undamped model.
+
+3.5  Numerical Validation via k-Wave
+
+The analytical H-matrix is validated by comparing the predicted sensor signalsHx             0 against
+those produced by the k-Wave pseudo-spectral time-domain solver [31], which numerically in-
+tegrates the full linearised acoustic wave equation. k-Wave simulations were executed with a
+perfectly matched layer (PML) of 40 grid points on each side of the domain and an absorption
+coefficientα= 2, using an identical spatial grid, time array, sensor configuration, and input
+pressure imagex            0 as the analytical model. The degree of agreement between the two models
+for sensors is quantified by the Pearson correlation coefficient:
+                                                            (            )
+                                                rs =  Cov     yans ,y kws
+                                                       σ(y    ans  )·σ(y       kws  )                              (8)
+
+    wherey           ans  andy       kws  denote the analytical and k-Wave time-series at sensors, respectively. A
+value ofr   s close to unity indicates that the analytical model faithfully reproduces the temporal
+waveform structure predicted by the numerical simulation. The mean correlation across allN     s∑rs, serves as the primary figure of merit for model accuracy.
+sensors,¯r=                       1Ns
+
+                                                             7
+3.6  Grid Spacing Study
+
+The imaging grid spacingd              x is a critical design parameter because it sets a direct trade-off
+between spatial resolution and forward-model fidelity. A finer grid resolves finer image detail
+but, through the CFL condition of (4), requires a proportionally larger number of time samples
+Nt, which extends the temporal window over which the analytical and numerical models must
+remain in agreement. Since the analytical model assumes free-space propagation whereas k-
+Wave enforces absorbing boundary conditions through the PML, the mismatch between the
+two accumulates in the late-time signal tail, and the extent of that tail grows withN        t. A larger
+dx therefore reduces model mismatch at the cost of resolution, while a smallerd             x improves
+resolution but degrades agreement with the reference.
+    To select an appropriate value, three candidate grid spacings,d                 x  =  0.075, 0.100, and
+0.125mm, were evaluated against the k-Wave reference under otherwise identical conditions.
+For each spacing the fullH-matrix and the corresponding k-Wave signals were generated, and
+the per-sensor Pearson correlation was computed as the figure of merit, summarised by its
+mean, its minimum across the sensor array, and the fraction of sensors exceeding the accep-
+tance threshold ofr= 0.80. The spacing yielding the best agreement on these measures was
+carried forward to all subsequent experiments.
+
+4  Proposed Method
+
+The classical iterative and learning-based reconstruction approaches retain a dependence on
+the H-matrix at inference time, either through repeated matrix-vector products or embedded
+forward operators. A complementary data-driven approach is proposed in this paper, in which
+a neural network learns the mapping from sensor measurementsydirectly to the reconstructed
+imagex           ∗. The proposed architecture, referred to as the Sensor Attention Network (SAN), treats
+each sensor’s time series as a token in a Transformer encoder, allowing every sensor to attend to
+all others and capture the non-local acoustic relationships encoded in the PAT forward model.
+The steps that are adopted for the mapping of sensor datay, to the reconstructed imagex                       ∗ are
+as listed below:
+
+4.1  Input Projection
+
+The sensor measurementyis reshaped into a matrixY∈R                       Nt×N s, so that each columny              s∈R   Nt
+is the time series recorded by sensors, fors= 1,...,N                       s. Each time series is mapped to ad  model-
+dimensional token embedding by a shared linear projection,
+
+                                               zs =W    projys +b    proj                              (9)
+whereW            proj is a learnable weight matrix of sized       model×N   t andb       proj is a learnable bias vector
+of sized       model.  z s is the resulting token embedding for sensors.  All token embeddings are
+assembled column-wise into the matrixZ= [z                  1,...,z Ns].
+
+4.2  Positional Encoding
+
+Because the Transformer encoder treats its input as an unordered set, sinusoidal positional
+encodings [32] are added to each token to convey sensor ordering.  For sensor indexsand
+embedding dimension indexk(k= 0,1,2,...,d                           model−1), the encoding is defined as
+
+
+
+
+
+
+                                                            8
+                                               (    s             )
+                            PE(s,k) = sin        10000k/dmodel       ,  whenkis even                 (10a)
+                                               (     s                 )
+                            PE(s,k) = cos        10000(k−1)/d           model,  whenkis odd              (10b)
+
+    The denominator10000                       k/dmodel grows from 1 (atk= 0) to 10000 (atk=d                       model), so that
+different dimensions oscillate at different frequencies: low-index dimensions change rapidly with
+sand encode fine position differences, while high-index dimensions change slowly and encode
+coarse spatial layout. Each token is updated asz    s←z    s + PE(s,:), wherePE(s,:)denotes the
+fulld       model-dimensional encoding vector for sensors.
+
+4.3  Multi-Head Self-Attention Encoder
+
+Theposition-encodedtokenmatrixZisthenprocessedbyLstackedTransformerencoderblocks.
+Each block applies a multi-head self-attention (MHSA) sub-layer followed by a position-wise
+feed-forward sub-layer, with a residual connection and layer normalisation after each sub-layer.
+    In the MHSA sub-layer,Aattention heads are computed in parallel. For each headh∈
+{1,...,A}, the token matrixZis projected into a query matrixQ                                      h, a key matrixK            h, and a
+value matrixV            h, each of per-head dimensiond                    head =d    model/A, via
+
+                             Qh =W    (Q h)Z,   K    h =W    (K h)Z,   V    h =W    (V h)Z,               (11)
+whereW            (Q h),W (K h),W (V h)∈R   dhead×d   model are learnable projection matrices. The queryQ           h
+encodes what each sensor is searching for, the keyK    h encodes what each sensor offers, and the
+valueV        h holds the content to be aggregated. The attention output for headhis
+                                                                ( QhKTh     )
+                                          headh = softmax          √dhead      Vh                        (12)
+
+where the productQ        hKTh is anN     s×N   s matrix of raw attention scores, with entry(i,j)mea-
+suring the relevance of sensorjto sensori. Division by      √dhead prevents scores from becoming
+excessively large before the softmax operation [19], which is applied row-wise so that the at-
+tention weights for each sensor sum to one. The outputs of allAheads are concatenated and
+projected back tod    model dimensions via a learnable output matrixW              0 (of sized       model×d    model).
+A residual connection is added and the result is normalised,
+
+                            Z←LayerNorm(Z+W                 0 [head1; head2;...; head  A])              (13)
+whereLayerNormstandardises each token vector to zero mean and unit variance across its
+dmodel dimensions, followed by a learnable scale and shift.  The semicolon denotes row-wise
+concatenation. The residual addition ensures that attention learns only the correction to the
+existing token representation, preserving information and stabilising gradient flow.
+
+4.4  Position-Wise Feed-Forward Sub-layer
+
+Following the MHSA sub-layer, each token is passed independently through a two-layer feed-
+forward network (FFN),
+
+                                   FFN(z          s) =W    2·ReLU(W               1zs +b    1) +b    2                    (14)
+whereW            1 (of sized  ff×d    model) expands each token fromd         model to a hidden dimensiond                    ff,
+ReLU(α) = max(0,α)is a non-linear activation applied element-wise, andW                                 2 (of sized       model×
+
+                                                              9
+dff) projects back tod    model dimensions. The same residual-plus-LayerNorm operation as in (13)
+follows. Equations (11) to (14) together define one complete encoder block; this block is applied
+Ltimes in sequence.
+
+4.5  Spatial Decoder
+
+AfterLencoder blocks, the token matrixZ(of sized                                      model×N   s) is flattened column-wise into
+a single vectorz          flat of lengthd             modelNs, which is decoded into the reconstructed image through
+three fully connected layers,
+
+
+                                           h1 = ReLU(W             d1zflat +b   d1),                        (15a)
+                                           h2 = ReLU(W             d2h1 +b   d2),                         (15b)
+                                            x∗ = sigmoid(W                d3h2 +b   d3),                        (15c)
+
+    whereW           d1, W d2, andW       d3 are learnable weight matrices;h                  1 andh       2 are intermediate
+hidden vectors andsigmoid(α)  =                                   11+e    −α  maps each output to[0,1]to match the normalised
+image range. The final outputx  ∗ is reshaped to the desired image size.
+
+4.6  Training Objective
+
+All learnable parameters are jointly optimised by minimising a vessel-weighted mean squared
+error loss. Since vessel pixels occupy a small fraction of the image area relative to the back-
+ground, a higher penalty weight is assigned to them. Denoting the ground truth phantom as
+x0 and the network prediction asx    ∗, the loss is defined as
+
+                                               L= ∑wi (x  ∗i−x    0,i  )2,                           (16)
+                                                       i
+    wherew           i = 8for vessel pixels (defined as those withx           0,i >0.1) andw                i = 1for background
+pixels (vessel mask is computed per sample from the ground-truth phantom).  The process
+included in the proposed method is summarized in Figure2.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                               Figure 2: SAN Pipeline
+
+
+
+
+
+                                                              10
+Figure 3: Waveform overlays for five randomly selected sensors and their corresponding corre-
+lation coefficients.
+
+4.7  Dataset Preparation
+
+A total of 191 images were downloaded from Radiopaedia.org [33].  To mitigate overfitting
+given the limited sample count, data augmentation was applied by translating each phantom
+by small integer offsets of 2 to 3 pixels in the horizontal, vertical, and diagonal directions, and
+recomputing the sensor signal for each translated phantom. Of the 191 source phantoms, 44
+were held out for validation and 46 for testing (neither augmented); the remaining training
+phantoms were augmented by translation to 488 samples, giving 578 images in total.
+
+5  Results
+
+The experiments reported in this section are organised into five parts. Section5.1validates
+the analytical H-matrix by comparing its predictions against the k-Wave numerical reference.
+Section5.2presents the empirical selection of the k-space apodization window, the Gaussian
+damping time constant, and the imaging grid spacing.  Section5.3establishes baseline re-
+construction performance using the classical iterative methods ISTA and split-Bregman total
+variation (SBTV). Section5.4reports the training behaviour and validation performance of the
+proposed Sensor Attention Network.  Section5.5provides a direct quantitative and qualita-
+tive comparison of all four approaches. Throughout, reconstruction quality is evaluated using
+the structural similarity index measure (SSIM), PSNR, NMSE and Pearson correlation¯r                      img,
+computed on normalised images in the range [0, 1].
+
+5.1  Forward Model Validation
+
+The analytical H-matrix was validated by comparing the sensor signals it predicts against those
+produced by the k-Wave pseudospectral solver under identical imaging conditions. For each
+sensors= 1,...,N                  s, the Pearson correlation coefficientr  s between the normalised analytical
+and k-Wave time series was computed as defined in (8). Figure3shows representative waveform
+overlays for five randomly selected sensors, illustrating the close agreement between the two
+models across the full measurement window ofN    t = 160time samples.
+    The mean correlation across all sensors was¯r= 0.919±0.049, with all 71 sensors exceeding
+
+
+                                                         11
+                           Figure 4: Correlation histogram and distribution.
+
+
+rs = 0.80. The full per-sensor correlation profile is shown in Figure4, together with the cor-
+relation histogram and summary statistics. The consistently high correlation across the entire
+sensor array confirms that the analytical model faithfully reproduces the temporal waveform
+structure of the k-Wave reference, and that of the H-matrix is a reliable and computationally
+efficient substitute for repeated numerical simulation in the training data generation stage. The
+small residual discrepancy1−¯r≈0.081is attributable to the boundary mismatch between
+the two models: the analytical formulation assumes free-space propagation, whereas k-Wave
+enforces absorbing boundary conditions via the perfectly matched layer. This discrepancy ac-
+cumulates preferentially in the late-time signal tail and is effectively suppressed by the Gaussian
+temporal damping applied during H-matrix construction, as discussed in Section 5.2.
+
+5.2  Regularisation and Grid Spacing Selection
+
+This section reports the empirical selection of the three key design parameters of the analytical
+forward model: the k-space apodization window, the Gaussian temporal damping constant,
+and the imaging grid spacing. Each parameter was evaluated independently against the k-Wave
+reference using Pearson correlation and NMSE as figures of merit, and the optimal configuration
+was carried forward to all subsequent experiments.
+
+5.2.1    K-Space Apodization Window
+
+Four apodization functions were compared: a rectangular window (i.e. no apodization), and
+the Hann, Hamming, and Blackman windows.  The left panel of Figure5shows the mean
+Pearson correlation achieved by each. The rectangular window produced the lowest correlation
+at¯r=  0.8732, confirming that unwindowed DFT matrices introduce significant Gibbs-like
+aliasing that degrades agreement with k-Wave. All three smooth windows improved correlation
+substantially and performed nearly identically; Hann:¯r=  0.9187, Hamming:¯r=  0.9183,
+Blackman:¯r= 0.9197, with differences of less than 0.002 between them. The Hann window was
+selectedfor allsubsequentexperimentsas itis theconventionalstandard fork-space apodization
+
+
+                                                        12
+Figure 5: Mean Pearson correlation achieved by each windowing techniques and the correspond-
+ing NMSE vs. K-wave.
+
+
+in pseudospectral methods, and its performance is indistinguishable from the alternatives within
+the measurement noise.
+
+5.2.2    Gaussian Temporal Damping (Regularisation Ablation)
+
+The right panel of Figure5hows an ablation study examining the individual and combined con-
+tributions of k-space apodization and Gaussian temporal damping, quantified by NMSE against
+k-Wave. The unregularised baseline yielded NMSE =0.496. Applying Hann apodization alone
+increased NMSE to0.573; a result that, while appearing counterintuitive, is consistent with the
+known behaviour of k-space windowing: the Hann taper reduces signal amplitude at high spatial
+frequencies, lowering the total signal energy and thereby inflating the energy-normalised NMSE,
+even though it improves the waveform shape correlation reported in Section5.2.1. Applying
+Gaussian temporal damping alone (τ =  0.9T) reduced NMSE to0.420, demonstrating that
+late-time oscillation suppression has a more direct effect on energy-based error than apodiza-
+tion does. Applying both regularisations together yielded the lowest NMSE of0.254, a 49%
+reduction from the raw baseline, confirming that the two regularisations address complementary
+sources of model error and act synergistically. The combined configuration was retained as the
+final H-matrix for all subsequent experiments.
+
+5.2.3    Source Position Dependence
+
+The validation in Section 5.1 reported mean statistics across all sensors for a single centrally
+placed source. To assess whether forward model accuracy is maintained for sources at different
+spatial positions within the imaging domain, three source locations were evaluated: centre
+(32,32), off-centre(16,16), and near-edge(8,8). As shown in the left panel of Figure 6, the
+mean correlation remained high across all three positions,¯r=  0.9907, 0.9756, and0.9395
+respectively, all well above the acceptance threshold ofr    s  =  0.80. The modest decrease for
+near-edge sources is expected, as sources close to the domain boundary generate wavefronts
+that interact more strongly with the PML in k-Wave, producing a slightly larger free-space
+mismatch. Nonetheless, the consistently high correlation across all positions confirms that the
+H-matrix provides a reliable forward model across the full imaging domain.
+
+
+
+
+
+                                                         13
+Figure 6: Mean correlation for a point source in the centre, off-centre and near-edge (left);
+Cumulative energy versus number of singular values forH      raw andH       hann+dampling(right).
+
+
+5.2.4    Grid Spacing Selection
+
+The imaging grid spacing was selected using the procedure described in Section3.6, evaluating
+three candidate spacings,d                 x  =  0.075, 0.100, and0.125mm, against the k-Wave reference.
+Agreement was assessed using three complementary measures: the mean per-sensor Pearson
+correlation, the minimum correlation across the array (a worst-case indicator), and the fraction
+of sensors exceeding the acceptance threshold ofr= 0.80.
+    The spacingd              x  =  0.100mm gave the best agreement on all three measures, achieving a
+mean correlation ofr= 0.919±0.049with all71sensors above ther= 0.80threshold. The
+finer0.075mm grid did not improve agreement despite its higher spatial resolution: because
+a smallerd             x requires more time samples through the CFL condition, it lengthens the signal
+window over which the free-space analytical model and the PML-bounded k-Wave reference
+must agree, and the additional late-time samples are precisely where the boundary mismatch
+accumulates.  The coarser0.125mm grid, conversely, shortened this window but sacrificed
+spatial resolution without a compensating gain in fidelity.  The intermediate spacingd              x  =
+0.100mm thus represents the best balance between resolution and forward-model accuracy, and
+was adopted for all subsequent experiments.
+
+5.2.5    Singular Value Compaction
+
+The right panel of Figure6shows the cumulative energy as a function of the number of singular
+values for both the raw H-matrix (H_raw) and the regularised matrix (H_final , Hann +
+damping). The number of singular values required to capture99%of the total energy, denoted
+k99, decreased from 3,744 for H_raw to 1,139 for H_final, representing a 3.3 compaction. This
+result has direct implications for compressed sensing reconstruction: a more compact H-matrix
+has faster effective singular value decay, which improves the conditioning of the regularised
+inverse problem and typically accelerates convergence of iterative solvers such as ISTA and
+SBTV.
+
+
+
+
+
+
+
+                                                          14
+      Figure 7: The metric distribution histograms for all three methods (y-axis is count).
+
+5.3  Baseline Reconstruction Methods
+
+Three baseline reconstruction methods were evaluated on the held-out test set of 46 samples to
+establish reference performance levels against which the proposed SAN is compared. The first
+twomethods,ISTAandSBTV,areclassicaliterativecompressivesensingalgorithmsthatexploit
+the sparsity ofx    0 and rely on repeated multiplication byHandH             T at every iteration. The
+third, LISTA, is a learned iterative method that unrolls a fixed number of ISTA iterations into a
+trainable network, replacing hand-tuned thresholds with learned parameters. All three methods
+use the validated H-matrix described in Section3.2as the forward operator. Reconstruction
+quality is reported in terms of NMSE, PSNR, SSIM, and Pearson correlation¯r                        img, and the
+metric distributions across the test set are shown in Figure7.
+
+5.3.1    ISTA
+
+ISTA was run with regularisation parameterλ=  0.009and a maximum of 500 iterations,
+at which point the cost function had converged for all test samples (final cost2.432×10                      1).
+Across the 46 test samples, ISTA achieved a mean SSIM of0.2116±0.0888, PSNR of10.49±
+2.28dB, NMSE of3.3130±4.6940, and¯r                                                  img of0.9358±0.0228.  The high mean Pearson
+correlation indicates that the gross spatial structure of the image is recovered faithfully, but the
+low SSIM reflects the presence of streak artefacts and spatial smearing that degrade structural
+fidelity at the fine scale.  The large standard deviation of the NMSE (σ=  4.6940) reveals
+considerable variation in reconstruction quality across test samples, with a small number of
+samples producing substantially higher error than the majority, as visible in the heavy right tail
+of the NMSE histogram. Original test samples are shown in Figure8and representative visual
+results shown in Figure9confirm that ISTA recovers the coarse extent of the vessel distribution
+but introduces ringing artefacts along high-contrast edges and fails to resolve fine vessel detail.
+
+
+                                                            15
+                                 Figure 8: Some examples of test images used.
+
+
+
+
+
+
+
+
+
+                                       Figure 9: ISTA reconstruction results.
+
+
+5.3.2    SBTV
+
+SBTV was run with the optimal parameters identified during the parameter search (λ=
+0.1000,µ=  1.0,N                    out  =  76outer iterations).  Across the 46 test samples, SBTV achieved a
+mean SSIM of0.1733±0.0750, PSNR of9.36±1.65dB, NMSE of4.1700±6.0986, and¯r                                                                                                  img of
+0.8557±0.0686. SBTVperformedbelowISTAonallfourmetrics. ThelowerPearsoncorrelation
+relative to ISTA (0.856vs0.936) suggests that the total variation regularisation, while effective
+at suppressing noise in standard imaging problems, introduces staircase artefacts in the vessel
+images used here, distorting the spatial waveform structure. The extremely large NMSE stan-
+dard deviation (σ= 6.099) indicates that performance is highly image-dependent, with several
+samples producing NMSE values exceeding 15. The test images used is shown in Figure8and
+visual inspection of Figure10confirms that SBTV reconstructions exhibit over-smoothing and
+loss of vessel boundary sharpness relative to ISTA.
+
+5.3.3    LISTA
+
+LISTA, as a learned iterative method, achieved substantially higher reconstruction quality than
+both classical baselines. Across the 46 test samples, LISTA achieved a mean SSIM of0.5020±
+0.1803, PSNR of14.26±3.25dB, NMSE of0.8053±0.1343, and¯r                                                                                img of0.4249±0.1472. The
+SSIMimprovementoverISTAis0.290inabsoluteterms, representinga2.37×relativegain. The
+lower Pearson correlation of LISTA relative to ISTA and SBTV (0.425vs0.936and0.856) is
+noteworthy and reflects a fundamental difference in reconstruction character: LISTA produces
+spatially compact, sparse reconstructions that recover the vessel locations with good structural
+fidelity but do not reproduce the full spatial extent of the ground truth signal in the way
+that the classical methods do. The test images used is shown in Figure8and this trade-off is
+visible in Figure11, where LISTA reconstructions show sharper, more localised vessel structures
+
+
+
+
+
+
+
+
+
+                                     Figure 10: SBTV reconstruction results
+
+
+                                                               16
+                                  Figure 11: LISTA reconstruction results
+
+                            Table 2: Sensor Attention Network configuration
+Parameter                                       Symbol             Value
+Token embedding dimension  d                    model           128
+Number of attention heads      A             4
+Encoder blocks                L             2
+Feed-forward hidden dimensiond                    ff              256
+Vessel-weighting threshold             –               0.10
+Vessel weight                  w  vessel           8
+Background weight              w  bg             1
+Optimiser                           –               Adam (β  1 = 0.9,β      2 = 0.999)
+Initial learning rate                   –                         3×10        −4
+LR decay schedule                   –       ×0.5every 80 epochs
+Batch size                           –               8
+Total epochs                         –               300
+Trainable parameters                 –       ≈18×10              6
+
+
+compared to the diffuse outputs of ISTA and SBTV, though at the cost of incomplete coverage
+for complex multi-vessel phantoms. The NMSE standard deviation for LISTA (σ= 0.1343) is
+substantially lower than for ISTA and SBTV, indicating more consistent reconstruction quality
+across test samples. The results of all three baseline methods are summarised alongside the
+SAN in Table3, presented in Section5.5.
+
+5.4  Sensor Attention Network: Training and Validation
+
+The SAN was trained end-to-end on the 488 augmented training samples and monitored on the
+44-sample validation set. The complete network and training configuration is summarised in
+Table2.
+    All weights were initialised using He initialisation [34]. The vessel-weighted MSE loss of
+equation (16) was minimised with Adam, with the learning rate halved every 80 epochs. The
+checkpoint with the lowest validation loss across the 300-epoch schedule was retained for eval-
+uation.
+
+5.4.1    Test-set performance
+
+The trained network was evaluated on the 46-sample held-out test set, which was not used at
+any stage of training or model-selection. Across the test set, the SAN achieved a mean SSIM
+of0.522±0.225, a mean PSNR of22.09±7.42dB, a mean NMSE of0.233±0.172, a mean
+¯r  img of0.836±0.103, and a mean coefficient of determinationR                                                         2 of0.654±0.237. Of the 46
+test samples, 21 (46%) achieved SSIM > 0.5 and 10 (22%) achieved SSIM > 0.7, with the best
+sample reaching SSIM =0.965. The standard deviation of 0.225 in SSIM reflects substantial
+sample-to-sample variation: the network performs strongly on phantoms whose vessel layout is
+
+
+                                                         17
+Figure 12: Per-sample SSIM distribution of the SAN reconstructions on the 46-sample test set.
+Dashed vertical line marks the mean.
+
+
+
+
+
+
+
+
+
+                             Figure 13: Six random test-set reconstructions
+
+
+well-represented in the training distribution and less well on outlier topologies, as visible in the
+lower tail of the distribution in Figure12.
+
+5.4.2    Qualitative results
+
+Figure13shows reconstructions for six randomly selected test samples (top row: ground truth;
+bottom row: SAN prediction).  The network recovers the position, orientation, and branch-
+ing topology of the vessel structures faithfully across all six cases, with sharp boundaries and
+well-localised reconstructions. Minor amplitude attenuation is observed at the thinnest vessel
+segments-aconsequenceofthelimitedspatial-frequencycontentofthetrainingdistributionand
+the smoothing effect of the sigmoid output activation - but the geometric fidelity remains high.
+Beyond reconstruction quality, the proposed network offers a substantial inference-cost advan-
+tage. Eachreconstructionisproducedinasingleforwardpassthroughthetrainednetwork, with
+no H-matrix multiplication required, and completes in a few milliseconds on a single mid-range
+GPU. By contrast, the iterative baselines reported in Section V-C require either 200 (ISTA), 4
+outer (SBTV), or 16 (LISTA) matrix-vector products of costO(MN)≈4.65×10                                  7floating-point
+operations each, leading to inference times that are at least one order of magnitude longer.
+
+5.5  SAN versus baselines
+
+This section presents a direct comparison of the four reconstruction methods evaluated in this
+work - ISTA, SBTV, LISTA, and the proposed SAN - on the same 46-sample held-out test set,
+using the validated H-matrix described in Section 3.2 as the forward operator. All metrics are
+computed on images normalised to the range [0, 1]. Aggregate results are summarised in Table
+3.
+    The SAN achieves the highest mean SSIM and PSNR, and the lowest mean NMSE, of
+
+
+                                                         18
+Table 3: Reconstruction performance of all four methods on the 46-sample test set. Mean±
+standard deviation. The best value in each column is shown in bold; ties or non-significant
+differences are not bolded.
+ Method                         SSIM           PSNR (dB)          NMSE        ¯r                   img
+
+ ISTA                          0.212±0.089         10.49±2.28         3.313±4.694  0.936±0.023
+ SBTV                  0.173±0.075          9.36±1.65          4.170±6.099         0.856±0.069
+ LISTA                        0.502±0.180         14.26±3.25         0.805±0.134         0.425±0.147
+ SAN (proposed)0.522±0.225      22.09±7.42      0.233±0.172 0.836±0.103
+
+
+Table 4: Paired statistical comparison of the SAN against each baseline on the test set (n= 46).
+The mean difference is computed as (SAN - baseline) for SSIM, PSNR and Pearson¯r               img (where
+higher is better) and as (baseline - SAN) for NMSE (where lower is better), so that a positive
+value always favours the SAN. Significance codes: ***p<0.001, **p<0.01, *p<0.05, not
+significant (n.s.)p≥0.05.
+        Comparison   Metric      Mean diff  95% CI        p (t-test)      p (Wilcoxon)
+
+        SAN vs ISTA      SSIM       +0.310     [+0.229, +0.392]1.1×10                                   −9    ***1.2×10           −7    ***
+        SAN vs ISTA      PSNR (dB)+11.60           [+9.21,+14.00]      1.1×10                                   −12    ***3.5×10           −9    ***
+        SAN vs ISTA      NMSE   +3.08            [+1.69,+4.47]        5.2×10                                   −5    ***3.5×10           −9    ***
+        SAN vs ISTA      Pearson¯r                  img    −0.100           [−0.129,−0.071]    1.5×10                            −8    ***4.1×10           −7    ***
+        SAN vs SBTV     SSIM       +0.349           [+0.270,+0.427]    1.6×10                                   −11    ***1.4×10           −8    ***
+        SAN vs SBTV     PSNR (dB)    +12.73           [+10.41,+15.05]    2.2×10                                −14    ***3.5×10           −9    ***
+        SAN vs SBTV     NMSE   +3.94            [+2.14,+5.74]        6.6×10                                   −5    ***3.5×10           −9    ***
+        SAN vs SBTV     Pearson¯r                  img    −0.020           [−0.051,+0.011]    0.20(n.s.)    0.057(n.s.)
+        SAN vs LISTA    SSIM       +0.020           [−0.046,+0.086]    0.55(n.s.)      0.90(n.s.)
+        SAN vs LISTA    PSNR (dB)+7.83            [+5.64,+10.02]      5.2×10                               −9    ***4.0×10           −9    ***
+        SAN vs LISTA    NMSE      +0.572           [+0.506,+0.638]    1.1×10                                  −21    ***4.0×10           −9    ***
+        SAN vs LISTA    Pearson¯r                  img    +0.411           [+0.360,+0.462]    2.3×10                           −20    ***3.5×10           −9    ***
+
+
+the four methods. To establish whether these differences are statistically significant given the
+modest test-set size (n= 46), each pairwise comparison was assessed using both a paired t-test
+on the per-sample metric values and a Wilcoxon signed-rank test, the latter providing a non-
+parametriccheckthatdoesnotassumenormallydistributeddifferences. Resultsaresummarised
+in Table4
+     Threeobservationsfollowfromthisanalysis. First, theSANdominatestheclassicaliterative
+baselines (ISTA and SBTV) on every fidelity metric. The improvements in SSIM (+0.31over
+ISTA,+0.35over SBTV), PSNR (+11.6dB and+12.7dB), and NMSE (3.1and3.9lower
+respectively) are all highly statistically significant (p <10     −4 ) under both the parametric and
+non-parametric tests. The single exception is Pearson correlation, where ISTA retains a small
+but significant lead (∆¯r    img  =−0.10, p <10                  −8 ) and SBTV is statistically indistinguishable
+from the SAN (p= 0.20; not significant (n.s.)). The high Pearson correlation of ISTA reflects
+its well-known behaviour on sparse signals: the algorithm recovers the gross spatial layout
+of the vessels with strong linear similarity to the ground truth while producing diffuse, low-
+amplitude reconstructions whose pixel-level structural fidelity (SSIM = 0.21) is poor. The SAN,
+by contrast, achieves only a modestly lower Pearson¯r               img yet a substantially higher SSIM and
+PSNR, indicating reconstructions that are structurally faithful as well as numerically accurate.
+Second,thecomparisonagainstLISTA,thestrongestbaselineestablishestheproposednetwork’s
+principal contribution.  On SSIM the two methods are statistically indistinguishable (∆  =
++0.020, p= 0.55(n.s.)), reflecting that both produce structurally compact reconstructions of
+
+
+                                                                       19
+comparable quality at the single-scale SSIM level. On every other metric, however, the SAN is
+decisively superior: PSNR is7.83dB higher (p<10                −8 ), NMSE is3.5×lower (p<10                 −21 ), and
+Pearson¯r               img is0.41higher (p<10                −20 ). The lower Pearson¯r               img of LISTA is consistent with a
+known limitation of unrolled networks trained with limited data: the learned proximal operator
+appliestoostrongasparsifyingthresholdateachiteration,leavingincompletecoverageonmulti-
+vessel phantoms that the SAN reconstructs more completely. Third, the qualitative comparison
+can be made by viewing the SAN reconstructions in Figure13above alongside the ISTA, SBTV,
+and LISTA reconstruction examples already presented in Section5.3. ISTA and SBTV recover
+the coarse vessel distribution but exhibit smearing and ringing along high-contrast edges, with
+SBTV additionally producing piecewise-constant ’staircase’ artefacts characteristic of total-
+variation regularisation. LISTA produces sharper, more spatially compact reconstructions than
+the classical methods but tends to miss vessel segments far from the dominant signal centroid,
+leavingincomplete coverageon multi-vesselphantoms, visiblequantitatively asthesubstantially
+lower Pearson correlation despite high SSIM. The SAN reconstructions in Figure13match
+the ground-truth vessel layout closely on most samples, with sharp boundaries and faithful
+branching topology. Failure modes are restricted to phantoms whose vessel patterns lie outside
+the augmented training distribution, corresponding to the lower tail of the SSIM histogram
+in Figure12. In summary, the proposed SAN produces reconstructions of significantly higher
+quality than the classical iterative methods (ISTA, SBTV) on every fidelity metric, and matches
+or exceeds the strongest learned baseline (LISTA) on every metric except SSIM, where the two
+are statistically indistinguishable. This is achieved while bypassing the H-matrix entirely at
+inference time, providing an order-of-magnitude reduction in reconstruction time relative to all
+three iterative baselines.
+
+6  DISCUSSION
+
+The principal finding of this work is that a Transformer-based sensor-as-token architecture can
+produce PAT reconstructions of significantly higher fidelity than the classical iterative baselines
+(ISTA and SBTV) and at least comparable to the strongest unrolled-network baseline (LISTA),
+while bypassing the H-matrix at inference. The paired statistical comparison in Section 5.5
+places this claim on rigorous footing: SAN attains improvements of+11.6dB PSNR over ISTA,
++12.7dB over SBTV, and+7.83dB over LISTA, with each comparison significant atp<10                                     −8
+under both parametric (paired t-test) and non-parametric (Wilcoxon signed-rank) tests. The
+NMSE reduction relative to LISTA, the strongest baseline, is a factor of3.5×(p <10                  −21  ),
+establishing the proposed network as a clear quantitative improvement over the prior state of
+the art at the test-set scale studied here [11].
+
+6.1  Interpretation of the Reconstruction Trade-Offs
+
+Three observations from Section5.5warrant further discussion. First, the Pearson correlation
+coefficientretainsasmalladvantageforISTA(0.936vsSAN’s0.836,∆¯r                                    img =−0.10, p<10                  −8 ).
+This is consistent with the well-known behaviour ofl    1-regularised iterative solvers on sparse
+signals[7]: suchmethodsrecoverthegrossspatiallayoutofthevesselswithhighlinearsimilarity
+to the ground truth, but the resulting reconstructions are diffuse and low-amplitude, which
+depresses the single-scale SSIM (0.21for ISTA). The SAN, by contrast, achieves only a modestly
+lower Pearson¯r               img but a substantially higher SSIM (0.522), reflecting reconstructions that are
+simultaneously structurally faithful at the pixel level and numerically accurate in the energy
+sense. Second, on the single-scale SSIM the SAN and LISTA are statistically indistinguishable
+(∆  =  +0.020, p=  0.55(n.s.). This is itself an informative result: SSIM is sensitive to fine
+boundary structure, and LISTA, being a learned variant of ISTA, inherits its ability to produce
+sparse, well-localisedreconstructions. Thedecisiveseparationbetweenthetwomethodsappears
+
+                                                          20
+in the energy-based metrics (PSNR, NMSE) and in Pearson correlation, where SAN’s coverage
+of the full vessel extent and amplitude is substantially better than LISTA’s. This pattern is
+consistent with the known limitation of unrolled networks trained on limited data: the learned
+proximal operator can become overly aggressive at sparsifying the iterate, leaving incomplete
+coverage on multi-vessel phantoms.  Third, the multi-scale structural similarity index (MS-
+SSIM) was deliberately excluded from the principal comparison table. On the same test set,
+ISTA attained a higher MS-SSIM (0.866) than the SAN (0.794) despite its much lower single-
+scale SSIM. This counterintuitive result is a consequence of MS-SSIM’s weighting of coarse-scale
+structural similarity, which is well preserved by diffuse low-amplitude reconstructions such as
+those produced by ISTA. Since fine-scale boundary structure is the metric of greatest clinical
+interest for vessel imaging, the single-scale SSIM is the more discriminating measure for this
+task, and the MS-SSIM is reported only as a SAN-specific descriptor in Section 5.4.
+
+6.2  Computational Efficiency at Inference
+
+The computational advantage of the SAN at inference is independent of the reconstruction-
+quality argument and is therefore worth separating. Each iterative baseline performs at least
+one matrix–vector product withHper iteration, with costO(MN)≈4.65×10                                                7 floating-point
+operations for the chosen grid size of64×64pixels andN                      sNt = 11,360measurements. ISTA
+uses 200 such iterations per reconstruction; SBTV uses 60 outer plus 5 inner conjugate-gradient
+iterations; LISTA uses 16 unrolled layers. The SAN, by contrast, performs a single forward pass
+dominated by dense matrix multiplications totalling on the order of10    7 operations, completing
+in1to5msonasinglemid-rangeGPU.Thisrepresentsatleastanorder-of-magnitudereduction
+ininferencelatencyrelativetoallthreeiterativebaselines, andbringsPATreconstructionwithin
+the latency budget of real-time clinical workflows.
+
+6.3  Limitations
+
+Three limitations of the present study deserve explicit acknowledgement. First, the training
+corpus comprises 191 phantoms drawn from a single public source (Radiopaedia), expanded to
+488 augmented samples by small spatial translations. While the held-out test set was strictly
+disjoint and the validation set was used only for checkpoint selection, the absolute generalisa-
+tion capacity of the network to phantoms outside this distribution remains unproven. Failure
+cases observed in the lower tail of the SSIM histogram (Figure12) correspond predominantly
+to phantoms with vessel topologies poorly represented in the training distribution. Second, the
+analytical H-matrix is constructed under the assumption of a homogeneous, lossless acoustic
+medium with constant speed of sound. Real biological tissue exhibits acoustic heterogeneity,
+frequency-dependent attenuation, and in some cases multiple scattering, none of which are mod-
+elled in the present forward operator. Although the validation against k-wave confirms that the
+analytical model faithfully reproduces idealised forward physics, the gap between the analytical
+training distribution and experimental measurements must be quantified before clinical transla-
+tion. Third, the present study reports results for a single grid spacing (d  x = 0.100mm), sensor
+configuration (N  s = 71on a square boundary), and image size (64×64). The scaling of SAN
+performance with image resolution, sensor count, and grid spacing has not been characterised
+here; this is the subject of ongoing work.
+
+6.4  Comparison to Prior Self-Work
+
+The proposed architecture is positioned as a complement, not a replacement, of the unrolled-
+network methods previously reported by the present authors [10], [14].  Unrolled networks
+remain valuable for problems in which the forward operator H changes between samples (e.g.,
+
+
+                                                         21
+different sensor geometries, patient-specific scan protocols) and physical interpretability of the
+per-layer iterate is required for clinical acceptance. The SAN is most appropriate when the sen-
+sor geometry is fixed across the patient population and inference latency is the dominant con-
+straint. Both approaches benefit from the validated analytical H-matrix introduced in Section
+3, which can be used for training data generation regardless of the downstream reconstruction
+architecture.
+
+7  CONCLUSION AND FUTURE WORK
+
+This paper introduced the Sensor Attention Network (SAN), a Transformer-based architecture
+forphotoacoustictomographyimagereconstructionthatmapsrawsensormeasurementsdirectly
+to the reconstructed image without invoking the forward operator at inference. The contribu-
+tions are threefold: (i) an analytical k-space H-matrix was constructed and validated against
+the k-Wave pseudo-spectral solver under matched geometry, achieving a mean per-sensor Pear-
+son correlation of¯r= 0.919±0.049, with two targeted regularisations (Hann apodization and
+Gaussian temporal damping) reducing the energy-normalised mismatch by 49%; (ii) the SAN
+architecture was introduced and trained end-to-end on 488 augmented PAT phantoms; and (iii)
+a rigorous statistical comparison against ISTA, SBTV, and LISTA on a 46-sample held-out test
+set established that the SAN achieves the highest mean SSIM (0.522), the highest mean PSNR
+(22.09 dB), and the lowest mean NMSE (0.233), with paired t-tests and Wilcoxon signed-rank
+tests confirming significance atp <10       −8  for the principal claims.  By eliminating the per-
+iterationHxmultiplication at inference, the SAN reduces reconstruction latency by at least an
+order of magnitude relative to all three iterative baselines. Several directions for future work are
+identified. First, the training corpus should be expanded with more diverse vessel topologies
+and, where possible, with experimentally acquired sensor signals from phantom and ex-vivo
+tissue measurements, in order to characterise the network’s generalisation capacity beyond the
+simulated regime [11]. Second, the data augmentation strategy can be made more physically
+faithful by applying the corresponding sensor-index permutation when rotating or reflecting the
+phantom, a procedure that is exact for a sensor array with discrete rotational symmetry and
+that avoids the analytical/numerical distribution mismatch encountered in preliminary aug-
+mented experiments.  Third, the SAN architecture should be extended to three-dimensional
+PAT by replacing the two-dimensional spatial decoder with a 3-D volumetric decoder, and by
+accommodating cylindrical or hemispherical sensor geometries common in clinical scanners [35].
+Moreover, a learned MLP encoding of the physical sensor coordinates can be considered as a
+future work. Fourth, the integration of physics-informed loss terms, penalising deviation of the
+reconstructed image from the analytical forward model under perturbed sensor inputs, offers
+a principled means of combining the data efficiency of unrolled networks with the inference
+speed of the direct architecture proposed here. Fifth, the present design should be evaluated
+on heterogeneous acoustic media and frequency-dependent attenuation, possibly with a learned
+correction layer to bridge the gap between the homogeneous analytical training distribution
+and clinical measurements. Finally, sixth, the network’s transferability to related tomographic
+modalities, such as thermoacoustic tomography and ultrasound computed tomography, merits
+investigation, as the underlying sensor-as-token paradigm is not specific to PAT and may gener-
+alise to any inverse problem in which a fixed sensor array produces a sparse-view measurement
+vector.
+
+Declaration of competing interest
+
+The authors declare that they have no known competing financial interests or personal rela-
+tionships that could have appeared to influence the work reported in this paper.
+
+
+                                                       22
+References
+
+ [1]P. Beard, Biomedical photoacoustic imaging, Interface focus 1 (4) (2011) 602–631.doi:
+     10.1098/rsfs.2011.0028.
+
+ [2]L. Li, L. V. Wang, Recent advances in photoacoustic tomography, BME Frontiers 2021
+     (2021) 9823268.doi:10.34133/2021/9823268.
+
+ [3]J. Zhang, F. Duan, Y. Liu, L. Nie, High-resolution photoacoustic tomography for early-
+     stage cancer detection and its clinical translation, Radiology: Imaging Cancer 2 (3) (2020)
+     e190030, pMID: 33778711.doi:10.1148/rycan.2020190030.
+
+ [4]G. P. Luke, D. Yeager, S. Y. Emelianov, Biomedical applications of photoacoustic imaging
+     with exogenous contrast agents, Annals of biomedical engineering 40 (2) (2012) 422–437.
+     doi:10.1007/s10439-011-0449-4.
+
+ [5]M. John, I. Barhumi, Handling missing data in limited-view photoacoustic tomography
+     using compressive sensing algorithm-based deep learning, in: 2024 Asia Pacific Signal and
+     InformationProcessingAssociationAnnualSummitandConference(APSIPAASC),IEEE,
+     2024, pp. 1–6.doi:https://doi.org/10.1109/APSIPAASC63619.2025.10848678.
+
+ [6]A. Hauptmann, J. Poimala, Model-corrected learned primal-dual models for fast limited-
+     view photoacoustic tomography, arXiv preprint arXiv:2304.01963 (2023).doi:https://
+     doi.org/10.48550/arXiv.2304.01963.
+
+ [7]M. J. John, I. Barhumi, Fast and efficient pat image reconstruction algorithms:  A
+     comparative performance analysis, Signal Processing 201 (2022) 108691.doi:https:
+     //doi.org/10.1016/j.sigpro.2022.108691.
+
+ [8]M. J. John, I. Barhumi, Total variation algorithms for pat image reconstruction, in: 2022
+     Asia-Pacific Signal and Information Processing Association Annual Summit and Con-
+     ference (APSIPA ASC), IEEE, 2022, pp. 1164–1168.doi:https://doi.org/10.23919/
+     APSIPAASC55919.2022.9980048.
+
+ [9]M. J. John, I. Barhumi, Compressive sensing based algorithms for limited-view pat image
+     reconstruction, in: 2023 Asia pacific signal and information processing association annual
+     summit and conference (APSIPA ASC), IEEE, 2023, pp. 1317–1322.doi:https://doi.
+     org/10.1109/APSIPAASC58517.2023.10317590.
+
+[10]M. John, I. Barhumi, Plug-and-play enhanced compressive sensing for limited sample pat
+     image reconstruction, in: 2023 6th international conference on signal processing and in-
+     formation security (ICSPIS), IEEE, 2023, pp. 110–115.doi:https://doi.org/10.1109/
+     ICSPIS60075.2023.10343788.
+
+[11]M. John, I. Barhumi, Advancing sensor-data based pat image reconstruction through effi-
+     cient and intelligible unrolled networks, Ieee Access 11 (2023) 117053–117066.doi:https:
+     //doi.org/10.1109/ACCESS.2023.3326504.
+
+[12]H. Shahid, A. Khalid, X. Liu, M. Irfan, D. Ta, A deep learning approach for the photoa-
+     coustic tomography recovery from undersampled measurements, Frontiers in Neuroscience
+     15 (2021) 598693.doi:https://doi.org/10.3389/fnins.2021.598693.
+
+[13]S. Antholzer, M. Haltmeier, J. Schwab, Deep learning for photoacoustic tomography from
+     sparse data, Inverse problems in science and engineering 27 (7) (2019) 987–1005.doi:
+     https://doi.org/10.1080/17415977.2018.1518444.
+
+
+                                                      23
+[14]M. John, I. Barhumi, Unrolled deep learning for breast cancer detection using limited-view
+     photoacoustic tomography data, Medical & Biological Engineering & Computing 63 (6)
+     (2025) 1777–1795.doi:https://doi.org/10.1007/s11517-025-03302-4.
+
+[15]Y. Li, O. Bar-Shira, V. Monga, Y. C. Eldar, Deep algorithm unrolling for biomedical imag-
+     ing, arXiv preprint arXiv:2108.06637 (2021).doi:https://doi.org/10.48550/arXiv.
+     2108.06637.
+
+[16]M. A. Josy,Optimizing photoacoustic imaging with advanced reconstruction techniques:
+     Compressive sensing and deep learning, Dissertations (2024).
+     URLhttps://scholarworks.uaeu.ac.ae/all_dissertations/309
+
+[17]N. Vaswani, Ls-cs-residual (ls-cs): Compressive sensing on least squares residual, IEEE
+     Transactions on Signal Processing 58 (8) (2010) 4108–4120.doi:https://doi.org/10.
+     1109/TSP.2010.2048105.
+
+[18]M. Xu, L. V. Wang, Universal back-projection algorithm for photoacoustic computed
+     tomography, Physical Review E—Statistical, Nonlinear, and Soft Matter Physics 71 (1)
+     (2005) 016706.doi:https://doi.org/10.1103/PhysRevE.71.016706.
+
+[19]A. Beck, M. Teboulle, A fast iterative shrinkage-thresholding algorithm for linear inverse
+     problems, SIAM Journal on Imaging Sciences 2 (1) (2009) 183–202.doi:https://doi.
+     org/10.1137/080716542.
+
+[20]Z. Qin, D. Goldfarb, S. Ma, An alternating direction method for total variation denoising,
+     Optimization Methods and Software 30 (3) (2015) 594–615.doi:https://doi.org/10.
+     1080/10556788.2014.955100.
+
+[21]S. V. Venkatakrishnan, C. A. Bouman, B. Wohlberg, Plug-and-play priors for model based
+     reconstruction, in: 2013 IEEE global conference on signal and information processing,
+     IEEE, 2013, pp. 945–948.doi:https://doi.org/10.1109/GlobalSIP.2013.6737048.
+
+[22]U. S. Kamilov, H. Mansour, B. Wohlberg, A plug-and-play priors approach for solving
+     nonlinear imaging inverse problems, IEEE Signal Processing Letters 24 (12) (2017) 1872–
+     1876.doi:https://doi.org/10.1109/LSP.2017.2763583.
+
+[23]N. Awasthi, S. Kumar Kalva, M. Pramanik, P. K. Yalavarthy, Dimensionality reduced plug
+     and play priors for improving photoacoustic tomographic imaging with limited noisy data,
+     Biomedical Optics Express 12 (3) (2021) 1320–1338.doi:https://doi.org/10.1364/
+     BOE.415182.
+
+[24]K. Gregor, Y. LeCun, Learning fast approximations of sparse coding, in: Proceedings of
+     the 27th international conference on international conference on machine learning, 2010,
+     pp. 399–406.doi:https://dl.acm.org/doi/abs/10.5555/3104322.3104374.
+
+[25]H. Lan, D. Jiang, C. Yang, F. Gao, F. Gao, Y-net:  Hybrid deep learning image re-
+     construction for photoacoustic tomography in vivo, Photoacoustics 20 (2020) 100197.
+     doi:https://doi.org/10.1016/j.pacs.2020.100197.
+
+[26]K.-T. Hsu, S. Guan, P. V. Chitnis, Comparing deep learning frameworks for photoacoustic
+     tomography image reconstruction, Photoacoustics 23 (2021) 100271.doi:https://doi.
+     org/10.1016/j.pacs.2021.100271.
+
+[27]P. Rajendran, A. Sharma, M. Pramanik, Photoacoustic imaging aided with deep learning:
+     a review, Biomedical Engineering Letters 12 (2) (2022) 155–173.doi:https://doi.org/
+     10.1007/s13534-021-00210-y.
+
+                                                      24
+[28]S. Said, I. Barhumi, A comparative study of diffusion-based reconstruction frameworks for
+     photoacoustic tomography, Scientific Reports (2026).
+
+[29]J. Yin, J. He, X. Ma, M. Xie, Optimization research on sparse sampling photoacous-
+     tic tomography based on attention-unet, in: Second International Conference on Optical
+     Communication and Optoelectronic Technology (OCOT 2025), Vol. 13985, SPIE, 2025, pp.
+     486–493.doi:https://doi.org/10.1117/12.3077798.
+
+[30]Y. Lai, Q. Zhang, Z. Yin, Attention-driven complementary information fusion network
+     for sparse photoacoustic image reconstruction, Photoacoustics (2026) 100797doi:https:
+     //doi.org/10.1016/j.pacs.2026.100797.
+
+[31]B. E. Treeby, B. T. Cox, k-wave: Matlab toolbox for the simulation and reconstruction
+     of photoacoustic wave fields, Journal of biomedical optics 15 (2) (2010) 021314–021314.
+     doi:https://doi.org/10.1117/1.3360308.
+
+[32]A. Vaswani, N. Shazeer, N. Parmar, J. Uszkoreit, L. Jones, A. N. Gomez, Ł. Kaiser,
+     I. Polosukhin, Attention is all you need, Advances in neural information processing systems
+     30 (2017).doi:https://doi.org/10.48550/arXiv.1706.03762.
+
+[33]Radiopaedia.org, Radiopaedia.org,https://radiopaedia.org, accessed: Jul. 11, 2026.
+
+[34]K. He, X. Zhang, S. Ren, J. Sun, Delving deep into rectifiers: Surpassing human-level per-
+     formance on imagenet classification, in: Proceedings of the IEEE international conference
+     on computer vision, 2015, pp. 1026–1034.
+
+[35]N. Huynh, O. Francies, E. Zhang, J. Zhu, J. Manson, P. Beard, A. A. Plumb, Feasibility of
+     3d photoacoustic tomography for the assessment of rheumatoid arthritis, British Journal
+     of Radiology 99 (1179) (2026) 473–480.doi:https://doi.org/10.1093/bjr/tqaf313.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                       25

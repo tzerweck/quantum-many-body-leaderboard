@@ -1,0 +1,1136 @@
+           HiST: A Hierarchical Sparse Transformer for Cross-Modal Spatial
+                                                 Transcriptomics Modeling
+
+
+
+
+           Weiyi Wu 1   Xinwen Xu 2   Xingjian Diao 1   Siting Li 1   Zhi Wei 3   Alma Andersson 4   Jiang Gui 1
+
+                             Abstract                                        nization (St  ˚ahl et al.,2016;Moses & Pachter,2022;Marx,
+      Spatial transcriptomics (ST) links gene expression                     2021).   By  localizing  molecular  programs  within  tissue,
+      with tissue morphology but remains expensive                           Spatial transcriptomics (ST) has revealed spatially struc-
+      and low-throughput, motivating surrogates that                         tured gene expression, microenvironmental niches, and long-
+      infer expression from routine histology. Whole-                        range gradients that are invisible to bulk or dissociated as-
+      slide H&E-to-ST inference pairs a gigapixel im-                        says (Moses & Pachter,2022;Birk et al.,2025;Kueckel-
+      age with gene measurements at a sparse, irregular                      haus et al.,2024;Aung et al.,2025;Andersson et al.,2021).
+      set of locations, making multiscale modeling chal-                     However, ST assays remain expensive and low-throughput,
+      lenging without incurring dense-grid overhead or                       limiting dataset scale and motivating computational surro-
+      quadratic token mixing. We propose HiST, a hier-                       gates that infer spatial expression from standard imaging
+      archical sparse transformer that treats measured                       data (Marx,2021;Smith et al.,2024;Xie et al.,2023).
+      locations  as  a  lattice-indexed  sparse  field  and                  H&E as a scalable surrogate.Routine hematoxylin-and-
+      builds a dyadic encoder–decoder directly on the                        eosin (H&E) histopathology is ubiquitous in clinical work-
+      active tissue footprint. HiST combines sparse win-                     flows, inexpensive to generate, and increasingly digitized
+      dow attention for local geometric correspondence                       into whole-slide images (WSIs) at scale (Dunn et al.,2024;
+      with resolution-changing operators for rapid mul-                      Wu et al.,2023;2026b).  Accurate H&E-to-ST inference
+      tiscale context integration.  For a fixed window                       could turn these routine slides into a proxy molecular read-
+      size, the dominant runtime and memory scale with                       out, enabling retrospective studies on large clinical archives
+      the number of observed locations rather than the                       and reducing reliance on expensive ST assays when they are
+      dense slide area. To mitigate slide-specific acqui-                    impractical. Because morphology reflects underlying molec-
+      sition variation, HiST adds a bottlenecked global                      ular programs, H&E contains rich latent molecular signals,
+      conditioning pathway via aslide calibration to-                        and many ST platforms provide a co-registered histology
+      kenthat summarizes slide-level context and con-                        image for localizing measurement locations (Chen et al.,
+      ditions local representations.  On a multi-organ                       2024a;St           ˚ahl et al.,2016).  In this work, we study H&E-
+      benchmark spanning diverse tissues and acqui-                          to-ST inference: given ST coordinates and a co-registered
+      sition sources, HiST improves predictive perfor-                       H&E WSI, we predict a gene expression vector at each
+      mance over recent baselines while reducing run-                        measured position.
+      time  and  peak  memory.   Code  is  available  at:                    Whole-slide inference is challenging because it requires
+      https://github.com/wwyi1828/HiST.                                      mapping gigapixel images to high-dimensional gene expres-
+                                                                             sion vectors spanning thousands of genes, while supervision
+                                                                             forms a sparse and irregular footprint. Accurate prediction
+1. Introduction                                                              requires multiscale tissue context, yet dense-grid backbones
+                                                                             waste computation on background regions or padding when
+Spatial transcriptomics links gene expression to tissue mor-                 the tissue footprint is irregular, and global token mixing
+phology by measuring transcriptomes with spatial coordi-                     over WSIs is prohibitively expensive. A practical solution
+nates, enabling molecular characterization of tissue orga-                   should therefore operate directly on the active tissue foot-
+                                                                             print and have dominant runtime and memory that scale
+   1Dartmouth College 2Mass General Hospital 3New Jersey In-
+stitute of Technology  4Genentech Inc.. Correspondence to: Weiyi             primarily with the number of measured locations (N), while
+Wu<weiyi.wu.gr@dartmouth.edu>.                                               remaining robust to slide-specific acquisition variation such
+                                                                             as staining and scanner differences (Schmitt et al.,2021;
+Proceedings of the 43 rd  International Conference on Machine                Millard et al.,2025). Recent iterative generative paradigms,
+Learning, Seoul, South Korea. PMLR 306, 2026. Copyright 2026                 including  flow  matching  (Huang  et  al.,2025)  and  diffu-
+by the author(s).
+
+                                                                         1
+                    HiST: A Hierarchical Sparse Transformer for Cross-Modal Spatial Transcriptomics Modeling
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 1.Overview of HiST. We extract patch features at measured tissue locations and arrange them on a coordinate-aligned sparse
+lattice. A spatial merging module progressively aggregates neighboring tokens to build compact multiscale representations, and a spatial
+recovery module with skip connections restores fine-grained features for per-spot prediction. Computation is applied only on observed
+tissue locations, keeping the dominant cost proportional to the number of spots.
+
+
+sion (Zhu et al.,2025), can also be computationally inten-                     distribution-aware slide calibration token attends to all lo-
+sive at whole-slide scale and large gene dimension due to                      cations to form a slide-level summary of the feature dis-
+multi-step inference.                                                          tribution, which is then broadcast back to condition local
+Limitations of fixed-range spatial coupling.Prior H&E-                         predictions.  This provides a lightweight pathway for han-
+to-ST models either (i) predict each location independently                    dling slide-specific acquisition variation under cross-slide
+from its local patch (He et al.,2020;Chen et al.,2024b;Xie                     training and evaluation.
+et al.,2023;Wang et al.,2025) or (ii) exchange informa-                        Contributions.Our main contributions are:
+tion through fixed-range local interactions, such as graph
+message passing (Zeng et al.,2022) or neighborhood at-                            •  We introduce HiST, which maps measured locations
+tention (Huang et al.,2025).  While efficient and scalable,                          onto a sparse 2D lattice and uses a dyadic encoder–
+fixed-range coupling can make long-range tissue structure                            decoder hierarchy to capture multiscale tissue context
+difficult to capture without stacking many layers, increasing                        with dominant computation proportional to the number
+both cost and sensitivity to neighborhood design.                                    of observed locations.
+HiST: hierarchical sparse multiscale modeling. To ad-                             •  We propose a distribution-aware slide calibration to-
+dress  these  challenges,  we  propose  HiST, a  hierarchical                        ken as a bottlenecked global conditioning pathway to
+sparse transformer for the ST data modeling.  HiST is de-                            mitigate slide-specific acquisition variation.
+signed for whole-slide hierarchical modeling directly on
+the sparse tissue footprint defined by measured ST loca-                          •  We evaluate HiST on a multi-organ benchmark, match-
+tions,  which motivates our lattice-indexed sparse design.                           ing or improving predictive performance while sub-
+Figure1provides an overview.  We focus on the spatial                                stantially reducing runtime and memory compared to
+representation  and  backbone  by  casting  the  targets  as  a                      recent baselines.
+lattice-indexed sparse field and training with a standard su-
+pervised regression objective to keep the evaluation focused                  As shown in Tables2and1, HiST matches or improves
+on this representation. This focus is complementary to al-                     predictive performance while being about an order of mag-
+ternative training paradigms, such as contrastive learning                     nitude faster at inference and over an order of magnitude
+and iterative generative refinement:  we show that an effi-                    lower in peak reserved memory than recent iterative base-
+cient backbone can already achieve strong accuracy under                       lines on our benchmark.
+standard supervision, and these objectives could be layered
+on top of HiST in future work. HiST maps measured loca-                        2. Related Work
+tions onto a sparse 2D lattice extracted from tissue patches,
+avoiding computation on background regions. It then builds                     Computational tasks in spatial transcriptomics.Spatial
+a dyadic encoder–decoder hierarchy that alternates spatial                     transcriptomics has driven a broad range of computational
+coarsening and refinement, with skip connections that fuse                     tools across complementary tasks. Graph-based ST models
+features across resolutions.   This design is analogous in                     such as SpaGCN (Hu et al.,2021) integrate gene expression,
+spirit to a U-Net (Ronneberger et al.,2015), but operates                      spatial location, and histology to identify spatial domains
+directly on the sparse spatial domain.                                         and spatially variable genes. Multimodal generative mod-
+To mitigate slide-specific acquisition shifts, we introduce                    els such as SPATIA (Kong et al.,2025) target prediction
+a  bottlenecked  conditioning  mechanism.   Specifically,  a                   and  generation  of  spatial  cell  phenotypes.   Cross-modal
+                                                                               integration frameworks such as SpatialMETA (Tian et al.,
+
+                                                                           2
+                    HiST: A Hierarchical Sparse Transformer for Cross-Modal Spatial Transcriptomics Modeling
+
+                                                                               Hierarchical representation.Hierarchical multiscale ar-
+                                                                               chitectures are a core design principle in computer vision for
+                                                                               capturing both fine-grained detail and long-range context.
+                                                                               Canonical examples include U-Net-style encoder–decoder
+                                                                               networks (Ronneberger et al.,2015;Lin et al.,2017) and
+                                                                               hierarchical vision backbones (Liu et al.,2021;Woo et al.,
+                                                                               2023;Hatamizadeh & Kautz,2025;Wu et al.,2026a), which
+                                                                               expand receptive fields through explicit resolution changes.
+                                                                               Directly transferring dense-grid hierarchies to spatial tran-
+                                                                               scriptomics is challenging because informative tissue occu-
+                                                                               pies a sparse and irregular subset of the slide. As a result,
+                                                                               many ST predictors rely on topological graph constraints
+Figure 2.Dyadic Encoder–Decoder Overview.On the encoder                        rather than geometry-aligned lattice hierarchies: graphs han-
+side, shown on the left, local tokens are refined by a Monoscale               dle irregular sampling but typically require deep stacks of
+Refinement Block conditioned on the slide calibration token Cb,                local message passing to capture long-range structure. This
+followed by hierarchical grouping via a Dyadic Coarsening Block.               motivates multiscale designs that operate directly on sparse
+The decoder, shown on the right, mirrors this process using Dyadic             tissue footprints while still leveraging the underlying 2D
+Uncoarsening and refinement blocks.  Ellipses indicate repeated                geometry.
+hierarchy levels, and token indices are shown for illustration only.
+                                                                               Slide acquisition variation.Histology-based ST inference
+                                                                               is affected by slide-specific nuisance variation, such as stain-
+2025) combine spatial transcriptomics with metabolomics                        ing intensity, scanner differences, and cohort or batch ef-
+across  samples.   Downstream  ST  analysis  tools  such  as                   fects, which can degrade cross-slide generalization (Schmitt
+NicheAgent  (Dip  &  Zhang, 2025)  use  language-model-                        et al.,2021;Howard et al.,2021).  ST measurements can
+guided pipelines for zero-shot niche identification.  These                    also exhibit pronounced batch effects, compounding these
+methods operate on already-measured ST; our work instead                       shifts  under  cross-slide  training  and  evaluation  (Millard
+targets the upstream task of inferring ST from H&E at mea-                     et al.,2025). Common strategies include preprocessing and
+sured locations, reviewed next.                                                augmentation (Vahadane et al.,2016;Hoque et al.,2024).
+                                                                               Complementary to these input-level strategies, another di-
+H&E to ST prediction.Computational pathology has ex-                           rection is to incorporate slide-level context as an explicit
+panded from slide-level prediction (Schmauch et al.,2020)                      conditioning signal.  We instantiate this idea with a slide
+to location-level models that infer spatially resolved molec-                  calibration token:  a learnable global token that reads out
+ular signals from histology. A common family of methods                        slide-level context by attending to all locations and broad-
+treats measured locations as i.i.d. samples (He et al.,2020;                   casts this summary back to condition local representations.
+Chen et al.,2024b;Xie et al.,2023), predicting expression                      This lightweight conditioning is conceptually reminiscent of
+from local patch features via regression or retrieval in a joint               learnable prompt/prefix tokens (Li & Liang,2021;?) used
+image–expression embedding space (e.g., BLEEP). More re-                       to steer representations.
+cent context-aware approaches (Zeng et al.,2022;Xu et al.,
+2024;Jia et al.,2023) couple nearby locations, typically via                   3. Method
+message passing or attention over local neighborhoods in
+2D Euclidean space. STFlow (Huang et al.,2025) casts ST                        3.1. Problem Formulation
+prediction as a flow-matching generative process defined                       Data and Notation.Spatial transcriptomics provides       N
+directly over the high-dimensional gene space, with iterative                  measurements{(s  n,y n)} Nn=1  , where sn∈R   2  is the 2D
+refinement and an E(2)-invariant local spatial-attention de-                   Euclidean coordinate and yn ∈R G  is the non-negative
+noiser. Diffusion-based generators such as Stem (Zhu et al.,                   expression vector overG genes after fixed preprocessing.
+2025) provide another iterative paradigm by modeling ex-                       We treat these as sparse samples of an underlying 2D gene-
+pression via conditional denoising, but can be substantially                   expression field. LetI∈R H×W×3            denote the co-registered
+more expensive due to multi-step sampling and scaling with                     H&E whole-slide image. Each location is associated with an
+the number of target genes.  When information exchange                         image patch extracted fromI, and a visual encoder yields a
+is restricted to fixed local neighborhoods, long-range tis-                    feature vectorx    n∈R C.
+sue context must be propagated through multiple rounds of
+local interaction and can be sensitive to neighborhood con-                    Lattice-indexed Sparse Field Representation.The ob-
+struction. Moreover, many designs do not explicitly exploit                    served locations typically occupy a sparse, non-rectangular
+the approximately lattice-like sampling structure present in                   subset of the slide due to tissue boundaries and missing
+ST (Zhao et al.,2021;Walker et al.,2022).
+
+                                                                            3
+                   HiST: A Hierarchical Sparse Transformer for Cross-Modal Spatial Transcriptomics Modeling
+
+measurements.  More generally, given coordinates sn, we                       that alternates sparse window attention with dyadic tran-
+define an indexing mapπ(s  n) = (i n,jn) onto a discrete                      sitions, rapidly expanding receptive fields while keeping
+sampling latticeL={0,...,H   ′−1}×{0,...,W   ′−1}                             compute proportional to active tokens.  Finally, we intro-
+at a chosen resolution.  We represent gene expression as                      duce a slide calibration token in Sec.3.4as a bottlenecked
+a sparse tensor fieldY∈R H′×W       ′×G   , supported only on                 global conditioning pathway to robustify against acquisition
+the set of observed indicesM={(i     n,jn)} Nn=1  .  That is,                 shifts.
+Y[i  n,jn] =y n for (i n,jn)∈M  , while locations outside                     Why hierarchy and sparsity?Dyadic coarsening expands
+M areunlabeledand not used for supervision, correspond-                       the spatial receptive field much faster than stacking local
+ing to out-of-tissue background regions or missing mea-                       layers at a fixed resolution, and the token count shrinks by
+surements.   Analogously,  we form a sparse feature field                     roughly 4×   per stage, making the total cost across stages a
+X∈R H′×W       ′×C    withX[i     n,jn] =x n.                                 convergent geometric series. Combined with sparse window
+Our goal is to learn a function Fθ  :  (X,M)→     bY  that                    attention at each level described in Sec.3.4,  the overall
+predicts expression at observed locations while leveraging                    compute  across  scales  is  dominated  by  the  finest  levels
+spatial context on the lattice. We minimize a supervised loss                 without padding the tissue bounding box.  We provide a
+restricted to the observed support:                                           receptive-field analysis and a multiresolution view of these
+                                    bY[i,j],Y[i,j]                            operators in AppendixB, including the Laplacian pyramid
+              Lsup = X            ℓ                      ,                    expansion in Eq. (6).
+                        (i,j)∈M
+whereℓ(·,·)       is a per-location regression loss such as squared           3.3. Overview
+error in log-expression space.                                                HiST alternates monoscale refinement blocks described in
+Representing ST as a sparse field onL provides several                        Sec.3.4, which update tokens within each level via Dual-
+inductive biases. It enables weight sharing and directional                   Path Attention, and dyadic transition operators described
+kernels through relative offsets.  It supports dyadic multi-                  in Sec.3.5, which coarsen/uncoarsen the active support to
+scale modeling.   It also reduces background redundancy                       build a U-Net-like encoder–decoder.
+by focusing computation on observed tissue sites and their                    Multiscale lattice notation.At level      ℓ∈{0,...,L}          we
+neighborhoods, rather than the entire slide area.                             work on a latticeLℓ with active supportM(ℓ) ⊆Lℓ, where
+Overall, this view makes explicit that location-level ST tar-                 M(0) =M   .  We denote the corresponding sparse feature
+gets behave as a sparse hyperspectral field on a 2D sampling                  field byX     (ℓ)    and letN  ℓ =|M    (ℓ) |.
+lattice,  rather than an unstructured point set.   Unlike ap-                 3.4. Monoscale Refinement Operators
+proaches that rely solely on fixed topological neighborhoods,
+our field formulation respects the underlying Euclidean ge-                   We first define the core operator for updating featureswithin
+ometry.  Because tissue lies in continuous 2D space, this                     a  fixed  lattice  scale ℓ.   To  simultaneously  capture  local
+representation naturally supports geometric priors such as                    morphology and correct for slide-wide acquisition shifts,
+standard image augmentations and metric-aware relative                        we  introduce  the  Dual-Path  Attention  mechanism.   Let
+offsets, which are less natural for purely topological neigh-                 X∈R   Nℓ×d    denote the flattened tissue tokens at the current
+borhood constructions.                                                        scale, letCb∈R   1×d     denote the slide calibration token de-
+                                                                              fined in Sec.3.6, and let     X′∈R Nℓ×d    denote the updated
+3.2. Design Challenges and HiST Approach                                      tissue tokens. We update the tissue representation via two
+Whole-slide  H&E-to-ST  inference  must  capture  long-                       parallel attention paths in a residual form:
+range context under tight compute budgets, scale to high-                                                                                    
+dimensional gene targets, and operate on sparse, irregular                      X′ =X+ Proj          W-MSA(X)|          + MCA(X,C     b). (1)
+measurement footprints. Existing paradigms typically sat-                                                      {z      }     |      {z       }
+isfy only part of this triad: independent per-location predic-                                         Local Spatial Context  Global Calibration
+tors ignore spatial context, fixed-range coupling propagates                  Here W-MSA       denotes sparse windowed self-attention on
+slowly, and dense multiscale backbones waste compute on                       the active set, computed over both standard and shifted win-
+background regions.                                                           dow neighborhoods, MCA denotes cross-attention between
+HiST in a nutshell.We propose aHierarchical Sparse                            tissue tokens and the calibration tokenCb, and Proj denotes
+Transformerto resolve these tensions. First, we adopt lattice-                a learned output projection applied after summing the two at-
+indexed sparse field modeling that confines computation to                    tention outputs. Although Eq. (1)    is written as a unit-weight
+the observed supportM, defined in Sec.3.1. Second, we                         sum, the relative contribution of the local and global paths
+build a dyadic sparse hierarchy described in Secs.3.5–3.6                     is learned through their attention weights and projection
+
+                                                                           4
+                    HiST: A Hierarchical Sparse Transformer for Cross-Modal Spatial Transcriptomics Modeling
+
+parameters.  Eq. (1)    decomposes the feature update into a                    a better match to tissue structures with consistent directional
+local geometric refinement and a global distributional cor-                     organization.
+rection, ensuring that spatial mixing stays focused on tissue
+structure while slide-level biases are handled separately.                      3.4.2. DISTRIBUTIONALCALIBRATION
+3.4.1. LOCALSPATIALCORRESPONDENCE                                               While  the  hierarchical  backbone  captures  multiscale  ge-
+                                                                                ometric structure, cross-slide generalization also requires
+To mix information locally while respecting Euclidean off-                      accounting  for  slide-specific  acquisition  signatures.   We
+sets, we apply windowed multi-head self-attention on the                        therefore introduce an auxiliary global pathway that pro-
+sparse lattice.  At each scale, we maintain an index map                        vides slide-level conditioning. The slide calibration token
+φ(ℓ)    :L ℓ→{1,...,N  ℓ}∪{∅}      that maps each lattice site                  Cb functions as a global low-rank information bottleneck.
+to a token index or to ∅ if empty.  In practice, we build                       We instantiate Cb  as a learnable token shared across all
+φ(ℓ)    as a lookup table over the tight lattice bounding box,                  slides, analogous to a CLS or prefix token, and within each
+enabling constant-time coordinate-to-token lookup during                        forward pass it is refreshed by the attention update below to
+neighborhood construction.  Using φ(ℓ)   , we partition the                     absorb the current slide’s context. Specifically, tissue tokens
+lattice into non-overlapping windows of size (2w)×(2w)                          attend to the current Cb  to receive a global conditioning
+and gather the active tokens within each windowW  while                         signal:
+skipping unobserved sites. To enable cross-window infor-                            MCA(X,C     b) = Attn(XW   Q, CbWK, CbWV ;  0).
+mation flow, we additionally apply a shifted partition with
+offsetw along both axes, so tokens near a window boundary                       Simultaneously, we updateCb by allowing it to attend to
+can interact across it.  This yields sparse local interaction                   all tissue tokens and itself, thereby aggregating a slide-level
+neighborhoods:  attention is computed only among token                          summary:
+pairs that fall into the same standard or shifted window.
+AppendixAprovides implementation details of window                              Cb←C  b+Attn(C   bW (c)Q , [X;C   b]W  (c)K , [X;C   b]W  (c)V   ;  0).
+partitioning and how the index map is used to form these                        Here,W  terms denote learned linear projections. This fac-
+sparse neighborhoods. LetW(ℓ)    andfW(ℓ)    denote the stan-                   torization separates two roles:  local spatial interaction is
+dard and shifted window partitions, and letZW be the active                     handled by lattice window attention, whileCb serves as a
+tokens gathered in windowW .  We apply Eq. (3)    with in-                      low-bandwidth global channel that evolves to capture and
+teractions restricted to the sparse neighborhood induced by                     condition on slide-wide distributional signatures.
+these partitions:
+          W-MSA(X) = Attn      E(ℓ)  (Q,K,V;B),                                 3.5. Dyadic Transition Operators
+    E(ℓ)    =  [        ZW×Z W        ∪ [          ZW×Z W         .     (2)     We define operators that transfer information between lattice
+             W∈W     (ℓ)                 W∈  fW(ℓ)                              scalesℓ andℓ+ 1  , corresponding to the Laplacian-pyramid
+             |          {z          }    |          {z          }               analysis operatorA and synthesis operatorS.  Both scale
+                 standard windows             shifted windows
+                                                                                linearly in active-set size:  each fine site maps to exactly
+Here AttnE(ℓ)   denotes masked attention computed only over                     one parent and each parent aggregates at most four children.
+interaction pairs inE(ℓ)   . Accordingly, the dominant atten-                   Each dyadic coarsening step halves the lattice resolution
+tion  cost  scales  with  window  occupancy  rather  than  the                  along each axis, so receptive fields expand rapidly.  Slide-
+full token count: it isO PW|Z W|2≤O Nℓ (2w)       2 =                         wide context can be reached in approximately O(logN)
+O(N  ℓ) for fixedw, up to a constant factor for shifted win-                    hierarchy levels.  Moreover, the number of active tokens
+dows, rather thanO(N      2ℓ ) as in dense global attention. At-                typically shrinks by about 4×   per level (Nℓ+1 ≈N ℓ/4  ),
+tention is computed with a learnable relative positional bias                   so for token-proportional operators the compute at coarser
+(RPB)B:                                                                         scales is roughly one quarter of that at the previous level.
+                                            QK⊤
+    Attn(Q,K,V;B) = Softmax                     √              V,    (3)        3.5.1. COARSENINGANALYSIS
+                                                  d   +B                        To  integrate  context  and  compress  the  lattice,  we  de-
+whereQ,K,V  are learned linear projections of the window                        fine   a   coarsening   index   mapping   that   assigns   each
+tokens, andBab =b(∆i     ab,∆j  ab) encodes the relative lat-                   active   site   (i,j) ∈ M     (ℓ)      to   its   dyadic   parent
+tice offset. This allows the model to learn direction-aware                    (⌊i/2⌋,⌊j/2⌋)                   , yielding the coarsened supportM(ℓ+1)    =(⌊i/2⌋,⌊j/2⌋) : (i,j)∈M                           (ℓ) 	.     For  each  parent  site
+local interactions such as cell boundary continuity without
+relying on ad hoc positional encodings. Crucially, the bias                    (u,v)    , we gather its active childrenCu,v and aggregate the
+depends onrelativeoffsets, preserving translation equivari-                     dyadic 2×2      neighborhood on the lattice. Letδ∈{0,1}          2 in-
+ance on the lattice while allowing anisotropic local kernels—                   dex the four dyadic offsets and letmu,v,δ∈{0,1}        indicate
+
+                                                                            5
+                     HiST: A Hierarchical Sparse Transformer for Cross-Modal Spatial Transcriptomics Modeling
+
+whether the corresponding child site is active. Then                               Table 1.Computational Efficiency and Scalability.We report
+                                                                                   throughput, measured as time per slide, and peak memory usage.
+        x(ℓ+1)u,v    = X         mu,v,δW (ℓ)                                       Memory is reported at themaximum feasible batch size    N  for
+                                             δ   x(ℓ)2u+δ          1,2v+δ           2,     (4)each method.  Parentheses report memory per 1k spots (GB/1k),
+                      δ∈{0,1}               2                                      normalized by the peak number of spots in trainingN.
+
+whereW            (ℓ)δ    are learned weights shared across lattice sites.              Method     Time (s/slide)     Peak Memory Usage (GB)
+                                                                                                      Train      Infer        Allocated          Reserved
+3.5.2. UNCOARSENINGSYNTHESIS                                                            ST-Net        6.51       2.02      4.72 (147.5)     8.39 (262.2)
+The inverse operator recovers features at levelℓ from level                             BLEEP       9.54       9.90      10.65 (83.2)     12.45 (97.3)
+ℓ+ 1   using an uncoarsening index mapping that records, for                            STFlow       2.94       0.76       11.94 (1.8)       46.37 (7.1)
+each parent site (u,v)∈M      (ℓ+1)   , the corresponding set of                        HiST  0.10       0.07        1.21 (0.3)         1.38 (0.4)
+active child sitesCu,v⊆M(ℓ)   . We employ a sparse patch-
+expanding operator that maps each parent token x(ℓ+1)u,v     back                  spatial details lost during coarsening, we employ a Lateral
+to its children locations inC u,v:                                                 Context Fusion operation. This mirrors the role of the Lapla-
+                                                                                   cian pyramid expansion in Eq. (6)    in App.B: the upsampled
+                 eX (ℓ)dec = Up(ℓ)  X (ℓ+1)dec  ,M (ℓ+1)    .                      pathway carries coarse information while the lateral features
+                                                                                   provide same-scale detail. We fuse the upsampled features
+This synthesis step restores the spatial resolution required                       with the cached encoder features:                                
+for fine-grained predictions.  In practice, we instantiate↑
+by first applying an MLP that expands channels by 4, and                                    Z(ℓ)    =     eX (ℓ)                ∥  X (ℓ)enc|       ,
+then applying a channel-to-space rearrangement, i.e., pixel                                                        {zdec|}                 {z}
+shuffle. Concretely, for each parent token,                                                             Upsampled coarse context    Lateral fine details
+                                                                                   where∥ denotes feature concatenation. The fused features
+                 zu,v = MLP(ℓ)  x(ℓ+1)u,v          ∈R   4d ,              (5)      are then processed by the refinement block:
+               {z u,v,δ}δ∈{0,1}               2 = reshape(z  u,v).
+                                                                                                          X (ℓ)dec = Φ(ℓ)  Z(ℓ)   ;C b    .
+and we scatter zu,v,δ to child coordinate (2u+δ          1,2v+δ         2),
+keeping only those children that lie inM    (ℓ)   .                                Finally, a linear head predicts log-expression bT.
+
+3.6. HiST Architecture                                                             3.7. Training objective
+We now assemble these operators into the full hierarchical                         To enforce geometric robustness, we leverage our continu-
+model.                                                                             ous field formulation by applying random planar transforms
+                                                                                   (e.g., rotation, shear) and random dropout to the coordinates
+3.6.1. INITIALIZATION                                                              sn during training.  The resulting transformed support   ˜M
+We initialize the slide calibration token as a learnable vector                    serves as the domain for all sparse operators. This strategy
+shared across slides,Cb =c    0∈R   1×d    .  During inference                     mirrors standard image augmentation, keeping the computa-
+and  training, Cb  is  updated  by  the  refinement  blocks  in                    tional footprint unchanged while preventing overfitting to
+Sec.3.4through attention over tissue tokens, producing a                           fixed orientations.
+slide-specific summary that conditions local representations.                      We train in log-expression space. LetT= log(Y+ 1)      , and
+                                                                                   let the model predict bT  at observed locations. We optimize
+3.6.2. HIERARCHICALENCODER                                                         the model using mean squared error, averaged over observed
+The encoder consists ofLstages. Each stageℓfirst applies                           sitesNand genesG:
+a stack of Monoscale Refinement Operators in Sec.3.4to                                                            X       bT[i,j]−T[i,j]        2.
+process featuresX (ℓ)    conditioned on Cb.  It then applies                                  Lmse =    1NG
+the Coarsening Analysis to produce the next level features                                                      (i,j)∈M
+X (ℓ+1)   . FeaturesX                (ℓ)enc are cached for lateral connections.
+3.6.3. HIERARCHICALDECODER                                                         4. Experiments
+The decoder reverses this process. Starting from the deepest                       4.1. Experimental Setup
+level, each stageℓ applies the Uncoarsening Synthesis op-                          Data and Protocols.We evaluate whole-slide H&E-to-
+erator↑ to features fromℓ+ 1  . To re-inject high-frequency                        ST prediction on a large-scale multi-organ benchmark with
+
+                                                                                6
+                   HiST: A Hierarchical Sparse Transformer for Cross-Modal Spatial Transcriptomics Modeling
+
+
+
+
+
+
+
+
+
+
+
+Figure 3.Scalability across spatial and output dimensions.From left to right, we plot train/spots, infer/spots, train/genes, and
+infer/genes; all axes are log-scale. All measurements are conducted on the same hardware.
+
+
+HEST (Jaume et al.,2024) spanning 11 datasets (Table2).                       Qualitatively, position-independent predictors capture local
+The benchmark also includes data across multiple ST plat-                     texture but have limited mechanisms to integrate long-range
+forms, including 10x Visium, 10x Xenium, and legacy Spa-                      tissue context, while STFlow models within-slide depen-
+tial Transcriptomics. For each dataset, we employ a strict                    dencies through iterative refinement with local interactions.
+4-fold cross-validation protocol where folds are split by                     HiST integrates multiscale context on the active tissue foot-
+slide ID. This ensures that all evaluation is performed on                    print via a sparse encoder–decoder hierarchy, keeping the
+unseen tissue sections that were not seen during training,                    dominant cost proportional to the number of observed loca-
+rigorously testing the model’s ability to generalize rather                   tions.
+than memorize. Furthermore, the benchmark spans datasets                     Where the accuracy gains come from.HiST improves
+from diverse sources with varying protocols, introducing                      prediction by combining local geometric correspondence
+significant domain heterogeneity that makes the task con-                     with rapid multiscale context integration:  sparse window
+siderably more challenging than single-source benchmarks.                     attention (with positional terms) captures local structure,
+Preprocessing and dataset composition details (including                      while dyadic coarsening/uncoarsening with skip connec-
+slide IDs) are provided in App.A.1.                                           tions expands receptive fields and fuses information across
+Baselines  and  Metrics.We  compare  HiST  against  ST-                       scales. Ablations confirm the contributions of these compo-
+Net (He et al.,2020), BLEEP (Xie et al.,2023), UNI (Chen                      nents and the slide calibration token, with consistent drops
+et al.,2024b), and STFlow (Huang et al.,2025). We focus                       when removing coordinate augmentation, positional terms,
+on STFlow as a representative scalable generative baseline,                   multiscale fusion, downsample–upsample transitions, or the
+as other diffusion-based methods like Stem (Zhu et al.,2025)                  calibration token (Table3).
+are computationally prohibitive for whole-slide evaluation
+withG=  2000    genes.  We optimize mean squared error                        4.3. Computational Efficiency and Scalability
+(MSE) in log-expression space and report Coefficient of                       Table1reports average training and inference time per slide,
+Determination (R2) and Pearson Correlation Coefficient                        along with peak memory usage. Figure3complements this
+(PCC). We also report per-slide wall-clock time and peak                      snapshot by evaluating scaling with the number of spots
+GPU  memory  (Table1).   Training  hyperparameters  and                       N  and the output dimensionG.  Since the maximum fea-
+hardware details are provided in App.A.                                       sible batch sizeN differs across methods, we additionally
+
+4.2. Comparison with Baselines                                                report memory per 1k spots to contextualize peak memory
+                                                                              numbers.
+We compare HiST to baselines spanning three paradigms for                    Where the efficiency comes from.HiST’s efficiency fol-
+H&E-to-ST inference: one-shot predictors, retrieval-based                     lows  from  its  sparse  operator  design:  window  attention
+models, and iterative generative models.  Table2summa-                        computes interactions only among tokens that co-occur in
+rizes performance across tissue types. Across datasets, HiST                  the same (shifted) window, and dyadic coarsening reduces
+attains the best or tied-bestR2 and PCC among the com-                        the number of active tokens by roughly 4×   per stage, so
+pared methods and achieves the best average performance.                      the total compute across scales is dominated by the finest
+On average, HiST improvesR2 from 0.27    to 0.34    (+0.07,                   resolutions.
++26%) and PCC from 0.54    to 0.59    (+0.05, +9%) compared
+to a recent strong spatially-aware baseline, STFlow. We note                  Predictive  performance–efficiency  trade-off.  Iterative
+that absolute values are modest: morphology only partially                    refinement and retrieval can improve modeling flexibility
+reflects the transcriptome and ST measurements are noisy                      but increase inference cost. As shown in Table1, STFlow
+and sparse, which imposes a practical ceiling on predictive                   requires 0.76    s/slide inference time with 46.37      GB peak re-
+accuracy.                                                                     served memory (7.1 GB/1k), while HiST runs in 0.07    s/slide
+
+
+                                                                          7
+                                            HiST: A Hierarchical Sparse Transformer for Cross-Modal Spatial Transcriptomics Modeling
+
+                   Table 2.Quantitative comparison across organs and datasets. Dataset sources are shown in parentheses. We report   R2 (↑) and Pearson
+                   Correlation Coefficient (PCC,↑) as mean± std over 4 cross-validation folds on the top 2,000 highly variable genes (HVGs) when
+                   available; for Lung (NCBI Geo), we use all 541 available genes. Non-positiveR  2 values are denoted as≤0.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                   Table 3.Component ablations on Brain (NCBI Geo).Each                                               trade-off when scaling retrieval.
+                   block ablates one HiST component while holding the others at
+                   their default setting.                                                                             Iterative  generative  models  require  multiple  refinement
+                                                                                                                      steps, so inference time scales with the number of steps.
+                   Setting                                 R              2↑            PCC↑                          Moreover, STFlow performs refinement directly in theG-
+                   Full model                                   0.228          ±0.13           0.542   ±0.18          dimensional gene space:  the intermediate states updated
+                   Coordinate Augmentation                                                                            across refinement steps areG-dimensional gene vectors, so
+                   None                                             0.149         ±0.16           0.500   ±0.18       per-step compute and activation memory scale withG. In
+                   Random Mirror Only                    0.153         ±0.17           0.503   ±0.18                  our benchmark withG= 2000   , STFlow reaches 46.37      GB
+                   Random Shear Only                      0.156         ±0.17           0.504   ±0.18                 peak reserved memory.
+                   Random Rotate Only                    0.176         ±0.16           0.508   ±0.18
+                   Random Drop Only                       0.184         ±0.15           0.526   ±0.19                 4.4. Ablation Studies
+                   Positional Encoding: Spatial Correspondence
+                   None                                             0.131         ±0.16           0.521   ±0.18       We ablate key components corresponding to HiST’s geomet-
+                   RoPE                                           0.153          ±0.14           0.522   ±0.17        ric and multiscale inductive biases. Specifically, we ablate
+                   ALiBi                                          0.132          ±0.16           0.522   ±0.18        coordinate augmentation and positional terms for spatial
+                   Skip Connections: Multi-scale Fusion                                                               correspondence (Sec.3.4), multiscale fusion (skip connec-
+                   None                                             0.197         ±0.10           0.527   ±0.19       tions and downsample–upsample transitions), and the slide
+                   Additive                                              0.213    ±0.14           0.536   ±0.20       calibration token.   Unless specified,  we keep the default
+                   Downsample-Upsample                                                                                settings and change one factor at a time. We report mean±
+                   None                                             0.213         ±0.15           0.517   ±0.18       std over four folds on Brain (NCBI Geo).
+                   Sparse Window Partition
+                   No shifted windows                          0.217      ±0.14           0.531   ±0.18               Geometric inductive biases.Coordinate-space augmen-
+                   Slide Calibration Token                                                                            tations perturb the measurement coordinates{s n} while
+                   None                                             0.185         ±0.17           0.509   ±0.18       keeping the patch-derived features{x n} fixed. The gains in
+                                                                                                                      Table3therefore suggest that HiST leverages spatial geome-
+                                                                                                                      try and relative arrangement through its lattice-indexed oper-
+                                                                                                                      ators, rather than relying solely on per-location appearance.
+                   with 1.38    GB peak reserved memory (0.4 GB/1k).  HiST                                            Consistently, removing relative positional terms degrades
+                   maintains strongR2 and PCC while substantially reducing                                            predictive performance; we also evaluate standard attention
+                   both runtime and memory (Table2).                                                                  positional schemes, RoPE and ALiBi (Su et al.,2024;Press
+                   BLEEP is retrieval-based and performs similarity search                                            et al.,2022), but they underperform our default positional
+                   against a reference bank in an embedding space at inference                                        terms (Table3).  We observe similar drops when remov-
+                   time. This introduces an additional cost component beyond                                          ing skip connections or disabling downsample–upsample
+                   a single forward pass: inference time scales with the number                                       transitions, which supports the value of multiscale fusion
+                   of query spots and the size of the reference bank, and the                                         (Table3).
+
+                   memory footprint scales with the bank unless approximate
+                   indexing is used. This creates a practical accuracy–latency
+Dataset                                   ST-Net                      BLEEP                        UNI                        STFlow                       HiST
+                                    R2 (↑)       PCC (↑)  R       2 (↑)       PCC (↑)  R       2 (↑)       PCC (↑)  R       2 (↑)       PCC (↑)  R       2 (↑)      PCC (↑)8
+Brain (NCBI Geo)      0.22              ±0.14       0.50±0.16       0.03 ±0.19       0.46 ±0.16       0.14 ±0.09       0.48 ±0.12        0.23±0.11       0.50±0.08        0.23±0.14        0.54±0.19
+Colon (Other)        0.04    ±0.03       0.31 ±0.05       0.10 ±0.10       0.34 ±0.17       0.02 ±0.01       0.19 ±0.09       0.11   ±0.06       0.42±0.06        0.31±0.15        0.55±0.15
+Heart (Other)   ≤0       0.09    ±0.10       0.20                      ±0.06       0.49 ±0.04       0.06 ±0.04       0.27 ±0.08       0.18 ±0.08       0.50±0.04        0.22±0.09        0.52±0.08
+Kidney (NCBI Geo)    0.12   ±0.02       0.39 ±0.05       0.13 ±0.06       0.40        ±0.05       0.14±0.04       0.40±0.06       0.11 ±0.04        0.43±0.04        0.19±0.08        0.43±0.10
+Liver (NCBI Geo)      0.34   ±0.18       0.65          ±0.18       0.32 ±0.20       0.58 ±0.13       0.22 ±0.06       0.55 ±0.10       0.39±0.25       0.62 ±0.25        0.41±0.22        0.66±0.21
+Lung (Other)         0.02    ±0.02       0.30 ±0.08       0.26 ±0.15       0.60 ±0.18       0.02 ±0.01       0.38 ±0.19       0.37   ±0.12       0.61±0.10        0.38±0.17        0.65±0.12
+Prostate (Mendeley Data)≤0       0.16    ±0.13       0.21 ±0.10       0.50 ±0.19       0.10 ±0.05       0.40 ±0.10       0.31        ±0.15       0.57±0.17        0.35±0.16        0.61±0.17
+Skin (NCBI Geo)   ≤0       0.15   ±0.17       0.21                     ±0.02       0.49 ±0.03       0.09 ±0.03       0.33 ±0.06       0.21±0.03       0.51±0.02        0.31±0.10        0.57±0.07
+Uterus (NCBI Geo)    0.11               ±0.09       0.40±0.08       0.01 ±0.10       0.32 ±0.13       0.09 ±0.08       0.32 ±0.12       0.11±0.08       0.34 ±0.12        0.13±0.09        0.41±0.11
+Breast (Spatial Research)0.17     ±0.04       0.45 ±0.08       0.55    ±0.09       0.75±0.05       0.25 ±0.12       0.52 ±0.13       0.44 ±0.08       0.68 ±0.05        0.69±0.06        0.84±0.04
+Lung (NCBI Geo)      0.49   ±0.05       0.71 ±0.04       0.54 ±0.03       0.74        ±0.02       0.41 ±0.03       0.66 ±0.03       0.55±0.04        0.75±0.02        0.56±0.07        0.75±0.05
+Average                0.14   ±0.16       0.37 ±0.20       0.23 ±0.19       0.52 ±0.14       0.14 ±0.12       0.41 ±0.14       0.27  ±0.14       0.54±0.13        0.34±0.17        0.59±0.13
+                   HiST: A Hierarchical Sparse Transformer for Cross-Modal Spatial Transcriptomics Modeling
+5. Limitations and Future Directions                                         harm.  Model performance may vary across tissue types,
+Limitations.HiST  is  designed  for  supervised  H&E-to-                     cohorts, and acquisition settings; spurious correlations and
+ST inference at measured locations, and several limitations                  batch effects could also amplify biases if deployment pop-
+follow  from  this setting.   First,  training relies  on paired             ulations differ from training data. We therefore view these
+histology–ST data with consistent preprocessing and nor-                     methods as complementary tools for research workflows
+malization. The slide calibration token is intended to mod-                  and emphasize the need for careful evaluation, transparency
+erate, not eliminate, the effect of acquisition variation; dis-              about uncertainty, and responsible use.
+
+tribution shift across cohorts, scanners, stains, or protocols               References
+may still degrade performance.  Second, the sparse lattice
+representation depends on the choice of discretization reso-                 Andersson,  A.,  Larsson,  L.,  Stenbeck,  L.,  Salm´en,  F.,
+lution and on accurate coordinate registration between the                      Ehinger, A., Wu, S. Z., Al-Eryani, G., Roden, D., Swar-
+histology image and ST locations. Misalignment or system-                       brick, A., Borg,  ˚A., et al. Spatial deconvolution of her2-
+atic missingness could affect neighborhood structure and                        positive breast cancer delineates tumor-associated cell
+prediction quality. Third, current absolute accuracy is not                     type interactions.Nature communications, 12(1):6012,
+yet sufficient for fine-grained clinical use; downstream clini-                 2021.
+cal validation would require larger and more diverse paired
+ST cohorts than are publicly available today. Fourth, predic-                Andrews, T. S., Nakib, D., Perciani, C. T., Ma, X. Z., Liu,
+tive accuracy is uneven across granularities.  ST measure-                      L., Winter, E., Camat, D., Chung, S. W., Lumanto, P.,
+ments are sparse and zero-inflated at the level of individual                   Manuel, J., et al. Single-cell, single-nucleus, and spatial
+genes, so per-gene rank-level recovery remains constrained                      transcriptomics characterization of the immunological
+for many low-expression genes, while coarse-grained spa-                        landscape in the healthy and psc human liver.Journal of
+tial organization (e.g., domain-level structure recovered by                    Hepatology, 80(5):730–743, 2024.
+downstream clustering) is captured more reliably. Use cases                  Aung, T. N., Monkman, J., Warrell, J., Vathiotis, I., Bates,
+that depend on accurate gene-by-gene profiles should be                         K. M., Gavrielatou, N., Trontzas, I. P., Tan, C. W., Fer-
+interpreted with this granularity gap in mind.                                  nandez, A. I., Moutafi, M., et al.  Spatial signatures for
+Future Directions.The hierarchical sparse backbone also                         predicting immunotherapy outcomes using multi-omics
+opens several directions for future work. First, uncertainty                    in non-small cell lung cancer. Nature Genetics, 57(10):
+quantification could be incorporated via test-time comput-                      2482–2493, 2025.
+ing or ensembling strategies such as Monte Carlo dropout,
+which are particularly feasible given the efficiency of our                  Barrozo, E. R., Seferovic, M. D., Castro, E. C., Major, A. M.,
+inference pipeline.  Second, by continuing the uncoarsen-                       Moorshead, D. N., Jochum, M. D., Rojas, R. F., Shope,
+ing or upsampling process, HiST could potentially support                       C. D., and Aagaard, K. M. Sars-cov-2 niches in human
+slide-level super-resolution and predict expression maps                        placenta revealed by spatial transcriptomics.Med, 4(9):
+at resolutions finer than the training data.  Third, HiST’s                     612–634, 2023.
+efficiency makes it a suitable backbone for scaling to pan-                  Birk,  S.,  Bonafonte-Pard`as,  I.,  Feriz,  A. M.,  Boxall,  A.,
+cancer foundation models or supporting computationally                          Agirre, E., Memi, F., Maguza, A., Yadav, A., Armingol,
+intensive iterative generative paradigms on whole slides.                       E., Fan, R., et al.  Quantitative characterization of cell
+Acknowledgment                                                                  niches in spatially resolved omics data.Nature Genetics,
+                                                                                pp. 1–13, 2025.
+This study is supported by the Department of Defense grant                   Canela,  V. H.,  Bowen,  W.  S.,  Ferreira,  R. M.,  Syed,  F.,
+HT9425-23-1-0267.                                                               Lingeman, J. E., Sabo, A. R., Barwinska, D., Winfree, S.,
+                                                                                Lake, B. B., Cheng, Y.-H., et al.  A spatially anchored
+Impact Statement                                                                transcriptomic atlas of the human kidney papilla identifies
+This paper develops models that predict spatial gene ex-                        significant immune injury in patients with stone disease.
+pression at measured locations from H&E histology and ST                        Nature communications, 14(1):4140, 2023.
+coordinates. If reliable, such models could reduce the cost                  Chen, B., Cherie’R, S., McKinley, E. T., Simmons, A. J.,
+of exploratory analyses, support hypothesis generation, and                     Ramirez-Solano, M. A., Zhu, X., Markham, N. O., Heiser,
+help scale studies where sequencing every slide is imprac-                      C. N., Vega, P. N., Rolong, A., et al.  Differential pre-
+tical. However, predicted expression is an inference rather                     malignant programs and microenvironment chart distinct
+than a measurement, and using these predictions for clinical                    paths to malignancy in human colorectal polyps.Cell,
+decision-making without rigorous validation may introduce                       184(26):6262–6280, 2021.
+
+                                                                          9
+                   HiST: A Hierarchical Sparse Transformer for Cross-Modal Spatial Transcriptomics Modeling
+
+Chen, J., Zhou, M., Wu, W., Zhang, J., Li, Y., and Li, D.                      J. Integrating spatial gene expression and breast tumour
+   Stimage-1k4m: A histopathology image-gene expression                        morphology via deep learning.Nature biomedical engi-
+   dataset for spatial transcriptomics.Advances in Neural In-                  neering, 4(8):827–834, 2020.
+   formation Processing Systems, 37:35796–35823, 2024a.                     Hoque, M. Z., Keskinarkaus, A., Nyberg, P., and Sepp¨anen,
+
+Chen, R. J., Ding, T., Lu, M. Y., Williamson, D. F., Jaume,                    T.  Stain normalization methods for histopathology im-
+   G., Song, A. H., Chen, B., Zhang, A., Shao, D., Shaban,                     age analysis: A comprehensive review and experimental
+   M., et al. Towards a general-purpose foundation model                       comparison.Information Fusion, 102:101997, 2024.
+   for computational pathology.  Nature medicine, 30(3):                    Howard, F. M., Dolezal, J., Kochanny, S., Schulte, J., Chen,
+   850–862, 2024b.                                                             H., Heij, L., Huo, D., Nanda, R., Olopade, O. I., Kather,
+
+Dip, S. A. and Zhang, L. Nicheagent: Llm-guided zero-shot                      J. N., et al.  The impact of site-specific digital histology
+   niche identification for spatial transcriptomics.bioRxiv,                   signatures  on  deep  learning  model  accuracy  and  bias.
+   pp. 2025–12, 2025.                                                          Nature communications, 12(1):4423, 2021.
+
+Donson,  A.,  Fu,  R.,  Norris,  g.,  Willard,  N.,  Griesinger,            Hu, J., Li, X., Coleman, K., Schroeder, A., Ma, N., Irwin,
+  A., Riemondy, K., Amani, V., Grimaldo, E., Harris, F.,                       D. J., Lee, E. B., Shinohara, R. T., and Li, M.  Spagcn:
+   Hankinson, T., Mitra, S., Ritzmann, t., Grundy, R., and                     Integrating gene expression, spatial location and histology
+   Foreman, N.   Epen-29. spatial transcriptomic analysis                      to identify spatial domains and spatially variable genes
+   of ependymoma implicates unresolved wound healing                           by graph convolutional network.Nature methods, 18(11):
+   as a driver of tumor progression.Neuro-Oncology, 24                         1342–1351, 2021.
+  (Supplement      1):i45–i45, 06 2022. ISSN 1522-8517. doi:                Huang, T., Liu, T., Babadi, M., Jin, W., and Ying, R. Scal-
+  10.1093/neuonc/noac079.165.    URL https://doi.                              able  generation  of  spatial  transcriptomics  from  histol-
+   org/10.1093/neuonc/noac079.165.                                             ogy  images  via  whole-slide  flow  matching.   InForty-
+
+Dunn, C., Brettle, D., Cockroft, M., Keating, E., Revie, C.,                   second International Conference on Machine Learning,
+   and Treanor, D. Quantitative assessment of h&e staining                     2025.  URL https://openreview.net/forum?
+   for pathology: development and clinical evaluation of a                     id=Ossg1IbHDT.
+   novel system.Diagnostic Pathology, 19(1):42, 2024.                       Jaume, G., Doucet, P., Song, A. H., Lu, M. Y., P´erez, C. A.,
+
+Erickson, A., He, M., Berglund, E., Marklund, M., Mirza-                       Wagner,  S. J.,  Vaidya,  A. J.,  Chen,  R. J.,  Williamson,
+   zadeh,  R.,  Schultz,  N.,  Kvastad,  L.,  Andersson,  A.,                  D. F., Kim, A., and Mahmood, F.  HEST-1k: A dataset
+   Bergenstr˚ahle, L., Bergenstr˚ahle, J., et al.  Spatially re-               for spatial transcriptomics and histology image analy-
+   solved clonal copy number alterations in benign and ma-                     sis.  InThe Thirty-eight Conference on Neural Informa-
+   lignant tissue.Nature, 608(7922):360–367, 2022.                             tion Processing Systems Datasets and Benchmarks Track,
+Ferreira, R. M., Sabo, A. R., Winfree, S., Collins, K. S.,                     2024.  URL https://openreview.net/forum?
+  Janosevic, D., Gulbronson, C. J., Cheng, Y.-H., Casbon,                      id=mlhFJE7PKo.
+
+   L., Barwinska, D., Ferkowicz, M. J., et al. Integration of               Jia,  Y.,  Liu,  J.,  Chen,  L.,  Zhao,  T.,  and  Wang,  Y.   Thi-
+   spatial and single-cell transcriptomics localizes epithelial                togene:  a deep learning method for predicting spatial
+   cell–immune cross-talk in kidney injury. JCI insight, 6                     transcriptomics from histological images.Briefings in
+  (12):e147703, 2021.                                                          Bioinformatics, 25(1), 2023.
+
+Giraud, J., Chalopin, D., Ramel, E., Boyer, T., Zouine, A.,                 Kanemaru, K., Cranley, J., Muraro, D., Miranda, A. M., Ho,
+   Derieppe, M.-A., Larmonier, N., Adotevi, O., Bail, B. L.,                   S. Y., Wilbrey-Clark, A., Patrick Pett, J., Polanski, K.,
+   Blanc, J.-F., et al.  Trem1+ regulatory myeloid cells ex-                   Richardson, L., Litvinukova, M., et al. Spatially resolved
+   pand in steatohepatitis-hcc and associate with poor prog-                   multiomics of human cardiac niches.Nature, 619(7971):
+   nosis and therapeutic resistance to immune checkpoint                       801–810, 2023.
+   blockade.bioRxiv, pp. 2022–11, 2022.                                     Kong, Z., Qiu, M., Boesen, J., Lin, X., Yun, S., Chen, T.,
+
+Hatamizadeh, A. and Kautz, J.  Mambavision:  A hybrid                          Kellis, M., and Zitnik, M.  Spatia:  Multimodal model
+   mamba-transformer vision backbone. InProceedings of                         for prediction and generation of spatial cell phenotypes.
+   the Computer Vision and Pattern Recognition Conference,                     ArXiv, pp. arXiv–2507, 2025.
+   pp. 25261–25270, 2025.                                                   Kueckelhaus, J., Frerich, S., Kada-Benotmane, J., Koupour-
+
+He, B., Bergenstr˚ahle, L., Stenbeck, L., Abid, A., Anders-                    tidou, C., Ninkovic, J., Dichgans, M., Beck, J., Schnell,
+   son, A., Borg,  ˚A., Maaskola, J., Lundeberg, J., and Zou,                  O., and Heiland, D. H.   Inferring histology-associated
+
+                                                                        10
+                   HiST: A Hierarchical Sparse Transformer for Cross-Modal Spatial Transcriptomics Modeling
+
+   gene expression gradients in spatial transcriptomic stud-                 Millard,  N.,  Chen,  J.  H.,  Palshikar,  M.  G.,  Pelka,  K.,
+   ies.Nature Communications, 15(1):7280, 2024.                                 Spurrell, M., Price, C., He, J., Hacohen, N., Raychaud-
+                                                                                huri, S., and Korsunsky, I.  Batch correcting single-cell
+Lake, B. B., Menon, R., Winfree, S., Hu, Q., Melo Ferreira,                     spatial  transcriptomics  count  data  with  crescendo  im-
+   R., Kalhor, K., Barwinska, D., Otto, E. A., Ferkowicz,                       proves visualization and detection of spatial gene patterns.
+   M., Diep, D., et al.  An atlas of healthy and injured cell                   Genome biology, 26(1):36, 2025.
+   states and niches in the human kidney.Nature, 619(7970):                  Mirzazadeh, R., Andrusivova, Z., Larsson, L., Newton, P. T.,
+   585–594, 2023.                                                               Galicia, L. A., Abalo, X. M., Avijgan, M., Kvastad, L.,
+
+Li, X. L. and Liang, P. Prefix-tuning: Optimizing continu-                      Denadai-Souza, A., Stakenborg, N., et al.  Spatially re-
+   ous prompts for generation. In Zong, C., Xia, F., Li, W.,                    solved transcriptomic profiling of degraded and challeng-
+   and Navigli, R. (eds.),Proceedings of the 59th Annual                        ing fresh frozen samples.Nature Communications, 14(1):
+  Meeting of the Association for Computational Linguistics                      509, 2023.
+   and  the  11th  International  Joint  Conference  on  Natu-               Moses,  L. and Pachter,  L.   Museum of spatial transcrip-
+   ral Language Processing (Volume 1: Long Papers), pp.                         tomics.Nature methods, 19(5):534–546, 2022.
+  4582–4597, Online, August 2021. Association for Com-
+   putational Linguistics. doi: 10.18653/v1/2021.acl-long.                   Press, O., Smith, N., and Lewis, M.  Train short, test long:
+   353.   URL https://aclanthology.org/2021.                                    Attention with linear biases enables input length extrapo-
+   acl-long.353/.                                                               lation. InInternational Conference on Learning Represen-
+Lin, T.-Y., Doll´ar, P., Girshick, R., He, K., Hariharan, B.,                   tations,  2022.   URL          https://openreview.net/
+   and Belongie, S.  Feature pyramid networks for object                        forum?id=R8sQPpGCv0.
+   detection.   InProceedings of the IEEE conference on                      Ronneberger, O., Fischer, P., and Brox, T. U-net: Convolu-
+   computer vision and pattern recognition, pp. 2117–2125,                      tional networks for biomedical image segmentation. InIn-
+   2017.                                                                        ternational Conference on Medical image computing and
+                                                                                computer-assisted intervention, pp. 234–241. Springer,
+Liu, Z., Lin, Y., Cao, Y., Hu, H., Wei, Y., Zhang, Z., Lin,                     2015.
+   S., and Guo, B.  Swin transformer:  Hierarchical vision                   Sch¨abitz,  A.,  Hillig,  C.,  Mubarak,  M.,  Jargosch,  M.,
+   transformer using shifted windows. InProceedings of the                      Farnoud, A., Scala, E., Kurzen, N., Pilz, A. C., Bhalla,
+  IEEE/CVF international conference on computer vision,
+   pp. 10012–10022, 2021.                                                       N., Thomas, J., et al.  Spatial transcriptomics landscape
+                                                                                of lesions from non-communicable inflammatory skin
+Luo, W., Li, Y., Urtasun, R., and Zemel, R. Understanding                       diseases.Nature Communications, 13(1):7729, 2022.
+   the effective receptive field in deep convolutional neural                Schmauch,  B.,  Romagnoni,  A.,  Pronier,  E.,  Saillard,  C.,
+   networks. In Lee, D., Sugiyama, M., Luxburg, U., Guyon,                      Maill´e, P., Calderaro, J., Kamoun, A., Sefta, M., Toldo,
+   I., and Garnett, R. (eds.),Advances in Neural Information                    S., Zaslavskiy, M., et al. A deep learning model to predict
+  Processing Systems, volume 29. Curran Associates, Inc.,                       rna-seq expression of tumours from whole slide images.
+   2016.     URL  https://proceedings.neurips.                                  Nature communications, 11(1):3877, 2020.
+   cc/paper_files/paper/2016/file/
+   c8067ad1937f728f51288b3eb986afaa-Paper.                                   Schmitt,  M.,  Maron,  R.  C.,  Hekler,  A.,  Stenzinger,  A.,
+   pdf.                                                                         Hauschild,  A.,  Weichenthal,  M.,  Tiemann,  M.,  Krahl,
+Madissoon, E., Oliver, A. J., Kleshchevnikov, V., Wilbrey-                      D., Kutzner, H., Utikal, J. S., et al.   Hidden variables
+   Clark,  A.,  Polanski,  K.,  Richoz,  N.,  Ribeiro Orsi,  A.,                in deep learning digital pathology and their potential to
+   Mamanova, L., Bolt, L., Elmentaite, R., et al. A spatially                   cause batch effects: prediction model study. Journal of
+   resolved atlas of the human lung characterizes a gland-                      medical Internet research, 23(2):e23436, 2021.
+   associated immune niche.Nature genetics, 55(1):66–77,                     Smith, K. D., Prince, D. K., MacDonald, J. W., Bammler,
+   2023.                                                                        T. K., and Akilesh, S.  Challenges and opportunities for
+Marx, V. Method of the year: spatially resolved transcrip-                      the clinical translation of spatial transcriptomics technolo-
+   tomics.Nature methods, 18(1):9–14, 2021.                                     gies.Glomerular Diseases, 4(1):49–63, 2024.
+                                                                             St˚ahl,  P.  L.,  Salm´en,  F.,  Vickovic,  S.,  Lundmark,  A.,
+Matchett, K., Wilson-Kanamori, J., Portman, J., Kapourani,                      Navarro, J. F., Magnusson, J., Giacomello, S., Asp, M.,
+   C., Fercoq, F., May, S., Zajdel, E., Beltran, M., Suther-                   Westholm, J. O., Huss, M., et al. Visualization and analy-
+   land, E., Mackey, J., et al. Multimodal decoding of human                    sis of gene expression in tissue sections by spatial tran-
+   liver regeneration.Nature, 630(8015):158–165, 2024.                          scriptomics.Science, 353(6294):78–82, 2016.
+
+                                                                        11
+                   HiST: A Hierarchical Sparse Transformer for Cross-Modal Spatial Transcriptomics Modeling
+
+Su,  J.,  Ahmed,  M.,  Lu,  Y.,  Pan,  S.,  Bo,  W.,  and Liu,  Y.           Xie,  R.,  Pang,  K.,  Chung,  S.,  Perciani,  C.,  MacParland,
+   Roformer:  Enhanced transformer with rotary position                         S.,  Wang,  B.,  and Bader,  G.   Spatially resolved gene
+   embedding.Neurocomputing, 568:127063, 2024.                                  expression prediction from histology images via bi-modal
+                                                                                contrastive learning.Advances in Neural Information
+Tian, R., Xue, Z., Chen, Y., Qi, Y., Zhang, J., Yuan, J., Ruan,                 Processing Systems, 36:70626–70637, 2023.
+   D., Lin, J., Liu, J., Wang, D., et al.   Integrating cross-               Xu, H., Usuyama, N., Bagga, J., Zhang, S., Rao, R., Nau-
+   sample and cross-modal data for spatial transcriptomics                      mann, T., Wong, C., Gero, Z., Gonz´alez, J., Gu, Y., et al.
+   and metabolomics with spatialmeta.Nature Communica-                          A whole-slide foundation model for digital pathology
+   tions, 16(1):8855, 2025.                                                     from real-world data.Nature, 630(8015):181–188, 2024.
+
+Vahadane, A., Peng, T., Sethi, A., Albarqouni, S., Wang,                     Zeng, Y., Wei, Z., Yu, W., Yin, R., Yuan, Y., Li, B., Tang, Z.,
+   L.,  Baust,  M.,  Steiger,  K.,  Schlitter,  A.  M.,  Esposito,              Lu, Y., and Yang, Y.  Spatial transcriptomics prediction
+   I., and Navab, N. Structure-preserving color normaliza-                      from histology jointly through transformer and graph neu-
+   tion and sparse stain separation for histological images.                    ral networks.Briefings in Bioinformatics, 23(5):bbac297,
+   IEEE transactions on medical imaging, 35(8):1962–1971,                       2022.
+   2016.
+Villacampa, E. G., Larsson, L., Mirzazadeh, R., Kvastad,                     Zhao, E., Stone, M. R., Ren, X., Guenthoer, J., Smythe,
+   L., Andersson, A., Mollbrink, A., Kokaraki, G., Monteil,                     K. S., Pulliam, T., Williams, S. R., Uytingco, C. R., Tay-
+  V., Schultz, N., Appelberg, K. S., et al.  Genome-wide                        lor, S. E., Nghiem, P., et al.  Spatial transcriptomics at
+   spatial expression profiling in formalin-fixed tissues.Cell                  subspot resolution with bayesspace.Nature biotechnol-
+  Genomics, 1(3), 2021.                                                         ogy, 39(11):1375–1384, 2021.
+
+                                                                             Zhu,  S.,  Zhu,  Y.,  Tao,  M.,  and Qiu,  P.   Diffusion gener-
+Walker, B. L., Cang, Z., Ren, H., Bourgain-Chang, E., and                       ative  modeling  for  spatially  resolved  gene  expression
+   Nie, Q. Deciphering tissue structure and function using                      inference  from  histology  images.    InThe  Thirteenth
+   spatial transcriptomics.Communications biology, 5(1):                        International Conference on Learning Representations,
+   220, 2022.                                                                   2025.  URL https://openreview.net/forum?
+                                                                                id=FtjLUHyZAO.
+Wang,  Q.,  Chen,  W.-j.,  Su,  J.,  Wang,  G.,  and  Song,  Q.
+   Heclip: histology-enhanced contrastive learning for im-
+   putation of transcriptomics profiles.Bioinformatics, pp.
+   btaf363, 2025.
+
+Woo, S., Debnath, S., Hu, R., Chen, X., Liu, Z., Kweon,
+   I. S., and Xie, S. Convnext v2: Co-designing and scaling
+   convnets with masked autoencoders.  InProceedings of
+   the IEEE/CVF Conference on Computer Vision and Pat-
+   tern Recognition (CVPR), pp. 16133–16142, June 2023.
+
+Wu, W., Gao, C., DiPalma, J., Vosoughi, S., and Hassanpour,
+   S. Improving representation learning for histopathologic
+   images with cluster constraints.  InProceedings of the
+   IEEE/CVF International Conference on Computer Vision,
+   pp. 21404–21414, 2023.
+
+Wu, W., Diao, X., Zhang, C., Gao, C., Xu, X., Li, S., and
+   Gui, J.   Learning spatial-preserving hierarchical repre-
+   sentations for digital pathology, 2026a.  URL https:
+  //arxiv.org/abs/2406.09333.
+
+Wu,  W.,  Xu,  X.,  Gao,  C.,  Diao,  X.,  Li,  S.,  and  Gui,  J.
+   Exploiting label-independent regularization from spatial
+   patterns for whole slide image analysis. InProceedings
+   of the IEEE/CVF Winter Conference on Applications of
+  Computer Vision, pp. 8639–8649, 2026b.
+
+                                                                        12
+                    HiST: A Hierarchical Sparse Transformer for Cross-Modal Spatial Transcriptomics Modeling
+A. Implementation Details
+A.1. HEST-1k benchmark details
+We follow the preprocessing and evaluation pipeline provided by HEST (Jaume et al.,2024). Our benchmark includes data
+across multiple ST platforms, including 10x Visium, 10x Xenium, and legacy Spatial Transcriptomics.
+
+Preprocessing and evaluation.Gene filtering/normalization, patch extraction, and coordinate alignment follow the default
+HEST-1k preprocessing pipeline unless stated otherwise. We evaluate on the top 2,000 highly variable genes (HVGs) and
+report Coefficient of Determination (R2) and Pearson Correlation Coefficient (PCC) as mean± std over 4 cross-validation
+folds. All metrics are computed using the benchmark’s reporting script under the default settings. Unless stated otherwise,
+we operate on precomputed patch embeddings and apply coordinate-only augmentations without re-encoding image patches.
+
+Cross-dataset harmonization.When training or evaluating across multiple sources,  we ensure that molecular and
+morphology measurements are paired and represented in a consistent feature space. We (i) harmonize gene identifiers by
+stripping dataset-specific prefixes/version suffixes and mapping Ensembl IDs to gene symbols when needed, (ii) aggregate
+duplicated genes/barcodes by summation, (iii) restrict the gene space to the shared set across the slides involved and reindex
+each slide accordingly, and (iv) match spots between the expression matrix and patch data by barcode, keeping only the
+intersection for downstream processing.
+
+                                          Table 4.HEST-1k slide IDs for the datasets used in Table2.
+
+  Dataset                                  Slide IDs (#slides)
+  Brain (NCBI GEO)               NCBI628–NCBI641 (14)
+  Colon (Other)                        MISC33–MISC73 (41)
+  Heart (Other)                         MISC101–MISC136, MISC138–MISC142 (41)
+  Kidney (NCBI GEO)            NCBI538–NCBI540, NCBI562–NCBI568, NCBI599, NCBI692–NCBI714 (34)
+  Liver (NCBI GEO)               NCBI642–NCBI643, NCBI672–NCBI675, NCBI826–NCBI833 (14)
+  Lung (Other)                         MISC13–MISC32 (20)
+  Prostate (Mendeley Data)     MEND59–MEND62, MEND139–MEND154, MEND156–MEND162 (27)
+  Skin (NCBI GEO)                 NCBI460–NCBI498, NCBI503–NCBI510, NCBI515–NCBI526 (59)
+  Uterus (NCBI GEO)             NCBI573–NCBI576, NCBI811–NCBI821 (15)
+  Breast (Spatial Research)      SPA51–SPA154 (104)
+  Lung (NCBI GEO)               NCBI534–NCBI537 (4)
+
+
+Dataset references.Dataset sources include Brain (Donson et al.,2022),  Kidney (Lake et al.,2023;Canela et al.,
+2023;Villacampa et al.,2021;Ferreira et al.,2021), Liver (Matchett et al.,2024;Andrews et al.,2024;Giraud et al.,
+2022), Skin (Sch          ¨abitz et al.,2022), Uterus (Barrozo et al.,2023), and Lung (Madissoon et al.,2023) from NCBI GEO;
+Prostate (Erickson et al.,2022;Mirzazadeh et al.,2023) from Mendeley Data; Breast (He et al.,2020;Andersson et al.,
+2021) from Spatial Research; and Colon (Chen et al.,2021), Heart (Kanemaru et al.,2023), and Lung (Madissoon et al.,
+2023) from other repositories.
+
+A.2. Sparse lattice representation
+We store active tissue sitesM={(i     n,jn)} Nn=1   as an index list and maintain a feature tableX∈R   N×C      aligned with this
+list. This decouples computation from the dense bounding boxH′×W ′ and ensures that the dominant cost scales with the
+number of observed sites and their local neighborhood occupancy. When lattice operators require neighborhood grouping,
+we additionally build anindex map  φ:L→{1,...,N}∪{0}                over the tight lattice bounding box, storing the token id at
+each occupied site and 0 for empty sites. This map serves as a lightweight lookup table for forming sparse local interaction
+sets without introducing background tokens into attention.
+
+A.3. Window partitioning on the active set
+For windowed attention at scaleℓ, tokens interact within local windows. Conceptually, each active site (i,j)∈M     (ℓ)    is
+assigned to a window key by integer division; in practice, we realize window partitioning via scatter/gather operations on an
+integer index map. We use windows of side length 2w   and stride 2w  , and we optionally apply a shifted partition with offset
+
+                                                                          13
+                     HiST: A Hierarchical Sparse Transformer for Cross-Modal Spatial Transcriptomics Modeling
+
+Algorithm 1Build a sparse window rulebook from an index map (vectorized; high level)
+Require:Active sitesM            (ℓ)   , window half-sizew, optional shift offsets
+Ensure:RulebookE(and relative offsets) for window attention
+ 1:φ   (ℓ) ←ScatterIndexMap(M                                         (ℓ)   ){lookup table over the tight bounding box; 0 for empty}
+ 2:W←ExtractWindows(φ                   (ℓ) ,w,s){batched window extraction; keep non-empty}
+ 3:Z←Flatten(W){token-id vectors per window}
+ 4:E←PairAndFilter(Z){broadcast pairs and mask out0entries and self-pairs}
+ 5:E←Dedup(E)and compute(∆i,∆j){optional}
+ 6:(E,∆i,∆j)
+
+
+Algorithm 2Dyadic coarsening and MLP-based uncoarsening (vectorized; high level)
+Require:Active sitesM            (ℓ)    and aligned featuresX               (ℓ) ∈R N×d
+Ensure:Parent sitesM            (ℓ+1)   , coarsened featuresX               (ℓ+1)   , upsampled features eX(ℓ)
+ 1:{Coarsen: gather up to four children per2×2parent cell and aggregate}
+ 2:P←⌊M      (ℓ) /2⌋{parent coordinates, vectorized}
+ 3:(M     (ℓ+1) ,π)←UniqueWithInverse(P){unique parents and child→parent map}
+ 4:σ←DyadicSlot(M                            (ℓ)   )∈{1,2,3,4}{child slot within each parent cell}
+ 5:C←ScatterToSlots(X                         (ℓ) ,π,σ){C∈R    |M(ℓ+1) |×4×d  }
+ 6:X    (ℓ+1) ←ψ     (ℓ)↓  (C){aggregate up to four children}
+ 7:{Uncoarsen: expand parent channels and reshape into child slots, then scatter/gather to active children}
+ 8:U←reshape(MLP           (ℓ)   (X  (ℓ+1)   ))∈R  |M(ℓ+1) |×4×d
+ 9: eX(ℓ) ←GatherFromSlots(U,π,σ){scatter/gather back to active child sites}
+
+
+
+w along both axes to enable cross-window exchange. The partitioning induces a sparseinteraction listof token pairs within
+each (shifted) window, and attention is computed only over these pairs via batched gather/scatter. In our implementation, we
+first build an integer index map as a lookup table, and then generate a rulebook (interaction list) from it using GPU tensor
+primitives. Attention is evaluated by batched gather/scatter along this rulebook, and the same rulebook can be shared across
+attention layers operating at the same scale.  Relative positional bias terms are looked up by the relative offset (∆i,∆j)
+within a window, matching Eq. (3).
+
+A.4. Coarsening and uncoarsening
+The coarsening operator maps each active site (i,j)∈M     (ℓ)    to a parent index (⌊i/2⌋,⌊j/2⌋)∈M                        (ℓ+1)    and groups up
+to four children per parent.  For each parent, we concatenate its child features in a canonical order and apply a learned
+projection, as in Sec.3.
+The uncoarsening operator performs the inverse mapping by expanding each parent token into child tokens and scattering
+them to the corresponding active child sites. This produces the upsampled feature field eX (ℓ)    used in the decoder before
+lateral fusion.
+
+A.5. Lateral fusion
+At each decoder level, we concatenate the upsampled features with cached encoder features at the same lattice resolution
+and pass the fused tensor through the refinement block, as in Sec.3.6.
+
+A.6. Coordinate augmentation and integer-grid mapping
+During training, we apply coordinate-only augmentation to promote geometric robustness while keeping the patch encoder
+fixed when using precomputed patch embeddings. We randomly reflect, shear, and rotate the 2D coordinate set around its
+centroid, optionally drop a random subset of spots, translate the result so the minimum coordinate is at the origin, and map
+transformed coordinates to a collision-free integer grid. Concretely, we round coordinates to nearby lattice sites and resolve
+collisions by assigning the nearest available free lattice site, yielding integer indices suitable for sparse lattice operators.
+
+                                                                                 14
+                    HiST: A Hierarchical Sparse Transformer for Cross-Modal Spatial Transcriptomics Modeling
+
+A.7. Default configuration used in experiments
+Unless otherwise specified, experiments use the following non-trivial settings from the default configuration. We optimize
+mean squared error (MSE)in log-expression space and train for 100 epochs using AdamW (learning rate           10−4   , weight
+decay 10−4   ) with cosine annealing to zero. We useone slide per batchand operate on precomputed patch embeddings
+by default. This enables efficient on-the-fly coordinate-only augmentations without re-encoding image patches. We apply
+coordinate augmentations with a cosine strength schedule that decays from 1.0 to 0.2 over training: mirror/shear/rotate are
+enabled with maximum shear angle 15◦ and rotation deviation up to 30◦ around right angles, and we apply spot dropout with
+base probability 0.2    (scaled by the same schedule). We use a single slide calibration token initialized as a learnable vector
+shared across slides, window half-sizew= 3   , attention dropout 0.05, and FFN expansion ratio 4. For patch embeddings of
+dimension 1024 (used by default), we project to model widthd= 512with 8 attention heads.
+
+A.8. Slide Calibration Token vs. Stain Normalization
+A natural question is whether the slide calibration token simply re-derives information that classical color-space stain
+normalization already provides. To probe this, we compare three configurations on Brain (NCBI Geo): calibration token
+only (HiST default), classical Macenko stain normalization applied to image patches with the calibration token disabled, and
+both applied jointly. Table5reports the results. The two interventions are complementary: stain normalization alone is
+weaker than the learned calibration token, but combining them yields a further gain, suggesting that the calibration token
+captures slide-level signal beyond what color-space normalization can correct.
+
+                              Table 5.Calibration token vs. Macenko stain normalization on Brain (NCBI Geo).
+
+                                                Setting                          R              2↑   PCC↑
+                                                Stain normalization only (noC     b)      0.20        0.51
+                                                Calibration token only (default)        0.23        0.54
+                                                Both stain normalization andC      b       0.25        0.56
+
+
+A.9. Slide Calibration Token Analysis
+To verify that the slide calibration tokenCb encodes slide-specific information rather than collapsing to a constant, we
+extract the final-layerCb representation of every slide within an organ cohort and analyze its discriminability across slides.
+
+Discriminability metrics.We quantify discriminability of      Cb across slide groups on two cohorts (Kidney, Breast). For
+each cohort we report (i) 1-nearest-neighbor same-group accuracy onCb, (ii) nearest-centroid accuracy (centroids computed
+per group), and (iii) the average within-group vs. between-group cosine distance. Results are summarized in Table6. On
+both cohorts the same-group accuracies substantially exceed chance, and within-group cosine distances are smaller than
+between-group distances, indicating thatC   b encodes meaningful slide-level variation rather than collapsing to a constant.
+
+                        Table 6.Discriminability of the slide calibration tokenC       b across slide groups on two cohorts.
+
+                        Cohort      1-NN same-group     Nearest-centroid acc     Within cos. dist     Between cos. dist
+                        Kidney               0.794                           0.824                         0.480                       0.536
+                        Breast                 0.894                           0.875                         0.885                       0.913
+
+
+PCA visualizations.For two representative organ cohorts (Kidney and Breast), we project the per-slide          Cb onto its first
+two principal components in Figs.4aand4b. Slides cluster by source study rather than scattering uniformly, supporting the
+interpretation ofC  b as a learned slide-level summary that absorbs acquisition signatures.
+
+B. Theoretical Analysis
+
+This appendix provides additional motivation and intuition for the hierarchical design of HiST. We present a multiresolution
+view of the proposed lattice operators, provide an informal receptive-field scaling comparison between fixed-resolution and
+hierarchical architectures, and discuss related approximation considerations.
+
+                                                                             15
+                    HiST: A Hierarchical Sparse Transformer for Cross-Modal Spatial Transcriptomics Modeling
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                 (a)Kidney slides (NCBI sources).                                                   (b)Breast slides (SPA sources).
+Figure 4.PCA of the slide calibration token   Cb across slides within an organ cohort. Slides cluster by source study rather than scattering
+uniformly, supporting the interpretation ofC   b as a learned slide-level summary that absorbs acquisition signatures.
+
+
+B.1. Multiresolution View via a Laplacian Pyramid
+A classical way to formalize multiscale structure in 2D fields is to decompose a signal into a coarse component plus a sum
+of detail components across scales (e.g., Laplacian pyramids). For an idealized Laplacian pyramid, a spatial fieldy admits a
+telescoping expansion:
+                                                                                  L−1X
+                                                              y=U  LALy+               ∆ℓy,                                                                        (6)
+                                                                                  ℓ=0
+
+whereAℓ is a dyadic averaging operator that coarsens resolution by a factor of 2ℓ,UL upsamples the coarsest field back to
+the original resolution, and∆   ℓyrepresents detail coefficients at scaleℓ.
+We use this view as intuition for HiST’s encoder–decoder design. Our dyadic coarsening operator plays the role of an analysis
+transform (approximating the coarse pathway), while the decoder’s upsampling and lateral fusion re-inject same-scale
+details in the spirit of Laplacian residual reconstruction. The main point is not to claim that tissue expression is literally
+Laplacian-pyramid sparse, but that multiresolution operators provide a principled mechanism to rapidly aggregate context
+over expanding spatial neighborhoods while preserving fine-scale information.
+Concatenation vs. summation.The idealized Eq.                     (6)    reconstructsy bysummingthe upsampled coarse field with detail
+coefficients at matched resolution. In HiST we insteadconcatenatethe upsampled coarse features and the lateral encoder
+features along the channel dimension before passing them to a refinement block. This choice keeps both pathways available to
+the downstream attention layer, which can then learn data-dependent mixing weights, rather than committing the architecture
+to a fixed additive reconstruction. The pyramid is therefore an intuition for what information each pathway carries, not a
+literal description of the fusion algebra.
+
+B.2. Receptive Field Analysis
+One of the primary challenges in whole-slide modeling is theDeep Receptive Field Gap: the discrepancy between the scale
+of local operators (patches  10s ofµm) and the scale of biological organization (tissue  1cm).
+Receptive field radius (informal).Let   O be a composition ofL local operators, where each operator mixes information
+within a spatial radiusr on its input lattice. The receptive field radiusRL is the maximum graph distance on the input lattice
+from which a node at layerLcan receive information.
+Fixed-resolution scaling (informal).For a depth-     L network operating on a fixed latticeL0 with local kernel radiusr (e.g.,
+
+                                                                            16
+                    HiST: A Hierarchical Sparse Transformer for Cross-Modal Spatial Transcriptomics Modeling
+
+3×3convolution or window attention), the receptive field grows at most linearly:
+                                                                 RfixedL    =O(L·r).
+Sketch.Each local layer can expand support by at most  r lattice steps, so composingL layers yields at mostLr expan-
+sion (Luo et al.,2016).
+Implication.To cover a spatial diameter        D (in lattice units), fixed-resolution designs generally require depth on the order of
+D/rlocal-mixing layers.
+Hierarchical scaling (informal).Now consider a hierarchical network with dyadic coarsening by a factor of 2 between
+stages. If stages operates on a lattice downsampled by 2s, then a local radius-r layer at stages expands the receptive field
+byO(r·2    s) on the input lattice. Summing across stages yields geometric growth; for example, with one local-mixing layer
+per stage,
+                                                                   S−1X
+                                                         Rhier≈          r2 s =r(2  S−1),
+                                                                    s=0
+up to constants and additional within-stage depth.
+Implication.Hierarchy can reduce the number of stages needed to reach diameter         D fromO(D)         toO(logD)              (up to the
+chosen within-stage depth), enabling long-range context with relatively shallow networks.
+
+B.3. Multiscale Approximation and Spectral Bias
+Why is hierarchy necessary if we only care about prediction? We appeal to signal processing principles.
+Heuristic (Spectral Decay of Biological Signals).Biological spatial fields      y(s)      (e.g., cell type maps, expression gradients)
+are comprised of smooth global trendsylow and sparse local high-frequency detailsyhigh. The energy of the signal generally
+decays with frequency.
+Intuition (Separation of Scales).A hierarchical architecture can help separate the learning problem. Let     y= Pℓyℓ be a
+multiresolution expansion.
+
+   •  Coarse layers operate onLcoarse: They can efficiently approximate smooth functionsylow because the Nyquist rate on
+      the coarse lattice is sufficient for low-frequency signals.
+   •  Fine layers operate onLfine:  They only need to model the residualyhigh =y−y            low.  Sinceyhigh is typically sparse
+      (edges, cell nuclei) or has lower variance, the effective complexity is reduced.
+
+In contrast, a fixed-resolution network may need to propagate local mixing operations across the fine lattice to capture the
+same global trends, which can be less efficient than explicitly introducing multiresolution operators.
+
+B.4. Slide Calibration Token as Domain Alignment
+We provide a simple probabilistic interpretation of the slide calibration token mechanismMCA(X,C              b).
+LetP(y|x,z)             be the true generative process, wherez is a slide-specific latent variable (e.g., staining intensity). Standard
+regression estimatesE[y|x]          , marginalized overz. Ifz varies strongly across slides (batch effect), the marginal prediction is
+high-variance. Our slide calibration tokenCb can be viewed as an estimator ˆz=ϕ({x      n}Nn=1  ) of this latent nuisance factor.
+Mechanism.With a single calibration token (        Cb  =c b∈R   1×d    ), the updateX′  =X+ Attn(X,C      b,Cb) broadcasts a
+slide-level correction:
+                                                                x′i =x i + (c bWV ).
+If Cb  encodes the shift ∆µ  slide, this additive term acts as a learned, slide-specific bias that aligns tissue features to a
+canonical domain. RestrictingCb to a single token enforces a low-bandwidth global bottleneck, encouraging the model to
+captureglobalproperties of the slide distribution rather than memorizing local artifacts.
+
+C. Additional Qualitative Results
+
+This appendix gathers additional qualitative visualizations complementing the quantitative results.
+
+                                                                           17
+                   HiST: A Hierarchical Sparse Transformer for Cross-Modal Spatial Transcriptomics Modeling
+
+C.1. Spatial Visualizations
+We visualize predicted vs. measured spatial expression heatmaps for canonical marker genes across four organ contexts. For
+each gene, the panel shows the H&E image alongside measured and HiST-predicted log-expression maps at the measured
+locations. HiST recovers the broad spatial organization of these markers and preserves locally coherent structure.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                           Figure 5.Lung slide NCBI879, marker geneSCGB1A1.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                              Figure 6.Colon slide MISC36, marker geneAGR2.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                         18
+HiST: A Hierarchical Sparse Transformer for Cross-Modal Spatial Transcriptomics Modeling
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                          Figure 7.Colon slide MISC42, marker geneMUC2.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                           Figure 8.Brain slide NCBI628, marker genePLP1.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                          Figure 9.Colon slide MISC62, marker geneKRT20.
+
+
+
+
+                                                      19

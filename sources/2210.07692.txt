@@ -1,0 +1,593 @@
+  Accelerating RNN-based Speech Enhancement
+  on a Multi-Core MCU with Mixed FP16-INT8
+                      Post-Training Quantization
+
+
+                Manuele Rusci1,2, Marco Fariselli2, Martin Croome2,
+                           Francesco Paci2, and Eric Flamand2
+
+                          1  Universita’ di Bologna, Bologna, ITA
+                                   manuele.rusci@unibo.it
+                        2  Greenwaves Technologies, Grenoble, FRA
+                     {name.surname}@greenwaves-technologies.com
+
+
+
+        Abstract.  This paper presents an optimized methodology to design and
+        deploy Speech Enhancement (SE) algorithms based on Recurrent Neural
+        Networks  (RNNs)  on  a  state-of-the-art  MicroController  Unit  (MCU),
+        with  1+8  general-purpose  RISC-V  cores.  To  achieve  low-latency  exe-
+        cution, we propose an optimized software pipeline interleaving parallel
+        computation of LSTM or GRU recurrent blocks, featuring vectorized 8-
+        bit integer (INT8) and 16-bit ﬂoating-point (FP16) compute units, with
+        manually-managed  memory  transfers  of  model  parameters.  To  ensure
+        minimal accuracy degradation with respect to the full-precision models,
+        we propose a novel FP16-INT8 Mixed-Precision Post-Training Quanti-
+        zation (PTQ) scheme that compresses the recurrent layers to 8-bit while
+        the bit precision of remaining layers is kept to FP16. Experiments are
+        conducted  on  multiple  LSTM  and  GRU  based  SE  models  trained  on
+        the Valentini dataset, featuring up to 1.24M parameters. Thanks to the
+        proposed  approaches,  we  speed-up  the  computation  by  up  to  4×  with
+        respect to the lossless FP16 baselines. Diﬀerently from a uniform 8-bit
+        quantization that degrades the PESQ score by 0.3 on average, the Mixed-
+        Precision  PTQ  scheme  leads  to  a  low-degradation  of  only  0.06,  while
+        achieving a 1.4-1.7× memory saving. Thanks to this compression, we cut
+        the power cost of the external memory by ﬁtting the large models on the
+        limited on-chip non-volatile memory and we gain a MCU power saving
+        of up to 2.5× by reducing the supply voltage from 0.8V to 0.65V while
+        still matching the real-time constraints. Our design results >10× more
+        energy eﬃcient than state-of-the-art SE solutions deployed on single-core
+        MCUs that make use of smaller models and quantization-aware training.
+
+        Keywords:  MCU  · Speech Enhancement  · RNNs  · Mixed-Precision.
+
+1    Introduction
+
+Novel  speech-centric  devices,  e.g.  miniaturized  Hearing  Aids,  make  use  of  AI-
+based methods to process audio data in real-time for improving the signal intel-
+ligibility. Given the small sizes, these devices present a limited energy budget: a
+2           M. Rusci et al.
+
+lifetime of up to 20h can be achieved with a small 60mAh battery if the average
+power consumption is 10mW, considering sensing, computation and actuation
+costs. Because of the severe energy constraints, low-power Micro-Controller Units
+(MCUs) are typically chosen as Digital Processing Units to handle control and
+processing tasks. These processing units feature a limited computational power
+(single core CPU) and up to few MB of on-chip memory, making the integration
+process of complex AI speech processing pipelines extremely challenging.
+    Speech Enhancement (SE), the ability of removing background noises from a
+(noisy) audio signal, is getting popular among the AI capabilities of speech sen-
+sors. While in the past SE methods relied on digital signal processing ﬁlters [1,2],
+recent approaches integrate Deep Learning (DL) strategies, which have demon-
+strated a superior eﬀectiveness to deal with non-stationary noises [10]. To cancel
+out noise components, DL based approaches learn in a supervised fashion to esti-
+mate spectral suppression masks from a set of features extracted from the noisy
+speech. Among the causal models tailored for real-time computation, Recurrent
+Neural  Networks  have  shown  promising  results  [16,6,15,8].  These  approaches
+encode the input signal, typically in the frequency domain (e.g. STFT or Mel
+spectrograms),  into  an  embedding  vector  that  feeds  one  or  multiple  recurrent
+layers, i.e. GRU or LSTM, acting also as memory components of the RNN based
+SE ﬁlter. The cleaned audio signal is reconstructed by decoding the outputs of
+the recurrent layers in a frame-by-frame streaming fashion.
+    Unfortunately, current DL methods target real time execution on high-end
+devices [11] and are not fully-optimized for MCUs. Only [9] and [4] described
+design methodologies of RNN based SE models, with less than 0.5M parameters,
+for single-core MCUs. More in details, the NNoM  framework was used to deploy
+the RNNoise model [14] on a single-core ARM Cortex-M MCU [9]. The RNNoise
+algorithm includes small GRU layers with constrained activation ranges, leading
+to an eﬀective 8-bit quantization. On the other side, TinyLSTM [4] made use of
+Quantization-Aware Training (QAT) [7] to compress an LSTM based model to 8
+bit without accuracy degradation. Despite its eﬀectiveness, the QAT technique
+is not always applicable because of the additional compute and data resources
+needed  to  simulate  the  non-linear  quantization  error  at  (re-)training  time  [5].
+Hardware-speciﬁc  ﬁne-tuning  such  as  Block  Pruning  has  been  also  developed
+to  eﬃciently  map  SE  RNNs  on  MicroNPU  accelerators  [12]  Diﬀerently  from
+these solutions, (i) we aim at a lossless and low-cost Post-Training Quantization
+methodology for scalable RNN-based SE algorithms and  (ii) we investigate an
+optimized deployment ﬂow for general-purpose multi-core MCUs, to achieve a
+ﬁnal design more energy-eﬃcient than state-of-the-art solutions.
+    To this aim, we combine multiple strategies. Firstly, we target a multi-core
+compute platform with 1+8 RISC-V CPUs, featuring 8-bit integer (INT8) and
+16-bit  ﬂoating-point  (FP16)  MAC  vector  units.  Secondly,  we  design  an  opti-
+mized software pipeline, in charge of scheduling at runtime parallel compute calls
+with manually-managed memory transfers, also from external L3 memories. To
+gain  an  almost  lossless  compression,  we  also  propose  a  novel  Mixed-Precision
+FP16-INT8 (MixFP16-INT8) Post-Training Quantization scheme, which quan-
+       Accelerating RNN-based SE on an MCU with Mixed FP16-INT8 PTQ           3
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+            Fig. 1. TinyDenoiser models for Speech Enhancement on MCUs.
+
+          Table 1. Characteristics of the RNN-based TinyDenoiser variants.
+
+                            LSTM256        GRU256        LSTM128        GRU128
+         k                      256                    256                     128                     128
+         RNN    0 layer   LSTM(257,256) GRU(257, 256) LSTM(257,128) GRU(257, 128)
+         RNN    1 layer   LSTM(257,256) GRU(257, 256) LSTM(128 128) GRU(128, 128)
+         Params               1.24 M              0.985 M             0.493 M             0.411 M
+         % rnn params          84%                   80%                 66.50%               59.80%
+
+
+tizes only the RNN parameters and activations to INT8 while keeping the bit
+precision of other tensors to FP16. This paper makes the following contributions:
+ –  We  present  an  optimized  HW/SW  design  for  LSTM  and  GRU  based  SE
+    models for multi-core MCU systems with limited memory space.
+ –  We  propose  an  almost  lossless  Mixed-Precision  FP16-INT8  Post-Training
+    Quantization scheme to accelerate RNN-based SE on MCUs.
+ –  We provide a detailed analysis of latency and HW/SW eﬃciency on a 22-nm
+    RISC-V 1+8-core MCU.
+    Our  work  demonstrates,  for  the  ﬁrst  time,  an  optimized  design  for  RNN-
+based SE models relying only on PTQ, without any need for expensive QAT,
+with Mixed-Precision FP16-INT8. When benchmarked on the Valentini dataset,
+the  RNN  trained  models  show  an  average  reduction  of  the  PESQ  and  STOI
+scores of only 0.06 and 0.007. The proposed HW/SW design results >10× more
+energy eﬃcient than state-of-the-art solutions deployed on single-core MCUs.
+
+2    RNN based Speech Enhancement on Multi-Core MCUs
+
+This Section ﬁrstly describes the scalable RNN-based SE model family, denoted
+as  TinyDenoiser, that we consider for this study. Second, we detail the target
+HW  platform  and  the  mapping  of  the  proposed  software  pipeline.  Lastly,  we
+present our novel Mixed-Precision FP16-INT8 PTQ method.
+
+2.1    TinyDenoiser models
+Fig. 1 shows the  TinyDenoiser  pipeline. The model takes as input the STFT
+frequency map of a noisy speech signal and predicts a spectral gain mask, whose
+4           M. Rusci et al.
+
+
+
+
+
+
+
+
+
+
+
+
+
+Fig. 2.  Micro-Architecture  of  the  target  platform.  The  cluster  on  the  right  includes
+1+8  cores.  An  external  memory  or  an  on-chip  non-volatile  memory  can  be  used  to
+permanently store the model parameters.
+
+
+values  are  in  the  range  [0, 1].  In  more  detail,  the  audio  input  is  sampled  at
+16kHz  and  the  STFT  frequency  features  are  computed  over  a  25  msec  audio
+frame, after Hanning windowing. For every audio frame, a total of 257 STFT
+magnitude  values  are  fed  into  the  model  and  257  gain  values  are  returned  as
+output. The hop size is 6.25 msec (25% of the window length), which determines
+the real-time constraint of the inference task. The ﬁltered frequency spectrum
+of the audio frame, computed by masking the noisy spectrum, is converted back
+to the time domain using an inverse STFT transform. In a real-time streaming
+processing scenario, the denoised speech signal is obtained by overlap-and-add
+operations of the cleaned audio frames.
+    Drawing inspiration from TinyLSTM [4], the TinyDenoiser includes two RNN
+layers with a parametric output size of length k, a Fully-Connected (FC) input
+layer producing 257 features and two ﬁnal FC layers both producing 257 fea-
+tures. With the exception of the last layer, which features a Sigmoid activation
+to estimate the frequency gains, the other FC layers are followed by a batchnorm
+and a ReLU activation. Concerning the RNN layers, we experiment with both
+LSTM and GRU layers with an output size ofk ={128, 256}, originating multi-
+ple variants of the TinyDenoiser denoted as LSTM256, GRU256, LSTM128  and
+GRU128. As reported in Table 1, these variants feature a number of parameters
+ranging from 0.4M and 1.24M. Note that the majority of the parameters (and
+the operations) are due to the RNN layers (up to 84% for LSTM256).
+
+2.2    Memory Management for RNN deployment on the target HW
+Fig. 2 depicts the architecture of the MCU platform targeted for the deployment
+of  the  RNN-based  SE  model.  Internally,  the  system  includes  a  cluster  with  8
+RISC-V CPUs tailored for computation and 1 core for control operation, denoted
+as  the  Cluster  Controller  (CC).  The  1+8  cores  can  load  data  from  a  128kB
+Tightly Coupled Data Memory, namely the L1 memory, in a single clock-cycle.
+Note  that  the  L1  memory  is  not  a  data  cache.  Every  core  has  a  8-bit  MAC
+vector unit, capable of computing a dot-product between two 4×8-bit vectors
+and accumulation in a single clock-cycle (i.e. 4 MAC/clk), while 4 ﬂoating point
+units are shared among the 8 compute cores, implementing single-cycle 2×FP16
+       Accelerating RNN-based SE on an MCU with Mixed FP16-INT8 PTQ           5
+
+vector MAC (2 MAC/clk). Outside the cluster, the platform includes a 1.5 MB
+L2 memory; the cluster cores can access data from the L2 memory∼ 10x slower
+than accessing the L1 memory. To reduce this overhead, the cluster DMA can
+be programmed by the CC core to copy data between L2 and L1 memories with
+a peak bandwidth of 8Byte/clk. In the background of the DMA operations, the
+Control Core dispatches and synchronizes parallel tasks on the 8 compute cores.
+    To deploy the RNN-based TinyDenoiser on the HW target platform, the layer
+parameters are permanently stored into a non-volatile memory. Because the stor-
+age requirements can grow up to several MBs, we use an oﬀ-chip FLASH memory
+(ExtFLASH ), also denoted as L3 memory, with a capacity of 8MB and connected
+to the MCU via OctoSPI. Data can be copied from L3 to L2 memories in the
+background of other operations by programming the MicroDMA module. Note
+that the IO memory interface reaches a max bandwidth of 1Byte/clk, 8× slower
+than the L2 peak bandwidth. Alternatively, the on-chip  eMRAM  non-volatile
+memory can be used for permanent storage, gaining a lower power consumption
+and a higher bandwidth but the total capacity reduces to 2MB.
+    At runtime, but before entering the inﬁnite inference loop, layer-wise network
+parameters can be copied from L3 (either ExtFLASH  or eMRAM ) to L2, based
+on  the  available  space.  Thanks  to  this  process,  named  tensor  promotion,  the
+time to copy parameters to the L1 memory during inference decreases linearly
+with respect to the amount of promoted tensors. If a parameter tensor does not
+ﬁt the available L2 parameter buﬀer space, it is partitioned in sub-tensors that
+are sequentially loaded from L3 to L2. Besides storing the promoted parameters,
+the L2 memory must reserve space to store an activation buﬀer, for temporarily
+keeping the activation feature maps, and a parameter buﬀer, serving the dynamic
+load of not-promoted parameters from L3 to L2.
+    During the inference task, the L1 memory inside the cluster acts as the work-
+ing memory because of the fast access time from the compute cores: parameters
+and activation features are copied to this memory and then fetched concurrently
+by the cores. Because of the small size, the L1 memory is kept free from static ten-
+sor allocation. Activation or parameter tensors or sub-tensors are rather loaded
+from L2 to L1 at inference time using the Cluster DMA, as depicted in Fig. 2.
+
+2.3    SW Computation Model
+The  CC  core  runs  the  RNN-based  SE  inference  SW  code,  which  includes  a
+sequence  of  layer-wise  processing  calls.  Fig.  3  shows  the  pseudo  C-code  for  a
+RNN layer processing task; the same software architecture applies for FC layer
+processing.  The  input  and  output  activation  tensor  arguments,  including  the
+RNN states, are L2 memory arrays. On the contrary, the RNN parameter ar-
+ray (Weights) can be stored in L2 or L3 memory, depending if any promotion
+occurred as discussed before.
+    Every layer-wise function interleaves data copies from L3 and L2 memories
+to the L1 memory and calls to the compute tasks. These latter are dispatched
+and  parallelized  over  the  8  compute  cores  of  the  cluster.  To  be  more  speciﬁc,
+the CC core programs the MicroDMA and Cluster DMA modules to operate,
+6           M. Rusci et al.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Fig. 3. Pseudo C code of layer-wise RNN processing. The CC core runs the code on
+the left. The parallel GRU and LSTM basic kernels dispatched on the compute cores
+are on the right. Biases are omitted for simplicity.
+
+
+respectively, asynchronous data copies from L3 to L2 and from L2 to L1. Note
+that L3 transfers occurs only if layer parameters are not promoted to L2; in this
+case the MicroDMA is not programmed.
+    Typically, input, weight and output tensors of a layer cannot entirely ﬁt the
+L1 memory (limited to 128kB). For this reason, large tensors are sliced in sub-
+tensors, also referred as tiles, during the code generation process. The size of the
+tiles are computed such as to maximize the memory occupation of the available
+L1 memory. Therefore the layer-wise software routine implements a for loop to
+sequentially loads (with the DMAs) the tensor slices in the background of the
+computation that applies on the previously copied data (Fig. 3 on the left). To
+realize this mechanism, we double the memory requirement of the tensor slices
+to account both the L1 memory needed by the compute cores and the memory
+buﬀer used by the DMA.
+    Based  on  the  proposed  execution  model,  the  minimal  theoretical  latency
+˜tlayer to process a layer can be estimated as:
+
+                       ˜tlayer =Ntiles· max(tL3−L2dma  ,tL2−L1dma  ,tcore)                        (1)
+
+    where Ntiles  is the number of tiles, tL2−L1dma     and tL3−L2dma     are the latencies re-
+quired by, respectively, the Cluster DMA and the MicroDMA to copy a single
+data  tile  from  L2  to  L1  and  L3  to  L2  and tcore  is  the  compute  time  due  to
+the parallel task. Based on HW architecture described in Section 2.2, tL3−L2dma ≈
+8×tL2−L1dma     if  considering  an  external  SPI  ﬂash. tL3−L2dma     decreases  when  using
+instead the on-chip non-volatile memory (up to 2.6× for eMRAM).
+    Fig. 3 shows on the right more in details the parallel SW kernels for LSTM
+and GRU computation. Both kernels consists of a 2 nested loops. The outer loop,
+which is parallelized over the available compute cores, iterates over the size of the
+       Accelerating RNN-based SE on an MCU with Mixed FP16-INT8 PTQ           7
+
+output feature tile. The inner loop computes the MAC between the combination
+of input features and the previous state and the GRU or LSTM weight tensors.
+More speciﬁcally, we target INT8 or FP16 computation depending on the used
+quantization type. To speed-up the computation of the dot-product, we exploit
+vectorized INT8 and FP16 MAC instructions, which can perform respectively
+4  or  2  MAC/cyc  per  core.  Concerning  the  FP16  tanh  and  sigmoid  functions
+applied on the accumulators, we use a fast approximation exploiting vectorized
+FP16 instructions, while the INT8 version makes use of LUTs.
+    Because of the high number of iterations of the inner loop, the total latency
+of the kernel is typically dominated by the computation of this loop. For INT8
+LSTM and GRU, we account a minimal theoretical per-core latency of 9 (5 vect
+LD + 4 vect MAC) and 7 (4 vect LD + 3 vect MAC) clock cycles to compute
+4×4 and 3×4 MAC operations, respectively. In case of FP16, the software kernel
+computes half of the MAC operations during the same period, if not considering
+the stalls occurring while accessing concurrently the shared ﬂoating-point units.
+    Note that the peak computation power scales linearly with number of com-
+pute cores, up to reach the memory bottleneck (see Eq.1). In fact, as we increase
+the number of compute cores, the total bandwidth requirement for RNN compu-
+tation exceeds the capacity of the target platform for both L3 and L2 memories.
+For instance, a FP16 LSTM layer processing on 8 cores demands for 8 (cores)
+× 5 (LD)× 2 (FP16 datatype) bytes every 9 cycles, which is much higher than
+the bandwidth from ExtFlash memory (1 byte/clk). In this case, using a lower
+datatype, e.g. 8-bit, results in faster computation for multiple reasons. Firstly,
+the  memory  bandwidth  requirements  of  INT8  kernels  is  2×  lower  than  FP16
+ones. Secondly, the 2× higher memory saving can lead the model parameters to
+entirely ﬁt the on-chip non-volatile eMRAM memory. Lastly, a smaller tensor
+parameters can be promoted permanently to the L2 memory. On the other side,
+INT8 leads to a higher quantization error with respect to a full-precision model
+than  FP16,  potentially  aﬀecting  the  prediction  quality  of  the  full  model.  Our
+solution to this problem is discussed in the next section.
+
+2.4    Mixed FP16-INT8 Post-Training Quantization
+TinyDenoiser models are quantized with Post-Training Quantization. We refer
+to the IEEE 754 standard for the FP16 format and quantization, i.e. a casting.
+On the other side, we follow [7] for INT8 symmetric quantization. According to
+this, every full-precision tensor x is approximated as an integer tensor X as:
+                       ⌊clamp(x,qmin,qmax)⌉
+                 X =                S               ,   S = qmax−qmin2n− 1                      (2)
+
+wheren is the number of bits,S is the scale factor, which impacts the conversion
+resolution,  and  [qmin,qmax]  is  the  quantization  range  of  an  individual  tensor.
+In particular, the PTQ routine estimates the quantization range of activation
+tensors  (Eq.  2)  by  collecting  the  intermediate  tensor  statistics  after  feeding  a
+trained model with a set of calibration samples. For the parameters, we refer to
+the min/max values.
+8           M. Rusci et al.
+
+Table 2. STOI and PESQ scores and memory footprint of the quantized TinyDenoiser
+models after Post-Training Quantization using FP16, INT8 or MixFP16-INT8 options.
+
+Quant       Clamp   Clamp      LSTM256            GRU256           LSTM128           GRU128
+              FC     RNN    pesq   stoi  MB   pesq   stoi  MB   pesq   stoi  MB   pesq   stoi  MB
+FP32                         2.78 0.942  4.75 2.78 0.942   3.76 2.76 0.941   1.88 2.69 0.940   1.56
+FP16                         2.78 0.942  2.37 2.78 0.942   1.88 2.76 0.941   0.94 2.69 0.940   0.78
+             max      max    2.42 0.922        2.19   0.932      2.40  0.922      2.20  0.925
+INT8         std3     std3   2.35   0.8851.18  2.17   0.9020.93  2.51   0.9110.47 2.12   0.892 0.39
+             std3     max    2.34   0.886     2.48 0.929        2.51  0.910       2.36  0.910
+MixFP16      std3     max    2.69   0.9261.37 2.72 0.940   1.13  2.67   0.9250.67 2.63  0.935  0.55
+-INT8        max      max    2.73 0.930        2.56   0.941     2.69 0.927        2.49  0.937
+
+
+    For RNN-based TinyDenoiser models, we observe a degraded quality, mea-
+sured using objective metrics (see Sec. 3), if using a uniform 8-bit quantization
+on  the  whole  model.  On  the  contrary,  the  FP16  quantization  works  lossless.
+We  hypothesize  the  INT8  accuracy  drop  to  originate  from  unbounded  tensor
+ranges, e.g. STFT input or ReLU output, which are clamped after quantization
+(Eq.  2)  or  causing  a  large  scale  factor S.  Quantization  error  propagates  also
+over time on RNN-based models. However, we noticed that both LSTM layers
+and GRU layers use constrained activation functions (tanh and  sigmoid), i.e.
+output  features  maps  features  a  numerical  range  limited  by  design,  with  the
+exception  of  the  LSTM  C       state.  This  motivates  us  to  quantize  only  the  RNN
+layers,  which  demands  the  highest  memory  requirement  of  the  whole  model,  to
+INT8  while  leaving  the  rest  to  FP16. We named this quantization as Mixed-
+Precision FP16-INT8, also referred in short as MixFP16-INT8. To this aim,
+we restrict the tensor statistic collection during PTQ to the input, states and
+output values of the RNN layers. In addition, two extra-layers, computationally
+inexpensive, are inserted in the inference graph for data type conversion purpose
+between FP16 and INT8 nodes and viceversa, according to Eq. 2.
+
+3    Experimental Results
+
+Before showing the eﬀectiveness, in terms of memory, latency and energy gains,
+of our optimized design, we report the accuracy of the trained SE models after
+quantization. Lastly, we compare our approach with state-of-the-art solutions.
+
+3.1    Accuracy after Mixed-Precision PTQ
+We train the TinyDenoiser models on the Valentini dataset [13], which consists
+of clean and noisy speech audio clips from 28 speakers sampled at 16kHz. The
+training environment is taken from [3]: the loss functions is a weighted combi-
+nation of the L1 loss and the STFT loss and an ADAM optimizer is used with
+a learning rate of 3e-4. We use a batch size of 64 and set 200 epochs of training.
+At the end of the training procedure, we select the trained model with the high-
+est score on a validation dataset composed by audio clips of speakers p286  and
+p287, opportunely removed from the train set. For evaluation purpose, we refer
+to the PESQ and STOI objective metrics.
+       Accelerating RNN-based SE on an MCU with Mixed FP16-INT8 PTQ           9
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Fig. 4. (Top) Latency, measured in terms of MAC/cyc, and (Bottom) Power Consump-
+tion, in mW, of the TinyDenoiser models running on the target HW.
+
+
+    We implement the Post-Training Quantization procedure as a module of the
+GAPﬂow  toolset3. The script imports a trained full-precision graph and quan-
+tizes it to FP16, INT8 or MixFP16-INT8, before generating the application code
+for deployment purpose. We use 4 randomly-chosen samples of the validation set
+(p286  035,  p286   166,  p287   151,  p287   269) for the calibration of the quantiza-
+tion ranges. In particular, we consider either the maximum absolute values of
+the activation parameters x orqmax = mean(x) + 3· std                dev(x), that we denote
+as max  and std3  calibration settings, respectively. Additionally, we make use of
+a moving average ﬁlter in the estimation of the quantization ranges when feeding
+the models with multiple calibration samples as done in [7].
+    Table 2 reports the PESQ and STOI scores of the TinyDenoiser models on the
+Valentini test dataset after PTQ, together with the memory occupation (in MB)
+of the whole quantized parameters. The FP16 models are lossless with respect to
+FP32 trained models but gain 2× memory saving. On the contrary, despite the
+additional 2× memory compression factor, a uniform 8-bit quantization leads to
+a score degradation of, on average, 0.3 and 0.015 concerning the PESQ and the
+STOI metrics, respectively. We applied multiple combinations of  max  and std3
+quantization ranges to the RNN layers activations (Clamp RNN in the table) or
+the FC layers, including the input of the SE model. For INT8, we observed max
+quantization ranges to bring beneﬁts to the RNN layer quantization, therefore
+we applied this setting also for MixFP16-INT8 quantization. On the contrary,
+we have not found any experimental evidence to select between std3  or max  on
+other layers. Overall, our proposed Mixed Precision FP16-INT8 PTQ recovers
+the accuracy degradation of INT8: on average, PESQ and STOI scores result to
+degrade of only 0.06 and 0.007, respectively. The eﬀectiveness of the approach
+is also assessed by the 1.4–1.7× less memory to store the model parameters.
+
+
+3  https://greenwaves-technologies.com/tools-and-software/
+10         M. Rusci et al.
+
+3.2    RNN-based SE inference performance on a multi-core MCU
+
+We  analyze  the  eﬀectiveness  of  the  proposed  software  pipeline  (Sec.  2.3)  and
+the  novel  quantization  strategy  by  measuring  the  TinyDenoiser  inference  la-
+tency and energy consumption on a 22nm prototype of the target architecture
+(Sec. 2.2). The chip prototype can be powered at 0.8V or 0.65V with a max-
+imum  clock  frequency  of  370MHz  and  240MHz,  respectively.  More  in  details,
+we  deploy  LSTM256,  GRU256,  LSTM128,  GRU128  models  after  FP16  and
+MixFP16-INT8 quantization. If exceeding 2MB of storage requirement for model
+parameters, we make use of an external FLASH memory while, on the contrary,
+the on-chip eMRAM memory can be used. This latter features a peak BW of
+640MB/sec, independently of the voltage supply.
+    Figure 4 reports on the top the measured inference latencies, expressed in
+terms MAC/cyc, and the MCU power consumption (in mW) on the bottom. In
+case of FP16 LSTM256  and GRU256  models, the ratio of parameters stored in
+the L3 memory over the total amount of parameters, denoted as ρL3, achieves
+0.84  and  0.79,  thanks  to  the  tensor  promotion  mechanism.  However,  the  exe-
+cution is L3 memory-bounded in this scenario. In accordance to the model of
+Eq. 1, the read time of a FP16 parameter from the ExtFlash takes 2 clock cycles
+that explains a latency close to 0.5MAC/cyc (every MAC requires one parameter
+to be loaded). Because of the activity of the external memory, an extra average
+power cost of 40-45 mW is measured, corresponding to∼ 50% of the total power.
+    While FP16 LSTM256 cannot ﬁt the on-chip non-volatile memory, the FP16
+GRU256  can  cut  the  extra  power  cost  by  storing  the  FP16  parameters  into
+the  eMRAM.  The  MCU  power  consumption  increases  because  of  the  on-chip
+memory utilization, which was OFF before, and the higher density of operations
+(higher MAC/cyc) due to the higher eMRAM memory BW than the ExtFlash.
+    If leveraging MixFP16-INT8 for LSTM256 and GRU256, the ratio ρL3  de-
+creases to 0.45 and 0.33, meaning more tensors are promoted to L2 in contrast to
+FP16 quantization. Thanks to this and the faster INT8 kernels, the computation
+eﬃciency increases up to 1.9 and 2.2 MAC/cyc (one of the two RNN layer is still
+L3 memory-bound). At the same time, the power cost of the MCU increases be-
+cause of the higher operation density. Lastly, we obtain a power saving of∼ 2×
+by  reducing  the  power  supply  to  0.65V.  Also  note  the  MAC/cyc  improves  by
+up to 8% because the eMRAM bandwidth is independent from the system clock
+frequency, bringing beneﬁts to the memory-bounded layers.
+    On the other side, FP16 LSTM128  and GRU128  ﬁts the eMRAM memory
+capacity and show aρL3 ratio as low as 0.13 and 0.0, meaning that the majority
+or all the memory parameters are promoted to the L2 memory before the infer-
+ence. This explains the high FP16 latency eﬃciency, reaching up to 2.2 MAC/cyc.
+The MixFP16-INT8 quantization further decreases latency by 1.8× and 1.3×. In
+case of LSTM128 the power consumption of MixFP16-INT8 slightly decreases
+with respect to FP16 because eMRAM is not used, while GRU128 presents a
+1.8× higher power, in line with other settings. Scaling down the supply voltage
+do not contribute to a higher MAC/cyc metric because of the low (or null) L3
+memory utilization, while the power consumption is reduced by 2.5×.
+       Accelerating RNN-based SE on an MCU with Mixed FP16-INT8 PTQ         11
+
+                Table 3. Comparison with other SE solutions for MCUs.
+
+Model             Mpar    Quant    QAT       Device      Deployment    msec/  MAC/    MMAC/
+                                                                         inf    cyc       W
+TinyLSTM [4]       0.33    INT8     yes  STM32F746VE         N/A        4.26    0.36     0.14
+TinyLSTM [4]       0.46                                                 2.39
+RNNoise [9]        0.21    INT8     yes   STM32L476       NNoM w/       3.28    0.45     1.84
+                                                          CMSIS-NN
+LSTM256 [ours]     1.24  MixFP16    no       8-core        GAPFlow      2.50    2.11    17.78
+GRU256 [ours]      0.98   -INT8              RISC-V                     1.70    2.41    17.46
+
+
+    Fig. 4 also reports on the bottom the latency and the energy measures for
+the inference tasks in the most energy eﬃcient conﬁguration. Even if reducing
+the clock frequency, the real-time constraints (6.25 msec) are matched. When
+considering  a  duty  cycled  operation  with  a  sleep  power  much  lower  than  the
+active power, the average power reduces up to 3mW for the smallest model.
+
+3.3    Comparison with other works
+Table  3  compares  our  solution  with  state-of-the-art  SE  solutions  on  MCUs:
+TinyLSTM [4], which is benchmarked on a STM32F7 MCU, and RNNoise [14]
+deployed on a low-power STM32L4 using the NNoM software with CMSIS-NN
+backend [9]. Both solutions leverage on single-core devices and 8-bit quantiza-
+tion,  which  results  eﬀective  thanks  to  QAT  and  the  model  design  constraint
+of using intermediate activation features with limited numerical ranges. Despite
+our solution being more subject to memory bottleneck issues because of 2.6−6×
+more parameters and the higher bit precision, we achieve a top latency eﬃciency,
+up to 5.3× and 6.7× MAC/cyc higher than RNNoise and TinyLSTM, respec-
+tively. This acceleration is obtained thanks to the optimized software pipeline
+that  eﬃciently  exploit  the  underlying  hardware.  Additionally,  the  energy  eﬃ-
+ciency  results  up  to  9.7×  and  123×  higher  than  previous  solutions.  We  also
+remark that our solution achieves low-degradation with respect to full-precision
+model without relying on any expensive QAT training procedures.
+
+4    Conclusion
+
+This work proposed a novel design approach to eﬃciently bring RNN-based SE
+models on low-power multi-core MCUs. On the one side, we proposed a novel
+quantization scheme that mixes FP16 and INT8 PTQ to obtain low-accuracy
+degradation without relying on expensive QAT. On the other side, we designed
+an  optimized  software  pipeline  to  eﬃciently  exploit  the  compute  performance
+of low-power 8-core MCU. Our design demonstrated the fastest RNN-based SE
+solution for MCUs, featuring > 10× energy-eﬃciency than previous solutions.
+
+References
+
+ 1.Boll, S.: Suppression of acoustic noise in speech using spectral subtraction. IEEE
+    Transactions on acoustics, speech, and signal processing 27(2), 113–120 (1979)
+12         M. Rusci et al.
+
+ 2.Cohen, I., Berdugo, B.: Speech enhancement for non-stationary noise environments.
+     Signal processing 81(11), 2403–2418 (2001)
+ 3.Defossez, A., Synnaeve, G., Adi, Y.: Real time speech enhancement in the waveform
+     domain. In: Interspeech (2020)
+ 4.Fedorov, I., Stamenovic, M., Jensen, C., Yang, L.C., Mandell, A., Gan, Y., Mattina,
+     M., Whatmough, P.N.: Tinylstms: Eﬃcient neural speech enhancement for hearing
+     aids (2020)
+ 5.Gholami,  A.,  Kim,  S.,  Dong,  Z.,  Yao,  Z.,  Mahoney,  M.W.,  Keutzer,  K.:  A  sur-
+     vey of quantization methods for eﬃcient neural network inference. arXiv preprint
+     arXiv:2103.13630 (2021)
+ 6.Hu,  Y.,  Liu,  Y.,  Lv,  S.,  Xing,  M.,  Zhang,  S.,  Fu,  Y.,  Wu,  J.,  Zhang,  B.,  Xie,
+     L.:  Dccrn:  Deep  complex  convolution  recurrent  network  for  phase-aware  speech
+     enhancement (2020)
+ 7.Jacob,  B.,  Kligys,  S.,  Chen,  B.,  Zhu,  M.,  Tang,  M.,  Howard,  A.,  Adam,  H.,
+     Kalenichenko, D.: Quantization and training of neural networks for eﬃcient integer-
+     arithmetic-only  inference.  In:  Proceedings  of  the  IEEE  conference  on  computer
+     vision and pattern recognition. pp. 2704–2713 (2018)
+ 8.Liu, J., Zhang, X.: Drc-net: Densely connected recurrent convolutional neural net-
+     work for speech dereverberation. In: International Conference on Acoustics, Speech
+     and Signal Processing). pp. 166–170. IEEE (2022)
+ 9.Ma,  J.:  A  higher-level  Neural  Network  library  on  Microcontrollers  (NNoM)
+     (Oct 2020). https://doi.org/10.5281/zenodo.4158710, https://doi.org/10.5281/
+     zenodo.4158710
+10.Reddy, C.K., Beyrami, E., Pool, J., Cutler, R., Srinivasan, S., Gehrke, J.: A scalable
+     noisy speech dataset and online subjective test framework. Proc. Interspeech 2019
+     pp. 1816–1820 (2019)
+11.Reddy, C.K., Dubey, H., Koishida, K., Nair, A., Gopal, V., Cutler, R., Braun, S.,
+     Gamper, H., Aichner, R., Srinivasan, S.: Interspeech 2021 deep noise suppression
+     challenge. arXiv preprint arXiv:2101.01902 (2021)
+12.Stamenovic, M., Westhausen, N.L., Yang, L.C., Jensen, C., Pawlicki, A.: Weight,
+     block or unit? exploring sparsity tradeoﬀs for speech enhancement on tiny neural
+     accelerators. arXiv preprint arXiv:2111.02351 (2021)
+13.Valentini-Botinhao, C., et al.: Noisy speech database for training speech enhance-
+     ment algorithms and tts models (2017)
+14.Valin,  J.M.:  A  hybrid  dsp/deep  learning  approach  to  real-time  full-band  speech
+     enhancement.  In:  2018  IEEE  20th  international  workshop  on  multimedia  signal
+     processing (MMSP). pp. 1–5. IEEE (2018)
+15.Valin,  J.M.,  Isik,  U.,  Phansalkar,  N.,  Giri,  R.,  Helwani,  K.,  Krishnaswamy,  A.:
+     A perceptually-motivated approach for low-complexity, real-time enhancement of
+     fullband speech (2020)
+16.Xia, Y., Braun, S., Reddy, C.K., Dubey, H., Cutler, R., Tashev, I.: Weighted speech
+     distortion losses for neural-network-based real-time speech enhancement. In: Int.
+     Conf. on Acoustics, Speech and Signal Proc. (ICASSP). pp. 871–875. IEEE (2020)

@@ -1,0 +1,2818 @@
+  SciPost Physics                                                                                       Submission
+
+
+ Learning the ground state of a non-stoquastic quantum Hamiltonian
+                            in a rugged neural network landscape
+
+                           Marin Bukov1,2⋆, Markus Schmitt1, Maxime Dupont1,3
+
+             1 Department of Physics, University of California at Berkeley, Berkeley, USA
+          2 Department of Physics, St. Kliment Ohridski University of Soﬁa, Soﬁa, Bulgaria
+       3 Materials Sciences Division, Lawrence Berkeley National Laboratory, Berkeley, USA
+                                             ⋆ mgbukov@phys.uni-soﬁa.bg
+
+                                                     June 18, 2021
+
+
+Abstract
+
+Strongly interacting quantum systems described by non-stoquastic Hamiltonians exhibit rich
+low-temperature physics.  Yet, their study poses a formidable challenge, even for state-of-
+the-art numerical techniques. Here, we investigate systematically the performance of a class
+of universal variational wave-functions based on artiﬁcial neural networks, by considering
+the frustrated spin-1/2 J1− J2 Heisenberg model on the square lattice.  Focusing on neural
+network architectures without physics-informed input, we argue in favor of using an ansatz
+consisting of two decoupled real-valued networks, one for the amplitude and the other for
+the phase of the variational wavefunction.  By introducing concrete mitigation strategies
+against inherent numerical instabilities in the stochastic reconﬁguration algorithm we ob-
+tain a variational energy comparable to that reported recently with neural networks that
+incorporate knowledge about the physical system.  Through a detailed analysis of the indi-
+vidual components of the algorithm, we conclude that the rugged nature of the energy land-
+scape constitutes the major obstacle in ﬁnding a satisfactory approximation to the ground
+state wavefunction, and prevents learning the correct sign structure. In particular, we show
+that in the present setup the neural network expressivity and Monte Carlo sampling are not
+primary limiting factors.
+
+
+Contents
+
+1   Introduction                                                                                                                      3
+    1.1    State of the art                                                                                                            4
+    1.2    Overview of the main results                                                                                4
+    1.3    Outline                                                                                                                            5
+
+2   Variational quantum Monte Carlo with neural network states                               6
+    2.1    Variational quantum Monte Carlo                                                                           6
+    2.2    Neural network architectures                                                                      7
+
+3   Numerical instabilities                                                                                   9
+    3.1    Holomorphic neural quantum states                                                                      9
+           3.1.1    Holomorphicity-induced correlations between amplitude and phase gradients9
+
+                                                              1
+  SciPost Physics                                                                                       Submission
+
+
+
+              3.1.2    Numerical instabilities in holomorphic neural networks                     11
+     3.2    Complex-valued neural quantum states with decoupled real-valued networks13
+
+4   Learning the phase structure                                                                           15
+
+5   Identifying bottlenecks which prevent learning the ground state                          18
+     5.1    The partial learning problems                                                                        19
+     5.2    Full-basis simulation                                                                                     20
+
+6   Rugged variational manifold landscape                                                         23
+     6.1    Different pseudo-random number sequences                                                23
+     6.2    Consequences of ﬁnite machine precision                                                       24
+
+7   Conclusions                                                                                                                    26
+     7.1    Main results                                                                                                        26
+     7.2    Discussion                                                                                                     27
+     7.3    Outlook                                                                                                                         28
+
+A   Variational parameters optimization                                                          29
+     A.1   Brief overview of the optimization algorithms                                             29
+              A.1.1    Stochastic gradient descent                                                                   30
+              A.1.2    ADAM                                                                                                          30
+              A.1.3    Heun’s method                                                                                      31
+     A.2   Comparison of the optimization algorithms                                                 32
+
+B   The convolutional layer                                                                                          33
+
+C   Model symmetries and neural network states                                                       34
+     C.1   Learning from representatives                                                               34
+     C.2   Data symmetrization                                                                             35
+     C.3   Relation to symmetrization by quantum number projections                       35
+     C.4   Numerical observations                                                                             35
+
+D   Network initialization                                                                                36
+
+E   Details of the Monte Carlo simulations                                                        36
+
+F   Post-selection of samples                                                                                   38
+
+G   Energy Hessian matrix                                                                                         38
+
+H   Neural network architectures                                                                    40
+
+References                                                                                                                            42
+
+
+
+
+
+
+
+
+
+                                                                           2
+  SciPost Physics                                                                                       Submission
+
+
+1 Introduction
+
+Understanding the effect of many-body interactions in quantum systems is a long-standing chal-
+lenge of modern physics: the exponential growth of the Hilbert space with the number of particles
+makes solving the Schrödinger equation impossible beyond a few dozen degrees of freedom. Over
+the last decades, the advent of sophisticated computational methods has led to breakthroughs in
+addressing the quantum many-body problem:  quantum Monte Carlo techniques [1], tensor net-
+work approaches [2,3   ] and the dynamical mean-ﬁeld theory framework [4] are now standard
+tools when it comes to studying strongly correlated systems. However, each of these methods can
+only address speciﬁc classes of problems efﬁciently, and many remain yet to be solved.
+    Prominent among the challenging problems is that of frustrated models [5,6   ].  In antiferro-
+magnetic (AF) systems, for instance, frustration may prevent conventional Néel order at low tem-
+peratures and lead instead to exotic magnetic states such as spin liquids [7–9    ].  A paradigmatic
+example of such a system is the AF spin-1/2 J1− J2 model on the square lattice. Its Hamiltonian
+reads as                                      ∑                     ∑
+                                     H = J1       〈i,j〉 Si· S j + J2    〈〈i,j〉〉 Si· S j,                                         (1)
+
+where Si = (S xi , S yi , Szi ) is the spin-1/2 operator acting on lattice site i, with a total of N = L× L
+lattice sites; we adopt periodic boundary conditions and we assume J1, J2≥ 0. The notation〈i, j〉
+and〈〈i, j〉〉 restricts the sum to nearest and next-nearest neighbor spins, respectively.  Working in
+the Sz basis, denoted by|s〉≡|s1, s2, . . . , s N〉 with s i =↑,↓, the normalized ground state of Eq. (1)
+can be written without loss of generality as,∑
+
+                                         |Ψgs〉 =       {s} cs|s〉,  with cs∈ R.                                              (2)
+
+    For J1  = 0 or J2  = 0, the system is frustration-free, and AF interactions display a bipartite
+pattern with sublattices A and B.  Therefore, the Marshall-Peierls sign rule applies [10–12     ]:  the
+sign of the ground state coefﬁcients cs is fully determined by the parity of the total number of spins
+pointing up or down on one of the sublattices, i.e., sign (cs) = (−1)N↑∈A(s).  This prior knowledge
+allows one to perform a sublattice spin rotation to make the ground state wavefunction positive,
+eliminating the infamous sign-problem in quantum Monte Carlo simulations [13,14     ].  At J2 = 0,
+the system displays Néel order with wavevector q  = (π,π) [15,16     ], and collinear stripe order
+with wavevector q = (0,π) or (π, 0) for J1 = 0.
+    Away from the two values J1 = 0 and J2 = 0, frustration sets in, and the Marshall-Peierls sign
+rule does not hold anymore.  The lack of efﬁcient numerical methods makes the phase diagram
+elusive, with discordant scenarios tracing back to the early days of research on high-temperature
+cuprate superconductors [17–54     ].  Although most studies point toward the existence of an inter-
+mediate phase (or two) in a small parameter window around J2/J1≈ 0.5, sandwiched between
+the Néel and stripe phases, its existence remains controversial. Proposed ground state candidates
+go from columnar [21,22,28         ] or plaquette [29,31,39,45              ] valence-bond states to gapped [40] or
+gapless [44,51     ] spin liquids.
+    The advent of machine learning (ML) techniques [55–57     ] has brought new hope in address-
+ing challenging many-body problems, with neural networks being used as a generic variational
+ansatz [58]. In particular, much like the MNIST data set of handwritten digits in the ML commu-
+nity [59], the ground state search of the frustrated J1−J2 model has recently turned into a test bed
+for ideas attempting to push the boundaries of neural-network-based variational approaches [60–
+65]. Such studies currently receive considerable attention for both equilibrium [66–72     ] and non-
+equilibrium [73–79     ] problems.
+
+                                                             3
+  SciPost Physics                                                                                       Submission
+
+
+
+    A noteworthy difference between typical ML problems and neural quantum states is the high
+precision that variational quantum many-body simulations aim to achieve to resolve the exact
+ground state.  In that respect, neural quantum states pose their own interesting technical chal-
+lenges.
+
+1.1State of the art
+
+Contrary to classifying handwritten digits, ﬁnding the ground state of the J1−J2 model at J2/J1≈ 0.5
+still appears to pose a signiﬁcant challenge, even for state-of-the-art approaches.  Recent efforts
+to employ neural networks for this problem can be summarized in two categories: (i) expanding
+some otherwise physically motivated variational ansatz, and (ii) pure (i.e., end-to-end) neural
+network wave functions. Whereas (i) enabled the detailed study of ground state properties even
+in the most challenging regime around J2/J1≈ 0.5 [60,62,65,80              ], achieving sufﬁcient accu-
+racy with neural network wave functions without physics-informed input remains a formidable
+challenge despite continuing efforts [61,63,64,70,80                   ].
+    Away from the highly frustrated point J2/J1≈ 0.5, a deep convolutional neural network (CNN)
+was shown in Ref. [61] to perform on par with, and even improve upon, existing density ma-
+trix renormalization group [40,45,50,81,82                   ] and standard variational quantum Monte Carlo
+(VQMC) [44,46     ] simulations, while involving fewer variational parameters.  It was also demon-
+strated that one can employ neural networks to enhance the performance of variational Gutzwiller
+states [62].  Similarly, endowing pair-product states with a neural network, enabled the authors
+of Ref. [65] to identify two different phases in the vicinity of J2/J1≈ 0.5, one of which a spin
+liquid with fractionalized spinons. Moreover, in Ref. [80], which appeared during the preparation
+of this manuscript,  substantial advancements in accuracy are reported.   In that case,  the non-
+stoquasticity of the Hamiltonian is alleviated by incorporating the Marshall-Peierls rule and the
+gain in accuracy is attributed to the symmetrization of very large Restricted Boltzmann Machines
+with quantum number projections.
+    While these studies show that neural networks are sufﬁciently versatile to ﬁnd a pretty good
+approximation to the ground state — and excited states  [80,83,84         ] — in a large part of parameter
+space, the region J2/J1≈ 0.5 appears to be an intriguing exception, in particular for pure neural
+network states without extra physics input.  Although learning the Marshall-Peierls rule, which
+governs the signs in the antiferromagnetic (J2 = 0) and striped (J1 = 0) phases is feasible [64,70     ],
+this has remained elusive on the square lattice for J2/J1≈ 0.5. It was recently shown that a generic
+problem arises using deep-learning-based variational Monte Carlo in frustrated systems: learning
+the signs of the expansion coefﬁcients in the Sz-basis, has increased complexity [63].
+    At ﬁrst sight, these difﬁculties seem to be at odds with the fact that neural networks are uni-
+versal function approximators in the limit of sufﬁciently large network size [85–87     ], and should
+therefore constitute a suited variational ansatz class that does not require further physical insight.
+
+1.2Overview of the main results
+Our goal in this work is to provide a detailed account of the performance of pure neural network
+wave functions (i.e., without using extra physics-informed input) optimized by VQMC to encode
+the ground state at the maximally frustrated point J2/J1 = 0.5.  We emphasize that our focus is
+on understanding the methodological challenges. Therefore, we restrict our discussion to system
+sizes up to N  = 6× 6 spins, which already exhibit the typical difﬁculties, and for which we can
+still obtain reference data using exact diagonalization for comparison.
+
+
+                                                            4
+  SciPost Physics                                                                                       Submission
+
+
+
+    As a result of a variety of numerical experiments, the main ﬁndings presented in the following
+are:
+
+    •Holomorphic  networks  generalize  poorly  due  to  unbounded  output  and  because  of  the
+       Cauchy-Riemann constraint on gradients. The latter induces potentially restrictive correla-
+       tions between the phase and amplitude output of the network which limits the learning ca-
+       pabilities of the ansatz. We show that these issues can be mitigated using a non-holomorphic
+       (but still complex-valued) bounded ansatz, which contains two decoupled real-valued net-
+       works for the phase and logarithm of the absolute value, of the variational probability am-
+       plitude.
+
+    •The Marshall-Peierls sign rule appears to be a universal attractor (in the optimization dy-
+       namics) even for unbiased networks.   The variational parameters which give rise to this
+       behavior deﬁne a saddle in the variational energy manifold that is difﬁcult to escape due to
+       the existence of only a few yet high-curvature directions to decrease energy.
+
+    •The expressivity of the quantum neural state ansatz is presently not the limiting factor to
+       ﬁnd the ground state. Monte-Carlo sampling noise does not provide the bottleneck either.
+
+    •The rugged bottom of the energy landscape generically renders the optimization difﬁcult,
+       and the obtained results – hard to reproduce. This behavior is caused by an energy landscape
+       topography which features deep valleys, each of which can host many Marshall-Peierls-like
+       saddles. Different optimization runs eventually get trapped into one of these saddles. As a
+       result, increasing the number of parameters in the ansatz is not guaranteed to lead to an
+       improved variational energy at J2/J1 = 0.5.
+
+1.3Outline
+
+This paper is organized as follows.  In Sec.2, we introduce variational quantum Monte Carlo for
+the ground state search problem and deﬁne the main quantities of interest, such as energy den-
+sity and energy variance.  We also present the optimization algorithm.  Then, we introduce deep
+neural networks as a variational ansatz for quantum many-body spin systems.  In Sec.3, we ﬁrst
+introduce two alternative neural network architectures:  (i) a single holomorphic network which
+approximates simultaneously the phase and the amplitude of the wavefunction, and (ii) two de-
+coupled real-valued networks, to approximate the phase and amplitude separately.  We provide
+arguments in favor of using real-valued networks, and exhibit the nature of two subtle numerical
+instabilities that occur in the ground state search for non-stoquastic Hamiltonians.  We also com-
+pare the performance of the two architectures.  Section4is devoted to the problem of learning
+the correct sign structure of the ground state. We introduce the concept of phase distribution and
+use it to interpret and analyze training bottlenecks. In pursuit of understanding which part of the
+algorithm prevents learning the correct phase structure, we perform a number of numerical exper-
+iments in Sec.5, and argue that the expressivity of the ansatz and the Monte Carlo sampling noise
+do not constitute primary limiting factors. Last, in Sec.6, we investigate the problem from the per-
+spective of landscape optimization.  We draw practical conclusions, which suggest the glassiness
+of the underlying rugged landscape for the J1−J2 model. Finally, we summarize our work, discuss
+some open problems, and establish connections to other research directions in Sec.7. A number
+of details are presented in the appendices for the interested reader, among which a comparison
+of various optimization algorithms (App.A), a discussion on building physical symmetries into
+
+
+                                                           5
+  SciPost Physics                                                                                       Submission
+
+
+
+the ansatz (App.C), a stable procedure to initialize the training parameters of deep neural states
+(App.D), and local versus global Monte-Carlo sampling updates (App.E).
+
+
+2 Variational quantum Monte Carlo with neural network states
+
+2.1Variational quantum Monte Carlo
+
+The variational principle allows one to search for an approximate ground state of a given Hamil-
+tonian H. It is achieved by parametrizing a trial wavefunction with a set of variational parameters
+θ  in a ﬁxed computational basis{s}, i.e,|ψθ〉 =∑{s}ψθ (s)|s〉.  Instead of being parametrized
+by an exponential number of coefﬁcients as in Eq. (2), the quantum state is parametrized by a
+chosen functionψθ (s) with a controllable number of variational parameters.
+    To ﬁnd an approximation to the ground state, one minimizes the energy,
+                                                          ∑
+                                Eθ =〈ψθ|H|ψθ〉〈ψθ|ψθ〉    =     {s} pθ (s)Elocθ  (s)≥ Egs,                                   (3)
+
+by ﬁnding the optimal values for the parameters θ .  Here, the exact ground state energy of H is
+noted Egs, and                                              ∑
+                                       Elocθ  (s) =     1ψθ (s) {s ′}Hs s ′ψθ (s ′),                                           (4)
+
+is the so-called local energy; it involves the Hamiltonian matrix elements Hs s ′ =〈s|H|s ′〉.  For a
+generic complex-valued variational wavefunction, Elocθ  (s) is also complex-valued.  The sum over
+s ′ in Eq. (4) is easily performed for local Hamiltonians for which |{s ′}|∼ O(N).
+    Note that
+                                            pθ (s) =|ψθ (s)|2À〈ψθ|ψθ〉                                                  (5)
+
+deﬁnes a proper probability distribution. It enables the use of Monte Carlo (MC) sampling in order
+to evaluate the energy of Eq. (3) without having to perform the sum “ ∑{s}” over the full Hilbert
+space H:  this procedure becomes infeasible if H is too large, e.g., dim(H) = 2N  for the spin-half
+system considered.   Using  NMC  Monte Carlo samples,  we can approximate the total energy of
+Eq. (3) by its sample estimate
+                                                      ≈    1    NMC∑
+                                         Eθ =
+
+Elocθ        NMC        Elocθ  (s n),                                              (6)
+                                                                  n=1
+with〈〈·〉〉 =∑{s} pθ (s)(·) denoting the expectation value with respect to the variational probability
+pθ .   The deviation of the MC estimate from the exact quantum expectation value vanishes as
+1/pNMC in the limit of NMC→∞.
+    Similarly, the energy variance takes the form,
+                                                                               ‹‹Eloc2¶¶
+                              σ2Eθ  =〈ψθ|H2|ψθ〉〈ψθ|ψθ〉 −〈ψθ|H|ψθ〉2〈ψθ|ψθ〉    =     θ       c,                                (7)
+
+with|Elocθ |2≡ Elocθ  (Elocθ  )∗, where∗ stands for complex conjugation. To simplify the notation, we use
+〈〈AB〉〉c =〈〈AB〉〉−〈〈A〉〉〈〈B〉〉 throughout the paper. Note that for exact eigenstates, the energy-variance
+vanishes. In particular, for the ground state one obtains Elocθ  (s)≡ Egs for all spin conﬁgurations s
+independently.
+
+                                                            6
+  SciPost Physics                                                                                       Submission
+
+
+
+    Now that we have introduced the Monte-Carlo procedure which allows us to estimate the
+energy for large systems, the next step aims at optimizing the variational parameters.  The most
+straightforward strategy is to directly minimize the energy of the system by seeking an expression
+for the energy gradient with respect to θ , which can be estimated using Monte Carlo.  Labeling
+each parameter with an index k, one arrives at
+                                                 ∂θ k Eθ = 2Re F k,                                                         (8)
+
+
+with F the so-called force vector,
+                             ∑                                                     ‹‹        ¶¶
+                      F k =      {s} pθ (s)   ∂θ k lnψ∗θ (s)   Elocθ  (s)− Eθ     =    O∗kElocθ  c,                       (9)
+
+
+where Ok(s) =∂θ k lnψθ (s).
+    Using gradient descent, see App.A, the parameters can be optimized iteratively until conver-
+gence of the energy is achieved,
+                                              θ k←− θ k− 2γRe F k,                                                   (10)
+
+
+withγ∈ R+ the step size, a small hyperparameter that one controls the optimization speed in the
+simulation.
+    Because the variational manifold may have varying curvature in different directions of pa-
+rameter space, the Euclidean gradient descent of Eq. (10) can be improved by introducing an
+appropriate metric [69].  This approach is known as Stochastic Reconﬁguration (SR) [88–91     ],
+and the optimizations of the parameters take the form,
+                                                              ∑
+                                            θ k←− θ k−γ           k′ S−1kk′ F k′,                                                (11)
+
+where the hermitian curvature matrix S is given by,
+              ∑                                 ∑                     ∑                           ‹‹       ¶¶
+    Skk′ =         pθ (s)O∗k(s)Ok′(s)        −        pθ (s)O∗k(s)           pθ (s)Ok′(s)      =    O∗kOk′   c.      (12)
+               {s}                                {s}                    {s}
+
+    We evaluate the performance of variational quantum Monte Carlo (VQMC) by monitoring the
+energy per site and the density of energy variance of|ψθ〉. Since our goal is to exhibit the reasons
+for the highly frustrated  J2/J1  =  0.5 point to defy the VQMC approach,  we focus exclusively
+on small lattices of size  N  =  4× 4 and  N  =  6× 6,  which can be directly compared to exact
+diagonalization simulations. Moreover, we perform a number of experiments where we evaluate
+the sums “∑{s}” over the entire basis exactly and not stochastically. We refer to these simulations
+as full basis simulations.
+
+2.2Neural network architectures
+
+We now now turn our attention to the variational ansatz itself for the quantum stateψθ (s).  Re-
+cently, neural networks emerged as a promising class of variational wave functions [58].  They
+are universal function approximators in the limit of inﬁnite depth or width (controlling the num-
+ber of variational parameters): the neural network expressivity theorem asserts that the accuracy
+of approximating arbitrary functions can be systematically enhanced by increasing the number
+of  network  parameters [85–87     ].   In  quantum many-body  physics,  neural  networks  have been
+
+                                                            7
+  SciPost Physics                                                                                       Submission
+
+
+
+
+
+
+
+
+
+
+
+
+      Figure 1: Schematic depiction of the network layers and visualization of the correspond-
+      ing mathematical meaning.  a) Dense layer, cf. Eq. (13).  Each neuron in layer       l is con-
+      nected to all neurons in layer l− 1 without further structure.  b) Convolutional layer,
+      cf. Eq. (26).  The connectivity is typically sparse and within a channel the coupling of
+      each neuron to the previous layer is obtained by translation as indicated by the arrow
+      and evident from the structure of the coupling matrix. In both cases we omitted possible
+      additional biases that can be added to each layer.
+
+
+shown to be capable of encoding volume-law entanglement [92,93     ], and thus they are believed
+to represent an alternative to established numerical techniques based on matrix product states. In
+principle, neural networks are also insensitive to the spatial dimensionality of the physical system
+of interest. Finally, with the advent of modern automatic differentiation techniques [94], such as
+the backpropagation algorithm [55,95,96         ], neural networks are amenable to efﬁcient larger-scale
+gradient-based optimizations.
+    In this paper, we focus on deep neural network (DNN) architectures, built from layers repre-
+senting afﬁne-linear transformations parametrized by the parameters θ .  Throughout this work,
+we restrict the discussion to fully-connected layers, and convolutional layers.  Different layers l
+are interlaced with nonlinear activation functions  fl(·) for enhanced expressivity.  The output of
+the ﬁrst layer z involves no bias (b(1)i ≡ 0, see below) and is always fed into an even activation
+function  f1(z) = ln cosh(z) to incorporate spin inversion symmetry (see App.C). The subsequent
+layers utilize the odd activation  fl>1(z) = z− tanh(z)/2, which is linear around z = 0.  This was
+empirically found to be advantageous for learning, because it allows to alleviate the vanishing
+gradient problem for deep networks [78,97     ].
+    A single fully-connected layer l is deﬁned as,
+                                        ∑
+                                z(l)i   =    j W (l)i j a(l−1)j       + b(l)i  ,        a(l)i   = fl(z(l)i   ),                                 (13)
+
+with variational parameters θ (l)≡{W (l), b(l)}, where W (l)i j   is known as the weight matrix and
+b(l)i    is the bias vector.  This layer is pictured in Fig.1(a).  General fully connected layers such as
+Eq. (13) can be supplemented with additional structure to render the ansatz better-suited for the
+problem of interest.  For instance, often times in physical systems the ﬁnal result is expected to
+have spatially local and translationally invariant structures, which can be more easily captured by
+a convolutional layer instead, see Fig.1and App.B.
+    In the exponentially large Hilbert spaces of many-body systems, the ratio of (squared) ampli-
+tudes required for Monte Carlo sampling, see Eq. (5), can differ by several orders of magnitude.
+Therefore, it is more convenient to work directly with lnψθ (s) instead ofψθ (s).  We identify
+the  network  input  with  the  spin  conﬁguration  s,  i.e,  a(0)j ≡  s j,  and  choose  the  output  layer
+NL  to contain a single neuron representing the log-amplitude of the variational wavefunction,
+
+
+                                                             8
+  SciPost Physics                                                                                       Submission
+
+
+
+a(NL)≡ lnψθ (s).  The network architectures we use in subsequent simulations are described in
+App.H.
+    Before we start each simulation, we choose uniformly distributed initial parameters θ k, see
+App.D. This results in a uniform log-amplitude distribution and an approximately delta-peaked
+phase distribution for all spin conﬁgurations. Hence, one can convince oneself that the correspond-
+ing       physical       initial       state       is       the       (non-normalized)       S x-polarized       state |↑〉j +|↓〉j, up to an overall phase factor.  Because the J1− J2 model is SU(2) sym-
+|φ〉∝⨂Nj=1
+metric (see App.C), this state is equivalent to the ferromagnetic          Sz-polarized state, corresponding
+to the most excited eigenstate in the spectrum of the Hamiltonian (1). Thus, the energy density of
+the physical initial state amounts to〈φ|H|φ〉/N = (J1 + J2)/2, and the energy variance vanishes.
+
+
+3 Numerical instabilities
+
+In the following, we elaborate on several practical problems that arise in the implementation of
+variational neural network wave functions.  In particular, the approach suffers from numerical
+instabilities that require special attention. We further contrast the choice of a single holomorphic
+network to encode the wave function, with representing the amplitude and phase separately using
+two independent real-valued networks. We argue that the holomorphic network comes with two
+major drawbacks: (i) restrictions in learning the non-trivial sign structure of the wave function due
+to the holomorphic constraint on gradients, and (ii) inherent instabilities caused by the unbounded
+character of holomorphic activation functions. Whereas (i) can be taken care of by working with
+two independent real-valued networks, we exhibit the necessity to introduce a regularization layer
+for the log-amplitude network to eliminate otherwise fatal generalization errors that occur during
+training, even with bounded activation functions.
+    Although a real-valued Hamiltonian has real-valued eigenstates, in the computational basis
+{s}, the wavefunction coefﬁcients cs  can have both positive and negative signs, see Eq. (2).  In
+this work, we focus on the following two possibilities to encode the logarithmic wave function co-
+efﬁcients, see Sec.2.2: we either use a holomorphic network with complex parameters (Sec.3.1),
+or two independent real networks for phase and amplitude (Sec.3.2).
+
+3.1Holomorphic neural quantum states
+
+A distinguished class of complex-valued functions are the holomorphic functions.  Holomorphic
+neural states are deﬁned by complex-valued parameters θ∈ C, coupled by holomorphic activation
+functions fl(·), e.g., fl(·) = ln cosh(·). By deﬁnition, such an ansatz can only encode holomorphic
+approximations to the wavefunction amplitudes.  Viewed over the ﬁeld of real numbers, a key
+feature of holomorphic functions is that they obey the Cauchy-Riemann equations [98]. This con-
+straint reduces by a factor of two the number of independent derivatives computed in backpropa-
+gation, as compared to non-holomorphic functions, which results in a “holomorphic correlation”
+between the real and imaginary parts of the variational parameters.
+
+3.1.1Holomorphicity-induced correlations between amplitude and phase gradients
+
+In Sec.2.2, we argued that it is advantageous to approximate directly the logarithm of the varia-
+tional many-body wavefunction. The polar decomposition, lnψθ (s) = ln|ψθ (s)|+iϕθ (s), induces
+
+
+
+                                                           9
+  SciPost Physics                                                                                       Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      Figure 2: Top row: the norm of the force vector||F k|| separated into a log-amplitude and
+      phase contributions shows the large difference between the two in the initial stages of
+      optimization. Bottom row: the corresponding energy optimization curves. Left column:
+      full-basis simulation for N  =  4× 4.   Right column:  C simulation at N  =  6× 6 with
+      NMC  = 215 samples.  The log-amplitude contribution to the gradients dominates over
+      the  phase  contribution  at  the  early  optimization  stages:  since  the  two  contributions
+      enter additively in the network update vector, this might lead to an optimization bias,
+      and prevent learning the correct sign structure at J2/J1  = 0.5 (until very deep in the
+      optimization landscape).  The AF Marshall-Peierls rule is incorporated into the ansatz
+      through a gauge choice. The network architecture used is listed in App.H. Optimization
+      was done using RK in combination with SR, see App.A.
+
+
+a corresponding decomposition in the force vector F k = F lnk  + Fϕk  of Eq. (9) as follows,
+                                      ∑                                                 
+                              F lnk  =    {s} pθ (s)   ∂θ k lnψθ (s)Elocθ  (s)− Eθ     ,
+                                         ∑                                            
+                              Fϕk  =−i       {s} pθ (s)   ∂θ kϕθ (s)    Elocθ  (s)− Eθ    .                                (14)
+
+
+This allows us to separately trace back the energy gradient contributions from the amplitude and
+the phase of the trial wavefunction. In Fig.2, we display the norm of the force vectors of Eq. (14)
+as a function of the optimization step for a two-layer holomorphic neural network. The signiﬁcant
+difference of two orders of magnitude observed between the two contributions suggests that the
+variational optimization is initially dominated by changes in the amplitudes.
+    For N = 4× 4, we perform a full-basis simulation which converges easily to the ground state.
+The magnitude of the log-amplitude contribution eventually becomes of the same order as the
+magnitude of the phase contribution only deep in the optimization landscape.  It is at this later
+stage that the network starts learning the correct phase distributionϕs, which we can verify by
+
+
+                                                            10
+  SciPost Physics                                                                                       Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      Figure 3:  A holomorphic single-layer DNN shows a drastically different performance,
+      depending on whether the AF Marshall-Peierls sign rule is used (blue) or not (red). The
+      spikes in the blue curve after iteration 400 occur due to a run-away instability related
+      to poor generalization, see Sec.3.1.2.  The system size is                N = 6× 6.  Optimization was
+      done using SR with the SGD optimizer, see App.A, with ﬁxed learning rate   γ = 10−2 and
+      NMC = 215 MC samples. The network architecture is listed in App.H, and           J2/J1 = 0.5.
+
+
+comparing to the sign structure of the ground state wave function obtained from exact diagonal-
+ization.
+    For N  = 6× 6, using Monte Carlo sampling, we observe that the phase contribution remains
+small in the ﬁrst stages of the optimization. It is an open question whether this behavior persists to
+the later stages of training, or for holomorphic networks with more parameters. We were not able
+to perform longer simulations due to the instabilities discussed in the following Sec.3.1.2. While
+our data does not predict whether this effect is a generic, Hamiltonian-independent feature, this
+observation raises a ﬂag to keep in mind when using holomorphic neural states to approximate
+non-stoquastic quantum states.
+    It is interesting to note that, when it does not have the antiferromagnetic Marshall-Peierls sign
+rule built-in, the holomorphic ansatz fails to ﬁnd a good approximation to the ground state even for
+deeper networks, see Fig.3. We believe that this behavior arises due to the holomorphicity-induced
+constraint  on  the  network  parameters.   That  said,  note  that  partially  holomorphic,  symmetry-
+restoring RBM’s with the antiferromagnetic Marshall-Peierls sign rule built-in, have recently been
+reported to outperform convolutional neural networks [80].
+
+3.1.2Numerical instabilities in holomorphic neural networks
+
+The domain of the holomorphic activation functions (or non-linearities) is the entire complex
+plane, as there are no other constraints on the variational parameters θ .  In complex analysis,
+Liouville’s boundedness theorem states that all non-constant entire functions are necessarily un-
+bounded [98]. We ﬁnd that this can potentially lead to two kinds of numerical instabilities.
+
+                                                           11
+  SciPost Physics                                                                                       Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      Figure 4:  Snapshots of the 2D histogram formed by the complex-valued output z(1)i    of
+      the ﬁrst layer just before applying the nonlinearity in a holomorphic DNN for two ﬁxed
+      training iterations (iteration 1:  left, and iteration 200:  right) show the spread of the
+      gradual output across the complex plane.  Eventually, a singularity (marked by a cyan
+      cross for the case of  f  = ln cosh) is inevitably hit which produces divergent gradients
+      leading to a training instability.  To generate the data, we used the holomorphic DNN
+      from Fig.2at         N  = 6× 6, and sampled 1000 spin conﬁgurations at the given training
+      iteration which are then symmetrized and fed back into the same network.
+
+
+    First, holomorphic activation functions, such as  f (z)≡ ln cosh(z) which was originally intro-
+duced in the context of restricted Boltzmann machines [58,83,99–101               ], have poles in the complex
+plane.  We have observed that the optimization dynamics can tune the variational parameters in
+such a way as to hit exactly the singularity, causing the algorithm to “blow up”.  To demonstrate
+the mechanism behind this instability, consider the holomorphic DNN trained in Fig2     [right panel]
+for N  = 6× 6.  At a ﬁxed training iteration, we can sample a batch of spin conﬁgurations from
+the DNN; we then symmetrize them [cf. Sec.C      ], and feed them back into the same network, only
+this time we cut the network open and consider the output z(1)i    after the ﬁrst dense layer, before
+applying the nonlinearity f1. In order to monitor the spread of the pre-activations z(1)i    across the
+complex plane, we construct a two-dimensional histogram over the pairs of real and imaginary
+parts of z(1)i   , evaluated at the symmetrized sample. Figure4shows snapshots of such histograms
+at training iterations 1 [left] and 200 [right], which exhibit the behavior that we typically found:
+The pre-activations z(1)i   , which take small absolute values at early iterations, increase in magni-
+tude during training. Nonetheless the distribution remains dense, meaning that poles – if present –
+are eventually inevitably encountered. In Fig.4we marked exemplarily two poles of the holomor-
+phic nonlinearity f1(·) = ln cosh(·) at z∗ =±iπ/2 [cyan crosses]. A single pre-activation z(l)i   lying
+sufﬁciently close to a pole for just a single input sample is sufﬁcient to cause a divergent gradient
+contribution and thereby a training instability. For this reason, the complex networks used in this
+paper [including the ones in Fig2    ], are trained using fourth-order polynomial nonlinearities.
+    Although entering poles in the complex plane can be partially alleviated by using analytic
+functions instead (e.g., a polynomial approximation to f (z) for small|z| as proposed in Ref. [78]),
+the unbounded character remains. This naturally leads to a second kind of instability, triggered by
+a runaway effect: since the neural quantum states we consider are not normalized (and cannot be,
+
+
+
+                                                            12
+  SciPost Physics                                                                                       Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      Figure 5: Schematic depiction of the role of the regularizing layer at later stages of op-
+      timization.  Typical conﬁgurations are mapped to the upper end of the linear regime,
+      which allows for maximal contrast to unlikely conﬁgurations.  As a result outliers with
+      otherwise strongly overestimated amplitudes due to faulty generalization are regular-
+      ized, because they end up in the ﬂat tail of the activation function.
+
+
+for practical reasons in large many-body systems), the magnitude of the log-amplitude ln|ψθ (s)|
+can increase indeﬁnitely.  As a consequence, one often encounters spin conﬁgurations during the
+optimization procedure with an incorrect estimate of the ratio|ψθ (s ′)|/|ψθ (s)| by a few orders of
+magnitude. This leads to a high variance in the Monte Carlo estimate of the local energy [Eq. (4)   ]
+or, alternatively, to artiﬁcial spikes in the probability distribution pθ (s).  The resulting incorrect
+estimates of the force vector F k of Eq. (9) ﬁrst cause the algorithm to update the parameters using
+incorrect gradients, and then eventually to blow up. We ﬁnd that this issue can often be remedied
+by using an adaptive learning rate solver, such as Runge-Kutta (RK), which controls the learning
+rate schedule, see App.A.
+    Finally, let us emphasize that the representativity theorems for neural networks to be universal
+approximators in the limit of inﬁnitely many neurons explicitly rely on the boundedness of the
+activation functions [85,86     ]. This provides yet another motivation for us to explore alternatives,
+like those introduced in the following section.
+
+3.2Complex-valued neural quantum states with decoupled real-valued networks
+Our previous considerations motivate us to consider two independent real-valued networks to
+model the complex-valued wave function,ψθ (s) =|ψθ (1)(s)|eiϕθ (2) (s) with θ≡ (θ (1),θ (2)):  one
+network approximates the log-amplitudes, ln|ψθ (1)(s)|, and the other encodes the phases,ϕθ (2)(s).
+A similar ansatz was recently constructed using long-range entangled plaquette states [102]. Im-
+portantly, this ansatz allows for the gradients of the network parameters to be evaluated sepa-
+rately: the parameter optimization following Eqs. (10) and (11) can be computed independently
+for the amplitudes and the phases. Although the log-amplitude and phase networks are indepen-
+dent, the local energy of Eq. (4), and therefore also the values of the network gradients, depend
+on the output of both the log-amplitude and the phase networks.
+
+
+                                                           13
+  SciPost Physics                                                                                       Submission
+
+
+
+    The optimization of networks with real-valued parameters proceeds similar to Eqs. (10) and (11).
+The equation for gradient descent remains the same. However, in the Stochastic Reconﬁguration
+update we use directly the real parts of the F k and Skk′,
+                                     θ k ←−   θ k− 2γRe F k,
+                                                            ∑              
+                                     θ k ←−   θ k−γ             k′ Re  S−1kk′Re F k′.                                     (15)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      Figure 6: Variational energy density against the iteration number for a ﬁxed neural net-
+      work layer structure with increasing number of parameters (neurons). The system size
+      is N = 6× 6. The network architectures used are listed in App.H, and           J2/J1 = 0.5. Op-
+      timization was done using RK in combination with SR, see App.A. A total of           NMC = 215
+      MC samples were used.
+
+    Real-valued networks can be constructed using bounded non-linearities. This automatically re-
+solves the instability caused by the poles of the activation function discussed in Sec.3.1.2. Besides,
+the runaway instability can be mitigated by introducing a single bounded layer at the top of the
+amplitude network. Denoting the symmetrized network output in the last layer as z [cf. App.C       ],
+we apply to it the activation function,
+                                                               z−ϑ a
+                                          fNL(z) = a tanh                    +ϑ,                                            (16)
+
+for a ﬁxed parameter a. Onlyϑ is an additional variational parameter here. Setting a = 8 results
+in a total log-amplitude network output range of 16, and is chosen empirically to allow for the log-
+amplitude network to encode a maximum relative magnitude difference of|ψθ (s ′)|/|ψθ (s)|≈ 107.
+The activation function  f (z) in Eq. (16) was chosen to have a linear slope for small values of       z.
+Because the input for this layer is|z|≪ 1 in the ﬁrst few optimization iterations,  f (z) has no ef-
+fect in this early stage of the optimization dynamics. Later on, the parameterϑ will automatically
+adjust the position of the linear regime in f (z) relative to typical values of z, which allows to cut
+off the large values ln|ψθ (s)| for those conﬁgurations s causing the instability.
+
+                                                             14
+  SciPost Physics                                                                                       Submission
+
+
+
+    During  the  optimization  we  observed  that  the  parameter ϑ  is  adjusted  such  that  the  pre-
+activation of typical conﬁgurations lies close to the upper end of the linear regime, allowing to
+represent accurately their relation to conﬁgurations less likely to occur in the MC sample, as de-
+picted in Fig.5. Thereby, outliers with a too large pre-activation are automatically regularized as
+they end up in the ﬂat tail of the tanh(·) function.  We checked that promoting a to be a varia-
+tional parameter itself produces worse results since this allows for a variable output range of the
+log-amplitude network and the runaway instability eventually kicks in.
+    We emphasize that using a bounded activation function alone is not sufﬁcient:  if inaccurate
+updates to the network parameters are generated, e.g., due to a large learning rate, this instability
+may occur in milder forms, as visible in Fig.6(blue line) and also in Fig.15in App.Afor the
+SGD/SR optimizer.  Nonetheless, such a scenario can further be prevented by using an adaptive
+learning rate algorithm, see App.A, and a sufﬁciently large MC sample size required for accurate
+gradient estimates.
+    The runaway instability only affects the log-amplitude network since the values of the phase
+network end up winding in the argument of the exponential eiϕθ (2) (s):  this reﬂects the known
+fact that only phase differences in the interval [0, 2π) are physical. In fact, we observed that the
+optimization procedure makes use of this gauge freedom towards the later stages of optimization,
+to position the valuesϕθ (2)(s), corresponding to certain conﬁgurations s, in different Riemann
+sheets at a distance 2π𝓁 apart, with𝓁∈ Z.  Hence, we ﬁnd no merit in using a discontinuous
+arg(z) activation function [64] in the output layer of the phase network, which may cause further
+problems when computing gradients using backpropagation. Since physical observables are only
+sensitive to phase differences, this phase network ansatz can result in constant relative phase shifts
+from one iteration to the next, observed at the later stages of the optimization.
+    For a ﬁxed system size  N  = 6× 6, we display in Fig.6the variational energy density as a
+function of the optimization iteration step for different numbers of variational parameters and a
+ﬁxed architecture consisting of three convolutional layers followed by two fully-connected layers.
+We ﬁnd that the optimization algorithm does not consistently yield a better variational approxi-
+mation when increasing the network size1.  Hence, our data indicates that the current approach
+does not produce a well-controlled variational approximation to the ground state wave-function
+at J2/J1 = 0.5. However, as we argue in Secs.5and6, this observation is not related to the ability
+of neural quantum states to approximate the ground state (the so-called ansatz expressivity), but
+is rather an intrinsic property of the rugged variational landscape at J2/J1≈ 0.5.
+
+
+4 Learning the phase structure
+
+For  real-valued  ground  state wavefunctions,  the  correct sign  distribution,  i.e.,  sign[ψθ (s)],  is
+difﬁcult to ﬁnd for frustrated systems in the Sz basis. In Sec.3.1, we introduced complex-valued
+variational wavefunctions for which learning the correct signs correspond to learning the correct
+phase distributionϕθ (2)(s).
+    In this section, we reveal some of the difﬁculties associated with learning the sign structure of
+the ground state wavefunction in the J1−J2 model. First, we analyze data obtained from the neural
+network states, and show that it does not encode the exact ground state sign distribution; we then
+brieﬂy quantify how much the exact ground state sign distribution differs from the Marshall-Peierls
+
+   1For the selected hyperparameters, the blue curve failed the samples post-selection checks, see App.F, after ten
+consecutive attempts of drawing a new MC sample, but the other simulations were well-behaved.
+
+
+                                                            15
+  SciPost Physics                                                                                       Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      Figure 7:  Snapshots of the distribution of phases and magnitudes at increasing opti-
+      mization iterations during training (top left:  200, top right:  500, bottom left:  1995)
+      shows the emergent of two phase peaks, a distanceπ-apart, signaling the approach to
+      the real-valued ground state wave function (see text). Left panels (blue): a s-sample of
+      103 conﬁgurations drawn from the log-amplitude network. Right panels (red): spin con-
+      ﬁgurations that contribute to the local energy and have a nonzero Hamiltonian matrix
+      element (s ′-sample). Bottom right: at iteration 1995 subtracting the peaks from the s ′-
+      sample (middle) in anϵ = 0.5 vicinity ofϕs = 0,±π leaves only the mismatch conﬁgura-
+      tions (red, middle), whose amplitudes and signs are compared against the exact ground
+      state values (right, magenta).  The position of the largest-amplitude s ′-conﬁguration is
+      held ﬁxed and is denoted by a red cross.  The system size is N  = 6× 6.  The network
+      architecture is listed in App.H, and           J2/J1  = 0.5.  Optimization was done using RK in
+      combination with SR, see App.A. The MC sample size is          NMC = 215. Note that the values
+      on the y-axes are not absolute, since neural quantum states are not normalized.
+
+
+distribution.
+    In Fig.7, we show snapshots of the phase distribution during the training process as a scatter
+plot in the ln|ψθ (1)|2 versusϕθ (2) plane.  The left panels (blue data points) show a sample of 103
+spin conﬁgurations s drawn according to the probabilities encoded in the log-amplitude network at
+a ﬁxed training iteration [see caption]. The right panels (red data points) show all conﬁgurations
+s ′  which contribute a nonzero matrix element Hs s ′  to the local energy, see Eq. (4) (these are
+
+
+                                                           16
+  SciPost Physics                                                                                       Submission
+
+
+
+about 8× 104 conﬁgurations for N = 6× 6 at the largest training iteration shown). Since phases
+are deﬁned modulo 2π, we wrap the output of the phase net in the interval [−π,π).  To ﬁx the
+global phase, we ﬁnd the conﬁguration s0 in the s-sample of 103 states with the largest value of
+ln|ψθ (1)(s)|, and use it to set ln|ψθ (1)(s0)| = 0 andϕθ (2)(s0) = 0.2
+    In Fig.7,  we observe two emerging peaks along the   ϕ-axis at a distanceπ apart.   Hence,
+we see that the algorithm correctly identiﬁes that the ground state is real-valued (up to a global
+phase).  While the phases of all states of the s-sample are learned to be separated byπ at the
+later training iterations, there exist small-amplitude s ′-states which are misaligned with the main
+phase peaks.  This can be explained by noting that these states have tiny amplitudes and do not
+contribute signiﬁcantly to the local energy, and hence also to the gradients used to update the
+variational parameters3.
+    To investigate whether our network learned the correct sign distribution, we do a comparison
+against the exact ground state, obtained using exact diagonalization on a 6×6 lattice [1,103,104         ].
+At a ﬁxed iteration, for each set of conﬁgurations (the blue and red data points in Fig.7), we
+evaluate the signs according to (i) the antiferromagnetic Marshall-Peierls sign rule, (ii) the exact
+ground state at J2/J1 = 0.5, and (iii) the optimized neural network at the latest available iteration
+(Fig.7, lower right panel):
+    •Out of the 10   3 samples s, 99.8% have identical signs in the AF Marshall-Peierls rule and
+       the exact ground state.  This means that the large majority of states which can be drawn
+       from the network cannot help distinguish the true ground state phase structure from the
+       AF Marshall-Peierls signs.  For the remaining 0.2% mismatch conﬁgurations, we computed
+       the neural network predictions and compared it against AF Marshall-Peierls and the exact
+       ground state distribution.   We ﬁnd a clear agreement with the AF Marshall-Peierls rule,
+       implying that the neural network did not learn the correct sign distribution, even though it
+       was completely unbiased by any pre-training [64] or extra unitary rotations [61].
+
+    •In the samples   s ′, the percentage of conﬁgurations whose signs do not agree between the
+       AF Marshall-Peierls rule and the exact ground state sign distribution is 14.2%.  However,
+       evaluating the neural network on these states showed that the majority of them (82% out
+       of the 14.2%) appeared consistent with the AF Marshall-Peierls rule.  Clearly, the accuracy
+       of this assignment decreases for the states with low amplitudes, since they do not belong to
+       a well-deﬁned phase peak.
+From these data, we conclude, that our network identiﬁes very accurately the AF Marshall-Peierls
+rule on high amplitude conﬁgurations, whereas at very low amplitudes the coefﬁcients can still
+have arbitrary phases.
+    The observations above provide a manifestation of the difﬁculty of encoding the correct phases
+in the neural network. It is thus natural to investigate the sign structure of the probability ampli-
+tudes in the exact ground state: in the entire computational basis at N = 6× 6, about 50.22% of
+
+   2Fixing the value of ln|ψθ (s 0)| is allowed because neural quantum states are non-normalized wavefunctions.
+   3A clearly visible feature displayed in the lower row of Fig.7is the asymmetry       /skewedness of the phase distribution
+for the samples  s ′.   We checked that it represents the manifestation of a dynamical drag effect.   It occurs because
+phases are deﬁned modulo 2π and the global phase rotates quickly as a result of updates during the training process
+(one can think of the two phase peaks moving together).   Since the large-amplitude states give rise to the major
+contribution to the updates of the neural network parameters, the low-amplitude states start lagging behind. This drag
+effect is particularly prominent for those training iterations when the energy changes quickly, or when we do not use
+an adaptive learning rate solver (e.g., SGD). We checked that the drag can be reduced or completely eliminated by
+breaking the U(1) gauge invariance associated with the phase network output, e.g., by adding a bounded non-linearity
+as a ﬁnal output layer in the phase network. However, this did not improve the variational energies.
+
+                                                             17
+ SciPost Physics                                                                                       Submission
+
+
+
+all conﬁgurations have different signs with respect to the AF Marshall-Peierls rule and the exact
+ground state. However, all the 50.22% taken together constitute a total of only 1.95% of the norm
+of the exact ground state. This means that most of these conﬁgurations have insigniﬁcantly small
+amplitudes, which makes encountering such states in MC sampling unlikely.
+    In Fig.7      [bottom right panel], we compare the variational amplitudes of the neural network
+conﬁgurations which do not align well with the main phase peaks, to their exact ground state
+values.  To do this, we consider again the s′-sample (red data) at training iteration 1995, and
+deﬁne anϵ-vicinity around the peaks atϕs  =−π, 0,π.  We now manually remove all s′ that fall
+within the peaks’ vicinity. The remainings′-sample clearly shows large deviation from the ground
+state phase distribution which is known to be real-valued.  Evaluating the relative amplitudes of
+the remaining s′-sample in the exact ground state is shown by the magenta data.  Note that we
+cannot compare absolute amplitude values here, since the neural network state is not normalized.
+However, we can ﬁx the amplitude value of the largest s′-conﬁguration as a reference point, see the
+red cross. The comparison clearly shows that the majority of the misaligned s′-conﬁgurations have
+their amplitudes suppressed in the neural network state by a few orders of magnitude, as compared
+to the exact ground state.  Thus, the VQMC optimization procedure conveniently suppresses the
+weights of those conﬁgurations whose phases cannot be learned well and, thus, their contribution
+to the gradient update will also be suppressed.  As a result, such conﬁgurations become difﬁcult
+to encounter in the MC sample.  Since the neural network state in VQMC improves from data
+generated by the network itself, this slows down the energy minimization procedure.
+    To sum up, we showed that, instead of learning the exact ground state sign distribution, start-
+ing with no bias our neural network approximates closely (though not exactly) the Marshall-Peierls
+sign rule. We traced the reason for this back to the vanishingly small weights that non-Marshall-
+Peierls conﬁgurations have in the exact ground state, which suppresses their occurrence in the MC
+samples used for training.
+
+
+5 Identifying bottlenecks which prevent learning the ground state
+
+The results we report raise the obvious question as to what prevents learning the correct ground
+state.  Pinpointing the major issue(s) is important from the perspective of improving the neural
+quantum state VMC technique. For N = 6×6, we can compute the exact ground state wavefunction
+using exact diagonalization, and use it to design a few numerical experiments. Our goal is to check
+if the training bottleneck arises due to
+
+    •Problems with the optimization of either the log-amplitude or the phase network alone,
+
+    •A MC sampling issue related to the probability of encountering states that can produce the
+       correct gradients to minimize the energy,
+
+    •The expressivity of the log-amplitude or phase network,
+
+    •An issue with the optimization procedure  /algorithm.
+
+To this end, we perform two sets of experiments, namely studying partial learning problems, where
+only either phase or amplitude has to be learned (Sec.5.1), and eliminating Monte Carlo noise
+by performing full basis simulations (Sec.5.2).  For a fair comparison, we use the same neural
+network architecture employed in the majority of the ﬁgures throughout the paper.
+
+
+                                                          18
+  SciPost Physics                                                                                       Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      Figure 8: Energy minimization in the partial learning problem for N = 4×4 (left panel)
+      and N  = 6× 6 (right panel):  ln|ψ|-optimization (blue) shows the amplitude learning
+      curves for the log-amplitude network, using the sign structure of the exact ground-state
+      at every iteration  step (i.e.,  we do not use  a phase network). ϕ-optimization (red)
+      shows the phase learning curves for the phase network,  using the amplitudes of the
+      exact ground state at every iterations step (i.e., we do not use a log-amplitude network).
+      The network architecture is listed in App.H, and           J2/J1 = 0.5.  Optimization was done
+      using RK in combination with SR, see App.A. The MC sample sizes are           NMC = 210 for
+      N = 4× 4, and NMC = 215 for N = 6× 6.
+
+
+5.1The partial learning problems
+
+Consider ﬁrst the two partial learning problems:  (i) sampling from the exact ground state dis-
+tribution|ψθ (s)|2, we optimize only the phase network, and (ii) given the correct values for the
+phase distribution in the exact ground state, we optimize only the log-amplitude network to see
+if we can learn the magnitudes of the ground-state probability amplitudes.
+    Figure8shows the energy optimization curves for             N = 4× 4 (left panel) and N = 6× 6 (right
+panel).  Scenario (i) is shown in red and scenario (ii) in blue.  As anticipated, we see that the
+optimization procedure results in energy difference with the exact ground state below 10−3 for
+N  = 4× 4 (left panel).  However, for N  = 6× 6 we ﬁnd similar behavior as in the full learning
+problem:  (i) optimizing the phase network by sampling from the exact ground state probability
+distribution, the system ends up trapped in a plateau, corresponding (largely) to the AF Marshall-
+Peierls rule, which survives at least up to 4000 optimization cycles (not shown).   Importantly,
+the value of the plateau appears higher than that obtained in the full-learning problem for the
+two independent simulations we ran.  (ii) Interestingly, although optimizing the log-amplitude
+network given the correct phases, leads to a slightly lower energy, as compared to (i), it does not
+perform much better than the joint learning problem.
+    This numerical experiment implies that the log-amplitude/phase-network has trouble learning
+the correct ground state on its own, even if the second network is taken to produce the exact
+
+
+                                                          19
+  SciPost Physics                                                                                       Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      Figure 9:  Lowest variational energy density reached, and its MC error bar versus the
+      inverse size of the MC sample 1/NMC:  increasing the sample size does not necessarily
+      lead to a lower energy.  Inset:  variational energy density against the iteration number
+      for different sample sizes;  see inset legend for the values of NMC.  The system size is
+      N = 6× 6. The network architecture is listed in App.H, and           J2/J1 = 0.5. Optimization
+      was done using RK in combination with SR, see App.A.
+
+
+ground state data.  Hence, it remains unclear if it is the phases alone that prevent the algorithm
+from reaching the ground state (for otherwise, scenario (ii) would reach the ground state).
+
+5.2Full-basis simulation
+
+To test whether the failure to learn the correct phases is caused by the MC sampling, we can turn
+it off, and work with the full basis of 15 804 956 states4 in the ground state symmetry sector at
+N = 6× 6 (excluding SU(2) symmetry, see App.C). We use the same neural network architecture
+as before, but now all states in the Hilbert space contribute to the evaluation of the gradients
+F  and the curvature matrix S, i.e., we perform an exact simulation, free of MC sampling noise,
+which we refer to as a full-basis simulation5.  In Fig.9, we ﬁx the seed of the pseudo-random
+number generator, and compare the energy curves as we vary the size NMC of the MC sample over
+two orders of magnitude (including a point free of MC noise, which corresponds to the full-basis
+simulation). This indicates that MC noise is not the limiting factor in our variational ground state
+search. Therefore, throughout the rest of this section, we focus on the full-basis simulation.
+    The full-basis training curves displayed in Fig.10show that there is a signiﬁcant difference in
+the accuracy achieved, for the two system sizes.  While the difference to the ground state energy
+
+   4For comparison, at N = 4× 4, the Hilbert space dimension of the ground state sector is 107.
+   5Performing a full-basis simulation is feasible using massive parallelization,  and automated differentiation soft-
+ware [105],  and to the best of our knowledge,  it has not been performed so far on this problem for large Hilbert
+spaces.
+
+
+
+                                                             20
+  SciPost Physics                                                                                       Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      Figure  10:   Energy  minimization  in  the  full-basis  simulation  learning  problem  for
+      N  = 4× 4 (blue) and N  = 6× 6 (red).  Albeit faster, for N  = 6× 6, we obtain sim-
+      ilar energies as with MC sampling which implies that the problem with reaching the
+      correct ground state is not (directly) related to MC sampling. The network architecture
+      is listed in App.H, and           J2/J1 = 0.5.  Optimization was done using RK in combination
+      with SR, see App.A.
+
+
+rapidly drops for the small system6, the minimal energy obtained for N = 6× 6 is the same as the
+one achieved in the previously discussed simulations with Monte Carlo sampling. Therefore, our
+simulations indicate that the Monte Carlo sampling noise is not the limiting factor that inhibits
+the optimization procedure to go further down the energy landscape.
+    Thus, we turn our attention to check the expressivity of the neural network ansatz.  This is a
+particularly challenging task, even if the exact ground state is known, because it requires a deﬁni-
+tion of expressivity which does not depend on the cost function or the optimization algorithm, for
+different cost functions or optimizers may yield different results depending on the topography of
+the optimization landscape. Therefore, we ask the slightly different, yet practically more relevant,
+question as to whether our best-performing network has reached a local minimum of the energy
+landscape or not.  Ending up in a minimum would be consistent with insufﬁcient expressivity of
+the ansatz.
+    To investigate this, we compute the Hessian matrix associated with the energy landscape
+
+                                                   Hmn =∂θ m∂θ n Eθ .                                                       (17)
+
+Negative and positive eigenvalues of the Hessian correspond to directions of negative and positive
+curvature, respectively. A local minimum has the property that the Hessian is positive deﬁnite, i.e.,
+all its eigenvalues are positive. Albeit a very time-consuming computation, it is feasible to obtain
+these eigenvalues due to the relatively small sizes of our networks. The details for the derivation
+of the explicit form of the Hessian matrix for the neural quantum state ansatz is shown in App.G.
+
+   6Minimal energy differences achieved with N = 4× 4 are of the order of 10−7, see Fig.3.
+
+
+                                                            21
+  SciPost Physics                                                                                       Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      Figure 11: Hessian matrix eigenvalues of the energy cost function, see App.G: full-basis
+      simulation for N = 4×4 at iteration 499 where Egs =−8.457917 (blue), and N = 6×6 at
+      iteration 675 where Egs =−18.073818 (red). Inset: zoom over the ﬁrst 100 eigenvalues.
+      The few negative large eigenvalues at N = 6× 6 indicates the presence of highly curved
+      narrow directions in the energy landscape, which appear hard for VQMC to ﬁnd.  They
+      are responsible for the slowing down of the rate at which energy improves. The network
+      architecture is listed in App.H, and           J2/J1  = 0.5.  Optimization was done using RK in
+      combination with SR, see App.A.
+
+
+    Figure11shows the Hessian eigenvalues for the               N  = 4× 4 and N  = 6× 6 systems at later
+stages of training. Whereas the N = 4× 4 Hessian has some negative eigenvalues, note that their
+magnitude is on the order of 10−2 (see inset). Therefore, these correspond to ﬂat directions on the
+variational manifold, that the optimization dynamics easily follows as it continues to improve the
+energy of the variational state.  In stark contrast, the N = 6× 6 Hessian has a few large negative
+eigenvalues on the order of 102: these are highly curved sparse directions on the manifold, which
+are hard to ﬁnd by the optimizer.  This might be causing the apparent slow improvement of the
+energy curve in Fig.10.  We ﬁnd that all large negative-curvature directions originate from the
+log-amplitude network, by computing the contribution of the corresponding eigenvectors to the
+log-amplitude network parameter subspace (the log-amplitude and phase-network parameters are
+coupled in the Hessian, see App.G).
+    More interestingly, the existence of these negative eigenvalues in the N = 6× 6 system proves
+that the network parameters have not yet reached a local minimum in the optimization landscape.
+Hence, expressivity is not a problem causing the observed learning bottleneck.  Note that, while
+this does not imply that our ansatz is expressive enough to encode the exact ground state distri-
+bution, it already points at a severe problem with the variational manifold and the optimization
+dynamics used to explore it.
+
+
+
+
+
+                                                           22
+ SciPost Physics                                                                                       Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      Figure 12: Variational energy density against the iteration number for different seeds of
+      the pseudo-random number generator. Inset: energy variance per spin. The system size
+      is N = 6×6. The network architecture is listed in App.H, and           J2/J1 = 0.5. Optimization
+      was done using RK in combination with SR, see App.A. The MC sample size is          NMC = 105.
+
+6 Rugged variational manifold landscape
+
+The ground state search can also be viewed and analyzed as an optimization problem.  In this
+section,  we investigate a connection between the properties of the neural network parameter
+manifold, and the difﬁculty of learning the correct ground state. We ﬁrst discuss signatures in the
+numerical data of the existence of a highly rugged optimization landscape, and then draw several
+conclusions of both practical and conceptual importance. We restrict the discussion to the J1− J2
+model, although much of the analysis can be repeated for similar problems.
+    The difﬁculties we encountered using variational quantum Monte Carlo to ﬁnd the true ground
+state at J2/J1 = 0.5 already at N = 6× 6 motivate us to perform another sequence of numerical
+experiments to unveil some characteristic features of this problem, which imply that we are dealing
+with a very rugged energy landscape.  In particular, we will address the role of pseudo-random
+numbers, Monte Carlo noise, and ﬁnite machine precision.
+
+6.1Different pseudo-random number sequences
+
+Notice ﬁrst that “randomness” is an important ingredient of VQMC as it occurs in the selection
+of the MC proposal updates, but also in the choice of the initial values for the neural network
+parameters θ . In Fig.12, we ﬁx all hyperparameters of the algorithm, and study its behavior for
+four different initial seeds of the pseudo random number generator (the inset shows the energy
+variance, which is zero in the beginning of optimization, since the S x-polarized state is an eigen-
+state of the Hamiltonian H).  Note that the energy optimization curves start deviating already in
+the ﬁrst few iteration steps:  therefore, we see that different runs of the algorithm follow differ-
+ent trajectories on the parameter manifold, despite the fact that they all start from (almost) the
+
+                                                          23
+  SciPost Physics                                                                                       Submission
+
+
+
+same initial quantum state.  Upon closer examination, we notice that some of these trajectories
+appear to be stable, while others are prone to (runaway) instabilities (Sec.3.1.2), caused by the
+optimization steering the variational parameters in a region of parameter space where the neural
+network generalizes poorly.  Following different trajectories on the parameter manifold is phys-
+ically irrelevant, provided that the ﬁnal network parameters represent the same physical state.
+However, we see that, although all simulations gradually minimize the energy, they eventually get
+stuck in landscape saddles corresponding to different physical states, as becomes evident from the
+different values of the energy reached.  7
+    One should keep in mind that the energy landscape in VQMC is not perfectly sharp, i.e., it is
+only known within the margin of uncertainty produced by the Monte Carlo estimates. MC-induced
+uncertainty can also cause the optimization to change the trajectory on the parameter manifold.
+For the J1− J2 model, we ﬁnd that an increasingly better resolution is needed in order to reach
+lower energies.   Moreover,  the larger the value of NMC,  the faster the energy decreases in the
+initial stages of optimization, see Fig.9. Once more we observe that different simulations end up
+in different saddles even when all hyperparameters are held ﬁxed.
+    Recall that adding small noise (e.g., due to estimating a quantity from sample averages) is
+a common practice when training machine learning models:  for instance, noise helps overcome
+shallow barriers in the loss function and (in part) motivated the development of stochastic gradient
+descent (SGD). Therefore, it is likely that the different saddles VQMC gets stuck in, are located
+in deep valleys, separated by high and difﬁcult to overcome energy barriers.  This topography is
+reminiscent of spin glasses, and will be the subject of future studies.
+
+6.2Consequences of ﬁnite machine precision
+The rugged character of the optimization landscape is best demonstrated in a simple numerical
+experiment on a N  = 4× 4 lattice where Monte Carlo ﬂuctuations can be eliminated because
+of the small size of the Hilbert space, by using a full-basis simulation.  We consider a shallow
+holomorphic DNN, and deliberately restrict the number of neurons to four, so ﬁnding the exact
+ground state becomes infeasible (we believe that this regime contains some of the difﬁculties
+encountered for larger systems). We then consider two equivalent but different implementations
+of the same algorithm, both using SGD with SR [cf. App.A       ]. To remove the remaining uncertainty
+related to the initial network parameters, we also load the exact same initial parameters for both
+implementations.
+    In Fig.13, we show the result of this toy-simulation:  stunningly, we ﬁnd that the errors ac-
+cumulated due to ﬁnite precision of the machine arithmetic are enough to conceivably alter the
+trajectory of the optimization dynamics.  Initially, the difference between two curves shown in
+the inset of Fig.13remains close to machine precision up to the plateau at 100 iterations, reach-
+ing as small as 10−15, which certiﬁes the correct implementation of the two independent codes.
+Nonetheless, the difference quickly grows again once the two simulations escape the plateau. Such
+a plateau is reminiscent of the landscape saddle point featuring a few highly curved directions we
+discussed in Sec.5.2. This behavior occurs as the two simulations go down the energy landscape in
+
+   7Notice that deep neural networks are nonlinear function approximators, and thus Eqs. (10) and (11) deﬁne nonlin-
+ear differential equations. Hence, one may be tempted to relate the observed behavior to classical chaos (trajectories,
+starting close in phase space eventually end up exponentially far apart).  However, this is not the case for imaginary-
+time evolution, because classical chaos requires that the underlying equations of motion carry a symplectic (i.e., a
+phase-space) structure. Chaotic manifold dynamics remain an interesting possibility to consider in real-time evolution
+though.
+
+
+                                                            24
+  SciPost Physics                                                                                       Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      Figure 13:  Energy minimization curves in a full-basis simulation.  The two simulations
+      (cyan, magenta) use two implementations of the VQMC algorithm with the exact same
+      neural network initial conditions and hyperparameters.  Inset (black curve): the differ-
+      ence between the two energy curves grows with increasing the iteration number.  We
+      observe a deviation between the two curves deep down the landscape due to an error
+      multiplication seeded by machine precision and caused by the rugged landscape.  We
+      used a shallow holomorphic DNN with six hidden neurons (App.H), and             J2/J1 = 0.5.
+      The system size is N  = 4× 4.  Optimization was done using SGD in combination with
+      SR, see App.A, with a learning rate of    γ = 10−2.
+
+
+different directions. These results are disturbing, because they reveal an issue with reproducibil-
+ity of the simulation.  Apparently, it is not enough to keep the same algorithm hyperparameters
+and the seed of the random number generator ﬁxed: the compute architecture and the low-level
+software which contains the arithmetic instructions need to also be identical in order to reproduce
+the data.
+    The  rugged  structure  of  the  cost  function  manifold  also  explains  why  different  optimizers
+perform drastically differently, see App.A          8. This adds to the evidence that the optimization land-
+scape for the ground state search at J2/J1 = 0.5 features a highly complex topography, consisting
+of many highly-curved saddles located in deep valleys. It is plausible that the energy landscape is
+glassy because the problem appears difﬁcult irrespective of the optimization method used (VQMC,
+tensor networks, etc.).  The physical intuition for having a glassy landscape here comes from the
+frustrated character of the physical Hamiltonian which imposes a number of constraints for the
+ground state to satisfy in order to minimize energy, akin to k-SAT problems in statistical mechan-
+ics [106]. Similar results have recently been reported in the context of quantum control [107].
+
+   8In Fig.15, it is clear that the optimization dynamics gets stuck in distinct saddles, whose energy values differ by
+orders of magnitude.
+
+
+
+
+                                                           25
+ SciPost Physics                                                                                       Submission
+
+
+7 Conclusions
+
+In this last section, we summarize and discuss our results.  In doing so, we pay speciﬁc attention
+to separate conclusions backed-up by numerical evidence from plausible explanations and inter-
+pretations of the data. We also discuss some open problems we were not able to resolve. Finally,
+we give an outlook to relate our study to expected near-term progress in the ﬁeld.
+
+7.1Main results
+
+While they have been demonstrated to work well in a number of problems so far [58,67,72,99              ],
+when it comes to learning the ground state of frustrated spin systems, such as the J1− J2 model,
+holomorphic architectures for neural network quantum states exhibit certain deﬁciencies:  ﬁrst,
+the holomorphic constraint correlates the phase and amplitude gradients of the variational wave-
+function parameters, which means that an update to the network parameters will cause a change
+in both the amplitude and the phase of the output. Therefore, ﬁne-tuning of, e.g., only the phases
+is not possible using a holomorphic ansatz.   Second, non-constant holomorphic non-linearities
+are necessarily unbounded.   This compromises the conditions for the expressivity theorem for
+neural networks, and raises the question whether holomorphic neural networks can be universal
+approximators. As a way out, we introduced a natural generalization, which eliminates the above
+drawbacks, where a complex-valued variational wavefunction is deﬁned by two independent real-
+valued neural networks: one for the log-amplitudes, and the other for the phases.
+    Using stochastic reconﬁguration to optimize the parameters of neural quantum states can be
+a challenging problem, due to the occurrence of instabilities, which cause the algorithm to blow
+up. We identiﬁed a runaway instability triggered by unbounded approximations to the probability
+amplitude: this leads to order-of-magnitude wrong network predictions for the local energies, and,
+consequently, to wrong values for the gradient updates. The runway instability is related to a poor
+generalization ability of the network. To remedy it, we proposed to apply a bounded output layer
+of ﬁxed range, capable of capturing amplitudes which otherwise differ by up to several orders
+of magnitude.   A further instability we discuss in App.Dis related to the proper initialization
+of the neural network parameters, and is particularly relevant for designing deep architectures
+which do not suffer from the vanishing/exploding gradient problem. Finally, we mention that we
+found stochastic reconﬁguration to produce a much more stable behavior, when combined with
+an adaptive step-size scheduler, for instance, based on Runge-Kutta methods, see App.A.
+    Having decoupled amplitude and phase network allowed us to investigate the process of learn-
+ing the correct ground state phases in an unbiased end-to-end approach, i.e., without any ex-
+tra physics input.  We demonstrated that this removes the necessity to explicitly implement the
+Marshall-Peierls sign rule in holomorphic networks.  Moreover, our phase networks are capable
+of encoding the Marshall-Peierls sign rule without any pre-training [64], and without the use of
+a physics-inspired architecture [60,62,65         ].   All simulations (that do not “blow up”) end with
+roughly the same energy density of  E/N≈−0.5019.  Since the same number occurs in previ-
+ous studies that differ in the network architecture used and further details of the optimization
+scheme [61,62,64         ], we believe this behavior to be universal. None of our simulations, including
+partial-learning and full-basis ones, was able to ﬁnd the correct phase distribution, or reach a
+lower energy on the N = 6× 6 lattice.
+    On the variational manifold, the Marshall-Peierls sign rule corresponds to a saddle point, where
+the energy Hessian contains predominantly positive and a few negative eigenvalues. The existence
+of the negative eigenvalues indicates that the network parameters have not yet reached a local
+
+
+                                                          26
+  SciPost Physics                                                                                       Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      Figure 14:  Cartoon of the evolution of a variational wave function coefﬁcient in the
+      complex plane during the optimization. The rapid initial optimization renders the wave
+      function real. Subsequently, reaching the correct sign takes very long, because a narrow
+      saddle has to be passed.
+
+
+minimum; this shows that the expressivity of the neural network is not the limiting factor to ﬁnd a
+better approximation to the ground state. By performing full-basis simulations, we also eliminated
+the Monte Carlo sampling noise as another possible suspect, and veriﬁed that it does not provide
+the training bottleneck either.
+    While incorrect signs constitute an obvious deviation from the exact ground state, by perform-
+ing separate optimization of the phase and amplitude network, respectively, we found that learning
+the correct signs is not the sole issue. Also given the sign structure of the exact ground state, our
+optimization did not result in a more accurate approximation of the wave function amplitudes.
+    This led us to investigate the properties of the optimization landscape. The numerical exper-
+iments we performed suggest that the J1− J2 model has a rugged landscape, consisting of deep
+valleys abundant in saddles containing just a few highly curved directions.  We showed that this
+topography leads to issues with reproducibility of the simulations. Moreover, scaling up the num-
+ber of network parameters does not systematically improve the accuracy of the variational energy
+at J2/J1 = 0.5, since it is easy for independently initialized simulations to get trapped in one of
+the many different saddles.   Many of these landscape features are shared by spin glasses and,
+therefore, it is conceivable that the landscape might have a glassy complexity.
+
+7.2Discussion
+In combination, the observations from various numerical experiments reported in this work in-
+dicate that, when addressing the system size N  = 6× 6, we reach a saddle point in the energy
+landscape that appears to be very hard to escape.  A cartoon of the evolution of individual wave
+function coefﬁcients is sketched in Fig.14.  During the early stages of optimization, the neural
+network learns to approximate the Marshall-Peierls sign rule with high accuracy, which renders
+
+
+                                                           27
+  SciPost Physics                                                                                       Submission
+
+
+
+the wave function real and — together with suited wave function amplitudes — yields already
+very low energies.  To further reduce the energy, the neural network would have to pick up the
+correct signs also for a small fraction of conﬁgurations in the exact ground state that deviate from
+the Marshall-Peierls sign rule.
+    Our observation indicates that the route for the neural network to further reduce the energy
+is to reduce the wave function amplitude of conﬁgurations with incorrect sign.  Looking at the
+energy expectation value expressed in terms of the local energy, Eq. (3), it is plausible that this is an
+efﬁcient way to reduce the energy when the majority of the signs is already produced correctly: for
+instance, if in Elocθ  (s) only the sign of the coefﬁcientψθ (s) is incorrect, Elocθ  (s) will have the wrong
+sign. Then, the energy obtained by Eq. (3) can be lowered by reducing     pθ (s). Figure7indicates
+that this is the main mechanism to reduce the energy at later stages of the optimization, because
+we only ﬁnd wave function coefﬁcients away from the main phase peaks at very low amplitudes.
+We furthermore checked on a number of exemplary conﬁgurations that the amplitudes learned by
+the network are systematically smaller than the exact ground-state result for conﬁgurations that
+deviate from the Marshall-Peierls sign rule.
+    We conjecture that this required ﬁne tuning of few wave function coefﬁcients constitutes the
+main obstacle preventing us from reaching a better approximation of the ground state. The spec-
+trum of the Hessian evaluated in the ﬁnal plateau (Fig.11) shows that the corresponding saddle
+reached by the optimization dynamics is largely ﬂat, except for a few eigendirections, which ex-
+hibit a strong negative curvature. However, it seems to be very hard for the optimizer to identify
+these directions — potentially, because the wave function amplitudes of conﬁgurations with sign
+mismatch are strongly suppressed. It is at this point an open question how this issue can be over-
+come.
+    In this context,  it is worth emphasizing that stochastic reconﬁguration is already a second
+order optimization algorithm that includes awareness of the curvature of the variational manifold.
+However, it is based on the metric tensor of the neural network manifold and not directly related to
+the curvature of the energy landscape (the matrix S constitutes only a part of the energy Hessian,
+see App.G). The sparsity of negative curvature that we revealed through the Hessian spectrum
+might require a different second order approach.   Directly utilizing the Hessian matrix in the
+optimization algorithm appears straightforward, and, although currently expensive, it is within
+the scope of present-day computational techniques.
+
+7.3Outlook
+
+It is curious enough to note that for  J2/J1  =  0.5 on the  N  =  6× 6 lattice,  all works [61,62,
+64], including ours, ﬁnd comparable variational energies (the energy density difference with the
+exact one is approximately 2· 10−3) while the variational ansatz and optimization procedures
+are different.   This suggests a “universal bottleneck” in the current use of neural networks as
+variational quantum states for frustrated quantum systems. It remains an open question whether
+this bottleneck can be overcome or circumvented by other optimization algorithms or enhanced
+network architectures.
+    Our results raise the natural question as to why neural quantum states approximate much bet-
+ter the ground states of other models, e.g., Ising, Heisenberg, Bose-Hubbard, etc. [58,67,72,99              ].
+We currently believe that, for these models, even when the variational ansatz is expressive enough
+to capture the true ground state, independently initialized simulations still end up in distinct land-
+scape minima characterized by different values of the network parameters. However, since these
+minima all describe the same physical state, they are indistinguishable from the perspective of
+
+
+                                                           28
+ SciPost Physics                                                                                       Submission
+
+
+
+physics.  In more complex setups, such as the J2/J1  = 0.5 point of the J1− J2 model we stud-
+ied, the degeneracy between the landscape minima is lifted, and a rugged landscape emerges.
+This makes it particularly hard for optimization algorithms to locate the global minimum (i.e., the
+lowest-energy conﬁguration).
+    Unlike tensor network approaches where the quality of the variational approximation is con-
+trolled by the amount of entanglement entropy across a cut in the lattice, it is currently unknown
+what sets the limitations for neural quantum states.  While there is no apparent sign problem,
+“learning” the correct sign structure in the quantum many-body ground state for non-stoquastic
+Hamiltonians appears in some cases as a nontrivial and challenging computational problem. Fig-
+uring out a way to determine the signs would allow one to safely access larger system sizes, and
+more generally, to deal with generic non-stoquastic Hamiltonians describing frustrated magnets
+and interacting fermions.
+
+    Note added: an alternative study of the complexity of ﬁnding the ground state of the J1− J2
+model using restricted Boltzmann machines can be found in Ref. [108].
+
+
+Acknowledgments
+
+We wish to thank E. Altman, Y. Bahri, C. Fisher, and P. Weinberg for valuable discussions, and
+G. Carleo for helpful comments during peer review.  We used JAX [105] for the deep learning
+implementation and QuSpin [103,104       ] for exact diagonalization and model symmetries.
+
+Funding information    M.B. was supported by the U.S. Department of Energy, Ofﬁce of Science,
+Ofﬁce of Advanced Scientiﬁc Computing Research, under the Accelerated Research in Quantum
+Computing (ARQC) program, the U.S. Department of Energy under cooperative research agree-
+ment DE-SC0009919,  the Emergent Phenomena in Quantum Systems initiative of the Gordon
+and Betty Moore Foundation, and the Bulgarian National Science Fund within National Science
+Program VIHREN, contract number KP-06-DV-5.  M.D. was supported by the U.S. Department of
+Energy,  Ofﬁce of Science,  Ofﬁce of Basic Energy Sciences,  Materials Sciences and Engineering
+Division under Contract No. DE-AC02-05-CH11231 through the Scientiﬁc Discovery through Ad-
+vanced Computing (SciDAC) program (KC23DAC Topological and Correlated Matter via Tensor
+Networks and Quantum Monte Carlo).  M.S. was supported through the Leopoldina Fellowship
+Programme of the German National Academy of Sciences Leopoldina (LPDS 2018-07) with addi-
+tional support from the Simons Foundation. This project has received funding from the European
+Union’s Horizon 2020 research and innovation programme under the Marie Sklodowska-Curie
+grant agreement No 890711.  This research also used resources of the National Energy Research
+Scientiﬁc Computing Center (NERSC), a U.S. Department of Energy Ofﬁce of Science User Facility
+operated under Contract No. DE-AC02-05CH11231.
+A Variational parameters optimization
+
+A.1Brief overview of the optimization algorithms
+Equations (10) and (12) use gradients            Dk to iteratively compute the updates of the neural network
+parameters θ .  Depending on whether we endow the variational manifold with the Euclidean or
+
+
+
+                                                        29
+  SciPost Physics                                                                                       Submission
+
+
+
+its intrinsic Riemannian metric, we obtain the expressions,
+                                                 ,    DSR    ∑
+                                DEk = 2Re F k           k   =     k′ (S +δ1)−1kk′ F k′,                                  (18)
+
+withδ an exponentially decaying regularizer needed to prevent instabilities at the early stages
+of optimization.  Formally,  DE/SRk      correspond to the gradients of the energy and the wavefunc-
+tion overlap cost functions, respectively [69].  Once the gradients are computed, using different
+optimizers to perform the update will result in various degrees of accuracy. Here, we brieﬂy intro-
+duce three common optimizers and compare their performance. More details on gradient descent
+methods used in machine learning can be found in Ref. [55].
+
+A.1.1Stochastic gradient descent
+Stochastic Gradient Descent (SGD) is the simplest and most common optimizer, and corresponds
+to the update rule:
+                                                θ t←− θ t−1−γDt,                                                      (19)
+withγ denoting the learning rate and t the iteration step. This ﬁrst-order method is computation-
+ally efﬁcient and inexpensive, and can be parallelized easily for speed.  The stochastic character
+of the method in the context of variational quantum Monte Carlo refers to the estimate of the
+gradients D over the MC sample.  The main disadvantages of SGD are that (i) the gradients D
+of all parameters are weighted by the same learning rateγ, and (ii) the learning rate schedule
+over the iterative optimization procedure is constant in t, which can both cause instabilities in the
+optimization dynamics.
+
+A.1.2ADAM
+
+ADAM is another ﬁrst-order optimizer which estimates a parameter-dependent learning rate from
+the ﬁrst and second order moments of the gradients according to [109],
+
+                                           mt←−β1mt−1 + (1−β1)Dt
+                                            nt←−β2nt−1 + (1−β2)D2t
+
+                                            ˜mt←−      mt1− (β1)t
+                                                                                                                   (20)
+                                            ˜nt←−      nt1− (β2)t
+
+                                         θ t+1←− θ t−γ     ˜mtp˜nt +ε.
+
+
+Besides the learning rateγ, hereβ1  = 0.9 andβ2  = 0.999 are the decay rates of the ﬁrst and
+second moment estimates,ε = 10−8 is a small regularizer, and (βj)t  denotesβj to the power t.
+The main advantage of ADAM is that it can escape narrow and wide valleys of the optimization
+landscape while retaining computational efﬁciency which makes it applicable to large neural net-
+works with many independent parameters.  Note that a parameter-dependent learning rate can
+also be achieved by using the SR gradient:  although the SR gradients provide a more accurate
+estimate for the curvature of the parameter manifold, computing the inverse matrix of the curva-
+ture matrix S−1kk′ of Eq. (12) is expensive for a large number of parameters, and also requires      Skk′
+to be well-conditioned.
+
+
+                                                          30
+  SciPost Physics                                                                                       Submission
+
+
+
+A.1.3Heun’s method
+
+This is a two-stage Runge-Kutta (RK) scheme which allows to adapt the learning rate schedule
+γ≡γt  during the optimization process.  Depending on the local curvature of the trajectory fol-
+lowed in the parameter manifold, this optimizer can make large steps in ﬂat regions while slowing
+down in highly-curved regions to efﬁciently improve the accuracy of the update.  In practice, it
+offers the advantage of not overshooting minima at the later stages of optimization. Additionally,
+it can stabilize optimization in our setup since large steps correspond to large updates which can
+implicitly deteriorate the quality of the Monte Carlo sample in subsequent iterations.  The major
+disadvantage of RK methods is their computational cost, since they require multiple evaluations
+of the gradients per iteration step.   We use the implementation described in the supplemental
+material to Ref. [78] and, in the rest of this paper, we refer to it simply as RK.
+    Consider the ordinary differential equation ˙y = f (y). Setting yn = y(t), we compute yn+1 = y(t+τ)
+using
+
+                                                  k1 = f (yn) ,
+                                                  k2 = f (yn +τk1) ,
+
+                                               yn+1 = yn +τ2 (k1 + k2) .                                                  (21)
+
+Based on this we can estimate the integration error using varying step sizesτ.  If we denote the
+exact solution by y(t), an integration step with step sizeτ yields
+
+                                                yn+1 = y(t +τ) + cτ3,                                                   (22)
+
+with an unknown constant c, because our integration scheme has an error of O(τ3). Alternatively,
+we can take two steps of sizeτ/2, resulting in
+                                                                        τ  3
+                                              y′n+1 = y(t +τ) + 2c        2    ,                                                (23)
+                                                                     |   {z   }
+                                                                         δ
+
+with the integration errorδ. The difference of both solutions is
+                                                                      3      = 6||δ||.                                  (24)
+                                  ∆yn+1 =||yn+1− y′n+1|| =             4 cτ3
+
+Given a desired toleranceε we can adjust the step size based on this to be
+                                                             ε      1/3
+                                                   τ′ =τ     ||δ||        .                                                       (25)
+
+
+The choice of a speciﬁc norm||·|| is in principle arbitrary. Following Ref. [78], we employ the normq∑
+induced by the S-matrix,||x||S  =  1P                k,k′ Sk,k′ x∗k xk′, for that purpose, meaning that we weigh
+integration errors by their signiﬁcance for the physical state. Here, P is the number of variational
+parameters.
+    We checked that using a four-stage RK (e.g., Dormand Prince) did not provide any advantage
+over the cheaper two-stage procedure.
+
+
+
+
+                                                             31
+  SciPost Physics                                                                                       Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      Figure 15: Variational energy density against the iteration number for different optimiz-
+      ers and cost functions. The system size is N = 6× 6. The network architecture is listed
+      in App.H, and           J2/J1 = 0.5. The MC sample size is NMC = 105. The data were produced
+      from simulations using 1024 Haswell cores running for 48 hours.
+
+
+A.2Comparison of the optimization algorithms
+We now test the behavior of the three optimization algorithms introduced in the previous section
+on the J1−J2 model. We consider both the Euclidean DEk and the Riemannian DSRk  metric gradients
+(see Sec.2.1) to perform the updates and display our results in Fig.15.
+    We ﬁnd that SGD (blue curve) is particularly sensitive to the initial condition:  the closer the
+physical state is to an eigenstate of the Hamiltonian, the longer it takes to ﬁnd the way down
+the energy landscape.  This is somewhat expected, since it can be shown that all eigenstates are
+extrema of the energy cost function, where DE = 0.  SGD produces a piece-wise constant energy
+curve which requires a large number of iterations for the variational neural state to get close to
+the ground state.
+    In contrast, adaptive learning-rate optimizers, such as ADAM (green curve) and RK (red curve),
+tend to produce updates that rapidly decrease the energy. For the J1−J2 model, we ﬁnd that ADAM
+shows a tendency to enter a wide valley of the energy landscape. Escaping this valley appears to be
+an extremely slow process already for N = 6×6 sites due to the rugged character of the landscape,
+as discussed in Sec.6.  RK, on the other hand, also encounters these wide valleys but succeeds
+in adapting the learning rate schedule within about 2000 iterations.  This allows it to eventually
+switch to a better valley in the landscape.  We emphasize that these results hold in the regime of
+about 103 neural network parameters, where the optimization problem appears to be constrained.
+    Unlike the plain energy gradients DEk, SR takes into account the curvature of the variational
+manifold by estimating the S matrix from the MC sample to compute the gradients DEk.  Notice
+that, although SR is designed to ﬁnd the ground state and thus it effectively performs energy min-
+imization, SR does not formally minimize energy but rather the overlap cost function. Therefore,
+the SR optimization landscape may in general differ from the energy landscape.  This becomes
+
+
+                                                           32
+  SciPost Physics                                                                                       Submission
+
+
+
+evident for holomorphic neural networks, see Sec.3.1, where the real part in Eq. (18) induces a
+difference between the Euclidian and SR gradients even in the ﬂat-metric limit S≡ 1.  Bearing
+a formal similarity to what is commonly known as “Natural Gradient”[69], SR allows to quickly
+ﬁnd good directions down the landscape. Intuitively, if we associate gradients with respect to the
+neural network parameters with directions on the variational manifold, SR weighs them according
+to their curvature, facilitating the minimization of the overlap cost function.
+    While it is formally possible to apply all three optimizers in combination with the DSRk  gradient,
+we ﬁnd empirically that ADAM does not converge and we focus on SGD (cyan curve) and RK
+(yellow curve); this is because ADAM needs a modiﬁcation to approximate the diagonal elements
+of the S-matrix [69].  For the selected hyperparameters, we ﬁnd that SGD fails to converge.  We
+believe this is related to an instability associated with the optimal choice of learning rate (we
+discuss various types of instabilities in Sec.3). While it is possible to ﬁnd a network initialization
+for which the behavior of SGD can be stabilized, we observed that SGD performs worse than RK on
+average, see Sec.6for a discussion of the optimization landscape. In all SR        /SGD simulations, we
+start withδ0 = 100 and use an exponential decay scheduleδt =δ0e−0.075t, see Eq. (18). Second-
+order adaptive RK, on the other hand, combines successfully the beneﬁts of an adaptive learning
+rate schedule, and the information about the curvature of the variational manifold. Therefore, we
+select this combination throughout our study. In all SR/RK simulations, we setδ = 0.
+    Finally, let us make a few comments on the CPU time required by the different combinations
+of optimizers and cost functions.   The energy cost function is much “lighter” than the overlap
+required for SR because it does not require the computation of the curvature matrix S, cf. Eq. (12).
+Moreover, the absence of S allows one to use much larger neural networks efﬁciently, since it does
+not require computing the inverse S−1.  It is a nontrivial open question whether increasing the
+number of network parameters can offer any beneﬁts with respect to reaching better energies with
+ﬁrst-order energy minimization in the present rugged landscape.  Clearly, one downside of using
+the energy cost function is the number of iterations required to reach a state with a competitive
+energy, which can well be a few orders of magnitude more, compared to SR.
+
+
+B The convolutional layer
+
+In Sec.2.2we introduced the fully-connected (dense) neural network.  However, in our simu-
+lations, we use the more sophisticated convolutional neural network ansatz.  The convolutional
+layer can be viewed as a specialization of the dense layer, where each output neuron is promoted
+to a channel,                                                                     
+                                                C(l)in∑N (l)F∑
+                                  a(l)c,m = fl           ˜W (c,l)m,c′,ka(l−1)c′,τm(k) + b(l)m ,                                    (26)
+                                                c′=1 k=1
+
+where the index c = 1, . . . , C(l)out introduced in the expression above runs over the number of out-
+put channels.  The mapsτm(k) are chosen to be permutations of the index set corresponding to
+translations by some ﬁxed stride. Hence, the name convolutional layer. Within each channel, the
+individual neurons a(l)c,m are coupled with identical weights to the neurons of the previous layer,
+which were ﬁrst transformed by the translationτm(·). Therefore, the same kind of information is
+extracted from all translations.
+    Moreover, the coupling  ˜W (c,l)m,c′,k is typically chosen to be sparse, with only N (l)F   non-vanishing
+elements per input channel, deﬁning a locally constrained receptive ﬁeld: this means that the con-
+
+                                                           33
+  SciPost Physics                                                                                       Submission
+
+
+
+volutional layer can only be sensitive to local features in the input data, see Fig.1(b). Nonethe-
+less, global correlations can be captured within this architecture despite the sparsity, by stacking
+multiple convolutional layers on top of each other.  To address all distances, the diameter of the
+receptive ﬁeld multiplied by the network depth has to exceed the linear dimension of the input
+data. Last, note that for stacked convolutional layers, we have by construction C(l)in ≡ C(l−1)out   .
+
+
+C Model symmetries and neural network states
+
+The J1−J2 model of Eq. (1) has a number of symmetries that one can take into account to obtain a
+variational quantum state respecting these important features and to reduce the variational space:
+
+  (i)Translation invariance along the two spatial directions     x and y (denoted t x and t y), as we
+       assume periodic boundary conditions,
+ (ii)The point-group symmetries, which include the reﬂection (parity) about the      x-axis, y-axis,
+       and the diagonal of the square lattice (denoted px, py and pd),
+ (iii)Total magnetization conservation,
+                                                h            ∑N         i
+                                                  H, Sztot =     j=1 Szj  = 0,
+
+ (iv)The spin inversion symmetry when       Sztot = 0, generated by ﬂipping all spins,
+  (v)A continuous SU     (2) spin-rotational symmetry,
+                                                           ∑N           2
+                                               H,S2tot =         j=1 S j     = 0.
+
+We work with neural networks and optimization procedures which obey symmetries (i–iv), and
+leave out the continuous SU(2) symmetry. Implementing the SU(2) symmetry in neural quantum
+states was recently proposed in Ref. [110].
+    On a ﬁnite-size system, the ground state of the J1− J2 model is a singlet with zero magneti-
+zation which falls in the zero-momentum sector with positive parities and positive spin-inversion
+quantum numbers. The variational search for the ground state is therefore restricted to these sym-
+metry sectors. First, the zero magnetization sector can be easily enforced via pre-selection by only
+working with spin conﬁgurations s with as many spins pointing up as spins pointing down. Then,
+the spin inversion symmetry s j7→−s j is enacted by considering an even non-linearity activation
+function fl=1(·) and no biases in the ﬁrst layer of the neural network.
+    We considered different approaches to encode the remaining symmetries [66] into the neural
+quantum state, as discussed in the following.
+
+C.1Learning from representatives
+
+In this ﬁrst approach, one works with representative basis states to incorporate the lattice sym-
+metries (i-ii). The idea is to associate a unique equivalence class under these symmetries to every
+basis state s ′, and pick an arbitrary member of the equivalence class s  as its representative [1].
+This amounts to ﬁxing the symmetry gauge by mapping each spin conﬁguration in the Monte Carlo
+sample to its representative spin conﬁguration.  This way, the network never sees spin conﬁgura-
+tions other than the representatives.
+
+                                                           34
+ SciPost Physics                                                                                       Submission
+
+
+C.2Data symmetrization
+
+Alternatively,  one can take a spin conﬁguration  s,  and generate all symmetric spin conﬁgura-
+tions by applying all possible combinations of symmetries. This augments the original data set by
+the symmetric conﬁgurations. The order in which this is done is irrelevant because all symmetries
+commute     in     the     ground     state     sector.              This     amounts     to     a     total     of
+Lt x× Lt y× 2px× 2py× 2pd  = 8N conﬁgurations for deep neural networks, or 2px× 2py× 2pd  = 8
+conﬁgurations for convolutional neural networks. In convolutional layers, translation symmetries
+are built into the neural network architecture using translational invariant ﬁlters and periodic
+padding.  Note that this procedure results in “double” counting for highly symmetric spin con-
+ﬁgurations, which map back to themselves before the cyclicity of the symmetry is exhausted. We
+checked that this double counting does not affect the optimization of neural quantum states. Plus,
+these highly symmetric spin conﬁgurations are exponentially hard to encounter with increasing
+system size.  We then apply the neural network to each one of those symmetry-expanded states
+separately, and uniformly sum up the ﬁnal network outputs in the end.  The same procedure is
+carried out for every initial state s which we want to ﬁnd the amplitudeψθ (s) of. Thus, the neural
+network becomes invariant under all symmetries used to extend the data set.
+
+C.3Relation to symmetrization by quantum number projections
+During the preparation of this manuscript another work appeared, that employs quantum number
+projections in order to symmetrize the variational wave function [80].  In that case, the basis is
+a variational ansatzψθ  without any symmetrization.  For an irreducible representation of the of
+point group  I  with characterχ I, momentum quantum numbers  K  corresponding to the set of
+translations TR, and spin parity S± the symmetrized wave function is then constructed as
+                                           ∑                ψθ (TRP s)±ψθ (TRP s) .                          (27)
+                         ψI,S±K   (θ, s) =       e−iK·Rχ IP
+                                          P∈I,R
+
+This symmetrization by quantum number projection differs from our approach in that it sym-
+metrizes at the level of the wave function coefﬁcients, whereas in our approach we symmetrize
+the logarithmic wave function amplitudes. Thereby, quantum number projections can straightfor-
+wardly address different quantum number sectors, whereas our approach is restricted to momen-
+tum K = 0 and positive spin parity.
+
+C.4Numerical observations
+
+In practice, we observed that data symmetrization is superior to learning from representatives
+since it allows to systematically reach lower variational energies. While we do not have a formal
+proof for this, we offer two plausible explanations. Intuitively, this arises due to the loss of locality
+in the set of representatives:  two conﬁgurations which differ by an exchange of spins on neigh-
+boring sites may have radically different representative spin conﬁgurations, and thus it is hard for
+the neural network to learn the relation between the two.  For the same reason, using represen-
+tatives also defeats the purpose of using convolutional layers. Related to this, representatives are
+not gauge invariant, and it is currently unclear what the effect of the representative choice (the
+gauge) on training is.  Therefore, all data presented in this paper was generated using the data
+symmetrization procedure.
+    We mention in passing yet another empirical observation about the training data: neural net-
+works achieve smaller training errors using the spin conﬁguration convention s j∈{−1, +1}, as
+
+                                                          35
+  SciPost Physics                                                                                       Submission
+
+
+
+compared to  s j∈{0, 1}.  This is likely the case since in the{0, 1} convention all weights that
+couple to 0 in the ﬁrst layer of the network are effectively turned off.
+
+
+D Network initialization
+
+Constructing a deep neural network and optimizing it with Stochastic Reconﬁguration may be
+challenging due to a further kind of instability, caused by inappropriate network initialization. This
+results in an (almost instantaneous) "blow-up" of the algorithm after a few optimization cycles.
+This is a manifestation of the so-called vanishing/exploding gradients problem, well-known in
+the context of machine learning. While the issue is easy to avoid for single-layer networks (via a
+manual ﬁne-tuning of the distribution which generates the initial weights and biases), it quickly
+becomes a major problem when experimenting with architectures consisting of several layers.
+    To overcome this and to enable a seamless initialization of arbitrarily deep networks, we draw
+the weights and biases θ (l)k   of each layer l from a uniform distribution on [−D, +D], with a properly
+adjusted interval size D [78,97     ]
+                                                Àr                            
+                                         D = c       H(l)W (l)C(l)in  + C(l)out                                   (28)
+
+for a CNN layer with of dimension H(l)× W (l) with C(l)in  input channels and C(l)out output channels.
+For a DNN where dense layer l has dimensions n(l)in×n(l)out, the corresponding expression is obtained
+as H(1)W (1)≡ n(1)in , C(1)in   = 1, C(1)in ≡ n(1)out for l  = 1, and H(l)W (l) = 1, C(l)in ≡ n(l)in , C(1)out≡ n(l)out for
+l > 1.  This weight normalization ensures that all sums in the forward and backward pass of a
+neural network with uniformly drawn parameters have unit variance.  The constant c∈ [0.1, 10]
+is arbitrary and controls how close the initial state is to the S x-polarized state. In practice we use
+cln = 0.8 and cϕ = 1 for the log-amplitude and phase networks, respectively.
+
+
+E Details of the Monte Carlo simulations
+
+Here, we lay out some details about the Monte Carlo sampling procedure. The goal behind using
+MC is to ﬁnd an efﬁcient way to compute expectation values of observables in large Hilbert spaces
+where using the full basis is infeasible with the present computational power.  In this work, we
+use the Metropolis-Hastings Markov Chain Mote Carlo algorithm to generate a sample of spin
+conﬁgurations from the probability associated with the output of the neural network.
+    In our MC simulations we consider spin conﬁgurations in the zero magnetization sector, which
+contains the ground state, see Sec.C. To propose the MC updates, we select two lattice sites with
+opposite spins, and ﬂip them.  To select the lattice sites, we used (i) a global scheme where two
+lattice sites are selected uniformly at random, and (ii) a local scheme where we select a site at
+random, and exchange its spin with any of its four nearest- and next-nearest neighbors; in both
+cases we repeat the procedure until the resulting pair of sites has opposite spins. (iii) We can also
+consider a probabilistic mixture where we apply (i) with probabilityδ and (ii) with probability
+1−δ.
+    Each      newly      proposed      conﬁguration      r       is      accepted      with      probability
+p = min 1,|ψθ (r)|2/|ψθ (s)|2 against the current state of the Markov chain s. Here, the squared
+amplitudes are evaluated using the current state of the neural network.   To avoid instabilities
+
+                                                           36
+  SciPost Physics                                                                                       Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      Figure 16:  MC acceptance ratio ar  during optimization for global MC proposals and
+      mixed local-global MC proposals forδ = 0.1 (see text). Inset: the corresponding energy
+      training curves. The parameters are the same as in Fig.7. The system size is         N = 6× 6.
+      The network architecture is listed in App.H, and           J2/J1 = 0.5.  Optimization was done
+      using RK in combination with SR, see App.A. The MC sample size is           NMC = 215.
+
+
+caused by poor network generalization on the proposed conﬁguration r, we additionally require
+that|ψθ (r)|2≤ξ|ψθ (s)|2 for some numberξ (in practice, we setξ = 500). The acceptance ratio
+for a given sample is deﬁned as
+                                                                             À
+                                    ar = #(accepted configurations)            NMC.                                       (29)
+
+We set the thermalization (or mixing) time for the MC sampler to 10N  with N  the total number
+of lattice sites.  The number of proposed updates per sweep, which sets the frequency of storing
+the state of the Markov chain in the MC sample, is deﬁned in terms of the acceptance ratio of the
+sample obtained at the previous iteration as N/2× max(0.05, ar).
+    In Fig.7of the main text, we discussed the phase distribution peaks.  A visible difference in
+the behavior of the s-sample and the s′-sample at low amplitudes there is the existence of states
+which do not align with the major phase peaks.  Because the s′-sample is obtained from the s-
+sample by ﬂipping nearest and next-nearest neighboring spins (see main text), one may wonder
+if this behavior changes with the use of a local MC update scheme.  We checked that a mixed
+local-global MC proposal scheme withδ = 0.1 does not yield better energies.  However it does
+result in a higher acceptance ratio which speeds up the simulations, see Fig.16.
+    Finally, let us mention a potential deadlock for the ground state search using VQMC which
+we observed a handful of times while experimenting with neural network architectures during
+the study:  if the acceptance ratio falls as low as ar  = 0.01, the simulation effectively gets stuck
+because the time to build the sample becomes too large. In this case, even adaptive learning rate
+optimizers, such as RK, proved insufﬁcient to escape the deadlock. Hence, it is advisable to restart
+the simulation with different initial conditions in case such a situation is encountered.
+
+                                                           37
+  SciPost Physics                                                                                       Submission
+
+
+F  Post-selection of samples
+
+In order for the variational optimization algorithm to work properly, it is crucial to obtain Monte
+Carlo samples producing reliable estimates of the energy, which can be tricky as one goes down
+the energy landscape, especially for for J2/J1 = 0.5. This is because the quality of a batch of NMC
+samples{s1, s2,··· s NMC} depends on the probability distribution pθ (s) itself, which is, at the same
+time, in the process of being optimized.
+    Since one cannot guarantee that the ground state search dynamics drives the network pa-
+rameters in regions of parameters space corresponding to easy-to-sample distributions, we adopt
+a post-selection procedure as follows.   Once we have obtained a set of samples at a given it-
+eration step  t, we evaluate the energy expectation  Eθ (t)≈〈〈Elocq              θ 〉〉 and its standard deviation
+σEθ (t)≈      〈〈|Elocθ |2〉〉c, according to Eqs. (6) and (7), respectively. The idea is to use these quan-
+tities to determine whether to keep the batch of Monte Carlo samples or throw it away and re-
+sample. We introduce three criteria for re-sampling:
+
+   a) |Re [Eθ (t)− Eθ (t− 1)]|<α1  ensures that the energy of the variational quantum state is
+       not misestimated.  This is particularly useful in cases when the sample at iteration step t
+       estimates a signiﬁcantly larger value for the energy than at step t− 1, because the ground
+       state search algorithm is set to minimize, not maximize, the energy.
+
+   b) |ImEθ (t)|<α2σEθ (t) requires that the imaginary part of the sample estimate for the energy
+       is within a given fraction of the energy standard deviation.   This reﬂects an observation
+       that bad samples typically give rise to anomalously large imaginary parts of Eθ  which has
+       to become real-valued in the limit of NMC→ +∞.  Hence, this deﬁnes a second natural
+       criterion for re-sampling.
+
+   c) σEθ (t)<α3σEθ (t− 1) guarantees that the energy standard deviation over the MC sample
+       in two consecutive iteration steps does not increase too rapidly,  as expected for a small
+       enough learning rate. A bad MC sample features a large deviation from its mean which can
+       lead to wrong gradient updates. The instabilities we discussed in Sec.3.1typically produce
+       large-variance samples, and it is important to be able to detect this behavior. This gives an
+       additional knob to prevent the simulation from blowing up.
+
+    In practice, we usedα1 = 2,α2 = 5, andα3 = 6. If at iteration t one of the criteria is violated,
+we go back to iteration t− 1, load the (t− 1)-network parameters, and repeat the sampling from
+there. This eliminates any potentially wrong gradient updates that could have triggered one of the
+the criteria to fail. We apply sample post-selection only below a certain energy, in our case Eθ = 0,
+which is roughly in the middle of the spectrum, to allow for larger steps in the ﬁrst iterations.
+    Last, let us mention that we considered alternative strategies to remedy bad samples, such as
+discarding outliers falling outside a given quartile as measured by the mean energy. However, this
+appears to harm the optimization in the early iterations where outliers contain signal about which
+directions to follow in order to go down the energy landscape.
+
+
+G Energy Hessian matrix
+
+In Sec.5.2of the main text, we show data which contains the eigenvalues of the Hessian matrix
+of the energy cost function.  Here, we provide the expression we used to calculate it.  For brevity,
+
+                                                          38
+  SciPost Physics                                                                                       Submission
+
+
+
+we only show isolated steps of the derivation.
+    The starting point is the deﬁnition for the energy of the variational state:
+                                                         ∑                                  ,                              (30)
+                               Eθ =〈ψθ|H|ψθ〉〈ψθ|ψθ〉    =     {s} pθ (s)Elocθ  (s) =
+
+Elocθ
+
+where we used〈〈·〉〉 =∑{s} pθ (s)(·). Taking the derivative with respect to the variational param-
+eters θ , the energy gradient∇θ n≡∂n amounts to
+                                               ∂nEθ = 2Re
+
+O∗              ,                                                  (31)
+                                                                  n∆Elocθ
+
+with the short-hand deﬁnitions On(s) =∂n lnψθ (s), and ∆Elocθ  (s) = Elocθ  (s)−〈〈Elocθ 〉〉. Taking into
+account the θ  dependence in  pθ (s), O∗n(s), ∆Elocθ  (s), the entries of the Hessian matrix can be
+computed as
+         Hmn =∂m∂nEθ =         4
+
+Re (Om) Re O∗                     
+                                         
+
+Re (Om)
+
+Re O∗n∆Elocθ       + (m↔ n)
+                                  −   4                         n∆Elocθ
+                                  +   2
+
+Re ∂m     O∗∆Eloc
+                                             ∑         n      θ
+                                                                                 ∑
+                                  +   2Re         {s} pθ (s)O∗n(s)×     1ψθ (s)      {s ′}Hs s ′ψθ (s ′)Om(s′)
+                                  −   2
+
+Re O∗             .                                                                   (32)
+                                                 nOmElocθ
+
+For a variational ansatz with two real-valued neural networks (one for the phase, and the other
+for the log-probability amplitude of the wavefunction), see Sec.3, the expression for the Hessian
+takes the form
+
+        Hmn =∂m∂nEθ =         2
+
+∂mOlnn Re(∆Eloc         θ  ) +∂mOϕ    1n Im(∆Elocθ  )                      
+                                        ∑                                       ∑
+                                 +   2      {s} pθ (s)   Olnn (s)Re    ψθ (s)       {s ′}Hs s ′ψθ (s ′)Om(s′)
+                                        ∑                               1     ∑                                
+                                 +   2      {s} pθ (s)   Oϕn (s)Im     ψθ (s)       {s ′}Hs s ′ψθ (s ′)Om(s′)
+                                 −   4
+
+Oln
+
+Oln
+                                              m      n Re(∆Eloc Re(∆Elocθ  ) + Oϕn Im(∆Elocθ  ) + (m↔ n)
+                                 +   2
+
+ OlnmOlnn− OϕmOϕn                θ  )
+                                 +   2
+
+ OlnmOφn  + (m↔ n) Im(∆Eloc
+
+Re(Elocθ  )
+                                 −   2
+
+OlnmOlnn  + OϕmOϕn             θ  ).                                                 (33)
+
+Here, we used On  = Olnn  + iOϕn , where Olnn (s)  =∂n ln|ψθ (s)|, and Oϕn (s)  =∂nϕθ (s)9.  Notice
+that the Hessian matrix is not block-diagonal in the log-amplitude and phase networks parameter
+spaces, i.e., it couples the parameters of the log-amplitude and phase networks. We also see that
+the S-matrices for the log-amplitude and phase networks enter in the last line of the Hessian.
+Finally, one can readily convince oneself that the above expression deﬁnes a symmetric matrix, as
+is expected for the Hessian due to the commutativity of the two partial derivatives.
+
+
+
+   9Note that in the second and third lines of Eq. (33), it is the full       Om(s′) that enters the sum over{s′}, not its phase
+or log component.
+
+                                                             39
+  SciPost Physics                                                                                       Submission
+
+
+H Neural network architectures
+
+
+
+                 Figure                   Layer 1            Layer 2            Layer 3         Layer 4      Layer 5       Layer 6
+             Fig.2(4  × 4)
+              holomorphic                      Dense                  Dense
+         296 cpx. parameters                12 neurons             8 neurons                  —                     —                  —                   —
+        (592 real parameters)
+             Fig.2(6  × 6)
+              holomorphic                      Dense                  Dense
+         536 cpx. parameters                12 neurons             8 neurons                  —                     —                  —                   —
+       (1072 real parameters)
+                  Fig.3
+              holomorphic                      Dense
+         432 cpx. parameters                12 neurons                 —                        —                     —                  —                   —
+        (864 real parameters)
+                  Fig.6                   Convolutional          Convolutional         Convolutional             Dense            Dense
+              log-amp. net                6 6× 6 ﬁlters          4 3× 3 ﬁlters          4 2× 2 ﬁlters         2 neurons         2 neurons      Regularizer
+         521 real parameters
+                  Fig.6                        Dense                  Dense                  Dense
+                phase-net                   12 neurons             8 neurons              4 neurons               —                  —                   —
+         572 real parameters
+                  Fig.6                   Convolutional          Convolutional         Convolutional             Dense            Dense
+              log-amp. net                7 6× 6 ﬁlters          5 3× 3 ﬁlters          3 2× 2 ﬁlters         2 neurons         2 neurons      Regularizer
+         521 real parameters
+                  Fig.6                        Dense                  Dense                  Dense
+                phase-net                   14 neurons            10 neurons              6 neurons               —                  —                   —
+         720 real parameters
+                  Fig.6                   Convolutional          Convolutional         Convolutional             Dense            Dense
+              log-amp. net                8 6× 6 ﬁlters          6 3× 3 ﬁlters          4 2× 2 ﬁlters         4 neurons         2 neurons      Regularizer
+         857 real parameters
+                  Fig.6                        Dense                  Dense                  Dense
+                phase-net                   16 neurons            12 neurons              8 neurons               —                  —                   —
+         884 real parameters
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                                   40
+SciPost Physics                                                                                       Submission
+
+
+
+               Figure                  Layer 1            Layer 2            Layer 3         Layer 4      Layer 5       Layer 6
+
+                 Fig.6                 Convolutional          Convolutional         Convolutional            Dense            Dense
+            log-amp. net               10 6× 6 ﬁlters         8 3× 3 ﬁlters         6 2× 2 ﬁlters         4 neurons        2 neurons      Regularizer
+       1325 real parameters
+                 Fig.6                      Dense                  Dense                 Dense
+              phase-net                  20 neurons            16 neurons             12 neurons              —                  —                   —
+       1260 real parameters
+                 Fig.7                 Convolutional          Convolutional         Convolutional            Dense            Dense
+            log-amp. net               8 6× 6 ﬁlters          6 3× 3 ﬁlters         4 2× 2 ﬁlters         4 neurons        2 neurons      Regularizer
+       857 real parameters
+                 Fig.7                      Dense                  Dense                 Dense
+              phase-net                  16 neurons            12 neurons             8 neurons               —                  —                   —
+       884 real parameters
+            Fig.8(4  × 4)              Convolutional          Convolutional         Convolutional            Dense            Dense
+            log-amp. net               8 6× 6 ﬁlters          6 3× 3 ﬁlters         4 2× 2 ﬁlters         4 neurons        2 neurons      Regularizer
+       697 real parameters
+            Fig.8(4  × 4)                   Dense                  Dense                 Dense
+              phase-net                  16 neurons            12 neurons             8 neurons               —                  —                   —
+       884 real parameters
+            Fig.8(6  × 6)              Convolutional          Convolutional         Convolutional            Dense            Dense
+            log-amp. net               8 6× 6 ﬁlters          6 3× 3 ﬁlters         4 2× 2 ﬁlters         4 neurons        2 neurons      Regularizer
+       857 real parameters
+            Fig.8(6  × 6)                   Dense                  Dense                 Dense
+              phase-net                  16 neurons            12 neurons             8 neurons               —                  —                   —
+       884 real parameters
+                Fig.10                 Convolutional          Convolutional         Convolutional            Dense            Dense
+            log-amp. net               8 6× 6 ﬁlters          6 3× 3 ﬁlters         4 2× 2 ﬁlters         4 neurons        2 neurons      Regularizer
+       857 real parameters
+                Fig.10                      Dense                  Dense                 Dense
+              phase-net                  16 neurons            12 neurons             8 neurons               —                  —                   —
+       884 real parameters
+                Fig.12                 Convolutional          Convolutional         Convolutional            Dense            Dense
+            log-amp. net               8 6× 6 ﬁlters          6 3× 3 ﬁlters         4 2× 2 ﬁlters         4 neurons        2 neurons      Regularizer
+       857 real parameters
+                Fig.12                      Dense                  Dense                 Dense
+              phase-net                  16 neurons            12 neurons             8 neurons               —                  —                   —
+       884 real parameters
+                 Fig.9                 Convolutional          Convolutional         Convolutional            Dense            Dense
+            log-amp. net               8 6× 6 ﬁlters          6 3× 3 ﬁlters         4 2× 2 ﬁlters         4 neurons        2 neurons      Regularizer
+       857 real parameters
+                 Fig.9                      Dense                  Dense                 Dense
+              phase-net                  16 neurons            12 neurons             8 neurons               —                  —                   —
+       884 real parameters
+           Fig.13(4   × 4)
+            holomorphic                     Dense
+        64 cpx. parameters               4 neurons                  —                        —                     —                  —                   —
+      (128 real parameters)
+                Fig.15                 Convolutional          Convolutional         Convolutional            Dense            Dense
+            log-amp. net               8 6× 6 ﬁlters          6 3× 3 ﬁlters         4 2× 2 ﬁlters         4 neurons        2 neurons      Regularizer
+       857 real parameters
+                Fig.15                      Dense                  Dense                 Dense
+              phase-net                  16 neurons            12 neurons             8 neurons               —                  —                   —
+       884 real parameters
+                Fig.16                 Convolutional          Convolutional         Convolutional            Dense            Dense
+            log-amp. net               8 6× 6 ﬁlters          6 3× 3 ﬁlters         4 2× 2 ﬁlters         4 neurons        2 neurons      Regularizer
+       857 real parameters
+                Fig.16                      Dense                  Dense                 Dense
+              phase-net                  16 neurons            12 neurons             8 neurons               —                  —                   —
+       884 real parameters
+
+     Table  1:   Neural  network  architectures  used  for  the  numerical  simulations  shown
+     throughout the paper.
+
+                                                                              41
+  SciPost Physics                                                                                       Submission
+
+
+References
+
+   [1]  A. W. Sandvik, Computational studies of quantum spin systems, AIP Conference Proceedings
+        1297(1), 135 (2010), doi:10.1063      /1.3518900.
+
+   [2]  U. Schollwöck, The density-matrix renormalization group in the age of matrix product states,
+        Annals  of  Physics 326(1),  96  (2011),   doi:https:      //doi.org/10.1016/j.aop.2010.09.012,
+        January 2011 Special Issue.
+
+   [3]  R.   Orús,         A   practical   introduction   to   tensor   networks:     Matrix   product   states
+        and   projected   entangled   pair   states,          Annals   of   Physics   349,    117   (2014),
+        doi:https:      //doi.org/10.1016/j.aop.2014.06.013.
+
+   [4]  A. Georges,  G. Kotliar,  W. Krauth and M. J. Rozenberg,   Dynamical mean-ﬁeld theory of
+        strongly correlated fermion systems and the limit of inﬁnite dimensions, Rev. Mod. Phys. 68,
+        13 (1996), doi:10.1103      /RevModPhys.68.13.
+
+   [5]  H. T. Diep, Frustrated Spin Systems, WORLD SCIENTIFIC, doi:10.1142      /5697(2005).
+
+   [6]  Autumn  School  on  Correlated  Electrons,  Jülich  (Germany),  21  Sep  2015  -  25  Sep
+        2015,   Many-Body Physics:  From Kondo to Hubbard,  vol. 5 of Modeling and Simulation.
+        Forschungszentrum Jülich GmbH Zentralbibliothek, Verlag, Jülich, ISBN 978-3-95806-074-
+        6 (2015).
+
+   [7]  L.  Balents,      Spin  liquids  in  frustrated  magnets,      Nature  464(7286),   199  (2010),
+        doi:10.1038      /nature08917.
+
+   [8]  L. Savary and L. Balents,  Quantum spin liquids:  a review,  Reports on Progress in Physics
+        80(1), 016502 (2016), doi:10.1088      /0034-4885/80/1/016502.
+
+   [9]  M. Vojta, Frustration and quantum criticality, Reports on Progress in Physics 81(6), 064501
+        (2018), doi:10.1088      /1361-6633/aab6be.
+
+ [10]  W.  Marshall  and  R.  E.  Peierls,    Antiferromagnetism,    Proceedings  of  the  Royal  Soci-
+        ety  of  London.  Series  A.  Mathematical  and  Physical  Sciences  232(1188),  48  (1955),
+        doi:10.1098      /rspa.1955.0200.
+
+ [11]  E. Lieb, T. Schultz and D. Mattis, Two soluble models of an antiferromagnetic chain, Annals
+        of Physics 16(3), 407 (1961), doi:https:      //doi.org/10.1016/0003-4916(61)90115-4.
+
+ [12]  E. Lieb and D. Mattis,  Ordering energy levels of interacting spin systems,  Journal of Mathe-
+        matical Physics 3(4), 749 (1962), doi:10.1063      /1.1724276.
+
+ [13]  E. Y. Loh, J. E. Gubernatis, R. T. Scalettar, S. R. White, D. J. Scalapino and R. L. Sugar, Sign
+        problem in the numerical simulation of many-electron systems, Phys. Rev. B 41, 9301 (1990),
+        doi:10.1103      /PhysRevB.41.9301.
+
+ [14]  M.  Troyer  and  U.-J.  Wiese,      Computational  complexity  and  fundamental  limitations
+        to  fermionic  quantum  monte  carlo  simulations,     Phys.  Rev.  Lett.  94,  170201  (2005),
+        doi:10.1103      /PhysRevLett.94.170201.
+
+
+
+                                                           42
+SciPost Physics                                                                                       Submission
+
+
+
+[15]  A.  W.  Sandvik,   Finite-size  scaling  of  the  ground-state  parameters  of  the  two-dimensional
+       heisenberg model, Phys. Rev. B 56, 11678 (1997), doi:10.1103      /PhysRevB.56.11678.
+
+[16]  M. Calandra Buonaura and S. Sorella,  Numerical study of the two-dimensional heisenberg
+       model using a green function monte carlo technique with a ﬁxed number of walkers,  Phys.
+       Rev. B 57, 11446 (1998), doi:10.1103      /PhysRevB.57.11446.
+
+[17]  P. Chandra and B. Doucot, Possible spin-liquid state at large s for the frustrated square heisen-
+       berg lattice, Phys. Rev. B 38, 9335 (1988), doi:10.1103      /PhysRevB.38.9335.
+
+[18]  E. Dagotto and A. Moreo, Phase diagram of the frustrated spin-1/2 heisenberg antiferromag-
+       net in 2 dimensions, Phys. Rev. Lett. 63, 2148 (1989), doi:10.1103      /PhysRevLett.63.2148.
+
+[19]  M.  P.  Gelfand,  R.  R.  P.  Singh  and  D.  A.  Huse,     Zero-temperature  ordering  in  two-
+       dimensional frustrated quantum heisenberg antiferromagnets, Phys. Rev. B 40, 10801 (1989),
+       doi:10.1103      /PhysRevB.40.10801.
+
+[20]  F. Figueirido, A. Karlhede, S. Kivelson, S. Sondhi, M. Rocek and D. S. Rokhsar,  Exact diag-
+       onalization of ﬁnite frustrated spin-(1/2 heisenberg models,  Phys. Rev. B 41, 4619 (1990),
+       doi:10.1103      /PhysRevB.41.4619.
+
+[21]  R. R. P. Singh and R. Narayanan, Dimer versus twist order in the j1-j2 model, Phys. Rev. Lett.
+       65, 1072 (1990), doi:10.1103      /PhysRevLett.65.1072.
+
+[22]  N. Read and S. Sachdev, Large-n expansion for frustrated quantum antiferromagnets, Phys.
+       Rev. Lett. 66, 1773 (1991), doi:10.1103      /PhysRevLett.66.1773.
+
+[23]  H.  J.  Schulz  and  T.  A.  L.  Ziman,    Finite-size  scaling  for  the  two-dimensional  frustrated
+       quantum  heisenberg  antiferromagnet,     Europhysics  Letters  (EPL)  18(4),  355  (1992),
+       doi:10.1209      /0295-5075/18/4/013.
+
+[24]  N. B. Ivanov and P. C. Ivanov, Frustrated two-dimensional quantum heisenberg antiferromag-
+       net at low temperatures, Phys. Rev. B 46, 8206 (1992), doi:10.1103      /PhysRevB.46.8206.
+
+[25]  J. Richter, N. Ivanov and K. Retzlaff,   On the violation of marshall-peierls sign rule in the
+       frustrated j1-j2 heisenberg antiferromagnet, EPL (Europhysics Letters) 25(7), 545 (1994).
+
+[26]  T. Einarsson and H. J. Schulz,  Direct calculation of the spin stiffness in the j1-j2 heisenberg
+       antiferromagnet, Phys. Rev. B 51, 6151 (1995), doi:10.1103      /PhysRevB.51.6151.
+
+[27]  H. Schulz, T. Ziman and D. Poilblanc, Magnetic order and disorder in the frustrated quantum
+       heisenberg antiferromagnet in two dimensions, Journal de Physique I 6(5), 675 (1996).
+
+[28]  R.   R.   P.   Singh,   Z.   Weihong,   C.   J.   Hamer   and   J.   Oitmaa,       Dimer   order   with
+       striped  correlations  in  the  J1−j2  heisenberg  model,     Phys.  Rev.  B  60,  7278  (1999),
+       doi:10.1103      /PhysRevB.60.7278.
+
+[29]  L. Capriotti and S. Sorella,  Spontaneous plaquette dimerization in the j1−−j2 heisenberg
+       model, Phys. Rev. Lett. 84, 3173 (2000), doi:10.1103      /PhysRevLett.84.3173.
+
+[30]  L.  Capriotti,   F.  Becca,   A.  Parola  and  S.  Sorella,       Resonating  valence  bond  wave
+       functions  for  strongly  frustrated  spin  systems,     Phys.  Rev.  Lett.  87,  097201  (2001),
+       doi:10.1103      /PhysRevLett.87.097201.
+
+                                                          43
+SciPost Physics                                                                                       Submission
+
+
+
+[31]  M. Mambrini, A. Läuchli, D. Poilblanc and F. Mila,   Plaquette valence-bond crystal in the
+       frustrated heisenberg quantum antiferromagnet on the square lattice, Phys. Rev. B 74, 144422
+       (2006), doi:10.1103      /PhysRevB.74.144422.
+
+[32]  J.  Sirker,   Z.  Weihong,   O.  P.  Sushkov  and  J.  Oitmaa,       j1−j2  model:    First-order
+       phase  transition  versus  deconﬁnement  of  spinons,     Phys.  Rev.  B  73,  184420  (2006),
+       doi:10.1103      /PhysRevB.73.184420.
+
+[33]  R. Darradi,  O. Derzhko,  R. Zinke,  J. Schulenburg,  S. E. Krüger and J. Richter,   Ground
+       state  phases  of  the  spin-1/2  J1−−J2  heisenberg  antiferromagnet  on  the  square  lat-
+       tice:    A  high-order  coupled  cluster  treatment,       Phys.  Rev.  B  78,   214415  (2008),
+       doi:10.1103      /PhysRevB.78.214415.
+
+[34]  M. Arlego and W. Brenig, Plaquette order in the J1−J2−J3 model: Series expansion analysis,
+       Phys. Rev. B 78, 224415 (2008), doi:10.1103      /PhysRevB.78.224415.
+
+[35]  V. Murg, F. Verstraete and J. I. Cirac, Exploring frustrated spin systems using projected entan-
+       gled pair states, Phys. Rev. B 79, 195119 (2009), doi:10.1103      /PhysRevB.79.195119.
+
+[36]  K. S. D. Beach,  Master equation approach to computing rvb bond amplitudes,  Phys. Rev. B
+       79, 224431 (2009), doi:10.1103      /PhysRevB.79.224431.
+
+[37]  J. Richter and J. Schulenburg, The spin-1/2 j1–j2 heisenberg antiferromagnet on the square
+       lattice:exact diagonalization for n=40 spins,  The European Physical Journal B 73(1), 117
+       (2010), doi:10.1140      /epjb/e2009-00400-4.
+
+[38]  F. Mezzacapo, Ground-state phase diagram of the quantum J1−J2 model on the square lattice,
+       Phys. Rev. B 86, 045115 (2012), doi:10.1103      /PhysRevB.86.045115.
+
+[39]  J.-F.  Yu  and  Y.-J.  Kao,     Spin- 12   J1-J2  heisenberg  antiferromagnet  on  a  square  lattice:
+       A  plaquette  renormalized  tensor  network  study,      Phys.  Rev.  B  85,   094407  (2012),
+       doi:10.1103      /PhysRevB.85.094407.
+
+[40]  H.-C. Jiang, H. Yao and L. Balents, Spin liquid ground state of the spin- 12 square J1-J2 heisen-
+       berg model, Phys. Rev. B 86, 024424 (2012), doi:10.1103      /PhysRevB.86.024424.
+
+[41]  X. Zhang and K. S. D. Beach,  Resonating valence bond trial wave functions with both static
+       and  dynamically  determined  marshall  sign  structure,    Phys.  Rev.  B  87,  094420  (2013),
+       doi:10.1103      /PhysRevB.87.094420.
+
+[42]  X. Zhang, J. Xu and K. Beach,  Frustrating antiferromagnetic exchange interactions enhance
+       speciﬁc valence-bond-pair motifs, arXiv preprint arXiv:1310.6030 (2013).
+
+[43]  L. Wang, D. Poilblanc, Z.-C. Gu, X.-G. Wen and F. Verstraete,  Constructing a gapless spin-
+       liquid state for the spin-1/2 J1−J2 heisenberg model on a square lattice, Phys. Rev. Lett. 111,
+       037202 (2013), doi:10.1103      /PhysRevLett.111.037202.
+
+[44]  W.-J.  Hu,   F.  Becca,   A.  Parola  and  S.  Sorella,       Direct  evidence  for  a  gapless   Z2
+       spin  liquid  by  frustrating  néel  antiferromagnetism,    Phys.  Rev.  B  88,  060402  (2013),
+       doi:10.1103      /PhysRevB.88.060402.
+
+
+
+                                                          44
+SciPost Physics                                                                                       Submission
+
+
+
+[45]  S.-S. Gong, W. Zhu, D. N. Sheng, O. I. Motrunich and M. P. A. Fisher, Plaquette ordered phase
+       and quantum phase diagram in the spin- 12  J1−J2 square heisenberg model,  Phys. Rev. Lett.
+       113, 027201 (2014), doi:10.1103      /PhysRevLett.113.027201.
+
+[46]  S. Morita, R. Kaneko and M. Imada, Quantum spin liquid in spin 1/2 j1–j2 heisenberg model
+       on  square  lattice:  Many-variable  variational  monte  carlo  study  combined  with  quantum-
+       number  projections,    Journal  of  the  Physical  Society  of  Japan  84(2),  024720  (2015),
+       doi:10.7566      /JPSJ.84.024720.
+
+[47]  L. Wang, Z.-C. Gu, F. Verstraete and X.-G. Wen,   Tensor-product state approach to spin- 12
+       square J1−J2 antiferromagnetic heisenberg model: Evidence for deconﬁned quantum critical-
+       ity, Phys. Rev. B 94, 075143 (2016), doi:10.1103      /PhysRevB.94.075143.
+
+[48]  D. Poilblanc and M. Mambrini,   Quantum critical phase with inﬁnite projected entangled
+       paired states, Phys. Rev. B 96, 014414 (2017), doi:10.1103      /PhysRevB.96.014414.
+
+[49]  R. Haghshenas and D. N. Sheng,   u(1)-symmetric inﬁnite projected entangled-pair states
+       study of the spin-1/2 square  J1−J2  heisenberg model,   Phys. Rev. B 97,  174408 (2018),
+       doi:10.1103      /PhysRevB.97.174408.
+
+[50]  L. Wang and A. W. Sandvik,   Critical level crossings and gapless spin liquid in the square-
+       lattice spin-1/2 J1− J2 heisenberg antiferromagnet,  Phys. Rev. Lett. 121, 107202 (2018),
+       doi:10.1103      /PhysRevLett.121.107202.
+
+[51]  W.-Y. Liu, S. Dong, C. Wang, Y. Han, H. An, G.-C. Guo and L. He, Gapless spin liquid ground
+       state of the spin- 12  J1− J2  heisenberg model on square lattices,   Phys. Rev. B 98,  241109
+       (2018), doi:10.1103      /PhysRevB.98.241109.
+
+[52]  F.   Ferrari   and   F.   Becca,         Spectral   signatures   of   fractionalization   in   the   frus-
+       trated  heisenberg  model  on  the  square  lattice,      Phys.  Rev.  B  98,   100405  (2018),
+       doi:10.1103      /PhysRevB.98.100405.
+
+[53]  D. Roscher, N. Gneist, M. M. Scherer, S. Trebst and S. Diehl,  Cluster functional renormal-
+       ization group and absence of a bilinear spin liquid in the J1−J2 heisenberg model, Phys. Rev.
+       B 100, 125130 (2019), doi:10.1103      /PhysRevB.100.125130.
+
+[54]  D.  Poilblanc,  M.  Mambrini  and  S.  Capponi,     Critical  colored-RVB  states  in  the  frus-
+       trated  quantum  Heisenberg  model  on  the  square  lattice,     SciPost  Phys.  7,  41  (2019),
+       doi:10.21468      /SciPostPhys.7.4.041.
+
+[55]  P. Mehta, M. Bukov, C.-H. Wang, A. G. Day, C. Richardson, C. K. Fisher and D. J. Schwab, A
+       high-bias, low-variance introduction to machine learning for physicists, Physics reports 810,
+       1 (2019).
+
+[56]  G. Carleo, I. Cirac, K. Cranmer, L. Daudet, M. Schuld, N. Tishby, L. Vogt-Maranto and L. Zde-
+       borová,  Machine learning and the physical sciences,  Rev. Mod. Phys. 91, 045002 (2019),
+       doi:10.1103      /RevModPhys.91.045002.
+
+[57]  J. Carrasquilla, Machine learning for quantum matter, Advances in Physics: X 5(1), 1797528
+       (2020), doi:10.1080      /23746149.2020.1797528.
+
+
+
+                                                          45
+SciPost Physics                                                                                       Submission
+
+
+
+[58]  G. Carleo and M. Troyer,   Solving the quantum many-body problem with artiﬁcial neural
+       networks, Science 355(6325), 602 (2017), doi:10.1126      /science.aag2302.
+
+[59]  Y. Lecun, L. Bottou, Y. Bengio and P. Haffner,  Gradient-based learning applied to document
+       recognition, Proceedings of the IEEE 86(11), 2278 (1998), doi:10.1109      /5.726791.
+
+[60]  Y. Nomura, A. S. Darmawan, Y. Yamaji and M. Imada, Restricted boltzmann machine learn-
+       ing  for  solving  strongly  correlated  quantum  systems,    Phys.  Rev.  B  96,  205152  (2017),
+       doi:10.1103      /PhysRevB.96.205152.
+
+[61]  K.  Choo,  T.  Neupert  and  G.  Carleo,     Two-dimensional  frustrated  J1−J2  model  stud-
+       ied   with   neural   network   quantum   states,        Phys.   Rev.   B   100,   125124   (2019),
+       doi:10.1103      /PhysRevB.100.125124.
+
+[62]  F. Ferrari, F. Becca and J. Carrasquilla, Neural gutzwiller-projected variational wave functions,
+       Phys. Rev. B 100, 125131 (2019), doi:10.1103      /PhysRevB.100.125131.
+
+[63]  T. Westerhout, N. Astrakhantsev, K. S. Tikhonov, M. I. Katsnelson and A. A. Bagrov,  Gen-
+       eralization properties of neural network approximations to frustrated magnet ground states,
+       Nat. Commun. 11(1), 1 (2020).
+
+[64]  A. Szabó and C. Castelnovo, Neural network wave functions and the sign problem, Phys. Rev.
+       Research 2, 033075 (2020), doi:10.1103      /PhysRevResearch.2.033075.
+
+[65]  Y. Nomura and M. Imada, Dirac-type nodal spin liquid revealed by machine learning (2020),
+       2005.14142.
+
+[66]  K.  Choo,  G.  Carleo,  N.  Regnault  and  T.  Neupert,     Symmetries  and  many-body  exci-
+       tations  with  neural-network  quantum  states,     Phys.  Rev.  Lett.  121,  167204  (2018),
+       doi:10.1103      /PhysRevLett.121.167204.
+
+[67]  R. Kaubruegger, L. Pastori and J. C. Budich,  Chiral topological phases from artiﬁcial neural
+       networks, Phys. Rev. B 97, 195136 (2018), doi:10.1103      /PhysRevB.97.195136.
+
+[68]  H. Saito and M. Kato, Machine learning technique to ﬁnd quantum many-body ground states
+       of bosons on a lattice, Journal of the Physical Society of Japan 87(1), 014001 (2018).
+
+[69]  C.-Y. Park and M. J. Kastoryano,  Geometry of learning neural quantum states,  Phys. Rev.
+       Research 2, 023232 (2020), doi:10.1103      /PhysRevResearch.2.023232.
+
+[70]  M.  Hibat-Allah,  M.  Ganahl,  L.  E.  Hayward,  R.  G.  Melko  and  J.  Carrasquilla,     Re-
+       current   neural   network   wave   functions,       Phys.   Rev.   Research  2,   023358   (2020),
+       doi:10.1103      /PhysRevResearch.2.023358.
+
+[71]  A. Borin and D. A. Abanin,  Approximating power of machine-learning ansatz for quantum
+       many-body states, Phys. Rev. B 101, 195141 (2020), doi:10.1103      /PhysRevB.101.195141.
+
+[72]  S.   Pilati   and   P.   Pieri,        Simulating   disordered   quantum   ising   chains   via   dense
+       and   sparse   restricted   boltzmann   machines,        Phys.   Rev.   E   101,   063308   (2020),
+       doi:10.1103      /PhysRevE.101.063308.
+
+[73]  M. Schmitt and M. Heyl,  Quantum dynamics in transverse-ﬁeld Ising models from classical
+       networks, SciPost Phys. 4, 013 (2018), doi:10.21468      /SciPostPhys.4.2.013.
+
+                                                          46
+SciPost Physics                                                                                       Submission
+
+
+
+[74]  S.  Czischek,   M.  Gärttner  and  T.  Gasenzer,      Quenches  near  ising  quantum  critical-
+       ity  as  a  challenge  for  artiﬁcial  neural  networks,     Phys.  Rev.  B  98,  024311  (2018),
+       doi:10.1103      /PhysRevB.98.024311.
+
+[75]  G. Fabiani and J. H. Mentink,   Investigating ultrafast quantum magnetism with machine
+       learning, SciPost Phys. 7, 4 (2019), doi:10.21468      /SciPostPhys.7.1.004.
+
+[76]  G. Fabiani and J. Mentink, Ultrafast entanglement dynamics and spreading of quantum cor-
+       relations in two-dimensional antiferromagnets, arXiv preprint arXiv:1912.10845 (2019).
+
+[77]  Y.   Wu,   L.-M.   Duan   and   D.-L.   Deng,        Artiﬁcial   neural   network   based   compu-
+       tation   for   out-of-time-ordered   correlators,         Phys.   Rev.   B   101,   214308   (2020),
+       doi:10.1103      /PhysRevB.101.214308.
+
+[78]  M. Schmitt and M. Heyl, Quantum many-body dynamics in two dimensions with artiﬁcial neu-
+       ral networks, Phys. Rev. Lett. 125, 100503 (2020), doi:10.1103      /PhysRevLett.125.100503.
+
+[79]  H. Burau and M. Heyl,  Unitary long-time evolution with quantum renormalization groups
+       and artiﬁcial neural networks (2020), 2009.04473.
+
+[80]  Y.  Nomura,   Helping  restricted  boltzmann  machine  with  quantum-state  representation  by
+       restoring symmetry, Journal of Physics: Condensed Matter (2021).
+
+[81]  S. R. White,  Density matrix formulation for quantum renormalization groups,  Phys. Rev.
+       Lett. 69, 2863 (1992), doi:10.1103      /PhysRevLett.69.2863.
+
+[82]  S. R. White,  Density-matrix algorithms for quantum renormalization groups,  Phys. Rev. B
+       48, 10345 (1993), doi:10.1103      /PhysRevB.48.10345.
+
+[83]  D. Hendry and A. E. Feiguin, Machine learning approach to dynamical properties of quantum
+       many-body systems, Phys. Rev. B 100, 245123 (2019), doi:10.1103      /PhysRevB.100.245123.
+
+[84]  T. Ðuri´c and T. Ševa, Efﬁcient neural-network based variational monte carlo scheme for direct
+       optimization of excited energy states in frustrated quantum systems, Phys. Rev. B 102, 085104
+       (2020), doi:10.1103      /PhysRevB.102.085104.
+
+[85]  K. Hornik, Approximation capabilities of multilayer feedforward networks, Neural Networks
+       4(2), 251 (1991), doi:https:      //doi.org/10.1016/0893-6080(91)90009-T.
+
+[86]  T. Kim and T. Adalı,Approximation by fully complex multilayer perceptrons, Neural Compu-
+       tation 15(7), 1641 (2003), doi:10.1162      /089976603321891846.
+
+[87]  N. Le Roux and Y. Bengio, Representational power of restricted boltzmann machines and deep
+       belief networks,  Neural Computation 20(6), 1631 (2008),  doi:10.1162      /neco.2008.04-07-
+       510.
+
+[88]  S. Sorella,  Green function monte carlo with stochastic reconﬁguration,  Phys. Rev. Lett. 80,
+       4558 (1998), doi:10.1103      /PhysRevLett.80.4558.
+
+[89]  S. Sorella, Generalized lanczos algorithm for variational quantum monte carlo, Phys. Rev. B
+       64, 024512 (2001), doi:10.1103      /PhysRevB.64.024512.
+
+
+
+                                                         47
+  SciPost Physics                                                                                       Submission
+
+
+
+ [90]  S. Sorella, M. Casula and D. Rocca,  Weak binding between two aromatic rings:  Feeling the
+        van der waals attraction by quantum monte carlo methods, The Journal of Chemical Physics
+        127(1), 014105 (2007), doi:10.1063      /1.2746035.
+
+ [91]  F. Becca and S. Sorella, Quantum Monte Carlo Approaches for Correlated Systems, Cambridge
+        University Press, doi:10.1017      /9781316417041(2017).
+
+ [92]  D.-L. Deng, X. Li and S. Das Sarma, Quantum entanglement in neural network states, Phys.
+        Rev. X 7, 021021 (2017), doi:10.1103      /PhysRevX.7.021021.
+
+ [93]  Y. Levine, O. Sharir, N. Cohen and A. Shashua,   Quantum entanglement in deep learning
+        architectures, Phys. Rev. Lett. 122, 065301 (2019), doi:10.1103      /PhysRevLett.122.065301.
+
+ [94]  F. Grund,  Rall, louis b., automatic differentiation: Techniques and applications. lecture notes
+        in computer science 120. berlin-heidelberg-new york, springer-verlag 1981. viii, 165 s., dm
+        21, 50. us $9.80. isbn 3-540-10861-0,   ZAMM-Journal of Applied Mathematics and Me-
+        chanics/Zeitschrift für Angewandte Mathematik und Mechanik 62(7), 355 (1982).
+
+ [95]  S. Dreyfus, The numerical solution of variational problems, Journal of Mathematical Analysis
+        and Applications 5(1), 30 (1962), doi:https:      //doi.org/10.1016/0022-247X(62)90004-5.
+
+ [96]  D. E. Rumelhart and D. Zipser, Feature discovery by competitive learning*, Cognitive Science
+        9(1), 75 (1985), doi:10.1207      /s15516709cog0901_5.
+
+ [97]  X. Glorot and Y. Bengio,   Understanding the difﬁculty of training deep feedforward neural
+        networks, In Y. W. Teh and M. Titterington, eds., Proceedings of the Thirteenth International
+        Conference on Artiﬁcial Intelligence and Statistics, vol. 9 of Proceedings of Machine Learning
+        Research, pp. 249–256. PMLR, Chia Laguna Resort, Sardinia, Italy (2010).
+
+ [98]  S. G. Krantz and S. G. Krantz, Handbook of complex variables, Springer Science & Business
+        Media (1999).
+
+ [99]  H. Saito, Solving the bose–hubbard model with machine learning, J. Phys. Soc. 86(9), 093001
+        (2017), doi:10.7566      /JPSJ.86.093001.
+
+[100]  Z. Cai and J. Liu, Approximating quantum many-body wave functions using artiﬁcial neural
+        networks, Phys. Rev. B 97, 035116 (2018), doi:10.1103      /PhysRevB.97.035116.
+
+[101]  I. Glasser, N. Pancotti, M. August, I. D. Rodriguez and J. I. Cirac,  Neural-network quan-
+        tum states, string-bond states, and chiral topological states,  Phys. Rev. X 8, 011006 (2018),
+        doi:10.1103      /PhysRevX.8.011006.
+
+[102]  J. Thibaut,  T. Roscilde and F. Mezzacapo,   Long-range entangled-plaquette states for crit-
+        ical  and  frustrated  quantum  systems  on  a  lattice,    Phys.  Rev.  B  100,  155148  (2019),
+        doi:10.1103      /PhysRevB.100.155148.
+
+[103]  P. Weinberg and M. Bukov,  QuSpin:  a Python Package for Dynamics and Exact Diagonal-
+        isation of Quantum Many Body Systems part I: spin chains,  SciPost Phys. 2, 003 (2017),
+        doi:10.21468      /SciPostPhys.2.1.003.
+
+[104]  P. Weinberg and M. Bukov, QuSpin: a Python Package for Dynamics and Exact Diagonalisation
+        of Quantum Many Body Systems. Part II: bosons, fermions and higher spins, SciPost Phys. 7,
+        20 (2019), doi:10.21468      /SciPostPhys.7.2.020.
+
+                                                          48
+  SciPost Physics                                                                                       Submission
+
+
+
+[105]  J.  Bradbury,   R.  Frostig,   P.  Hawkins,   M.  J.  Johnson,   C.  Leary,   D.  Maclaurin  and
+        S. Wanderman-Milne, JAX: composable transformations of Python+NumPy programs (2018).
+
+[106]  H. Nishimori, Statistical physics of spin glasses and information processing: an introduction,
+        111. Clarendon Press (2001).
+
+[107]  A. G. R. Day, M. Bukov, P. Weinberg, P. Mehta and D. Sels, Glassy phase of optimal quantum
+        control, Phys. Rev. Lett. 122, 020601 (2019), doi:10.1103      /PhysRevLett.122.020601.
+
+[108]  C.-Y. Park and M. J. Kastoryano,  Are neural quantum states good at solving non-stoquastic
+        spin hamiltonians?, arXiv preprint arXiv:2012.08889 (2020).
+
+[109]  D.  P.  Kingma  and  J.  Ba,    Adam:   A  method  for  stochastic  optimization,    arXiv  preprint
+        arXiv:1412.6980 (2014).
+
+[110]  T. Vieijra, C. Casert, J. Nys, W. De Neve, J. Haegeman, J. Ryckebusch and F. Verstraete,
+        Restricted boltzmann machines for quantum states with non-abelian or anyonic symmetries,
+        Phys. Rev. Lett. 124, 097201 (2020), doi:10.1103      /PhysRevLett.124.097201.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                            49

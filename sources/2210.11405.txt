@@ -1,0 +1,1625 @@
+ SciPost Physics                                                                           Submission
+
+           Approximation using Artiﬁcial Neural NetworksQuantum-Inspired Tempering for Ground State
+
+
+               T. Albash1,2,3*, C. Smith1,3, Q. Campbell3 A. D. Baczewski2,3,4
+
+     1 Department of Electrical and Computer Engineering, University of New Mexico,
+                                  Albuquerque, NM 87131, USA
+  2 Department of Physics and Astronomy, University of New Mexico, Albuquerque, NM
+                                            87131, USA
+   3 Center for Quantum Information and Control (CQuIC), University of New Mexico,
+                                  Albuquerque, NM 87131, USA
+   4 Quantum Algorithms and Applications Collaboratory, Sandia National Laboratories,
+                                  Albuquerque NM 87185, USA
+                                        * talbash@unm.edu
+
+                                        February 20, 2023
+
+Abstract
+
+A large body of work has demonstrated that parameterized artiﬁcial neural net-
+works  (ANNs)  can  eﬃciently  describe  ground  states  of  numerous  interesting
+quantum many-body Hamiltonians. However, the standard variational algorithms
+used to update or train the ANN parameters can get trapped in local minima, es-
+pecially for frustrated systems and even if the representation is suﬃciently expres-
+sive.  We propose a parallel tempering method that facilitates escape from such
+local minima.  This methods involves training multiple ANNs independently, with
+each simulation governed by a Hamiltonian with a diﬀerent “driver” strength, in
+analogy to quantum parallel tempering, and it incorporates an update step into
+the training that allows for the exchange of neighboring ANN conﬁgurations.  We
+study instances from two classes of Hamiltonians to demonstrate the utility of our
+approach using Restricted Boltzmann Machines as our parameterized ANN. The
+ﬁrst instance is based on a permutation-invariant Hamiltonian whose landscape
+stymies the standard training algorithm by drawing it increasingly to a false local
+minimum.  The second instance is four hydrogen atoms arranged in a rectangle,
+which  is  an  instance  of  the  second  quantized  electronic  structure  Hamiltonian
+discretized using Gaussian basis functions.  We study this problem in a minimal
+basis set, which exhibits false minima that can trap the standard variational al-
+gorithm despite the problem’s small size.  We show that augmenting the training
+with quantum parallel tempering becomes useful to ﬁnding good approximations
+to the ground states of these problem instances.
+
+
+Contents
+
+1   Introduction                                                                                                     2
+
+
+                                                  1
+  SciPost Physics                                                                           Submission
+
+
+2   Overview of the Methodology                                                                         3
+
+3   Results                                                                                                             7
+    3.1    Precipice Problem                                                                                                      7
+    3.2    H4 Rectangle                                                                                                            10
+            3.2.1    Fixed Hamming Weight                                                                                11
+            3.2.2    No Fixed Hamming Weight                                                                          12
+
+4   Conclusions                                                                                                    13
+
+5   Code                                                                                                               14
+
+A  Review of Stochastic Reconﬁguration                                                            15
+
+B  Adaptive Learning Rate Scheme                                                                    18
+
+C  Calculating the expectation value of operators with respect to an RBM
+    ansatz                                                                                                             19
+
+D  Alternative Parallel Tempering Schemes                                                       21
+    D.1   Standard deviation of H2 as a measure of temperature                                          21
+    D.2   Almost constant swap probability                                                                            22
+
+E  Short Note On the Bootstrap Procedure                                                       23
+
+F  The H4 rectangle                                                                                            25
+
+References                                                                                                          26
+
+
+
+
+1  Introduction
+
+Approximating the ground state of a many-body quantum Hamiltonian is a computational
+task at the heart of many problems in the physical sciences.  Tackling this problem requires
+both an eﬃcient representation of the wave function and an algorithm for optimizing the wave
+function to minimize its energy whose individual update steps are eﬃcient.  A variety of meth-
+ods have been developed, each with its advantages and limitations.  Quantum Monte Carlo
+(QMC) [1, 2] methods are generically useful in the absence of the sign problem [3], although
+there  are  QMC  approaches  that  try  to  mitigate  the  bottlenecks  associated  with  the  sign
+problem [4–6].  Methods based on Matrix Product States (MPS) [7–12] have been extremely
+successful at addressing systems in one dimension and methods based on Projected Entangled
+Pair States (PEPS) [13,14] have allowed the study of certain systems in two dimensions.  More
+recently,  artiﬁcial  neural  networks  (ANNs)  have  been  used  as  ans¨atze  for  quantum  ground
+states [15], with the advantages of being agnostic to the sign problem and able to take as input
+Hamiltonians with arbitrary connectivity.  While there have been important demonstrations
+
+
+
+                                                               2
+ SciPost Physics                                                                           Submission
+
+
+of  the  utility  of  this  approach  [16–18],  it  still  suﬀers  when  studying  frustrated  systems  by
+getting stuck in the many local minima of a rugged optimization landscape [19].
+    Parallel tempering (PT) [20–22] is a Monte Carlo method that has been extensively used
+to help explore the rugged energy landscapes of spin glasses [23].  In the typical PT approach,
+multiple “replicas” of the system evolve independently at diﬀerent temperatures and hence
+in diﬀerent free energy landscapes.  The exchange of conﬁgurations between higher and lower
+temperature replicas facilitates escape from local minima. There is nothing special about using
+temperature  to  alter  the  landscape,  and  other  physically  motivated  choices  can  be  made.
+In  quantum  parallel  tempering  (QPT)  [24, 25],  replicas  are  evolved  according  to  diﬀerent
+Hamiltonians, where the strength of a driver Hamiltonian, e.g.  a uniform transverse ﬁeld, is
+used to control the landscape the replicas are evolving in instead of the temperature.
+    In this paper we combine the methods of QPT and the training of ANNs to approximate
+ground states of quantum spin systems.  For simplicity of presentation, we focus on a speciﬁc
+choice of ANN, the restricted Boltzmann machine (RBM), and we demonstrate how a QPT
+method implemented in addition to the standard training can help overcome barriers in energy
+landscape.   We  do  this  using  two  examples.   The  ﬁrst  is  based  on  a  permutation-invariant
+Hamiltonian that is designed to trap the standard training approach in a false minimum.  In
+this case, the QPT provides a clear advantage over simply repeating the standard algorithm
+starting from independent initial points.  The second is based on a molecular system of four
+hydrogen atoms arranged in a rectangle with an angleθ between adjacent hydrogen atoms that
+we can vary.  The fermionic second quantized Hamiltonian is mapped to a system of qubits
+using the Jordan-Wigner transformation [26], and we apply the ANN training methods to the
+qubit Hamiltonian [27].  We ﬁnd that the hardness of approximating the ground state of this
+system depends on diﬀerent aspects, such as the choice of angles and whether we constrain
+the  training to  a  ﬁxed  magnetization  sector corresponding  to  a  ﬁxed particle  number,  and
+we ﬁnd that QPT can provide a computational advantage in the cases where the standard
+approach struggles to ﬁnd a good approximation of the ground state.
+    The paper is organized as follows.  In Section 2, we review the standard training approach
+of  the  RBM  ansatz  for  quantum  wave  functions  in  addition  to  how  we  introduce  QPT  to
+it.  In Section 3, we introduce our two problem classes and compare the performance of the
+standard training approach to our QPT augmented approach.  In Section 4, we conclude with
+open questions and future directions of our work.
+
+2  Overview of the Methodology
+
+We consider an unnormalized parameterized wave function expressed in the computational
+basis|ψ(α)⟩ =∑x∈{0,1}nψx(α)|x⟩, where|x⟩≡|xn⟩⊗···⊗|x1⟩ denotes the n-qubit compu-
+tational basis state with σzi|xi⟩ = (1− 2xi)|xi⟩ =vi|xi⟩ and α denotes the set of K  complex
+variational parameters.  Here we restrict our attention to the case where ψx(α) is the weight
+associated with a RBM with parameters α ={ai,bµ,Wiµ}n,mi=1,µ=1 and with x as the value of
+its input layer,
+                                                      m∏        (        n∑         )
+                                           ∑n
+                           ψx(α)   = e       i=1aivi      cosh    bµ +      Wiµvi     ,                              (1)
+                                                     µ=1                i=1
+
+
+
+                                                        3
+ SciPost Physics                                                                           Submission
+
+
+where vi ∈ {−1, 1}.   As  long  as m  scales  polynomially  with n,  the  RBM  representation
+provides an eﬃcient representation of the quantum state|ψ(α)⟩.
+    Given a many-body HamiltonianH deﬁned onn qubits, our aim is to ﬁnd an approximate
+RBM  representation  to  the  ground  state  of H.   Therefore,  our  optimization  problem  is  to
+identify a set of parameters α∗ such that
+                                       α∗∈ argmin       ⟨ψ(α)|H|ψ(α)⟩
+                                                  α       ⟨ψ(α)|ψ(α)⟩  .                                             (2)
+The cost function on the right hand side deﬁnes a multi-dimensional parameter landscape,
+and if the number of variational parameters is suﬃciently large, the global minimum of this
+landscape gives an excellent approximation of the ground state.
+    This optimization problem is solved using Stochastic Reconﬁguration (SR) [28,29], which
+updates the parameters as
+                           α′k    = αk +δαk =αk−γ∑                 (S(α))−1kk′Fk′(α) ,                              (3)
+                                                               k′
+where Skk′(α) are the matrix elements of the covariance matrix and Fk(α) are the elements
+of the force vector deﬁned as,
+                             Skk′(α) =⟨Ok(α)†Ok′(α)⟩−⟨Ok(α)†⟩⟨Ok′(α)⟩                               (4a)
+                               Fk(α) =⟨Ok(α)†H⟩−⟨Ok(α)†⟩⟨H⟩ ,                                           (4b)
+where the expectation values are taken with respect to the state|ψ(α)⟩ and where Ok(α) is
+the operator associated with the gradient of the state|ψ(α)⟩ with respect to the variational
+parameter αk,
+                                Ok(α) =  ∑               1      ∂
+                                            x={0,1}n  ψx(α)   ∂αkψx(α)|x⟩⟨x| .                                    (5)
+
+Since S may not be invertible, S−1 is strictly speaking the Moore-Penrose pseudoinverse [30,
+31].  We review the derivations of these formulas in Appendix A.
+    The parameter γ sets the learning rate, and we choose it adaptively using a second-order
+Runge-Kutta (RK) method [17, 19, 32].  We review this adaptive procedure in Appendix B.
+While the RK method incurs a computational overhead because it requires multiple estimates
+of the covariance matrix and force vector, the combination of RK with SR generally results in
+more accurate results with fewer updates in total compared to other optimization schemes [19]
+such  as  ADAM  [33]  with  SR  or  stochastic  gradient  descent,  and  it  eliminates  the  need  to
+specify a learning rate.  In this regard, the RK with SR optimization approach to train the
+RBM sets a competitive baseline for us to improve upon.
+    Calculating  the  covariance  matrix S  and  force  vector F  requires  expectation  values  of
+the observables associated with the set{Ok} and H.  These can be estimated using Monte
+Carlo importance sampling [15], but in this work we will restrict ourselves to evaluating these
+expectation values exactly.  The reason for using exact sampling is to eliminate the role of
+ﬁnite sampling in the training.  We give details of how to calculate the necessary expectation
+values in Appendix C.
+    WithS andF in hand, the ﬁnal step to implement Eq. (3) is to calculate the pseudoinverse
+ofS.  In what follows we calculate the inverse using an explicit regularization where we replace
+the diagonal elements of S by [15]
+                                       Skk→Sregkk  =Skk (1 +λ(p)) ,                                             (6)
+
+                                                         4
+ SciPost Physics                                                                           Submission
+
+
+where p denotes the update step and λ(p) = max (λ0bp,λmin) with λ0 = 100,b = 0.9,λmin =
+10−4.   We  use  the  MINRES-QLP  [34]  with  a  maximum  of  103  iterations  and  a  stopping
+tolerance of 10−6 to solve the linear system of equations.  The choice of these parameters can
+aﬀect the performance of SR to ﬁnd a description of the ground state, and we have not tried
+to optimize these parameters for our problem; our aim is to compare the relative performance
+of the overall algorithm with and without QPT using the same set of parameters otherwise.
+    The  SR  algorithm  can  be  shown  [35]  to  be  a  generalization  of  the  Riemannian  natural
+gradient [36], so like other gradient descent algorithms it is susceptible to being trapped in
+local minima of the energy landscape.  Finite sampling and the resulting ﬂuctuations inS and
+F  can be a source of noise that can help the training escape local minima [37], but it can also
+hinder an accurate determination of the gradient and hence prevent the training from ﬁnding
+high-quality solutions.  Motivated by the success of PT [20–22] in the study of equilibration in
+spin systems, we propose the following optimization algorithm that is inspired by QPT [24,25].
+We perform the usual training onN  RBMs, each called a replica in the parlance of PT. Each
+training  is  done  with  a  diﬀerent  training  Hamiltonian,  where  the  Hamiltonian  for  the rth
+replica is given as
+                                             H(Γr) =HT + ΓrHM,                                                   (7)
+where HT  is  the  target  Hamiltonian  whose  ground  state  we  are  actually  after  and HM  is
+a suitably chosen mixer Hamiltonian with a trivial ground state, preferably the one with a
+uniform superposition over the relevant basis states. This choice of training Hamiltonian is not
+unique, and we give an alternative formulation in Appendix D. For example, in the absence
+of any constraints,  the mixer can be taken to be the uniform transverse ﬁeld Hamiltonian,
+HM =−H0∑ni=1  12 (1−σxi ), whereH0 is a characteristic energy scale ofHT.  In this case, for
+replicas with Γr≫ 1 the training Hamiltonian is dominated by the transverse ﬁeld, and the
+ground state is the uniform superposition state.  This is analogous to the high-temperature
+limit in “standard” PT, where the diﬀerent replicas operate at diﬀerent temperatures but with
+the same Hamiltonian.  For replicas with Γr close to 0, the training Hamiltonian is dominated
+by  the  target  Hamiltonian,  and  the  ground  state  is  close  to  the  target  ground  state.   This
+is  analogous  to  the  low-temperature  limit  in  standard  parallel  tempering.   The  parameter
+Γr  thus  allows  us  to  interpolate  between  the  target  parameter  landscape  at  Γr  =  0  and  a
+much simpler parameter landscape at Γr≫ 1.  We can therefore think of Γr  as controlling
+the  eﬀective  temperature  of  the  simulation.   We  note  that  using  Eq.  (7)  as  the  training
+Hamiltonian and using Γr  as the temperature is similar to schemes that use the free energy
+to train the ANN [18,38,39], where instead of using the entropy we use⟨HT⟩.  We leave it to
+future work to directly compare these two approaches.
+    We choose our distribution of Γr to be a cubic function of the replica indices,
+                                           (  r      )3
+                                Γr = 10      N− 1         ,  r = 0,...,N− 1 .                                    (8)
+
+For  our  simulations,  a  ΓN−1  =  10  value  was  suﬃcient  for  the HM  to  dominate  over HT.
+We  emphasize  that  the  choice  of  the  distribution  of  Γr  values  can  strongly  inﬂuence  the
+performance of the QPT algorithm; for example, choosing a linear function for our simulations
+resulted in very poor performance.
+    Our  algorithm  proceeds  as  follows.   The N  replicas  (indexed  by r  =  0,...,N− 1)  are
+initialized  randomly  with  both  the  real  and  imaginary  components  of  the  parameters αr
+chosen from a Gaussian distribution with mean 0 and standard deviation 10−2.  We perform
+
+                                                          5
+ SciPost Physics                                                                           Submission
+
+
+10 updates of SR for all replicas, conﬁguration swap between replicas r and r + 1 for r even,
+10 updates of SR for all replicas, and ﬁnally a conﬁguration swap between replicasr andr +1
+for r odd.  The choice of the number of updates of SR between conﬁguration swaps was not
+optimized, and other choices may improve performance.  This process is repeated until a total
+of u updates are performed.  The deterministic even-odd pattern for conﬁguration swaps is a
+typical update pattern in PT that helps improve the diﬀusion of replicas [40, 41].  For every
+update, we calculate the expectation value of the target Hamiltonian for each replica, which
+we denote by
+                                          Er≡⟨ψ(αr)|HT|ψ(αr)⟩ .                                                 (9)
+We denote the running average of an expectation value of an observable O over 10 updates
+of SR by   ⟨O⟩, which we will use to calculate the probabilities for conﬁguration swaps.
+    The ﬁnal issue we must address about the QPT algorithm is how to perform the swap
+updates between the N  replicas.  We begin by reminding ourselves how the swaps are per-
+formed  in  the  case  where  each  of  the N  replicas  is  evolving  according  to  a  Markov  Chain
+Monte Carlo simulation that is ergodic and has a unique equilibrium distribution.  Assuming
+a ﬁnite state space, thei-th conﬁguration of replicar has an equilibrium probability given by
+Π(Γr) =Wi(Γr)/∑jWj(Γr), where Wi(Γr) is the unnormalized weight of the i-th conﬁgura-
+tion.  The swap updates between replicas then occurs with a probability p chosen to satisfy
+the detailed balance condition; speciﬁcally, if replica r is in conﬁguration i and replica r + 1
+is in conﬁguration i′, then the probability of a swap between the two is taken to be:
+                                                   (                          )
+                                 pr↔r+1 = min        1,Wi(Γr+1)Wi′(Γr)Wi(Γr)Wi′(Γr+1).                                    (10)
+
+While we may think of the SR algorithm as implementing imaginary-time evolution in a ﬁxed
+subspace (see Appendix A), we are not aware of a way to implement this evolution in terms
+of  an  ergodic  MCMC  simulation  that  eventually  converges  to  an  equilibrium  distribution.
+Therefore  we  are  not  able  to  use  the  form  in  Eq.  (10),  and  instead  we  will  use  physical
+intuition to pick a swap update probability.  This choice is not unique, and we expect diﬀerent
+choices to perform diﬀerently.
+    With these concerns in mind, we propose the following update.  For Γr  = 0(r = 0), we
+expect the ANN to reach a good approximation of an eigenstate ofHT, assuming the number
+ANN  parameters  is  suﬃciently  large  and  the  ANN  is  suﬃciently  expressive.   Similarly,  for
+replicas with Γr≫ 1 we expect the ANN to be a good approximation of an eigenstate ofHM.
+Therefore, as we have already mentioned, we can think of Γr as being a measure of a “noise”
+introduced, and we can think of Γr  as being proportional to the temperature of the replica.
+We thus propose the following probability rule for swap updates between neighboring pairs r
+and r + 1:                           (         [(                                       )])
+                    pr↔r+1 = min        1, exp    Er−    Er+1)(    1H0Γr−      1H0Γr+1         .                   (11)
+
+This  choice  for  the  probability  rule  is  a  heuristic  choice  motivated  by  the  Metropolis  up-
+date [42] for the standard PT algorithm [20–22], but in no way do we claim that it satisﬁes
+detailed balance [43].  The use of the target energy comes from the desire to move conﬁgura-
+tions with lower target energies to smaller r.  For our temperature, we use Γr  multiplied by
+some relevant energy scale H0 as motivated by our discussion above.  We use                       Er  as opposed
+to simply Er  in order to average out any ﬂuctuations in the estimation of the target energy
+during the ANN training.
+
+                                                         6
+ SciPost Physics                                                                           Submission
+
+
+    In what follows, we deﬁne success as ﬁnding a conﬁguration below some relative error ϵ of
+the energy given by                                ⏐⏐⏐⏐           ⏐⏐⏐⏐ ,                                                    (12)
+                                              ϵ =    ⟨E⟩−EGS
+                                                         EGS
+whereEGS is the true ground state energy.  To determine whether QPT can provide practical
+advantages over its standard counterpart,  we use the time-to-epsilon (TTϵ) metric [44, 45],
+which is the time required to ﬁnd a solution below a target relative error ϵ at least once with
+probability 0.99.  The TTϵ is given by
+
+                                        TTϵ =  NNmaxu ln(1− 0.99)ln(1−pS(u)) ,                                            (13)
+
+where pS(u) is the probability of reaching the target ϵ within u steps of the algorithms, such
+that the factor   ln(1−0.99)ln(1−pS(u))  counts the number of repetitions of the algorithm needed to ensure
+the  target ϵ  is  reached  with  probability  0.99  at  least  once. Nmax  is  the  largest  number  of
+QPT replicas we will use in our simulations, so that the factor N/Nmax  takes into account
+the reduction in computational cost possible by parallelization by exchanging replicas N with
+independent runs of the algorithm.  For every pair of values (n,N), we identify the value of u
+that minimizes the TTϵ, and we choose this as the cost of running the algorithm.  Using this
+approach we can determine unambiguously when it becomes more advantageous to use QPT
+versus independent runs of the algorithm.  We emphasize that this metric does not account for
+the extra overhead associated with the communication needed between replicas to implement
+the swap update, but we expect this to be minimal compared to the cost of ﬁnding a high
+quality solution for hard problems.
+
+3  Results
+
+3.1Precipice Problem
+In order to illustrate the computational viability of the QPT approach, we study a problem
+class of qubit Hamiltonians that are invariant under any permutation of the qubits.  Speciﬁ-
+cally, we take our target Hamiltonian to be of the form
+
+                                               n∑
+                          HT = 12(1−s)            (1−σxi ) +s ∑
+                                             i=1                  x∈{0,1}nf(x)|x⟩⟨x| ,                           (14)
+
+wheren is the total number of qubits andf(x) is a function that only depends on the Hamming
+weight of the bit-string x.  We can therefore label the energy eigenstates of HT  in terms of
+their symmetry properties under qubit permutation.  We take the mixer Hamiltonian to be
+given by the uniform transverse ﬁeld Hamiltonian,
+
+                                                           n∑
+                                          HM =−H02            (1−σxi ),                                               (15)
+                                                          i=1
+which is also qubit permutation invariant and we set H0  = 1.  Because the Hamiltonian is
+stoquastic [46, 47], the ground state of this Hamiltonian can be expressed entirely with non-
+negative amplitudes, so it must be in the completely symmetric subspace, which has dimension
+
+                                                         7
+ SciPost Physics                                                                           Submission
+
+
+n + 1.  We can enforce this symmetry in our RBM ansatz
+                                                       m∏        (             n∑    )
+                            ψx(α)   = ea∑ni=1vi            cosh    bµ +Wµ          vi   ,                             (16)
+                                                      µ=1                     i=1
+
+where vi ≡  (1− 2xi)∈{−1, 1}.   This  ansatz  only  depends  on  the  total  magnetization  of
+the  spin conﬁguration v,  or  equivalently  on the  Hamming  weight  of the  bit-string x.  This
+will enforce that all equal Hamming weight bit-strings will have the same amplitude.  This
+representation  has  only K  =  1 + 2m  parameters.   In  principle  these  parameters  need  only
+be purely real to capture the ground state, but we will allow the training to treat them as
+complex parameters.
+    In what follows, we will focus on a function f(x) ﬁrst introduced in Ref. [48]
+                                                {−1      if x = 1··· 1
+                                       f(x) =       w(x)   otherwise ,                                               (17)
+
+where w(x)  denotes  the  Hamming  weight  of  the  bit-string x.   We  call  this  problem  the
+“Precipice” problem because of the form of f(x),  since it increases linearly with Hamming
+weight until reaching Hamming weight n where it plummets to a value of−1.
+    For concreteness, we picks = 4/5 for our target Hamiltonian in Eq. (14).  For this value of
+s,HT  is dominated by its diagonal component, corresponding to the second term in Eq. (14).
+The  ground  state  of  the  corresponding  target  Hamiltonian HT  has  most  but  not  all  of  its
+weight on the all-one bit-string,  which is the bit-string that minimizes f(x).  On the other
+hand, the ﬁrst excited state of HT has most of its weight on the false minimum of f(x) given
+by the all-zero bit-string.  The Hamiltonian HT has the feature that annealing from Γ≫ 1 to
+Γ = 0 (Eq. (7)) encounters an exponentially closing ground state energy gap as a function of
+the system size.  One can understand this intuitively as arising from the system requiring to
+tunnel between the two conﬁgurations above (the state with most of its weight on the all-one
+bit string and the state with most of its weight on the all-zero bit string) that requires ﬂipping
+n spins [49].
+    This feature of the energy spectrum stymies the SR algorithm.  Whether it will ﬁnd the
+the correct global minimum depends entirely on where the RBM parameters are initialized,
+because  once  it  reaches  the  false  minimum  associated  with  the  ﬁrst  excited  state,  the  SR
+updates do not provide a means to escape this local minimum and reach the global minimum.
+This is where our QPT implementation helps, as it provides a mechanism for RBM conﬁgu-
+rations with weight on the all-one bit-string to be reached and guide the training to the true
+ground state.  Since our aim is to distinguish between the two minima that the algorithm can
+get stuck in, the choice of ϵ is not crucial as long as it is suﬃciently small.  We therefore ﬁx
+it to ϵ = 10−1, which is enough to distinguish between the two lowest energy eigenstates.
+    We begin by analyzing the behavior of the standard algorithm without QPT. We show in
+Fig. 1 how the probability of ﬁnding the ground state within a relative error of ϵ behaves as
+a function of system size.  We see that the probability of ﬁnding the ground state saturates
+to a value less than 1 as a function of the number of SR updates, and the saturation value
+decreases faster than exponentially with system size.  This behavior indicates that once the
+system reaches the false minimum it is trapped there without the possibility of escape, and the
+probability of initializing at a point where the SR updates guide you to the correct minimum
+decays faster than exponentially.
+
+
+                                                         8
+ SciPost Physics                                                                           Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                           (a)                                                      (b)
+
+     Figure 1:  Relative frequency of ﬁnding the ground state for the Precipice problem
+     to within a relative error ofϵ = 0.1 for a random initialization of a trial RBM ansatz
+     without using QPT as a function of (a) number of updates and (b) system size n.
+     We used 103  independent trials for n = 6, 7, 8,  4× 103  for n = 9 and 4× 104  for
+     n = 10.  The error bars correspond to the 95% conﬁdence interval calculated using a
+     bootstrap with 103 resamplings of the data.  We describe this procedure in Appendix
+     E. Inset:  Median number of updates to reach a relative error of ϵ = 0.1 when the
+     algorithm succeeds.
+
+
+    To show how QPT boosts the probability of ﬁnding the ground state, we show in Fig. 2
+how  with  increasing  number  of  updates  in  QPT  we  can  increase  the  probability  of  ﬁnding
+the ground state.  In order to compare these results to the standard approach without QPT,
+we use the results at n = 10 as a benchmark.  In the standard approach, the probability of
+ﬁnding the ground state is approximately 2.5× 10−3  with a median number of steps of 440
+(Fig. 1).  Therefore, to guarantee that we ﬁnd the ground state at least once with probability
+0.99, we would need to perform 1840 independent trials.  With QPT, we can achieve almost
+a probability of 1 of ﬁnding the ground state using less than 500 steps and 10 replicas with
+a single simulation.  Therefore, we already see a signiﬁcant advantage for using QPT in this
+model.
+    To illustrate how the QPT algorithm is helping, we show in Fig. 3 an example of a random
+walk for one of our simulation trials.  In Fig. 3a, we see that both replicas at r = 0 andr = 1
+very quickly converge to the ﬁrst excited state and only after approximately 1500 network
+updates does ther = 0 replica ﬁnd the ground state.  As we can see in Fig. 3b, the transition
+to the ground state is precipitated by a swap between the r = 0 and r = 1 conﬁgurations.
+While the conﬁguration atr = 0 remains unchanged for a large fraction of the earlier updates,
+the conﬁguration atr = 1 is swapped multiple times with other conﬁgurations, allowing it to
+explore the landscape of possible solutions.
+    Finally, we show our results for the TTϵ in Fig. 4 with Nmax = 40.  We see that at small
+system sizes (< 8), using the standard approach (N = 1) is more advantageous than incurring
+the added computational cost of QPT. Here the probability of reaching the ground state is
+suﬃciently high (even if it is not close to 1 as seen in Fig. 1) that running multiple independent
+runs of the algorithm is the optimal strategy.  However beyond system sizes of > 8, we see
+
+
+                                                        9
+ SciPost Physics                                                                           Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+     Figure 2:  Relative frequency of ﬁnding the ground state for the Precipice problem
+     to within ϵ = 10−1  with increasing number of updates in QPT for 50 independent
+     simulations.  Here we use N = 10 replicas for all QPT simulations.
+
+
+a signiﬁcant advantage to using QPT. In this case, the optimal strategy is to use QPT with
+more updates to achieve higher probabilities of reaching the ground state.
+    We  note  that  for  intermediate  values  of n  we  see  similar  performance  for N  =  10  and
+N  =  20,  indicating  that  increasing  the  number  of  replicas  does  not  improve  the  success
+probability enough to outweigh the cost of simulating additional replicas.  However, we also
+see that at larger system sizes it does become more advantageous to use more replicas.  For
+example, atn = 17 our simulations withN = 10 replicas fail to ﬁnd the ground state, and at
+n = 18 our simulations withN = 20 replicas fail to ﬁnd the ground state.  Because increasing
+N  changes the distribution of Γr  values and includes more replicas at smaller Γr  values, the
+need to increaseN to ﬁnd the ground state at larger system sizes indicates the importance of
+optimizing this distribution to get the best results.
+
+3.2H       4 Rectangle
+The  second  system  we  study  is  that  of  four  hydrogen  atoms  arranged  in  a  rectangle  with
+an angle θ between adjacent atoms.  This is an example of a molecular system that is small
+enough  to  be  exactly  solved  that  includes  a  type  of  conﬁgurational  degeneracy  that  gives
+some approximate quantum chemistry algorithms trouble [50, 51].  We consider a particular
+encoding  of  the  second  quantized  Hamiltonian  into  8  qubits;  further  details  of  this  system
+and how we construct the qubit Hamiltonian are given in Appendix F.
+    The  ground  state  of  the  8-qubit  Hamiltonian  has  non-zero  amplitudes  only  on  compu-
+tational basis states with Hamming Weight four or equivalently with four fermions or zero
+z-magnetization.  This observation motivates two diﬀerent RBM ans¨atze:  (1) we restrict the
+input of the RBM to Hamming-weight-four computational basis states and assume that all
+other inputs give zero amplitude, and (2) we allow all inputs to the RBM and the training
+of  the  RBM  must  ﬁnd  the  Hamming  weight-four  subspace.   While  the  ﬁrst  case  is  a  more
+eﬃcient representation for the H4 Rectangle, we still consider both ans¨atze since they could
+be relevant in diﬀerent contexts for fermionic simulation beyond the H4 Rectangle:  the ﬁrst
+applies to cases where particle number is conserved, whereas the second applies to cases where
+the chemical potential is ﬁxed.
+
+
+                                                         10
+ SciPost Physics                                                                           Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                           (a)                                                       (b)
+
+     Figure  3:  An  example  of  a  random  walk  for  a  single  simulation  of  the  Precipice
+     problem withn = 12 andN = 10.  In (a), we show the target energy (Eq. (9)) of the
+     conﬁguration atr = 0 andr = 1 during the simulation.  The dotted lines correspond
+     to the ground state energy and ﬁrst excited state energy for the target Hamiltonian.
+     In (b), we label each conﬁguration by its original replica index at initialization, and
+     we show which index is at position r  = 0 and r  = 1 during the simulation.  This
+     allows us to monitor how conﬁgurations walk on the space of Γr.
+
+
+    In what follows, we ﬁx our desired error toϵ = 10−3.  The reason for this smaller choice of
+relative error, compared to the Precipice example, is that this problem requires a relative error
+less than 6×10−3 forθ = 90◦ to begin distinguishing the two lowest energy eigenstates.  So we
+choose anϵ that is suﬃciently small to ensure that we are ﬁnding a high quality approximation
+of the ground state.  For the simulations, we use a up to 104 updates.
+
+3.2.1Fixed Hamming Weight
+We ﬁrst consider the case where the RBM is only sampled with Hamming-weight-four states.
+In  this  case,  we  choose  a  mixer  Hamiltonian  given  by  the  ferromagnetic  Heisenberg  model
+with all-to-all connectivity,
+
+                                          n∑   n∑   (                               )
+                           HM = H02n                  1−σxiσxj−σyiσyj−σziσzj           ,                            (18)
+                                         i=1 j=i+1
+
+for which the (degenerate) ground state is the uniform superposition of ﬁxed Hamming weight
+states with energy 0 andH0 is the absolute magnitude of the largest coupling strength in the
+target Hamiltonian.  This choice is made to ensure that the energy scales of HM and HT are
+comparable.
+    For the simulations, we ﬁnd that using m = 8 hidden units is suﬃcient to represent the
+ground state with the required accuracy, so we use this value for all our training simulations
+with a ﬁxed Hamming weight exact sampling.  We show in Fig. 5 the results for the optimal
+TTϵ for three diﬀerent θ values, where we ﬁnd rich behavior as a function of θ.  We ﬁnd that
+for a suﬃcient number of replicas,  the QPT approach demonstrates an advantage over the
+standard approach for angles θ = 80◦ and 85◦.  Forθ = 90◦, the ground state is found readily
+
+                                                        11
+ SciPost Physics                                                                           Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+     Figure  4:  Optimum  time  to  epsilon  to  reach  a  relative  error  of ϵ  =  10−1  for  the
+     Precipice  problem  as  a  function  of  system  size n  for  the  Precipice  problem  with
+     diﬀerent number of QPT replicas N  with Nmax  = 40.  The error bars correspond
+     to the 95% conﬁdence interval calculated using a bootstrap with 103 resamplings of
+     the data.
+
+
+by the standard approach that the additional cost of running N  replicas does not introduce
+any  beneﬁt.   The θ  =  90◦  instance  was  found  to  be  pathological  for  the  coupled  cluster
+doubles (CCD) approximation but not its variational counterpart in Ref. [51].  It is therefore
+unsurprising that a variational RBM ansatz that explores a similar Hilbert space captures the
+ground state well.  Because the root of the CCD pathology is ultimately degeneracy of two
+of the dominant conﬁgurations, it seems like this degeneracy might provide an advantage for
+the RBM ansatz training that is worthy of further investigation.
+    We also note that this particular radius provides a uniquely easy energy landscape for the
+single-replica approach at 90◦,  and at diﬀerent radii the 90◦  case is more diﬃcult.  In fact,
+among the instances considered,  the instance that we are highlighting was found to be the
+one for which achieving an advantage with QPT was most diﬃcult.  At θ = 80◦ and 85◦, we
+observe  that N  =  5, N  =  10  and N  =  20  replicas  exhibit  a  deﬁnitive  advantage  over  the
+single-replica approach.
+
+3.2.2No Fixed Hamming Weight
+We now consider the case where the RBM is sampled with all possible computational basis
+states.  In this case, we choose a mixer Hamiltonian to be the uniform transverse ﬁeld:
+                                                          n∑
+                                           HM = H02           (1−σxi ) ,                                               (19)
+                                                         i=1
+where H0  is  again  the  absolute  magnitude  of  the  largest  coupling  strength  in  the  target
+Hamiltonian.
+    For the simulations, we ﬁnd that using m = 48 hidden units is suﬃcient to represent the
+ground state with the required accuracy but also allow the simulations withN = 1 to ﬁnd the
+ground state with suﬃcient frequency, so we use this value for these simulations1.  We show in
+
+   1We can actually use fewer hidden units (as low as m = 16) and still have an approximation of the ground
+state to the desired accuracy, but in this case we only ﬁnd a good approximation to the ground state using our
+QPT method when using our simulation parameters.
+
+                                                          12
+ SciPost Physics                                                                           Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+     Figure 5:  Optimum time to epsilon to reach a relative error of ϵ = 10−3 for the H4
+     Rectangle at diﬀerent angles with ﬁxed Hamming weight exact sampling.  We use
+     Nmax  =  20.   The  error  bars  correspond  to  the  95%  conﬁdence  interval  calculated
+     using a bootstrap with 103 resamplings of the data.  The lines are to guide the eye.
+
+
+Fig. 6 the results for the optimal TTϵ for the same three values of θ∈{80◦, 85◦, 90◦}.  While
+generally the problem of approximating the ground state is harder in this case compared to
+the ﬁxed Hamming weight case, the advantage for QPT training with a suﬃcient number of
+replicas for all three angles is clear, indicating that the energy landscape is more eﬃciently
+searched using the QPT training in this case.  This is a promising indication of the advantages
+of the QPT approach for more generic problems that may not exhibit any symmetries that
+can be used to restrict the wave function ans¨atze.
+
+4  Conclusions
+
+We have shown that using a QPT method as part of the training of ANNs to approximate
+ground states of quantum Hamiltonians can help overcome barriers in the energy landscape.
+To illustrate this, we simplify our analysis by using exact sampling in order to eliminate the
+role of ﬂuctuations introduced by ﬁnite sampling.  We demonstrated the utility of the QPT
+approach using two Hamiltonians with very diﬀerent proﬁles.  For the permutation invariant
+problem, the QPT approach demonstrated a clear advantage over repetitions of the standard
+algorithm even for small system sizes. A possible criticism of this problem is that it is described
+by a stoquastic Hamiltonian [46,47].  Stoquastic Hamiltonians have ground state that can be
+described  in  terms  of  non-negative  real  amplitudes,  and  they  admit  eﬃcient  quantum-to-
+classical mappings [52].  While these properties do not necessarily mean there is an eﬃcient
+algorithm to ﬁnd the ground state, the existence of an eﬃcient classical representation is often
+taken to mean that the ground states of stoquastic Hamiltonians are not as diﬃcult to ﬁnd
+as those of non-stoquastic Hamiltonians.  We therefore consider a second problem based on
+four hydrogen atoms arranged in a rectangle with a variable angle between adjacent atoms,
+and we observe a clear advantage for the QPT approach at some angles where the standard
+approach  struggled  to  ﬁnd  the  ground  state.   These  promising  initial  results  indicate  that
+using the QPT approach to train ANNs may be useful for a broad range of Hamiltonians with
+diﬃcult to explore parameter landscapes.
+
+
+                                                        13
+ SciPost Physics                                                                           Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+     Figure  6:  Optimum  time  to  epsilon  to  reach  a  relative  error  of ϵ  =  10−3  for  the
+     H4 Rectangle at diﬀerent angles with full exact sampling.  We use Nmax = 20.  The
+     error bars correspond to the 95% conﬁdence interval calculated using a bootstrap
+     with 103 resamplings of the data.  The lines are to guide the eye.
+
+
+    We focused on using an RBM as our ANN ansatz, but the implementation of QPT is in-
+dependent of the choice of ANN architecture and can be applied equally well to convolutional
+neural  networks  (CNNs)  [16],  to  two  disconnected  real  ANNs  to  represent  the  magnitude
+and phase of wave function amplitudes [19], or to group convolutional neural networks (GC-
+NNs) [18], which have also been shown to be eﬃcient at representing quantum states.  This
+makes  our  proposed  approach  quite  versatile,  with  only  the  added  complexity  of  training
+multiple replicas of the ANNs and implementing conﬁguration swaps between them.
+    We emphasize that we made several choices in this work for simplicity that might have
+been suboptimal for the performance of the QPT approach.  For example, we chose a cubic
+distribution of the parameter Γ for our replicas (Eq. (8)), and a suboptimal distribution of Γ
+values around a bottleneck for the simulation does hinder the random walk of replicas [53].
+We conjecture that optimizing this distribution will further increase the advantage of the QPT
+approach in our problems.  We leave it to future work to develop a methodology to identify
+more optimal distributions.
+    Furthermore, our choice of swap probability (Eq. (11)) was based on an intuitive argument,
+and we provided examples of other possible choices in Appendix D. It would be ideal to identify
+a choice that can satisfy some appropriate notion of detailed balance.  We believe that this
+is the most important open theoretical problem with our proposal.  Such a formalism would
+also allow us to adopt some of the strategies and methods using in conjunction with QPT
+to characterize the hardness of the landscape, such as using the autocorrelation time of the
+replica random walk as a proxy for the mixing time [23].
+
+5  Code
+
+Code for this project can be found at https://github.com/talbash/QPTforRBM.
+
+
+
+
+
+
+                                                        14
+ SciPost Physics                                                                           Submission
+
+Acknowledgements
+
+We would like to thank the UNM Center for Advanced Research Computing, supported in part
+by the National Science Foundation, for providing the high performance computing resources
+used in this work.
+
+Funding information    This material is based upon work supported by the National Sci-
+ence  Foundation  under  Grant  No.   2037755.   This  material  is  based  upon  work  supported
+by the Air Force Oﬃce of Scientiﬁc Research under award number FA9550-22-1-0498.  Any
+opinions, ﬁndings, and conclusions or recommendations expressed in this material are those
+of the author(s) and do not necessarily reﬂect the views of the United States Air Force.  CS
+and QC were supported by Sandia National Laboratories’ Laboratory Directed Research and
+Development program (Project 222396).  Sandia National Laboratories is a multi-mission lab-
+oratory managed and operated by National Technology and Engineering Solutions of Sandia,
+LLC, a wholly owned subsidiary of Honeywell International, Inc., for DOE’s National Nuclear
+Security Administration under contract DE-NA0003525.  This paper describes objective tech-
+nical results and analysis.  Any subjective views or opinions that might be expressed in the
+paper do not necessarily represent the views of the U.S. Department of Energy or the United
+States Government.
+
+A Review of Stochastic Reconﬁguration
+
+We  consider  a  (possibly  unnormalized)  wave  function|ψ(α)⟩  parameterized  by K  complex
+parameters denoted byα = (α1,...,αK)T .  We are interested in ﬁnding the parameter values
+α that minimize
+                                     E(α)≡⟨ψ(α)|H|ψ(α)⟩⟨ψ(α)|ψ(α)⟩    =⟨H⟩ .                                          (20)
+
+The true minimum is given by the ground state energyEGS.  Because the parameterization of
+the wave function|ψ(α)⟩ is unlikely to be general enough to capture the ground state exactly,
+we can only hope for|ψ(α)⟩ (when normalized) to provide an approximation to the ground
+state.
+    Assume the wave function has an expansion in a basis of the form:|ψ(α)⟩ =∑xψx(α)|x⟩.
+For simplicity, we will assume thatψx(α) only depends onαk and not on both (αk,α∗k).  Let us
+consider a small variation of the parameters α′k =αk +δαk Let us expand the wave function:
+
+                      |ψ(α′)⟩   = |ψ(α)⟩       (    1                )
+                              +∑     δαk  ∑               ∂            ψx(α)|x⟩
+
+                                  k        x     ψx(α)   ∂αkψx(α)
+                                   ∑             (    1      ∂     ∂          )
+                              +12      δαkδαk′      ψx(α)  ∂αk   ∂αk′ψx(α)      ψx(α)|x⟩
+                                   k,k′
+                              +.....                                                                                          (21)
+
+
+
+
+
+                                                       15
+ SciPost Physics                                                                           Submission
+
+
+It is convenient to deﬁne the operators:
+
+                                  Ok(α) =∑            1      ∂
+                                               x   ψx(α)   ∂αkψx(α)|x⟩⟨x| ,                                      (22a)
+                               Mkk′(α) =∑             1      ∂     ∂
+                                               x   ψx(α)   ∂αk   ∂αk′ψx(α)|x⟩⟨x| .                              (22b)
+
+(We will suppress their α dependence for notational brevity) such that we can write
+
+                          |ψ(α′)⟩   = |ψ(α)⟩ +∑             δαkOk|ψ(α)⟩
+                                                        k
+                                                ∑
+                                           +12       δαkδαk′Mkk′|ψ(α)⟩ +...
+                                           (    k,k′                     )
+
+                                      =      1 +∑      δαk⟨Ok⟩ +...         |ψ(α)⟩
+                                                    k
+                                           +∑δαk (Ok−⟨Ok⟩)|ψ(α)⟩
+                                               k
+                                                ∑
+                                           +12       δαkδαk′ (Mkk′−⟨Mkk′⟩)|ψ(α)⟩
+                                                k,k′
+                                           +... ,                                                                            (23)
+
+where
+
+                                       ⟨Ok(α)⟩ =⟨ψ(α)|Ok(α)|ψ(α)⟩⟨ψ(α)|ψ(α)⟩   ,                                        (24a)
+
+                                    ⟨Mkk′(α)⟩ =⟨ψ(α)|Mkk′(α)|ψ(α)⟩⟨ψ(α)|ψ(α)⟩    .                                     (24b)
+
+We will denote the coeﬃcient of the|ψ(α)⟩ term in Eq. (23) byδα0, such that⟨ψ(α)|ψ(α′)⟩ =
+δα0⟨ψ(α)|ψ(α)⟩ and
+
+                      ⟨ψ(α′)|ψ(α′)⟩   = |δα0|2⟨ψ(α)|ψ(α)⟩(           )
+                            +∑     δα∗kδαk′⟨ψ(α)|       O†k−⟨O†k⟩      (Ok′−⟨Ok′⟩)|ψ(α)⟩
+                               k,k′
+                            +...                                                   
+                            =|δα0|2    1 +     1      ∑    δα∗kδαk′Sk,k′ +...      
+                                               |δα0|2  k,k′
+                            ×⟨ψ(α)|ψ(α)⟩ ,                                                                                  (25)
+
+where we have deﬁned the covariance matrix
+                                                 (              )
+                                        ⟨ψ(α)|     O†k−⟨O†k⟩      (Ok′−⟨Ok′⟩)|ψ(α)⟩
+                           Skk′    =                      ⟨ψ(α)|ψ(α)⟩
+
+                                   = ⟨O†kOk′⟩−⟨O†k⟩⟨Ok′⟩ .                                                        (26)
+
+                                                          16
+ SciPost Physics                                                                           Submission
+
+
+Here we have suppressed the dependence ofS onα.  We see from Eq. (25) that renormalizing
+|ψ(α′)⟩ by δα0 amounts to rescaling δαk by δα0.  We will exploit this freedom later.  Finally,
+for completeness, we note that we can expand the energy as:
+
+                     E(α′)   = E(α)                 (              (              )
+                                               ∑
+                             +         1⟨ψ(α)|ψ(α)⟩   δα∗k⟨ψ(α)|     O†k−⟨O†k⟩      H|ψ(α)⟩
+                                                 k
+                             +δαk⟨ψ(α)|H (Ok−⟨Ok⟩)|ψ(α)⟩) +... ,
+                               = E(α) +∑           (δα∗kFk +δαkF∗k ) +... ,                                      (27)
+                                                k
+where we have deﬁned                            (              )
+
+                                       ⟨ψ(α)|     O†k−⟨O†k⟩      (H−E(α))|ψ(α)⟩
+                            Fk    =                     ⟨ψ(α)|ψ(α)⟩
+
+                                  = ⟨O†kH⟩−⟨O†k⟩⟨H⟩ .                                                            (28)
+
+Here we have suppressed the dependence of F  on α.
+    For the SR algorithm we further demand that:
+
+                                        |ψ(α′)⟩ =P (Λ−H)|ψ(α)⟩ ,                                            (29)
+
+where Λ is taken to be a suﬃciently large (larger than the largest eigenvalue of H) positive
+number and P  is the projector onto the subspace of the parameterization.  By acting with()
+⟨ψ(α)| and⟨ψ(α)|        O†k−⟨O†k⟩      , and by restricting to linear order in δα, we get K + 1 linear
+equations:
+
+                          ∑δα0 = Λ−E(α)                                                                          (30a)()
+                               δαk′⟨ψ(α)|      O†k−⟨O†k⟩      (Ok′−⟨Ok′⟩)|ψ(α)⟩ =
+                            k′                (              )
+                                   −⟨ψ(α)|      O†k−⟨O†k⟩      H|ψ(α)⟩
+                                             (              )
+                               =−⟨ψ(α)|        O†k−⟨O†k⟩      (H−E(α))|ψ(α)⟩ ,                             (30b)
+
+we get the linear equation:
+
+                              −Fk =∑         Skk′δαk′⇒δαk =−∑S−1kk′Fk′ .                                (31)
+                                         k′                             k′
+Since S  may  not  be  invertible, S−1  is  strictly  speaking  the  Moore-Penrose  pseudoinverse.
+Therefore, the update rule for the parameters α is given by:
+
+                                    α′k =αk +δαk =αk−∑                S−1kk′Fk′ .                                       (32)
+                                                                  k′
+Furthermore, if we renormalize the stateψ(α′) byδα0, we eﬀectively are rescalingδαk byδα0.
+Therefore, our update rule after this renormalization is given by:
+                                                                    ∑
+                                 α′k =αk + δαkδα0  =αk−   1δα0           S−1kk′Fk′ ,                                   (33)
+                                                                     k′
+
+                                                         17
+ SciPost Physics                                                                           Submission
+
+
+and we have (from Eq. (25)):
+
+                              ⟨ψ(α′)|ψ(α′)⟩−⟨ψ(α)|ψ(α)⟩
+                                         ⟨ψ(α)|ψ(α)⟩                =
+                                                       1     ∑    δα∗ksk,k′δαk′ +... .                              (34)
+                                                    |δα0|2   k,k′
+
+    By repeating this iterative scheme, convergence is reached when the ratio δαk/δα0→ 0:
+we have from Eq. (27):
+
+                           E(α′)−E(α) =∑       (
+                               −    1|δα0|2      F∗kS−1kk′Fk′ +(F∗kS−1kk′Fk′)∗)       .                                   (35)
+                                           k,k′
+
+Because  the  covariance  matrix  is  a  positive  semi-deﬁnite  matrix,  the  term  in  the  sum  is
+positive, which says that on every iteration the energy decreases, and in the limit ofδαk/δα0→
+0, the energy ceases to change.
+    As we noted earlier,  there is some freedom in picking the value of Λ.  Since Λ controls
+the value of δαk, which in turn controls both the parameter update rate (Eq. (33)) and the
+wave function change rate (Eq. (34)), in practice we treat δα−10 ≡γ as a free parameter that
+is chosen to get a stable convergence.  The value of γ is the learning rate.  As we describe in
+Appendix B, we will use an adaptive scheme to update this learning rate.
+    In  the  case  of  the  RBM  ansatz,  the  operators Ok  can  be  calculated  analytically.   The
+relevant quantities are given by:
+
+                                      1      ∂
+                                   ψx(α)   ∂aiψx(α) = (1− 2xi) ,                                                 (36a)
+                                      1      ∂
+                                   ψx(α)   ∂bµψx(α) = tanh (θ(x)) ,                                             (36b)
+                                    1      ∂
+                                ψx(α)    ∂Wiµψx(α) = (1− 2xi) tanh (θ(x)) .                               (36c)
+
+B Adaptive Learning Rate Scheme
+
+We begin by interpreting Eq. (3) as being a discretization of a dynamical equation for α with
+γ being the step size; therefore, let us recast it as:
+
+                          d                    (S(α(γ))−1)kk′Fk′(α(γ))≡fk(α(γ)) ,                        (37)
+                         dγαk(γ) =−∑k′
+
+where we have introduced the dependence of α onγ.  In this form, we can use a Heun second
+order consistent integrator to adaptively update γ.  We calculate two quantities:
+
+                                             ⃗κ1 = ⃗f(⃗α(γ)) ,                                                            (38a)
+                                             ⃗κ2 = ⃗f(⃗α(γ) + ∆γ⃗κ1) ,                                               (38b)
+
+
+
+                                                           18
+ SciPost Physics                                                                           Submission
+
+
+and then update using:
+                                      ⃗α(γ + ∆γ) =⃗α(γ) + ∆γ2   (⃗κ1 +⃗κ2)                                        (39)
+In order to dynamically adjust the step ∆γ, we calculate the ANN parameters at the same
+time γ + ∆γ but now using two ∆γ/2 steps.  Therefore, we deﬁne:
+
+                                  ⃗κ3 = ⃗f(⃗α(γ) + ∆γ2 ⃗κ1) ,                                                           (40a)
+
+                                  ⃗κ4 = ⃗f(⃗α(γ) + ∆γ4   (⃗κ1 + ⃗κ3)) ,                                                (40b)
+
+                                  ⃗κ5 = ⃗f(⃗α(γ) + ∆γ4   (⃗κ1 + ⃗κ3) + ∆γ2 ⃗κ4) ,                                  (40c)
+
+such that
+                          ⃗α′(γ + ∆γ) =⃗α(γ) + ∆γ4   (⃗κ1 + ⃗κ3) + ∆γ4   (⃗κ4 +⃗κ5) .                         (41)
+
+We deﬁne ∆α =‖⃗α′(γ + ∆γ)−⃗α(γ + ∆γ)‖S(α(γ)), where the norm here is deﬁned as:
+                                                      vuu√
+                                                           M∑
+                                 ‖⃗x‖S(α(γ)) =  1M              x∗kSkk′(α(γ))xk′ .                                  (42)
+                                                         k,k′=1
+The adjusted time step is then taken to be [17]:
+                                                           ( 6ϵ   )1/3
+                                             ∆γ′ = ∆γ         ∆α          ,                                                 (43)
+
+for a ﬁxed tolerance ϵ.  In our simulations, we ﬁx ϵ = 10−6.  We note that in a single update
+step in this framework requires performing 5 diﬀerent calculations of S  and F , one for each
+of the diﬀerent κ values.
+
+C Calculating the expectation value of operators with respect
+       to an RBM ansatz
+
+We begin by ﬁrst considering a diagonal operator D, meaning it is diagonal in the compu-
+tational basis.  In this case,  the expectation value of the operator can be straightforwardly
+calculated using the RBM ansatz in Eq. (1) (we will suppress the α dependence):
+                                        ⟨D⟩   =    1     ∑   |ψx|2⟨x|D|x⟩ ,                                           (44)
+                                                     Z    x
+
+whereZ =⟨ψ|ψ⟩ =∑x|ψx|2.  Note that|ψ⟩/√Z deﬁnes a normalized state.
+    Let  us  now  consider  the  expectation  value  of  an  arbitrary  Pauli  operator  acting  on n
+qubits, which we denote by P .  We can express the expectation value as:
+                                 ⟨P⟩   =    1    ∑ψ∗xψx′⟨x|P|x′⟩
+                                             Z   x,x′
+                                                 ∑          (∑                     )
+                                        =    1       |ψx|2          ψx′                ,                                  (45)
+                                             Z    x             x′  ψx⟨x|P|x′⟩
+
+                                                           19
+ SciPost Physics                                                                           Submission
+
+
+where the term in parenthesis deﬁnes the local Pauli operator P (x):
+
+                                          P (x) =∑      ψx′
+                                                     x′  ψx⟨x|P|x′⟩ .                                               (46)
+
+For a givenP , letIα,α =x,y,z, denote the qubit indices where a single-qubit Pauli operator
+σα  acts.  For example, consider the Pauli operator acting on 3 qubits P  = σx2⊗σy1⊗σz0; in
+this case we would haveIx ={2},Iy ={1},Iz ={0}.  For the RBM ansatz in Eq. (1), we
+can calculate the local Pauli operator straightforwardly:
+                                                                           
+                        P (x)   =    ∏     (−1)xj    i|Iy| ∏    (−1)1−xj
+                                       j∈Iz                   j∈Iy
+                                                                  
+                              × exp−2 ∑             aj(1− 2xj)
+
+                                            j∈Ix∪Iy
+                                           (                                          )
+                                  m∏  cosh   θµ(x)− 2∑j∈Ix∪IyWjµ(1− 2xj)
+                              ×                        cosh (θµ(x))          ,
+                                 µ=1
+                                                                                                             (47)
+
+where θµ(x) =bµ +∑nj=1Wjµ(1− 2xj).
+    The  above  prescription  allows  us  to  calculate  the  expectation  values  in  the  covariance
+matrix and force vector in Eq. (4).  For example, let us consider the term⟨O†kH⟩.  We can
+write:
+                            ⟨O†                ∑    ψ∗xψx′⟨x|O†
+                                kH⟩   =    1Z                    kH|x′⟩
+                                                x,x′
+                                       =    1    ∑     ψ∗xψx′⟨x|O†
+                                            Z                       k|x′′⟩⟨x′′|H|x′⟩
+                                               x,x′,x′′    (∑
+                                       =    1  ∑    |ψx|2         ψx′′
+                                            Z                     ψx⟨x|O†k|x′′⟩
+                                                 x            x′′   )
+                                            ×∑      ψx′
+                                                x′  ψx′′⟨x′′|H|x′⟩
+                                               ∑
+                                       =    1Z      |ψx|2⟨x|O†k|x⟩H(x) ,                                          (48)
+                                                 x
+where we have used that the operators Ok are diagonal and where we deﬁned a local Hamil-
+tonian:                                                 ψx′
+                                         H(x) =∑         ψx⟨x|H|x′⟩ .                                               (49)
+                                                     x′
+Since any Hamiltonian can be expressed in terms of diagonal operators and arbitrary Pauli
+operators, we can calculate the local Hamiltonian using our prescription above for diagonal
+and local Pauli operators.
+
+
+                                                        20
+ SciPost Physics                                                                           Submission
+
+
+    In the case of the completely symmetric RBM ansatz, the expectation values take a simple
+form.  For example, we can express the contribution of the transverse ﬁeld as:
+
+                            n∑               n∑ (n)
+                               ⟨σxi⟩   =          w   |ψw(α)|2
+                           i=1  (          w=0
+                             ×    nδw0ψw+1(α)ψw(α)   +nδwnψw−1(α)ψw(α)
+                                         (                                     ))
+                             +δ0<w<n       (n−w)ψw+1(α)ψw(α)   +wψw−1(α)ψw(α)        ,                            (50)
+
+where we have deﬁned ψw(α) as
+
+                                                    m∏
+                          ψw(α)   = ea(n−2w)           cosh (bµ +Wµ(n− 2w)) .                           (51)
+                                                   µ=1
+
+We can also calculate:
+                       n∑                 n∑  (n)
+                         ⟨σxiσxj⟩   =           w   |ψw(α)|2
+                      i⁄=j   [           w=0
+
+                          ×   δw0n(n− 1)ψw+2ψw   +δwnn(n− 1)ψw−2ψw
+                                 (                                       )
+                           +δw1    2(n− 1) + (n− 1)(n− 2)ψw+2ψw
+                                     (                                       )
+                           +δw,n−1     2(n− 1) + (n− 1)(n− 2)ψw−2ψw
+                                         (
+                           +δ1<w<n−1       2w(n−w) + (n−w)(n−w− 1)ψw+2ψw
+                                               )]
+                           +w(w− 1)ψw−2ψw           .                                                                       (52)
+
+
+D Alternative Parallel Tempering Schemes
+
+D.1Standard deviation of     H2 as a measure of temperature
+As we indicated in the main text, there is a lot of freedom in choosing the training Hamiltonian
+and the parallel tempering update scheme.  Here we present an alternative approach.  We can
+choose the Hamiltonian for the rth replica to be given by
+
+                                     H(Γr) = (1− Γr)HM + ΓrHT ,                                          (53)
+
+where HT  is the target Hamiltonian whose ground state we are actually after and HM  is a
+suitably chosen mixer Hamiltonian with a trivial ground state.  For example, in the absence
+of any constraints,  the mixer can be taken to be the uniform transverse ﬁeld Hamiltonian,
+HM =−H0∑ni=1σxi , whereH0 is a characteristic energy scale ofHT.  In this case, for replicas
+with  Γr  close  to  0  the  training  Hamiltonian  is  dominated  by  the  transverse  ﬁeld,  and  the
+
+                                                      21
+ SciPost Physics                                                                           Submission
+
+
+ground state is the uniform superposition state.  This is analogous to the high-temperature
+limit in “standard” PT, where the diﬀerent replicas operate at diﬀerent temperatures but with
+the same Hamiltonian.  For replicas with Γr close to 1, the training Hamiltonian is dominated
+by  the  target  Hamiltonian,  and  the  ground  state  is  close  to  the  target  ground  state.   This
+is analogous to the low-temperature limit in standard parallel tempering.  The parameter Γr
+thus allows us to interpolate between the target parameter landscape at Γr = 1 and a much
+simpler parameter landscape at Γr = 0.  For simplicity we choose our distribution of Γr to be
+linearly spaced,
+                                   Γr = 1−  rN− 1 ,  r = 0,...,N− 1 .                                     (54)
+
+We then propose the following PT update.  Since Γr controls the relative energy scales of HT
+and HM, it is not a suitable candidate for the temperature as it was in the main text, so we
+propose a diﬀerent choice.  We expect the standard deviation σr  to be 0 for Γr = 1 (r = 0)
+because we expect the ANN to reach a good approximation of an eigenstate of HT, assuming
+the number ANN parameters is suﬃciently large.  Similarly, for larger r replicas this quantity
+should be non-zero since we expect the ANN to be a good approximation of an eigenstate of
+H(Γr).  Therefore, we can think ofσr as being a measure of the broadening of the eigenstates
+of HT due to the “noise” introduced by Γr < 1.  In this sense, we can think of σr  as being a
+kind of temperature.  We thus propose the following probability rule for swap updates between
+neighboring pairs r and r + 1:
+                   1                                                                 if r = 0 andEr+1<Er
+
+     pr↔r+1 =       0                                                                 if r = 0 and([()])Er+1>Er(55)
+                      min    1, exp    Er−    Er+1)(  2σr−     2σr+1                        otherwise .
+
+While  it  is  not  strictly  necessary,  the r  =  0  replica  only  swaps  its  conﬁguration  with  its
+neighbor if its neighbor has a better approximation of the ground state.  This is equivalent to
+what happens in the main text at zero temperature. The factor of 2 in 2/σr is a choice we make
+to ensure that enough replica swaps happen in our simulations.  This is a hyper-parameter
+that could be optimized.
+    We show the QPT simulation results using this rule for the Precipice problem in Fig. 7
+and for the H4 Rectangle in Fig. 8.  The results are comparable to our results from the main
+text (Figs. 4, 5, and 6), although the performance using the rule in the main text is better.
+We  also  emphasize  that  our  simulations  with  this  rule  did  not  succeed  at  ﬁnding  a  good
+approximation of the ground state with N = 5 replicas, while the approach in the main text
+does.
+
+D.2Almost constant swap probability
+In what follows we use the same the same deﬁnition of the training Hamiltonian as in the main
+text (Eq. (7)), as well as the same distribution of Γr  values (Eq. (8)).  We consider a swap
+rule that abandons the idea of a temperature altogether;  instead we consider the following
+swap probability rule:
+                                              1       if r = 0 and   Er+1<     Er
+
+                               pr↔r+1 =        0       if r = 0 and   Er+1>     Er                              (56)
+                                                1/4                         otherwise
+
+
+                                                         22
+ SciPost Physics                                                                           Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+     Figure  7:  Optimum  time  to  epsilon  to  reach  a  relative  error  of ϵ  =  10−1  for  the
+     Precipice problem as a function of system size n using the QPT swap probability
+     rule  in  Eq.  (55)  with  diﬀerent  number  of  QPT  replicas N  with Nmax  =  40.   The
+     error bars correspond to the 95% conﬁdence interval calculated using a bootstrap
+     with 103 resamplings of the data.
+
+
+The motivation for this choice is as follows.  The r = 0 replica only swaps its conﬁguration
+with  its  neighbor  if  its  neighbor  has  a  better  approximation  of  the  ground  state.   This  is
+equivalent to what happens in the main text at zero temperature.  For the remaining replicas,
+we swap the replicas with probability 1/4 irrespective of the energies of the conﬁgurations.
+We show the QPT simulation results using this rule for the Precipice problem in Fig. 9 and
+for  the  H4  Rectangle  in  Fig.  10.   The  results  are  comparable  to  our  results  from  the  main
+text (Figs. 4, 5, and 6), although the performance using the rule in the main text is better in
+all cases, although there are some qualitative diﬀerences.  For the Precipice problem, we see
+a clear separation between the diﬀerent N  values for intermediate n values, which suggests
+that  the  constant  swap  probability  with a  smaller  separation  between  replicas  is  hindering
+performance compared to the probability rule in the main text.  For the H4  Rectangle, the
+larger error bars suggest less consistency in the performance using this scheme.
+
+E Short Note On the Bootstrap Procedure
+
+Let  us  assume  we  have  repeated  our  stochastic  simulations n  times  and  gotten  the  set  of
+outcomes{x1,x2,...,xn}.  The outcome of the i-th experiment can be treated as a random
+variable Xi,  with  the i-th  experimental  outcome  given Xi  = xi.   We  will  assume  that  all
+the random variables are independent and identically distributed with mean µx and standard
+deviationσx.  Our goal is to report the mean and uncertainty of some property of the random
+variables.  For example, if we are interested in estimatingµx, we may use the the sample mean
+¯X as our function:
+                                                            n∑
+                                                  ¯X =  1n      Xi                                                        (57)
+                                                           i=1
+From the Central Limit Theorem, we expect that  ¯X∼N (µx,σ2x/n) for suﬃciently large n.
+So for suﬃciently largen, we can report our 95% conﬁdence estimate ofµx as ¯x± 2σx√n  where
+
+
+                                                         23
+ SciPost Physics                                                                           Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                              (a)                                                      (b)
+
+      Figure 8:  Optimum time to epsilon to reach a relative error of ϵ = 10−3 for the H4
+      Rectangle  at  diﬀerent  angles  with  (a)  ﬁxed  Hamming  weight  exact  sampling  and
+      (b) full exact sampling using the QPT swap probability rule in Eq. (55).  We use
+      Nmax  =  20.   The  error  bars  correspond  to  the  95%  conﬁdence  interval  calculated
+      using a bootstrap with 103 resamplings of the data.  The lines are to guide the eye.
+
+¯x =  1 ∑n
+      n    i=1xi.  We can estimate σ2x by using the sample variance for example.
+    However, if instead of estimatingµx, we were interested in the median of Xi, then it is not
+obvious how to use the above method to give conﬁdence estimates.  The bootstrap method
+allows us to mitigate this problem in a simple way.
+    Bootstrapping requires resampling (with replacement) the data (x1,...,xn) uniformly to
+acquire nb  bootstrap resamples.  Each bootstrap resample Si  picks n of the data outcomes
+randomly with replacement, i.e. Si ={xi1,xi2,...xin}.  So a bootstrap resample eﬀectively
+amounts to randomly picking indices from 1 ton with replacement.  For eachSi, we calculate
+the property we are interested in, like the median, giving a value Fi.  We can treat the set
+{F1,F2,...,Fnb}  as nb  samples  of  the  random  variables Fi.   We  now  calculate  the  sample
+mean of F:                                                    nb∑
+                                                   ¯F =  1        Fi                                                        (58)
+                                                          nb  i=1
+
+Now we can use the Central Limit Theorem (for suﬃciently large nb) that ¯F∼N .  We can
+now report our estimate with 95% conﬁdence interval as:
+
+                                                       ¯F± 2σF                                                             (59)
+
+where  ¯F  is the sample mean:
+                                                               nb∑
+                                                    ¯F  =  1      Fi                                                        (60)
+                                                          nb  i=1
+and σF  is the standard deviation:
+
+                                                             nb∑
+                                           σ2F  =     1nb− 1     (Fi−  ¯F )2                                               (61)
+                                                             i=1
+
+
+                                                           24
+ SciPost Physics                                                                           Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+     Figure  9:  Optimum  time  to  epsilon  to  reach  a  relative  error  of ϵ  =  10−1  for  the
+     Precipice problem as a function of system size n using the QPT swap probability
+     rule  in  Eq.  (56)  with  diﬀerent  number  of  QPT  replicas N  with Nmax  =  40.   The
+     error bars correspond to the 95% conﬁdence interval calculated using a bootstrap
+     with 103 resamplings of the data.
+
+F The H    4 rectangle
+
+The H4 rectangle, illustrated in Fig. 11, consists of four hydrogen atoms placed in a rectangle,
+each with a distance to the center of R.  The separation between these atoms can be further
+controlled by the angle between adjacent hydrogen atoms θ.  When θ  is far away from 90◦,
+the system resembles two disconnected H2  molecules and the energy can be approximately
+calculated as twice the energy of an equivalent H2  molecule.  As the angle approaches 90◦,
+however, the distance between the diﬀerent hydrogen atoms becomes equivalent and the sys-
+tem becomes degenerate,  leading to a frustrated system with a peak in energy at 90◦.  By
+moving from a rectangular system to a square one, the system can be brought arbitrarily close
+to a strongly correlated, two conﬁguration system.  This conﬁguration has been shown to lead
+to diﬃculty for many atomic modeling algorithms, notably including Coupled Cluster meth-
+ods, which incorrectly predict a cusp and minimum at 90◦ for certain radii [51].  Throughout
+this work, following Pfau et al.  and others [54, 55], we have used a radius of 1.738 ˚A, which
+places the H4  rectangle in a regime where the atoms are nearing full dissociation.  Coupled
+Cluster  methods  have  been  shown  to  fail  at  this  radius  [51],  and  single  replica  RBM  runs
+often struggle to ﬁnd the ground state energy as seen in the main text,  providing a useful
+benchmark for our parallel tempering scheme.
+    To create inputs for our calculations,  we consider the Fermionic problem in the second
+quantitized formalism
+                                 H =∑        tijc†icj + ∑      uijkmc†ic†kcmcj ,                                    (62)
+                                         i,j            i,j,k,m
+where we deﬁne the fermionic annihilation and creation operators with the anticommutation
+relation{c†i,cj} =δi,j.  We deﬁne tij  and uijkm as one- and two-body integrals, respectively.
+We then map this fermionic Hamiltonian onto a spin Hamiltonian with the form
+                                                         r∑
+                                                 H =        hjσj ,                                                       (63)
+                                                       j=1
+
+                                                        25
+ SciPost Physics                                                                           Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                             (a)                                                    (b)
+
+     Figure 10:  Optimum time to epsilon to reach a relative error of ϵ = 10−3  for the
+     H4 Rectangle at diﬀerent angles with (a) ﬁxed Hamming weight exact sampling and
+     (b) full exact sampling using the QPT swap probability rule in Eq. (56).  We use
+     Nmax  =  20.   The  error  bars  correspond  to  the  95%  conﬁdence  interval  calculated
+     using a bootstrap with 103 resamplings of the data.  The lines are to guide the eye.
+
+
+
+
+
+
+
+
+
+
+
+     Figure 11:  The arrangement of hydrogen atoms in the H4 rectangle.  The conﬁgura-
+     tion is controlled by the radius R and the angle θ.
+
+
+wherehj are coeﬃcients andσj is an N-fold tensor product of single-qubit Pauli operators I,
+σx,σy, andσz.  We use the canonical Jordan-Wigner transformation [26] to map Hamiltonians
+of the form of Eq. 62 to Eq. 63.  We use a minimal STO-3G basis set [56] and the OpenFermion
+software package [57] to generate and map Hamiltonians for the H4 problem.
+    For θ  =  80◦,  the  ground  state  energy  of  the  8  qubit  Hamiltonian  is−1.88016686;  for
+θ  =  85◦,  the  ground  state  energy  is−1.87584118;  for θ  =  90◦,  the  ground  state  energy  is
+−1.87420093.
+
+References
+
+ [1]D. Landau and K. Binder,      A  Guide  to  Monte  Carlo  Simulations  in  Statistical  Physics,
+     Cambridge University Press, USA,  ISBN 0521842387 (2005).
+
+ [2]F.  Becca  and  S.  Sorella,        Quantum  Monte  Carlo  Approaches  for  Correlated  Systems,
+
+
+                                                         26
+ SciPost Physics                                                                           Submission
+
+
+      Cambridge University Press,  doi:10.1017/9781316417041 (2017).
+
+ [3]E. Y. Loh,  J. E. Gubernatis,  R. T. Scalettar,  S. R. White,  D. J. Scalapino and R. L.
+      Sugar,  Sign  problem  in  the numerical  simulation  of  many-electron  systems,  Phys. Rev.
+      B 41, 9301 (1990),  doi:10.1103/PhysRevB.41.9301.
+
+ [4]P.  J.  Reynolds,  D.  M.  Ceperley,  B.  J.  Alder  and  W.  A.  Lester,        Fixed-node  quan-
+      tum  monte  carlo  for  molecules,  The Journal of Chemical Physics 77(11), 5593 (1982),
+      doi:10.1063/1.443766.
+
+ [5]G. Ortiz,  D. M. Ceperley and R. M. Martin,       New  stochastic  method  for  systems  with
+      broken  time-reversal  symmetry:  2d  fermions  in  a  magnetic  ﬁeld,  Phys. Rev. Lett. 71,
+      2777 (1993),  doi:10.1103/PhysRevLett.71.2777.
+
+ [6]S.  Zhang,   J.  Carlson  and  J.  E.  Gubernatis,          Constrained   path   quantum   monte
+      carlo   method   for   fermion   ground   states,       Phys.   Rev.   Lett.   74,   3652   (1995),
+      doi:10.1103/PhysRevLett.74.3652.
+
+ [7]I.  Aﬄeck,  T.  Kennedy,  E.  H.  Lieb  and  H.  Tasaki,         Valence  bond  ground  states  in
+      isotropic quantum antiferromagnets,  Communications in Mathematical Physics 115(3),
+      477 (1988),  doi:10.1007/BF01218021.
+
+ [8]S.  R.  White,       Density  matrix  formulation  for  quantum  renormalization  groups,   Phys.
+      Rev. Lett. 69, 2863 (1992),  doi:10.1103/PhysRevLett.69.2863.
+
+ [9]S. R. White,      Density-matrix algorithms for quantum renormalization groups, Phys. Rev.
+      B 48, 10345 (1993),  doi:10.1103/PhysRevB.48.10345.
+
+[10]M.  Fannes,  B.  Nachtergaele  and  R.  F.  Werner,          Finitely  correlated  states  on  quan-
+      tum   spin   chains,     Communications  in  Mathematical  Physics  144(3),   443  (1992),
+      doi:10.1007/BF02099178.
+
+[11]U.  Schollw¨ock,         The  density-matrix  renormalization  group,   Rev.  Mod.  Phys. 77,  259
+      (2005),  doi:10.1103/RevModPhys.77.259.
+
+[12]U.    Schollw¨ock,                   The     density-matrix     renormalization     group     in     the     age
+      of     matrix     product     states,             Annals     of     Physics    326(1),      96     (2011),
+      doi:https://doi.org/10.1016/j.aop.2010.09.012,  January 2011 Special Issue.
+
+[13]F. Verstraete and J. I. Cirac,       Renormalization algorithms for quantum-many body systems
+      in two and higher dimensions,  arXiv e-prints cond-mat/0407066 (2004).
+
+[14]R.   Or´us,             A   practical   introduction   to   tensor   networks:     Matrix   product   states
+      and    projected    entangled    pair    states,         Annals   of   Physics   349,    117   (2014),
+      doi:https://doi.org/10.1016/j.aop.2014.06.013,  1306.2164.
+
+[15]G. Carleo and M. Troyer,        Solving the quantum many-body problem with artiﬁcial neural
+      networks,  Science 355(6325), 602 (2017),  doi:10.1126/science.aag2302.
+
+[16]K.  Choo,   T.  Neupert  and  G.  Carleo,            Two-dimensional   frustrated J1−J2   model
+      studied  with  neural  network  quantum  states,     Phys.  Rev.  B  100,   125124  (2019),
+      doi:10.1103/PhysRevB.100.125124.
+
+                                                           27
+ SciPost Physics                                                                           Submission
+
+
+[17]M.   Schmitt   and   M.   Heyl,               Quantum    many-body    dynamics    in    two    dimen-
+      sions   with   artiﬁcial   neural   networks,       Phys.   Rev.   Lett.   125,   100503   (2020),
+      doi:10.1103/PhysRevLett.125.100503.
+
+[18]C.  Roth,  A.  Szab´o  and  A.  MacDonald,          High-accuracy  variational  Monte  Carlo  for
+      frustrated  magnets  with  deep  neural  networks,  arXiv e-prints arXiv:2211.07749 (2022),
+      2211.07749.
+
+[19]M. Bukov, M. Schmitt and M. Dupont,         Learning  the  ground  state  of  a  non-stoquastic
+      quantum Hamiltonian in a rugged neural network landscape, SciPost Phys. 10, 147 (2021),
+      doi:10.21468/SciPostPhys.10.6.147.
+
+[20]R. H. Swendsen and J.-S. Wang,        Replica  monte  carlo  simulation  of  spin-glasses,  Phys.
+      Rev. Lett. 57, 2607 (1986),  doi:https://doi.org/10.1103/PhysRevLett.57.2607.
+
+[21]C. J. Geyer,        Parallel tempering, In E. M. Keramidas and S. M. Kaufman, eds., Comput-
+      ing  Science  and  Statistics  Proceedings  of  the  23rd  Symposium  on  the  Interface, p. 156.
+      American Statistical Association, New York (1991).
+
+[22]K.  Hukushima  and  K.  Nemoto,           Exchange  monte  carlo  method  and  application  to
+      spin  glass  simulations,   Journal  of  the  Physical  Society  of  Japan 65(6),  1604  (1996),
+      doi:https://doi.org/10.1143/JPSJ.65.1604.
+
+[23]R.  A.  Ba˜nos,  A.  Cruz,  L.  A.  Fernandez,  J.  M.  Gil-Narvion,  A.  Gordillo-Guerrero,
+      M. Guidetti, A. Maiorano, F. Mantovani, E. Marinari, V. Martin-Mayor, J. Monforte-
+      Garcia, A. M. Sudupe et al., Nature of the spin-glass phase at experimental length scales,
+      Journal  of  Statistical  Mechanics:   Theory  and  Experiment  2010(06),  P06026  (2010),
+      doi:10.1088/1742-5468/2010/06/p06026.
+
+[24]E.  Farhi,  D.  Gosset,  I.  Hen,  A.  W.  Sandvik,  P.  Shor,  A.  P.  Young  and  F.  Zam-
+      poni,    Performance  of  the  quantum  adiabatic  algorithm  on  random  instances  of  two
+      optimization  problems   on  regular  hypergraphs,     Phys.  Rev.  A  86,   052334  (2012),
+      doi:10.1103/PhysRevA.86.052334.
+
+[25]T.  Albash,  G.  Wagenbreth  and  I.  Hen,         Oﬀ-diagonal  expansion  quantum  monte  carlo,
+      Phys. Rev. E 96, 063309 (2017),  doi:10.1103/PhysRevE.96.063309.
+[26]P. Jordan and E. P. Wigner,        ¨Uber das paulische ¨aquivalenzverbot, In The Collected Works
+      of Eugene Paul Wigner, pp. 109–129. Springer (1993).
+
+[27]K.  Choo,  A.  Mezzacapo  and  G.  Carleo,         Fermionic  neural-network  states  for  ab-initio
+      electronic  structure,  Nature Communications 11(1),  2368 (2020),  doi:10.1038/s41467-
+      020-15724-9.
+
+[28]S. Sorella,        Green function monte carlo with stochastic reconﬁguration,  Phys. Rev. Lett.
+      80, 4558 (1998),  doi:10.1103/PhysRevLett.80.4558.
+
+[29]S.  Sorella,         Generalized  lanczos  algorithm  for  variational  quantum  monte  carlo,   Phys.
+      Rev. B 64, 024512 (2001),  doi:10.1103/PhysRevB.64.024512.
+
+[30]E. H. Moore,       On the reciprocal of the general algebraic matrix, In Bulletin of the American
+      Mathematical Society, vol. 26, pp. 394–395 (1920).
+
+                                                           28
+ SciPost Physics                                                                           Submission
+
+
+[31]R. Penrose,        A generalized inverse for matrices,  Mathematical Proceedings of the Cam-
+      bridge Philosophical Society 51(3), 406 (1955),  doi:10.1017/S0305004100030401.
+
+[32]G. Fabiani and J. H. Mentink,        Investigating ultrafast quantum magnetism with machine
+      learning,  SciPost Phys. 7, 4 (2019),  doi:10.21468/SciPostPhys.7.1.004.
+
+[33]D. P. Kingma and J. Ba,        Adam:  A Method for Stochastic Optimization,  arXiv e-prints
+      arXiv:1412.6980 (2014),  1412.6980.
+
+[34]S.-C. T. Choi and M. A. Saunders,        Algorithm 937:  Minres-qlp for symmetric and hermi-
+      tian linear equations and least-squares problems, ACM Trans. Math. Softw. 40(2) (2014),
+      doi:10.1145/2527267.
+
+[35]C.-Y. Park and M. J. Kastoryano,        Geometry  of  learning  neural  quantum  states,  Phys.
+      Rev. Research 2, 023232 (2020),  doi:10.1103/PhysRevResearch.2.023232.
+
+[36]S.-i. Amari,        Natural Gradient Works Eﬃciently in Learning, Neural Computation 10(2),
+      251 (1998),  doi:10.1162/089976698300017746.
+
+[37]M. Casula, C. Attaccalite and S. Sorella,        Correlated geminal wave function for molecules:
+      An eﬃcient resonating valence bond approach, The Journal of Chemical Physics 121(15),
+      7110 (2004),  doi:10.1063/1.1794632.
+
+[38]C. Roth,       Iterative Retraining of Quantum Spin Models Using Recurrent Neural Networks,
+      arXiv e-prints arXiv:2003.06228 (2020),  2003.06228.
+
+[39]M. Hibat-Allah, R. G. Melko and J. Carrasquilla,        Supplementing Recurrent Neural Net-
+      work Wave Functions with Symmetry and Annealing to Improve Accuracy, arXiv e-prints
+      arXiv:2207.14314 (2022),  2207.14314.
+
+[40]T.  Okabe,  M.  Kawata,  Y.  Okamoto  and  M.  Mikami,          Replica-exchange  monte  carlo
+      method  for  the  isobaric–isothermal  ensemble,    Chemical  Physics  Letters  335(5),  435
+      (2001),  doi:https://doi.org/10.1016/S0009-2614(01)00055-0.
+
+[41]S.  Syed,  A.  Bouchard-Cˆot´e,  G.  Deligiannidis  and  A.  Doucet,          Non-reversible  parallel
+      tempering:  a scalable highly parallel mcmc scheme,  Journal of Royal Statistical Society,
+      Series B 84, 321 (2021),  doi:10.1111/rssb.12464.
+
+[42]N. Metropolis, A. W. Rosenbluth, M. N. Rosenbluth, A. H. Teller and E. Teller,        Equation
+      of state calculations by fast computing machines, The Journal of Chemical Physics 21(6),
+      1087 (1953),  doi:10.1063/1.1699114.
+
+[43]W. K. Hastings,        Monte Carlo sampling methods using Markov chains and their applica-
+      tions,  Biometrika 57(1), 97 (1970),  doi:10.1093/biomet/57.1.97.
+
+[44]T. F. Rønnow, Z. Wang, J. Job, S. Boixo, S. V. Isakov, D. Wecker, J. M. Martinis, D. A.
+      Lidar and M. Troyer,  Deﬁning and detecting quantum speedup,  Science 345(6195), 420
+      (2014),  doi:10.1126/science.1252319.
+
+[45]J. King, S. Yarkoni, M. M. Nevisi, J. P. Hilton and C. C. McGeoch,       Benchmarking a quan-
+      tum annealing processor with the time-to-target metric,  arXiv e-prints arXiv:1508.05087
+      (2015),  1508.05087.
+
+                                                         29
+ SciPost Physics                                                                           Submission
+
+
+[46]S. Bravyi, D. P. DiVincenzo, R. I. Oliveira and B. M. Terhal,       The complexity of stoquastic
+      local hamiltonian problems,  Quant. Inf. Comp. 8(5), 0361 (2008).
+
+[47]S. Bravyi and B. Terhal,        Complexity  of  stoquastic  frustration-free  hamiltonians,  SIAM
+      Journal on Computing 39(4), 1462 (2009),  doi:10.1137/08072689X.
+
+[48]W. van Dam, M. Mosca and U. Vazirani,        How powerful is adiabatic quantum computa-
+      tion?,  In Proceedings 42nd IEEE Symposium on Foundations of Computer Science, pp.
+      279–287,  doi:10.1109/SFCS.2001.959902 (2001).
+
+[49]S.  Muthukrishnan,  T.  Albash  and  D.  A.  Lidar,          Tunneling  and  speedup  in  quantum
+      optimization  for  permutation-symmetric  problems,    Phys.  Rev.  X  6,  031010  (2016),
+      doi:10.1103/PhysRevX.6.031010.
+
+[50]J. Paldus, P. Piecuch, L. Pylypow and B. Jeziorski,        Application of hilbert-space coupled-
+      cluster theory to simple (h 2) 2 model systems:  Planar models, Physical Review A 47(4),
+      2738 (1993),  doi:10.1103/PhysRevA.47.2738.
+
+[51]T.  Van  Voorhis  and  M.  Head-Gordon,         Benchmark  variational  coupled  cluster  doubles
+      results,  The Journal of Chemical Physics 113(20), 8873 (2000),  doi:10.1063/1.1319643.
+
+[52]M.  Suzuki,           Relationship  between  d-dimensional  quantal  spin  systems  and  (d+  1)-
+      dimensional Ising systems:  Equivalence, critical exponents and systematic approximants
+      of  the  partition  function  and  spin  correlations,   Progress  of  theoretical  physics 56(5),
+      1454 (1976),  doi:10.1143/PTP.56.1454.
+
+[53]H. G. Katzgraber, S. Trebst, D. A. Huse and M. Troyer,        Feedback-optimized parallel tem-
+      pering monte carlo, Journal of Statistical Mechanics:  Theory and Experiment 2006(03),
+      P03018 (2006),  doi:10.1088/1742-5468/2006/03/p03018.
+
+[54]D. Pfau, J. S. Spencer, A. G. D. G. Matthews and W. M. C. Foulkes,        Ab initio solution of
+      the many-electron schr¨odinger equation with deep neural networks,  Phys. Rev. Research
+      2, 033429 (2020),  doi:10.1103/PhysRevResearch.2.033429.
+
+[55]H.  G.  A.  Burton  and  A.  J.  W.  Thom,          Holomorphic  hartree–fock  theory:   An  inher-
+      ently multireference approach, Journal of Chemical Theory and Computation 12(1), 167
+      (2016),  doi:10.1021/acs.jctc.5b01005.
+
+[56]W. J. Hehre, R. F. Stewart and J. A. Pople,        Self-consistent  molecular-orbital  methods.
+      i.  use  of  gaussian  expansions  of  slater-type  atomic  orbitals,   The  Journal  of  Chemical
+      Physics 51(6), 2657 (1969),  doi:10.1063/1.1672392.
+
+[57]J. R. McClean,  N. C. Rubin,  K. J. Sung,  I. D. Kivlichan,  X. Bonet-Monroig,  Y. Cao,
+      C. Dai, E. S. Fried, C. Gidney, B. Gimby, P. Gokhale, T. H¨aner et al., OpenFermion:  the
+      electronic  structure  package  for  quantum  computers,  Quantum Science and Technology
+      5(3), 034014 (2020),  doi:10.1088/2058-9565/ab8ebc.
+
+
+
+
+
+
+
+                                                          30

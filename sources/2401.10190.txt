@@ -1,0 +1,1333 @@
+    A Kaczmarz-inspired approach to accelerate the optimization of
+                                   neural network wavefunctions
+
+
+                               Gil Goldshlagera, Nilin Abrahamsenb, Lin Lina,c
+
+                 aDepartment of Mathematics, University of California, Berkeley, CA 94720, USA
+                  bThe Simons Institute for the Theory of Computing, Berkeley, CA 94720, USA
+ cApplied Mathematics and Computational Research Division, Lawrence Berkeley National Laboratory, Berkeley,
+                                                     CA 94720, USA
+
+
+
+
+Abstract
+Neural  network  wavefunctions  optimized  using  the  variational  Monte  Carlo  method  have  been
+shown to produce highly accurate results for the electronic structure of atoms and small molecules,
+but  the  high  cost  of  optimizing  such  wavefunctions  prevents  their  application  to  larger  systems.
+We propose the Subsampled Projected-Increment Natural Gradient Descent (SPRING) optimizer
+to  reduce  this  bottleneck.   SPRING  combines  ideas  from  the  recently  introduced  minimum-step
+stochastic reconfiguration optimizer (MinSR) and the classical randomized Kaczmarz method for
+solving linear least-squares problems.  We demonstrate that SPRING outperforms both MinSR and
+the popular Kronecker-Factored Approximate Curvature method (KFAC) across a number of small
+atoms and molecules, given that the learning rates of all methods are optimally tuned.  For example,
+on the oxygen atom, SPRING attains chemical accuracy after forty thousand training iterations,
+whereas both MinSR and KFAC fail to do so even after one hundred thousand iterations.
+
+
+1.  Introduction
+
+    Predicting the properties of molecules and materials from first principles has numerous appli-
+cations.  For many chemical properties, it suffices to work within the Born-Oppenheimer approx-
+imation,  in which the nuclei are viewed as classical point charges and only the electrons exhibit
+quantum-mechanical  behavior.   The  study  of  chemistry  through  this  lens  is  known  as  electronic
+structure theory.
+    Within electronic structure theory, methods to model the many-body electron wavefunction in-
+clude Hartree-Fock theory, configuration interaction methods, and coupled cluster theory.  A typical
+ansatz for such methods is a sum of Slater determinants which represent antisymmetrized products
+of single-particle states.  The benefit of such an ansatz is that the energy and other properties of
+the wavefunction can be evaluated analytically from pre-computed few-particle integrals.
+    Another approach to the electronic structure problem is the variational Monte Carlo method
+(VMC)  [1,  2].   In  VMC,  the  properties  of  the  wavefunction  are  calculated  using  Monte  Carlo
+sampling rather than direct numerical integration, and the energy is variationally minimized through
+a stochastic optimization procedure.  This increases the cost of the calculations,  especially when
+high accuracy is required, but it enables the use of much more general ansatzes.  Traditionally, these
+ansatzes included Slater-Jastrow wavefunctions and Slater-Jastrow-backflow wavefunctions [1].
+
+
+
+
+
+Preprint submitted to Elsevier                                                                                                              August 27, 2024
+    In recent decades the modeling of very high-dimensional data and functions has seen impres-
+sive progress through the use of neural networks.  For the quantum chemistry problem, the high-
+dimensional  quantum  wavefunction  can  be  modeled  by  combining  several  neural  network  layers
+with a determinantal layer that enforces the Fermionic antisymmetry [3, 4].  Such neural network
+wavefunctions, optimized using the variational Monte Carlo method, have enabled near-exact com-
+putation  of  the  ground-state  energy  for  small  molecules  [5,  6,  7]  and  certain  condensed  matter
+systems [8, 9, 10, 11, 12].
+    Due  to  the  large  number  of  parameters  and  the  highly  nonlinear  nature  of  neural  networks,
+the  optimization  of  neural  network  wavefunctions  poses  a  significant  challenge.   Prior  to  neural
+network wavefunctions,  VMC simulations typically relied on powerful domain-specific optimizers
+such  as  stochastic  reconfiguration  (SR)  [13,  14,  15]  and  the  linear  method  [16,  17,  18,  19,  20].
+These optimizers are able to converge in only tens or hundreds of iterations using highly accurate
+gradient  estimates  based  on  millions  or  more  Monte  Carlo  samples.   However,  when  applied  to
+a wavefunction with Np  parameters,  they require solving either a linear system or a generalized
+eigenvalue  problem  involving  a  dense Np×Np  matrix  known  as  the S  matrix,  with  a  cost  that
+is O(N3p )  in  general.   The  recently  proposed  Rayleigh-Gauss-Newton  optimizer  [21]  presents  a
+potentially favorable intermediate point between stochastic reconfiguration and the linear method,
+but still incurs a similar computational cost.
+    Since high-accuracy neural network architectures for molecules typically involve at least hun-
+dreds of thousands of parameters, it is not possible to directly apply SR or the linear method in this
+context.  Instead, molecular neural network wavefunctions are typically optimized using methods
+from the machine learning community.  These methods have a low per-iteration cost and require
+only a small number of Monte Carlo samples per iteration (or in machine learning parlance, a small
+minibatch size).  However, they can require hundreds of thousands of optimization steps to converge
+fully.
+    For  the  FermiNet  and  related  architectures  [3,  6,  12,  5],  the  most  popular  optimizer  is  the
+Kronecker-Factored Approximate Curvature method (KFAC) [22].  KFAC was originally designed
+as a tractable approximation to natural gradient descent (NGD) [23] for machine learning models
+with  millions  of  parameters.   In  the  quantum  setting,  natural  gradient  descent  is  equivalent  to
+stochastic reconfiguration since theS matrix can be viewed as the Fisher information matrix of the
+normalized probability distribution defined by the wavefunction [3].  Taking the view of stochastic
+reconfiguration, the key ingredient of KFAC is an approximate factorization of the S matrix.  This
+factorization enables the efficient inversion of the approximate S matrix and also makes it possible
+to approximateS based on multiple recent minibatches.  This can significantly improve performance
+in highly stochastic settings where a single minibatch can provide only a very noisy approximation
+to the trueS matrix.  It is worth noting that the interpretation of KFAC as an approximate natural
+gradient method has recently been called into question due to some experiments which show that
+KFAC  performs  better  than  exact  natural  gradient  updates  [24].   Regardless  of  the  underlying
+mechanism, KFAC represents the state-of-the-art in optimizing neural network wavefunctions for
+molecules and solids.
+    An alternative to KFAC is to take advantage of the fact that the estimate of the S  matrix is
+always low-rank when it is based on only a small set of Monte Carlo samples.  This idea was first
+introduced in the machine learning community in the form of efficient subsampled natural gradient
+descent [25].  In the physics community, several recent works have proposed similar methods for the
+VMC setting [26, 27].  These methods make fewer heuristic assumptions than KFAC and are much
+simpler to describe and implement.  However, unlike KFAC, they are limited to estimating the S
+
+
+                                                             2
+matrix based on only a single minibatch at a time.
+    In this work, we improve upon these existing optimizers with a new method that we call Sub-
+sampled Projected-Increment Natural Gradient Descent (SPRING). Our method is most directly
+inspired by the minimum-step stochastic reconfiguration (MinSR) approach of Chen and Heyl [26].
+MinSR is based on the observation that the SR parameter update can be formulated as the solu-
+tion to an overdetermined linear least-squares problem.  At each iteration, the Monte Carlo samples
+provide access to a small set of rows from this least-squares problem, yielding an underdetermined
+subproblem which has many possible solutions.  To make the parameter update unique, Chen and
+Heyl propose to choose the minimal-norm solution to the sampled subproblem.
+    We  improve  upon  this  scheme  by  taking  inspiration  from  the  randomized  Kaczmarz  method
+for solving overdetermined linear least-squares problems [28].  The original randomized Kaczmarz
+method solves the problem by sampling a single row at a time.  The subsequently developed block
+version of the method (see i.e.  [29]) instead uses a small set of rows at each iteration.  In either
+case,  the key idea of the Kaczmarz method is to iteratively project the solution vector onto the
+hyperplane of solutions to each sampled subproblem.  When the system is consistent and the rows
+are sampled from an appropriate probability distribution, this approach provably converges to the
+true solution with an expected error that decays by a constant factor at each iteration.
+    Recall that the SR parameter update can be formulated as the solution to an overdetermined
+linear least-squares problem, and that each minibatch of Monte Carlo samples provides access to a
+randomly sampled underdetermined subproblem.  In direct analogy to the Kaczmarz method, the
+parameter update in SPRING is calculated by projecting the previous  parameter update onto the
+hyperplane of solutions to the newly sampled subproblem.  By leveraging the previous parameter
+update as the starting point for the projection, SPRING is able to use data from previous mini-
+batches to obtain a more accurate approximation to the true SR update direction.  Furthermore,
+this improvement is obtained at essentially no extra cost relative to MinSR.
+    To demonstrate the effectiveness of SPRING, we apply it to optimize a FermiNet wavefunction
+for several small atoms and molecules, namely the carbon, nitrogen, and oxygen atoms, two config-
+urations of the N2 molecule, and the CO molecule at equilibrium.  We use the VMCNet code [30] for
+all numerical experiments.  We find that SPRING consistently outperforms MinSR and KFAC when
+all three methods have their learning rates tuned for maximal performance.  Remarkably, on the
+oxygen atom, SPRING is able to attain chemical accuracy after forty thousand training iterations,
+whereas both MinSR and KFAC fail to do so even after one hundred thousand iterations.
+
+
+2.  Background
+
+2.1.  Variational Monte Carlo
+    In this work we focus on the application of the variational Monte Carlo method to find ground-
+state wavefunctions for molecular systems.  A molecule is defined by the positions RI  and charges
+ZI  of M  atomic nuclei.  Using the Born-Oppenheimer approximation [31], we model the nuclei as
+fixed point charges.  The quantum system of interest then consists of N  electrons interacting under
+the influence of these charges.  The Hamiltonian for the system is given in atomic units by
+
+                              NX          NX   MX     ZI          NX      1         MX    ZIZJ
+                  H =−12          ∆ri−             |ri− RI| +        |ri−rj| +          |RI− RJ|,                    (1)
+                             i=1          i=1 I=1                i<j               I<J
+
+
+
+                                                           3
+whereri∈ R3 represents the position of electron i and ∆ri  represents the corresponding Laplacian
+operator.  Because electrons are fermions, the wavefunction must be antisymmetric with respect to
+particle exchange.  Within the space of antisymmetric wavefunctions, the ground-state energy E0
+and wavefunction|ψ0⟩ correspond to the smallest eigenvalue of H and its corresponding eigenfunc-
+tion.
+    We make several simplifications to the space of wavefunctions before searching for the ground-
+state.  First, since the Hamiltonian is Hermitian, its ground-state wavefunction can be chosen to be
+purely real.  We thus limit our search to real normalizable many-body wavefunctions of the form
+ψ : R3N→ R, usually written as ψ(R) = ψ(r1,...,rN) with R∈ R3N.  Next, we fix the numbers
+N↑,N↓ of up- and down-spin electrons a priori for each calculation. Given this assumption, together
+with  the  antisymmetry  of  the  wavefunction  and  the  spin-independence  of  the  Hamiltonian,  it  is
+possible to assume without loss of generality that the first N↑ electrons are always spin-up and the
+last N↓ electrons are always spin-down [1].
+    The ground-state wavefunction can be found by minimizing the expectation value of the energy:
+
+                                              |ψ0⟩ = argmin⟨ψ|H|ψ⟩
+
+                                                           ψ       ⟨ψ|ψ⟩ .                                                      (2)
+
+Given a variational ansatz|ψθ⟩, we can then define a loss function
+
+                                                  L(θ) =⟨ψθ|H|ψθ⟩⟨ψθ|ψθ⟩                                                             (3)
+
+and represent the ground-state approximately via
+
+                                 θ∗ = argmin
+                                            θ  L(θ),|ψ0⟩≈|ψθ∗⟩, E0≈L(θ∗).                                     (4)
+    In some electronic structure methods, such as the Hartree-Fock method and configuration inter-
+action methods, the ansatz is chosen to enable the direct calculation ofL(θ) based on precomputed
+one- and two-electron integrals.  In variational Monte Carlo, the ansatz is chosen in a more flexible
+way, such as a Slater-Jastrow ansatz, a Slater-Jastrow-backflow ansatz, or a neural network wave-
+function.  For such ansatzes it is not possible to directly evaluate L(θ), so it is necessary to instead
+approximate it via Monte Carlo integration.  To this end, L(θ) can be reformulated stochastically
+as
+                                                L(θ) = ER∼p [EL(θ)],                                                        (5)
+where p(R) =ψθ(R)2/⟨ψθ|ψθ⟩ and EL(R) =Hψθ(R)/ψθ(R) (see i.e.  [1], Section III.C). This last
+term, EL(R), is known as the local energy  of the wavefunction|ψθ⟩ at the position R.
+    To optimize a variational wavefunction using this formula, it is usually necessary to calculate
+the gradient∇θL(θ).  A convenient formula for this gradient can be derived taking advantage of
+the fact that H is Hermitian (see i.e.  [32], Appendix E):
+
+                            g =∇θL(θ) = 2ER∼p [∇θ log|ψθ(R)| (EL(R)−L(θ))].                              (6)
+
+In practice, bothL(θ) andg are estimated stochastically using Markov-Chain Monte Carlo sampling
+to generate samples from p(R).  The parameters can then be updated by a variety of optimization
+schemes, several of which we discuss in the following sections.
+
+
+
+                                                             4
+2.2.  Stochastic Reconfiguration
+    One popular approach for optimizing variational wavefunctions is known as stochastic recon-
+figuration (SR) [13, 14, 15] .  In recent years,  SR has been widely adopted for optimizing neural
+quantum states in second quantization [33, 34].  It also serves as the starting point for the MinSR
+method to be introduced later.
+    SR is based on the idea of imaginary time evolution, which states that the ground-state|ψ0⟩
+can be found via the formula
+                                                  |ψ0⟩ =  limτ→∞e−τH|ψ⟩                                                         (7)
+
+for any wavefunction|ψ⟩ such that⟨ψ0|ψ⟩̸= 0.  In SR, we optimize a variational ansatz|ψθ⟩ by
+finding parameter updates that approximate small imaginary time steps.  In particular, we choose
+a step-size δτ  and use this to define the desired updated wavefunction|ψ′⟩ = e−δτH|ψθ⟩.  Due to
+the constraints of the ansatz, we cannot update our wavefunction to|ψ′⟩ directly.  Instead we seek
+a parameter update dθ such that|ψθ+dθ⟩ is close to|ψ′⟩.  To measure the closeness, we rely on the
+Fubini-Study distance defined by
+
+                                            D(|ψ⟩,|ϕ⟩) = arccos |⟨ψ|ϕ⟩|∥ψ∥∥ϕ∥.                                                  (8)
+
+In  practice,  we  make  a  first  order  approximation  to  both|ψ′⟩  and|ψθ+dθ⟩  and  then  minimize  a
+second-order approximation to D2(|ψ′⟩,|ψθ+dθ⟩).  See [35] for a more thorough discussion of the
+geometric underpinnings of stochastic reconfiguration.
+    To  present  the  formula  for  the  update,  we  first  define  the  functions   ¯O(R)  and  ¯ϵ(R).   The
+first quantity,  ¯O(R), is the transposed gradient of the logarithm of the normalized wavefunction,
+evaluated  at  the  point R.   The  second  quantity,  ¯ϵ(R),  is  the  first-order  change  in  the  logarithm
+of the normalized wavefunction induced by the imaginary time-step δτ, evaluated at the point R.
+These quantities are given by
+                               ¯O(R) = (∇θ log|ψθ(R)|− ER∼p [∇θ log|ψθ(R)|])T,                                 (9)
+
+                                       ¯ϵ(R) =−δτ (EL(R)− ER∼p [EL(R)]).                                         (10)
+It can be shown that, to second order, the square of the Fubini-study distance is given by
+                                                                   h ¯O(R)dθ− ¯ϵ(R)2i
+                                 D2(|ψ′⟩,|ψθ+dθ⟩) = ER∼p                                    .                                  (11)
+
+This leads us to define the SR parameter update by
+                                                             h ¯O(R)dθ′− ¯ϵ(R)2i
+                                     dθ = argmin                                        .                                        (12)
+                                               dθ′    ER∼p
+A detailed derivation of this formulation of stochastic reconfiguration can be found in [26].
+    In practice, (11) must always be approximated using a finite collection ofNs samplesR1,...,RNs.
+To estimate  ¯O(R) and ¯ϵ(R) at the sampled points, we must empirically estimate the expectation
+values that appear in their definitions.  We first define
+                                          ∇θ log|ψθ(R1)|                           EL(R1)    
+                          O =    1√               ...        , ϵ =− δτ√             ...   .                          (13)
+                                   Ns     ∇θ log|ψθ(RNS)|                     Ns     EL(RNs)
+
+
+                                                              5
+Next, let 1 be the column vector of length NS  whose entries are all equal to 1 and let P  =   1Ns 11T
+represent the orthogonal projector onto the span of 1.  When acting on the left,  the operator P
+replaces  each  row  of  the  matrix  or  vector  on  its  right  with  the  average  of  all  of  its  rows.   Our
+empirical estimates of  ¯O(R) and ¯ϵ(R) can thus be collected as
+
+                                              ¯O = (I−P )O,  ¯ϵ = (I−P )ϵ.                                                (14)
+
+The estimate of the Fubini-Study distance of the update dθ can then be written as
+
+                                           D2(|ψ′⟩,|ψθ+dθ⟩)≈ ¯Odθ− ¯ϵ2,                                             (15)
+
+and the update takes the form                                     ¯Odθ′− ¯ϵ2.                                                  (16)
+                                               dθ = argmin
+                                                         dθ′
+    In traditional SR, many more samples are taken than parameters in the ansatz, meaning that
+the least-squares problem is overdetermined and should have a unique solution.  To protect against
+the case when  ¯O is ill-conditioned or singular, a Tikhonov regularization is generally added to yield
+the regularized problem                                      ¯Odθ′− ¯ϵ2 +∥dθ′∥2.                                          (17)
+                                        dθ = argmin      1
+                                                  dθ′    λ
+In the case of real parameters and a real wavefunction, the solution to (17) is given by
+
+                                                dθ = ( ¯OT ¯O +λI)−1 ¯OT ¯ϵ.                                                    (18)
+
+This is more traditionally written as
+
+                                                 dθ =−δτ2 (S +λI)−1g,                                                     (19)
+
+whereS =  ¯OT ¯O,g =∇θL(θ) =−2 ¯OT ¯ϵ/δτ, and the imaginary time step has been halved to cancel
+the factor of two in the gradient.
+
+2.3.  Minimum-Step Stochastic Reconfiguration
+    For  a  problem  with Np  variational  parameters,  the  traditional  SR  update  scales  as O(N3p )
+due  to  the  need  to  invert  the Np×Np  matrix S.   The  insight  of  MinSR  is  that  the  parameter
+update can be calculated much more efficiently when Ns≪Np.  In fact the linear system is highly
+underdetermined in this setting.  The MinSR method addresses this issue by choosing the solution
+with  minimal  norm.   For  regularization,  MinSR  utilizes  a  pseudoinverse  with  a  cutoff  for  small
+eigenvalues.   Subsequently,  Rende  et  al  [27]  suggested  using  a  Tikhonov  regularization  instead.
+This approach amounts to solving the same regularized equation as in traditional SR, namely (17).
+In  the  underdetermined  setting,  the  application  of  the  Sherman-Morrison-Woodbury  formula  to
+(18) yields the solution
+                                                dθ =  ¯OT ( ¯O ¯OT +λI)−1¯ϵ.                                                    (20)
+This is the version of MinSR that we use as the basis for SPRING. The key point is that the update
+can now be calculated efficiently since  ¯O ¯OT  is only Ns×Ns rather than Np×Np.
+    It is worth noting that methods very similar to MinSR were introduced independently in the
+machine learning community as early as 2019.  For example, Zhang, Martens, and Grosse decribed a
+
+
+                                                                6
+pseudoinverse-based approach to natural gradient descent for the overparameterized case when the
+number of parameters is greater than the total number of data-points available [36] .  Subsequently,
+Ren and Goldfarb proposed an efficient subsampled natural gradient method [25] for the case when
+the minibatch size is smaller than the number of parameters.  In fact, the Tikhonov-regularized form
+of MinSR can be viewed as a streamlined implementation of the method of Ren and Goldfarb which
+applies whenever the gradient of the loss function is a linear combination of the model gradients at
+the sampled points.  We elaborate on this connection in Appendix  A.
+
+2.4.  Kaczmarz method for solving linear systems
+    MinSR enables the efficient solution of an underdetermined subsample from the SR equation,
+but the solution of such an equation is not necessarily a good approximation to the solution of the
+original SR equation.  Our goal is to develop an algorithm that can converge to the solution of the
+original SR equation using only a series of underdetermined subsamples.  This is the motivation
+behind the Kaczmarz algorithm, and in particular its blocked variants.
+    To understand the Kaczmarz algorithm, consider an overdetermined system of linear equations
+Ax =b, where A is m×n and                                             
+                                                      aT1...          b1...
+                                              A =       , b =      .                                                     (21)
+
+                                                      aTm            bm
+Assume that A has full column rank and that the system is consistent, meaning that there exists
+a unique x∗ such that Ax∗ =b.  The earliest form of the Kaczmarz algorithm, which dates back to
+the first half of the twentieth century [37], solves this problem iteratively.  A starting guess x0  is
+required for initialization and is then honed by iterations of the form
+                                        xk =xk−1 +  ai∥ai∥2 (bi−aTi xk−1),                                             (22)
+
+where i is chosen to cycle through all the rows of A one at a time.  The interpretation is that xk is
+attained by projecting xk−1 onto the solution space of the sampled equation aTi x =bi.
+    The seminal work of Strohmer and Vershynin [28] proposed a randomized variant of the algo-
+rithm which samples rowi with a probability proportional to∥ai∥2.  With this randomized sampling
+strategy, they showed that the algorithm converges ash
+
+                                E   ∥xk−x∗∥2i       ≤ 1−κD(A)−2k∥x0−x∗∥2,                                   (23)
+
+where κD(A) =∥A∥F∥A+∥2 is the Demmel condition number of A and A+ is the Moore-Penrose
+pseudoinverse of A.
+    Since single row updates are very inefficient on modern hardware, blocked versions of the ran-
+domized Kaczmarz algorithm were subsequently proposed and analyzed, i.e.  [29].  Such randomized
+block Kaczmarz algorithms take the form
+                                         xk =xk−1 +A+σ (bσ−Aσxk−1),                                              (24)
+where σ  represents  a  randomly  selected  subset  of  the  rows  of A  and b  and A+σ  represents  the
+pseudoinverse of Aσ.  The interpretation is similar to before: xk  represents the projection of xk−1
+onto the solution space of the sampled equationAσx =bσ.  For consistent equations the randomized
+block Kaczmarz algorithm converges linearly to the true solutionx∗, though the convergence rate is
+more complicated than in the single row case and has a more nuanced dependence on the sampling
+procedure.
+
+
+                                                            7
+3.  Methods
+
+    We now present our main contribution, the Subsampled Projected-Increment Natural Gradient
+Descent  (SPRING)  algorithm  for  optimizing  neural  network  wavefunctions.   To  start,  recall  the
+formula for the SR parameter update:
+                                                              h ¯O(R)dθ′− ¯ϵ(R)2i
+                                      dθ = argmin                                        .                                        (25)
+                                                dθ′    ER∼p
+Since R  is  drawn  from  a  continuous  and  high-dimensional  space  this  equation  can  be  seen  as  a
+highly overdetermined linear least-squares problem, with each configuration R corresponding to a
+single row.  Now, let  ¯Ok  and ¯ϵk  denote the subsamples from  ¯O(R) and ¯ϵ(R) that are available at
+VMC training iteration k.  Our approach hinges on the assumption that the imaginary time-step
+is small, meaning the parameter vector θ changes only slightly at each iteration.  Thus, although
+the  sampled  subproblems  ( ¯Ok−1, ¯ϵk−1),  ( ¯Ok, ¯ϵk)  can  be  completely  different,  the  underlying  SR
+equations are nearly identical.  This inspires us to proceed as follows:
+   1.Make  the  approximation  that  the  recent  iterates  (    ¯Ok, ¯ϵk), ( ¯Ok−1, ¯ϵk−1),...  are  all  random
+       block samples from the current SR equation
+                                                              h ¯O(R)dθ′− ¯ϵ(R)2i
+                                             argmin                                      .                                       (26)
+                                                dθ′    ER∼p
+   2.Apply  the  randomized  block  Kazcmarz  method  to  these  iterates  to  yield  an  approximate
+       solution ϕk to the current SR equation.
+   3.Apply  some  scaling  and  clipping  procedures,  to  be  described  later,  to  ϕk  to  calculate  the
+       parameter update dθk.
+In this way SPRING takes advantage of the entire optimization history to inform each parameter
+update, distinguishing it from MinSR which leverages only a single minibatch of data at a time.
+    Following  the  structure  of  a  single  step  of  the  randomized  block  Kaczmarz  method  [29],  we
+calculateϕk by projectingϕk−1 onto the solution space of the underdetermined equation  ¯Okϕ = ¯ϵk.
+Recall that the basic form for the Kaczmarz projection is
+
+                                           ϕk =ϕk−1 +  ¯O+k (¯ϵk−  ¯Okϕk−1).                                              (27)
+
+Equivalently we can say that ϕk satisfies
+
+                                     ϕk = arg min
+                                                 ϕ  ∥ϕ−ϕk−1∥2  s.t.  ¯Okϕ = ¯ϵk.                                       (28)
+Thus, at a conceptual level, our algorithm differs from MinSR only in how we break the indetermi-
+nacy of the sampled subproblem:  MinSR chooses the solution of minimal norm, whereas SPRING
+chooses the solution that is nearest to the previous approximate solution.
+    In  practice   ¯Ok  can  be  singular  or  very  ill-conditioned,  so  it  is  beneficial  add  some  form  of
+regularization to this projection.  We choose to regularize the projection by incorporating the linear
+equations  using  a  penalty  term  rather  than  a  hard  constraint.   To  make  this  modification,  we
+introduce a regularization parameter λ and use the formula
+                                   ϕk = argmin       1  ¯Okϕ− ¯ϵk2 +∥ϕ−ϕk−1∥2.                                    (29)
+
+                                              ϕ      λ
+
+
+                                                               8
+    Even with this regularization, we find that directly using (29) can result in unstable optimization
+trajectories (see Figure 10b).  We do not yet have an explanation for this phenomenon.  To stabilize
+the method, we decay the previous gradient by a small amount before projecting it.  Formally, this
+stabilization comes in the form of a new regularization parameterµ and a modified update formula
+                                  ϕk = argmin      1   ¯Okϕ− ¯ϵk2 +∥ϕ−µϕk−1∥2.                                   (30)
+
+                                             ϕ     λ
+
+    An explicit formula forϕk can now be derived.  We first defineπk =ϕk−µϕk−1,π =ϕ−µϕk−1,
+and  ¯ζk = ¯ϵk−µ ¯Okϕk−1 and note that (30) can be recast as
+                                       πk = argmin       1  ¯Okπ− ¯ζk2 +∥π∥2.                                          (31)
+
+                                                  π      λ
+
+This formula now has the same form as MinSR with Tikhonov regularization, so we know that the
+solution is given by
+                                             πk =  ¯OTk ( ¯Ok ¯OTk  +λI)−1 ¯ζk.                                                  (32)
+Finally, we can translate back to ϕk yielding
+
+                                        ϕk =  ¯OTk ( ¯Ok ¯OTk  +λI)−1 ¯ζk +µϕk−1.                                           (33)
+
+To understand this formula, it is helpful to explicitly write out the three terms:
+
+                    ϕk =  ¯OTk ( ¯Ok ¯OTk  +λI)−1¯ϵk +µϕk−1−µ ¯OTk ( ¯Ok ¯OTk  +λI)−1 ¯Okϕk−1.                  (34)
+
+The  first  term  alone  corresponds  to  MinSR,  while  the  first  two  terms  together  correspond  to  a
+scaled version of MinSR with momentum (to be presented in Section 3.4).  It is the addition of the
+third term that concretely distinguishes SPRING from these other methods.
+    Equation  (33)  is  almost  the  formula  that  we  use  in  practice.   The  only  missing  piece  is  an
+extra stabilization procedure that we introduce in Section 3.2, which is not essential but should be
+included for best performance.  Finally, to calculate dθk, we also include a learning rate schedule
+ηk and a norm constraint C which ensures that the parameters are not changed too much at each
+iteration (see Section 3.1).  To ensure that the Kaczmarz algorithm is implemented consistently,
+regardless of the learning rate schedule, we always calculate ¯ϵk  using δτ  = 1 and then apply the
+learning  rate ηk  only  when  we  calculate dθk.   For  convenience  we  present  the  full  procedure  for
+SPRING including these extra details in Algorithm 1.
+    It is worth noting that due to several technical details, we cannot directly transfer the conver-
+gence  results  for  the  classical  Kaczmarz  method  to  the  VMC  setting.   First  of  all,  the  inclusion
+of the parameter µ in SPRING distinguishes it substantially from the Kaczmarz method.  We can
+understand this distinction as arising from the fact that in SPRING, the underlying least-squares
+system changes a small amount after each iteration.  Thus, it makes sense to progressively forget
+the information  from previous iterations,  which is what  we  accomplish by  setting µ <  1.  Addi-
+tionally, the least-squares problem arising in VMC need not be consistent, and in the inconsistent
+setting the Kaczmarz method only converges to within a ball of the true solution, with the radius
+of the ball depending on how inconsistent the system is [38].  For these reasons, we cannot derive
+a rigorous convergence guarantee for SPRING with regard to either dθ or θ.  Still, the connection
+to  the  Kaczmarz  method  serves  to  motivate  the  algorithm  and  explain  its  superior  performance
+relative to MinSR.
+
+
+                                                              9
+Algorithm 1 SPRING
+Require:  Hamiltonian H, ansatz ψθ,
+Require:  Initialization θ0, iteration count K, batch size Ns, learning rate schedule ηk
+Require:  Tikhonov damping λ, decay factor µ, norm constraint C
+ 1: θ←θ0
+ 2: ϕ← 0
+ 3:  for k in 1:K do
+ 4:       Sample R1,...,RNs  from p(R) =ψθ(R)2/⟨ψθ|ψθ⟩               ▷ i.e.  using MCMC
+ 5:       Calculate  ¯O, ¯ϵ using δτ = 1                                ▷ via (13), (14)
+ 6:        ¯ζ← ¯ϵ−µ ¯Oϕ
+ 7:   ϕ←  ¯OT ( ¯O ¯OT +λI +   1Ns 11T )−1 ¯ζ +µϕ           ▷ following (39) and using Cholesky
+ 8:   dθ←ϕ· min(ηk,√C/∥ϕ∥)                                ▷ See Section 3.1
+ 9:   θ←θ +dθ
+10:  end for
+11:  return θ
+
+
+3.1.  Norm Constraint
+    As an additional stabilization procedure,  we include a constraint on the norm of the MinSR,
+MinSR+M, and SPRING updates inspired by the norm constraint used by KFAC. We have found
+that including this norm constraint helps to stabilize the optimization procedure and enable larger
+learning rates to be applied,  and it also improves the ability to transfer learning rates from one
+system to another.  For reference we briefly describe how the norm constraint used by KFAC works
+before introducing the form of the norm constraint that we use for MinSR and SPRING.
+    The norm constraint in KFAC is “natural” in the sense that it applies to the norm induced by
+the Fisher information matrix as opposed to the Euclidean norm.  To define this scheme let g  be
+the estimated energy gradient, η  be the learning rate, S  be KFAC’s approximation to the Fisher
+information matrix, and ϕ = S−1g  be the unscaled and unconstrained KFAC parameter update.
+The final update will be dθ =cϕ for some scalar c.  The norm constraint relies upon the fact that
+∥dθ∥2S =c2ϕTSϕ =c2ϕTg and as a result it enforces the constraint
+
+                                                     c2ϕTg≤C.                                                              (35)
+
+Concretely this is achieved by choosing
+
+                                           dθ =ϕ· min(η,√C/pϕTg).                                                 (36)
+
+    In SPRING the update dθ and the gradient g  are not related by a positive definite matrix S;
+hence the above scheme is not justified.  Instead we implement a simple Euclidean norm constraint
+given by
+                                                     ∥dθ∥2≤C.                                                               (37)
+Just  like  in  KFAC,  if  this  constraint  is  violated  before  the  norm  constraint  is  applied,  we  scale
+the update down to ensure that it is satisfied.  Concretely, we calculate the update dθk  from the
+Kaczmarz iterate ϕk and the learning rate ηk using the formula
+
+                                         dθk =ϕk· min(ηk,√C/∥ϕk∥).
+
+
+                                                          10
+3.2.  Numerically Stable Inversion
+    In exact arithmetic,T  =  ¯O ¯OT is positive semidefinite,T +λI is positive definite, and (T +λI)−1 ¯ζ
+can be computed efficiently using the Cholesky decomposition.  However, in single precision we have
+found that the T  matrix can be become indefinite.  As a result, the Cholesky decomposition can
+fail if the regularization is chosen to be too small, and we have even observed this to occur when
+using our default value of λ = 0.001.
+    We now note thatT is always singular due to the construction of  ¯O.  Recall that 1 represents the
+column vector whose entries are all equal to 1 and P  =   1Ns 11T  represents the orthogonal projector
+onto the span of 1.  Since  ¯O = (I−P )O, we have that
+
+                              T1 =  ¯O ¯OT1 =  ¯OOT (I−P ) 1 =  ¯OOT (1− 1) = 0.                                (38)
+
+This means that any numerical perturbation to T  can make it indefinite.  If the numerical pertur-
+bation is large enough, the resulting T  matrix can have an eigenvalue smaller than−λ, in which
+case the Cholesky factorization fails.  This can happen even when all of the other eigenvalues of T
+are well-separated from 0.
+    We  alleviate  this  issue  by  replacing  the  matrix T  +λI  with  the  further  regularized  matrix
+T +λI +ωP  for some positive real ω.  We thus calculate the Kaczmarz iterate for iteration k as
+
+                                      ϕk =  ¯OTk (Tk +λI +ωP )−1 ¯ζk +µϕk−1.                                         (39)
+
+This does not affect the value of ϕk in exact arithmetic.  To see this, note that 1 is an eigenvector
+of (Tk +λI) with eigenvalue λ, and is thus also an eigenvector of (Tk +λI +ωP ) with eigenvalue
+ω +λ.  As a result, we have
+                                                                               1
+                             (Tk +λI +ωP )−1 = (Tk +λI)−1 +                  ω +λ− 1λ        P.                              (40)
+
+Acting on the left with  ¯OTk  then annihilates the extra term:
+                                                                                  1
+                       ¯OTK(Tk +λI +ωP )−1 =  ¯OTk (Tk +λI)−1 +                ω +λ− 1λ         ¯OTkP
+
+                                                   =  ¯OTk (Tk +λI)−1.
+
+    Thus, using (39) reduces the likelihood that numerical errors cause the Cholesky solver to fail
+without otherwise affecting the computation.  In our experiments we have used the value ω = 1 in
+all cases.  However, it is theoretically possible for the eigenvalues of T  to all be smaller than 1, in
+which case settingω = 1 would increase the condition number of the regularized T  matrix.  In such
+a case ω could instead be chosen for example to be the mean of the eigenvalues of the original T
+matrix.
+
+3.3.  MinSR implementation details
+    We now briefly discuss the version of MinSR that we use for our numerical experiments, which
+is  very  similar  but  not  identical  to  the  basic  version  presented  in  Section  2.3.   Functionally,  the
+only differences are the inclusion of a norm constraint and the extra regularization of the matrix
+¯Ok ¯OTk  as described in Section 3.2.  Additionally, for consistency with SPRING we set δτ = 1 when
+
+
+
+                                                             11
+calculating ¯ϵk  and we instead control the step size with a learning rate parameter ηk.  With these
+modifications the MinSR algorithm is described by the following formulas:
+
+                                        ϕk =  ¯OTk ( ¯Ok ¯OTk  +λI +P )−1¯ϵk,                                              (41)
+
+                                         dθk =ϕk· min(ηk,√C/∥ϕk∥).                                               (42)
+
+3.4.  MinSR with Momentum
+    We motivate SPRING primarily via its relation to the Kaczmarz method.  An alternative view-
+point is to see SPRING as a modification of a momentum method with an added projection step
+to remove the component of the momentum that conflicts with the current subproblem  ¯Okdθ = ¯ϵ.
+While we do not endorse this perspective, it is natural to wonder how SPRING would compare to
+MinSR with na¨ıve momentum, which we refer to as MinSR+M.
+    Concretely, MinSR+M iteratively updates a momentum directionϕk by taking a convex combi-
+nation of the previous valueϕk−1 and the current MinSR solution.  Just like in SPRING, we assume
+an imaginary time step of δτ  = 1 when we calculate ¯ϵk  and instead control the step size using a
+learning rate parameter ηk and a norm constraint.  The method is thus described by the formulas:
+
+                               ϕk = (1−µ) ¯OTk ( ¯Ok ¯OTk  +λI +P )−1¯ϵk +µϕk−1,                                 (43)
+
+                                         dθk =ϕk· min(ηk,√C/∥ϕk∥).                                               (44)
+    As  in  SPRING,  the µ  parameter  acts  as  a  decay  factor  on  the  previous  parameter  update.
+However, MinSR+M differs significantly from SPRING in that no regularized projector is applied
+to the previous update.  It also differs in that the MinSR solution is scaled by a factor of (1−µ)
+to achieve a convex combination, which means µ must be chosen to be strictly less than one.  See
+Section 4.3 and Figure 10a for further discussion of the choice of µ for MinSR+M. We demonstrate
+in our numerical experiments that SPRING outperforms MinSR+M substantially.  This supports
+the viewpoint that SPRING is not simply a momentum method, but is rather a way of improving
+the quality of the parameter updates as approximate solutions to the SR equation.
+
+
+4.  Results
+
+    We now turn to our numerical results.  Our main finding is that SPRING outperforms KFAC,
+MinSR, and MinSR+M for several small atoms and molecules.  We present results for the carbon,
+nitrogen, and oxygen atoms in Section 4.1 and for the N2  and CO molecules in Section 4.2.  We
+summarize the final energies attained in our main experiments in Table 1.  We use VMCNet [30] to
+run all our experiments, which is a neural network VMC framework based on JAX [39].  For all of
+our experiments, we use a standard FermiNet architecture with 16 dense determinants; see Table
+B.2 for details.
+    For our training phase we use one hundred thousand optimization iterations with one thousand
+MCMC samples per iteration.  For our MCMC proposals we use Gaussian all-electrons moves with a
+step-size that is tuned dynamically to maintain an acceptance ratio of approximately 50%.  We take
+ten MCMC steps between optimization iterations to reduce correlations between the samples, and
+we use mean–centered local energy clipping to improve the stability of the optimization.  We use a
+decaying learning rate with a decay rate of r = 1e− 4 and learning rate schedule ηk =  η1+rk.  For
+MinSR, MINSR+M, and SPRING, we assume δτ = 1 and apply the learning rate ηk as described
+
+
+                                                           12
+           System           KFAC         MinSR       MinSR+M         SPRING       Benchmark      Benchmark source
+             C             -37.8445     -37.8445       -37.8448      -37.8449       -37.8450        [40], Table XI
+             N             -54.5877     -54.5885       -54.5889      -54.5890       -54.5892        [40], Table XI
+             O             -75.0643     -75.0652       -75.0659      -75.0668       -75.0673        [40], Table XI
+      N2, equilibrium     -109.5301     -109.5268     -108.5294     -109.5322      -109.5423        [41], Table II
+       N2, 4.0 Bohr       -109.1862     -109.1794     -109.1829     -109.1906      -109.2021      [42], MLR4(6, 8)
+             CO           -113.3140     -113.3092     -113.3117     -113.3169      -113.3255         [3], Table II
+
+Table 1:  Summary of final energies attained with tuned learning rates for all systems studied.  Energies are reported
+in Hartrees, to four decimal places.
+
+
+in Section 3.  For more details on our VMC settings, see Table B.3.  To obtain final energies we run
+a separate inference phase with the parameters from the last iteration of each optimization run; see
+Table B.4 for details.
+    To compare the methods fairly, we do not start them from fully random initializations.  Rather,
+for each system in question, we first run a short preliminary optimization and save the result to a
+checkpoint.  The rest of our experiments then load the starting parameters from the end of the pre-
+liminary optimization phase, switch out the optimizer and hyperparameters to the desired settings,
+and run one hundred thousand further optimization iterations.  This procedure removes the chaotic
+early optimization stage as a factor from the comparison between the different methods, ensuring
+that no method is unfairly advantaged by randomly having a favorable start.  Our preliminary op-
+timization is different from the Hartree-Fock pretraining procedure (see [3, 6] for example) because
+we optimize the variational energy from the beginning.  However, our results should translate well
+to a setting with pretraining as a result of this preliminary optimization.  See Table B.5 for more
+details on the preliminary optimization phase.
+    For all of our optimizers we use a Tikhonov regularization parameter of λ = 0.001 and a norm
+constraint ofC = 0.001 unless indicated otherwise.  For MinSR+M we use a momentum parameter
+of µ  =  0.9,  and  for  SPRING  we  use  the  regularization  parameter µ  =  0.99.   In  Section  4.3  we
+present several hyperparameter studies which demonstrate that these values provide a fair basis for
+comparing the methods.  We also investigate the effect of the preliminary optimization phase and
+demonstrate that SPRING outperforms KFAC significantly without preliminary optimization.
+    In all of our numerical results we report energy errors relative to the benchmark energies listed
+in Table 1.  For the energy and variance trajectories, we smooth out the curves by reporting averages
+over a sliding window of ten thousand iterations.  We note that we are using a somewhat smaller
+network, fewer MCMC samples, and fewer optimization iterations than were used in most state-of-
+the-art calculations with KFAC; hence it should not be surprising that some of our results do not
+reach the same level of accuracy as those presented in the literature for comparable systems.  Our
+results can be viewed as as proof-of-principle for the value of SPRING on small calculations, which
+will need to be extended to larger calculations by future works.
+
+4.1.  Small atoms
+    We first present results for KFAC, MinSR, MinSR+M, and SPRING on the carbon, nitrogen,
+and oxygen atoms.  We find that it is critical to turn the learning rate of each method in order
+to achieve the best performance and obtain a fair comparison.  Thus, for each method, we test a
+number of learning rates on the carbon atom, with results presented in Figure 1.  Our experiments
+lead us to choose a learning rate of η = 0.02 for KFAC,η = 0.1 for MinSR,η = 0.2 for MinSR+M,
+and η = 0.02 for SPRING.
+
+
+                                                            13
+                       (a) KFAC                                                        (b) MinSR
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                     (c) MinSR+M                                                      (d) SPRING
+
+                 Figure 1:  Learning rate sweeps on the carbon atom with four different optimizers.
+
+
+    After tuning the learning rates on the carbon atom, we use the selected learning rates to compare
+the methods on carbon, nitrogen, and oxygen.  The results with optimized learning rates are shown
+in Figure 2.  On the carbon atom,  we find that SPRING reaches chemical accuracy significantly
+faster than the other methods.  Relative to KFAC and MinSR, its final energy error is about a factor
+of four lower,  and its final local energy variance that is about an order of magnitude lower.  On
+nitrogen and oxygen, SPRING continues to outperform the other methods. In the case of the oxygen
+atom, SPRING reaches chemical accuracy after forty thousand iterations, whereas MinSR+M takes
+eighty thousand iterations and the other methods never reach chemical accuracy.
+
+4.2.  Molecules
+    We next test KFAC, MinSR, MinSR+M, and SPRING on two somewhat larger systems:  the N2
+and CO molecules.  We begin by tuning the learning rates for all four methods on the N2 molecule
+at an equilibrium bond distance of 2.016 Bohr.  We present the results of the learning rate sweeps in
+Figure 3.  Based on these results, we pick learning rates of η = 0.05 for KFAC,η = 0.02 for MinSR,
+η = 0.02 for MinSR+M, and η = 0.002 for SPRING. These learning rates are not always chosen
+strictly for the best final energy since the final energy can vary due to statistical fluctuations in
+the parameters and statistical errors in the energy estimation.  We instead look at the optimization
+trajectories and the final energies and pick the learning rate that appears to be optimal based on
+the combination of the two.  It is worth noting that the optimal learning rates for MinSR+M and
+SPRING  change  by  a  factor  of  10  between  the  carbon  atom  and  the  N2  molecule,  whereas  the
+optimal learning rate for MinSR changes by only a factor of 5, and the optimal learning rate for
+KFAC changes by only a factor of 2.  The optimal learning rate may thus be more system-dependent
+for MinSR+M and SPRING compared to the other methods.
+    Using these optimized learning rates, we then compare the four methods on the N2  molecule
+both at equilibrium and at a stretched bond distance of 4.0 Bohr, and on the CO molecule at an
+
+
+                                                           14
+                                                    (a) Carbon atom.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                   (b) Nitrogen atom.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                    (c) Oxygen atom
+
+Figure 2:  Comparison of methods on three small atoms, with learning rates tuned on the carbon atom.
+
+
+
+
+
+                                                            15
+                        (a) KFAC                                                         (b) MinSR
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                      (c) MinSR+M                                                       (d) SPRING
+
+Figure 3:  Learning rate sweeps on the nitrogen molecule at equilibrium bond distance with four different optimizers.
+
+
+equilibrium bond distance of 2.173 Bohr.  The results of these comparisons are presented in Figure
+4  and  Figure  5.   For  these  systems  none  of  the  optimizers  are  able  to  reach  chemical  accuracy,
+which is expected due to the relatively small network, few MCMC samples, and few optimization
+iterations  that  we  are  using.   Nonetheless,  SPRING  still  displays  a  marked  advantage  over  the
+other  methods,  converging  much  faster  and  to  a  lower  energy  and  energy  variance  in  all  three
+cases.  The MinSR+M optimizer only improves upon MinSR marginally for these systems, and it
+is outperformed by KFAC. This provides evidence that the SPRING algorithm is distinctly better
+than simply adding momentum on top of MinSR.
+
+4.3.  Hyperparameter studies
+    In this section, we provide several experiments that demonstrate that our main results are robust
+to the choices ofC andµ.  We also provide evidence that the results are not significantly skewed by
+the preliminary optimization phase.  For simplicity we focus on the carbon atom for the purposes
+of this section.
+    We first show in Figure 6 how the results of the learning rate experiments differ if we do not apply
+a norm constraint to any of the methods.  In all four cases, the performance is much more sensitive
+to the learning rate when the constraint is turned off, and we are prevented from displaying results
+with larger learning rates because they produce completely unstable optimization trajectories.  The
+combination of these factors means that without the norm constraints, it is much more difficult to
+find an effective learning rate, and our ability to transfer the learning rate from system to system is
+hindered. Nonetheless, even with the norm constraint off, the tuned version of SPRING significantly
+outperforms the tuned versions of the other methods, as shown in Figure 7.  In Figure 8, we show
+that neither increasing nor decreasing the norm constraint used for KFAC enables it to compete
+with  the  performance  of  SPRING  on  the  carbon  atom.   This  provides  further  evidence  that  the
+advantage of SPRING is not related to the choice or the form of the norm constraint.
+
+
+                                                             16
+                                     (a) Equilibrium configuration, bond distance 2.016 Bohr.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                        (b) Stretched configuration, bond distance 4.0 Bohr.
+
+Figure 4:  Comparison of methods on N2 molecule at two bond distances, with learning rates tuned at equilibrium.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                  Figure 5:  Comparison of methods on CO molecule, with learning rates tuned on N2.
+
+
+
+
+                                                                     17
+                         (a) KFAC                                                          (b) MinSR
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                      (c) MinSR+M                                                         (d) SPRING
+
+    Figure 6:  Learning rate sweeps on the carbon atom without norm constraints with four different optimizers.
+
+
+    To better understand the impact of the norm constraint on SPRING, we return to the learning
+rate  sweep  for  SPRING  on  the  carbon  atom  and  provide  some  additional  data  from  these  five
+optimization runs.  In particular, we plot the scale factor qk = max(1,∥ηkϕk∥/√C).  For example,
+if qk  =  5  then  this  means  that  at  iteration k  the  norm  constraint  resulted  in  a  scaling  down  of
+the  parameter  update  by  a  factor  of  5,  and  if qk  =  1  then  the  norm  constraint  at  iteration k
+had no effect.  We see in Figure 9 that qk  tends to grow over the course of the first one hundred
+optimization iterations and then decay to 1 as the optimization progresses.  We can understand this
+in the following way: qk  first rises as more optimization history is incorporated into SPRING; it
+then decays due to both the learning rate decay and the decay of the energy gradient.  As should
+be expected, with a larger learning rate, qk reaches a larger peak and takes longer to decay to 1.
+    Next, we test the MinSR+M scheme with several different values of the momentum parameter
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+       Figure 7:  Comparison of methods on carbon atom, with tuned learning rates and no norm constraint.
+
+
+                                                              18
+Figure 8:  Testing KFAC on the carbon atom with different values of the norm constraint C.  No value performs
+better than the default value of C = 0.001 and all settings are outperformed by SPRING with C = 0.001.  All runs
+use the optimized learning rate of η = 0.02.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 9:  Effect of the norm constraint on the SPRING parameter update during the learning rate sweep on the
+carbon atom.  The quantityqk = max(1, ∥ηkϕk∥/√C) represents the extent to which the parameter update is scaled
+down as a result of the norm constraint.
+
+
+
+
+
+
+                                                                   19
+                            (a)                                                               (b)
+
+Figure  10:  Hyperparameter  studies  for  the  parameter µ  for  both  MinSR+M  and  SPRING.  (a)  MinSR+M  with
+several values of the momentum parameter µ, on the carbon atom.  The learning rate is held fixed at the previously
+tuned value of η = 0.2.  (b) SPRING on the carbon atom with several values of the regularization parameter µ.  All
+values converge well except for the unregularized caseµ = 1.0, shown in black, for which the optimization is unstable
+and encounters NaNs after approximately twenty thousand epochs.  The learning rate is held fixed at the previously
+tuned value of η = 0.02
+
+
+µ, using the previously optimized learning rate of η = 0.2.  For values larger than µ = 0.95 we find
+that the optimization is unstable and we do not report numerical results.  We find that choosing µ
+anywhere between 0.8 and 0.95 produces approximately optimal results, which justifies our use of
+µ = 0.9 for our main experiments.  Results are shown in Figure 10a.  Similarly, we test SPRING
+with several values of its regularization parameter µ, again using the previously optimized learning
+rate ofη = 0.02.  Results are shown in Figure 10b.  We find that choosing µ anywhere between 0.98
+and 0.999 produces approximately optimal results,  which justifies our choice of µ = 0.99 for our
+main experiments.  Interestingly, ifµ = 1.0 then the method becomes unstable.  We do not yet have
+an explanation for the source of this instability.
+    Finally, we consider the effects of the preliminary optimization phase.  Since we have used KFAC
+for the preliminary optimization in all cases, it is unclear thus far whether SPRING can perform well
+when run from a random initialization.  To ameliorate this concern, we compare the performance of
+SPRING against KFAC without any preliminary optimization, with results in Figure 11.  We find
+that KFAC outperforms SPRING in the very early stages of the optimization.  However, SPRING
+overtakes KFAC after about seven thousand training iterations and reaches chemical accuracy in
+fewer than half as many iterations as KFAC. We conclude that SPRING is also effective starting
+from a random initialization.
+
+4.4.  Computational Cost
+    The  computational  cost  of  SPRING  is  essentially  identical  to  that  of  MinSR,  as  the  extra
+computations  for  SPRING  are  negligible  in  cost.   The  same  applies  to  MinSR+M.  For  all  three
+of  these  methods,  the  computational  bottleneck  lies  in  computing  the  matrix T  =  ¯O ¯OT ,  which
+has  asymptotic  complexity O(Np· N2s ).   This  cost  dominates  the O(N3s )  cost  of  the  Cholesky
+factorization.
+    Relative to KFAC, we expect the cost of SPRING to be highly dependent on the system size, the
+number of MCMC samples per iteration, and the number of GPUs used to parallelize the calculation,
+and we do not attempt to perform a systematic study along these lines.  In our experiments, we use
+
+
+                                                             20
+Figure 11:  Comparison of SPRING versus KFAC on the carbon atom without preliminary optimization.  We use the
+previously tuned learning rate of η = 0.02 for both KFAC and SPRING.
+
+
+a single GeForce RTX 2080Ti GPU with 1000 MCMC walkers.  With these particular settings, we
+find that SPRING results in VMC iterations that are about 50% slower than KFAC for our smaller
+systems such as the carbon atom.  As system size grows, the difference is reduced, and for the N2
+molecule the VMC iterations with SPRING are only about 5% slower than with KFAC.
+
+
+5.  Discussion
+
+    Neural network wavefunctions represent a promising avenue towards highly accurate simulations
+of small but challenging molecular systems.  The major bottleneck of applying such wavefunctions
+is  the  high  cost  associated  with  their  optimization.   In  this  work  we  introduce  a  new  optimizer
+called SPRING to alleviate this bottleneck.  SPRING combines ideas from the recently proposed
+MinSR optimizer [26] with ideas from the randomized Kaczmarz method for solving overdetermined
+least-squares problems [28].  By doing so, SPRING is able to utilize optimization history to improve
+upon MinSR in a principled way at essentially no extra cost.  We test SPRING on several small
+atoms and molecules, comparing it against MinSR, MinSR with momentum, and KFAC. We find
+that SPRING consistently outperforms the alternatives across all tested systems.  We hope that
+these findings will be extended to larger systems by future works.
+    Due to several discrepancies between the VMC setting and the traditional Kaczmarz setting,
+we  are  not  yet  able  to  furnish  a  rigorous  proof  of  convergence  for  the  SPRING  optimizer.   One
+interesting direction for future research is to modify SPRING in a way that makes it possible to
+prove its convergence.  For example, the exponentially convergent randomized Kaczmarz method
+of  Strohmer  and  Vershynin  requires  that  the  rows  are  sampled  with  probability  proportional  to
+the square of their Euclidean norm [28].  Furthermore, in the randomized block Kaczmarz method,
+Needell and Tropp find that for optimal performance it is critical to partition the constraints of the
+least-squares problem into well-conditioned blocks [29].  Such sampling schemes would represent a
+significant departure from traditional VMC methods that sample from the probability density of
+the wavefunction, but they could lead to rigorous convergence guarantees, better performance, or
+both.  There are also variants of the Kaczmarz method such as the randomized extended Kaczmarz
+algorithm of Zouzias and Freris [43] that can converge to the solution of inconsistent least-squares
+problems.  This technique cannot be directly applied to the VMC setting since it requires sampling
+
+
+                                                           21
+the columns as well as the rows of the system.  However, it could serve as inspiration for further
+development of the algorithm.
+    We  also  draw  a  connection  between  the  MinSR  and  SPRING  methods  for  optimizing  neural
+network wavefunctions and the efficient subsampled natural gradient descent method of Ren and
+Goldfarb [25].  In particular, we show in Appendix   A that MinSR can be viewed as a simplified
+implementation of the method of Ren and Goldfarb which applies as long as the gradient of the loss
+function is a linear combination of the model gradients at the sampled points.  This is quite a com-
+mon scenario in machine learning, occurring for example in supervised learning with a mean-squared
+error loss function.  In such a setting, SPRING can then be viewed as a potential improvement to
+existing subsampled natural gradient descent methods.  We leave it to future works to determine
+whether SPRING can yield performance improvements for applications outside of VMC.
+
+
+Acknowledgements
+
+    This research used the Savio computational cluster resource provided by the Berkeley Research
+Computing program at the University of California, Berkeley (supported by the UC Berkeley Chan-
+cellor, Vice Chancellor for Research, and Chief Information Officer).  This material is based upon
+work supported by the U.S. Department of Energy, Office of Science, Office of Advanced Scientific
+Computing  Research,  Department  of  Energy  Computational  Science  Graduate  Fellowship  under
+Award  Number(s)  DE-SC0023112  (G.G.).   This  effort  was  supported  by  the  SciAI  Center,  and
+funded  by  the  Office  of  Naval  Research  (ONR),  under  Grant  Number  N00014-23-1-2729  (N.A.).
+LL is a Simons Investigator in Mathematics.  We thank Yixiao Chen, Zhiyan Ding, Yuehaw Khoo,
+Michael Lindsey, Eric Neuscamman, and Zaiwen Wen for their helpful discussions, and the anony-
+mous reviewers for their valuable comments.
+
+
+Disclaimer
+
+    This report was prepared as an account of work sponsored by an agency of the United States
+Government.   Neither  the  United  States  Government  nor  any  agency  thereof,  nor  any  of  their
+employees, makes any warranty, express or implied, or assumes any legal liability or responsibility
+for  the  accuracy,  completeness,  or  usefulness  of  any  information,  apparatus,  product,  or  process
+disclosed, or represents that its use would not infringe privately owned rights.  Reference herein to
+any specific commercial product, process, or service by trade name, trademark, manufacturer, or
+otherwise does not necessarily constitute or imply its endorsement, recommendation, or favoring by
+the United States Government or any agency thereof.  The views and opinions of authors expressed
+herein  do  not  necessarily  state  or  reflect  those  of  the  United  States  Government  or  any  agency
+thereof.
+
+
+References
+
+ [1]WMC Foulkes, Lubos Mitas, RJ Needs, and Guna Rajagopal.  Quantum monte carlo simula-
+     tions of solids.  Reviews of Modern Physics, 73(1):33, 2001.
+
+ [2]Federico Becca and Sandro Sorella.      Quantum Monte Carlo approaches for correlated systems.
+     Cambridge University Press, 2017.
+
+
+
+                                                           22
+ [3]David Pfau,  James S Spencer,  Alexander GDG Matthews,  and W Matthew C Foulkes.  Ab
+     initio solution of the many-electron schr¨odinger equation with deep neural networks.  Physical
+     Review Research, 2(3):033429, 2020.
+
+ [4]Jan Hermann, Zeno Sch¨atzle, and Frank No´e.  Deep-neural-network solution of the electronic
+     schr¨odinger equation.  Nature Chemistry, 12(10):891–897, 2020.
+
+ [5]Zeno Sch¨atzle, PB Szab´o, Mat˘ej Mezera, Jan Hermann, and Frank No´e.  Deepqmc:  An open-
+     source software suite for variational optimization of deep-learning molecular wave functions.
+     The Journal of Chemical Physics, 159(9), 2023.
+
+ [6]Ingrid  von  Glehn,  James  S  Spencer,  and  David  Pfau.   A  self-attention  ansatz  for  ab-initio
+     quantum chemistry.  arXiv preprint arXiv:2211.13672, 2022.
+
+ [7]Leon  Gerard,  Michael  Scherbela,  Philipp  Marquetand,  and  Philipp  Grohs.   Gold-standard
+     solutions  to  the  schr¨odinger  equation  using  deep  learning:  How  much  physics  do  we  need?
+     Advances in Neural Information Processing Systems, 35:10282–10294, 2022.
+
+ [8]Gino Cassella, Halvard Sutterud, Sam Azadi, N. D. Drummond, David Pfau, James S. Spencer,
+     and W. M. C. Foulkes. Discovering quantum phase transitions with fermionic neural networks.
+     Phys. Rev. Lett., 130:036401, Jan 2023.
+
+ [9]Jane Kim, Gabriel Pescia, Bryce Fore, Jannes Nys, Giuseppe Carleo, Stefano Gandolfi, Morten
+     Hjorth-Jensen,  and  Alessandro  Lovato.   Neural-network  quantum  states  for  ultra-cold  fermi
+     gases, 2023.
+[10]Wan Tong Lou, Halvard Sutterud, Gino Cassella, W. M. C. Foulkes, Johannes Knolle, David
+     Pfau, and James S. Spencer.  Neural wave functions for superfluids, 2023.
+
+[11]Gabriel  Pescia,  Jannes  Nys,  Jane  Kim,  Alessandro  Lovato,  and  Giuseppe  Carleo.  Message-
+     passing neural quantum states for the homogeneous electron gas, 2023.
+
+[12]Xiang Li, Zhe Li, and Ji Chen.  Ab initio calculation of real solids via neural network ansatz.
+     Nature Communications, 13(1):7895, 2022.
+
+[13]Sandro Sorella. Generalized lanczos algorithm for variational quantum monte carlo.        Phys. Rev.
+     B, 64:024512, Jun 2001.
+
+[14]MP Nightingale and Vilen Melik-Alaverdian.  Optimization of ground-and excited-state wave
+     functions and van der waals clusters.  Physical review letters, 87(4):043401, 2001.
+
+[15]Sandro Sorella, Michele Casula, and Dario Rocca.  Weak binding between two aromatic rings:
+     Feeling the van der waals attraction by quantum monte carlo methods. The Journal of chemical
+     physics, 127(1), 2007.
+
+[16]C.  J.  Umrigar,  Julien  Toulouse,  Claudia  Filippi,  S.  Sorella,  and  R.  G.  Hennig.   Alleviation
+     of the fermion-sign problem by optimization of many-body wave functions.  Phys.  Rev.  Lett.,
+     98:110201, Mar 2007.
+
+[17]Julien Toulouse and Cyrus J Umrigar.  Optimization of quantum monte carlo wave functions
+     by energy minimization.  The Journal of chemical physics, 126(8), 2007.
+
+
+                                                            23
+[18]Eric Neuscamman, CJ Umrigar, and Garnet Kin-Lic Chan.  Optimizing large parameter sets
+     in variational quantum monte carlo.  Physical Review B, 85(4):045103, 2012.
+
+[19]Luning Zhao and Eric Neuscamman.  A blocked linear method for optimizing large parameter
+     sets in variational monte carlo.  Journal of chemical theory and computation, 13(6):2604–2611,
+     2017.
+[20]Iliya Sabzevari, Ankit Mahajan, and Sandeep Sharma.  An accelerated linear method for opti-
+     mizing non-linear wavefunctions in variational monte carlo.  The Journal of chemical physics,
+     152(2), 2020.
+
+[21]Robert J Webber and Michael Lindsey.  Rayleigh-gauss-newton optimization with enhanced
+     sampling for variational monte carlo.  Physical Review Research, 4(3):033099, 2022.
+[22]James Martens and Roger Grosse. Optimizing neural networks with kronecker-factored approx-
+     imate curvature.  In  International  conference  on  machine  learning, pages 2408–2417. PMLR,
+     2015.
+
+[23]Shun-Ichi Amari. Natural gradient works efficiently in learning.       Neural computation, 10(2):251–
+     276, 1998.
+[24]Frederik  Benzing.   Gradient  descent  on  neurons  and  its  link  to  approximate  second-order
+     optimization.   In  International  Conference  on  Machine  Learning,  pages  1817–1853.  PMLR,
+     2022.
+
+[25]Yi Ren and Donald Goldfarb. Efficient subsampled gauss-newton and natural gradient methods
+     for training neural networks.  arXiv preprint arXiv:1906.02353, 2019.
+[26]Ao  Chen  and  Markus  Heyl.   Efficient  optimization  of  deep  neural  quantum  states  toward
+     machine precision, 2023.
+
+[27]Riccardo  Rende,  Luciano  Loris  Viteritti,  Lorenzo  Bardone,  Federico  Becca,  and  Sebastian
+     Goldt. A simple linear algebra identity to optimize large-scale neural network quantum states.
+     arXiv preprint arXiv:2310.05715, 2023.
+[28]Thomas Strohmer and Roman Vershynin. A randomized kaczmarz algorithm with exponential
+     convergence.  Journal of Fourier Analysis and Applications, 15(2):262–278, 2009.
+
+[29]Deanna Needell and Joel A Tropp. Paved with good intentions: analysis of a randomized block
+     kaczmarz method.  Linear Algebra and its Applications, 441:199–221, 2014.
+[30]Jeffmin Lin, Gil Goldshlager, and Lin Lin.  VMCNet:  Flexible, general-purpose VMC frame-
+     work, built on JAX.  http://github.com/jeffminlin/vmcnet, 2021.
+
+[31]M. Born and R. Oppenheimer. Zur Quantentheorie der Molekeln.        Ann. der Phys. (4), 84:457–
+     484, 1927.
+[32]Jeffmin Lin, Gil Goldshlager, and Lin Lin.  Explicitly antisymmetrized neural network layers
+     for variational monte carlo simulation.  Journal of Computational Physics, 474:111765, 2023.
+
+[33]Giuseppe Carleo and Matthias Troyer. Solving the quantum many-body problem with artificial
+     neural networks.  Science, 355(6325):602–606, 2017.
+
+
+                                                            24
+[34]Giuseppe Carleo, Kenny Choo, Damian Hofmann, James ET Smith, Tom Westerhout, Fabien
+     Alet,  Emily  J  Davis,  Stavros  Efthymiou,  Ivan  Glasser,  Sheng-Hsuan  Lin,  et  al.   Netket:  A
+     machine learning toolkit for many-body quantum systems.  SoftwareX, 10:100311, 2019.
+
+[35]Chae-Yeun  Park  and  Michael  J  Kastoryano.   Geometry  of  learning  neural  quantum  states.
+     Physical Review Research, 2(2):023232, 2020.
+
+[36]Guodong Zhang, James Martens, and Roger B Grosse.  Fast convergence of natural gradient
+     descent for over-parameterized neural networks.   Advances  in  Neural  Information  Processing
+     Systems, 32, 2019.
+
+[37]Stefan Karczmarz. Angenaherte auflosung von systemen linearer glei-chungen.        Bull. Int. Acad.
+     Pol. Sic. Let., Cl. Sci. Math. Nat., pages 355–357, 1937.
+[38]Deanna Needell.  Randomized kaczmarz solver for noisy linear systems.        BIT Numerical Math-
+     ematics, 50:395–403, 2010.
+
+[39]James Bradbury, Roy Frostig, Peter Hawkins, Matthew James Johnson, Chris Leary, Dougal
+     Maclaurin, George Necula, Adam Paszke, Jake VanderPlas, Skye Wanderman-Milne, and Qiao
+     Zhang.  JAX: composable transformations of Python+NumPy programs, 2018.
+
+[40]Subhas J Chakravorty,  Steven R Gwaltney,  Ernest R Davidson,  Farid A Parpia,  and Char-
+     lotte Froese p Fischer. Ground-state correlation energies for atomic ions with 3 to 18 electrons.
+     Physical Review A, 47(5):3649, 1993.
+
+[41]Claudia  Filippi  and  Cyrus  J  Umrigar.     Multiconfiguration  wave  functions  for  quantum
+     monte  carlo  calculations  of  first-row  diatomic  molecules.   The  Journal  of  Chemical  Physics,
+     105(1):213–226, 1996.
+
+[42]Robert  J  Le  Roy,  Yiye  Huang,  and  Calvin  Jary.   An  accurate  analytic  potential  function
+     for ground-state n2 from a direct-potential-fit analysis of spectroscopic data.  The  Journal  of
+     chemical physics, 125(16), 2006.
+
+[43]Anastasios Zouzias and Nikolaos M Freris.  Randomized extended kaczmarz for solving least
+     squares.  SIAM Journal on Matrix Analysis and Applications, 34(2):773–793, 2013.
+
+[44]Minghan Yang, Dong Xu, Zaiwen Wen, Mengyun Chen, and Pengxiang Xu. Sketch-based em-
+     pirical natural gradient methods for deep learning.  Journal of Scientific Computing, 92(3):94,
+     2022.
+
+Appendix  A.  Connection to Efficient Subsampled Natural Gradient Descent
+
+    Recall that MinSR with Tikhonov regularization uses the update formula
+
+                                             dθ =  ¯OT λI +  ¯O ¯OT−1 ¯ϵ,                                                 (A.1)
+
+where λ is the damping parameter.  This is the same formula that arises from the “simple linear
+algebra  trick”  of  Rende  et  al  [25].   We  now  introduce  the  efficient  subsampled  natural  gradient
+method of Ren and Goldfarb [25] and show how it is equivalent to MinSR in the VMC setting.  The
+key idea of Ren and Goldfarb is that a damped Fisher matrix arising from a small minibatch can
+
+
+                                                            25
+be viewed as a low-rank perturbation of the identity and is thus amenable to inversion using the
+Sherman-Morrison-Woodbury formula.  Using the notation of the later work by Yang et al [44], the
+resulting update is
+
+                                   dθ =  1λ   −I +U λI +UTU−1UT               g,
+
+whereg is the gradient estimator and the columns ofU contain the model gradients divided by the
+square-root of the number of samples used.
+    Now  suppose,  as  is  often  the  case,  that  the  gradient  of  the  loss  function  is  simply  a  linear
+combination of the gradients at each input, with some input-dependent scalar weights.  Then we
+can write the gradient estimator as g =Uv for some column vectorv that depends on the sampled
+inputs.  This allows us to simplify the NGD-SMW formula as follows:
+
+               dθ =  1λ  −I +U λI +UTU−1UT Uv
+
+                  =  1λ  −U +U λI +UTU−1UTU                  v
+
+                  =  1λ  −U +U λI +UTU−1 λI +UTU−U λI +UTU−1 (λI)                                v
+
+                  =−U λI +UTU−1v.
+
+    Comparing with (A.1), we see that this is equivalent to the MinSR formula when we identify  ¯OT
+with U  and ¯ϵ with v.  Furthermore, this identification is the natural one, since the columns of  ¯OT
+represent the gradients of the logarithm of the normalized wavefunction and the formula g =  ¯OT ¯ϵ
+holds in the VMC setting up to constant factors.  Thus,  the MinSR method can be viewed as a
+simplified  way  of  implementing  the  efficient  subsampled  natural  gradient  method  in  the  context
+of VMC. Furthermore, SPRING can be viewed as a potential improvement to subsampled natural
+gradient descent and may have applications outside the VMC setting.
+
+
+Appendix  B.  Network Architecture and Hyperparameters
+
+    We list in Table B.2 the hyperparameters of the FermiNet architecture that we use in all our
+experiments.  We list in Table B.3 the other settings used for our VMC training phase, in Table B.4
+the settings used for our inference phase, and in Table B.5 the settings used for our preliminary
+optimization.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                         26
+                          Hyperparameter                     Value
+                   One-electron stream width                  256
+                   Two-electron stream width                   16
+                  Number of equivariant layers                 4
+                  Backflow activation function               tanh
+                     Number of determinants                    16
+                 Exponential envelope structure            Isotropic
+                         Determinant type                   Dense
+
+Table B.2:  List of FermiNet architecture hyperparameters used for all experiments.
+
+
+                                 Setting                             Value
+          Standard deviations for local energy clipping                 5
+                          Number of walkers                           1000
+                         MCMC burn-in steps                           5000
+                          Training iterations                          1e5
+                   MCMC steps between updates                          10
+
+                 Table B.3:  List of settings for the training phase.
+
+
+                                 Setting                                Value
+                          Number of walkers                              2000
+                  MCMC burn-in steps for C,N,O                           5000
+                    MCMC burn-in steps for N2                            1e4
+                          Inference iterations                           2e4
+       MCMC steps between local energy measurements                       10
+
+                 Table B.4:  List of settings for the inference phase.
+
+
+                           Setting                                   Value
+                         Optimizer                                   KFAC
+                       Learning rate                                  0.05
+                    Kernel initializers                           Orthogonal
+                      Bias initializers                        Random normal
+    Standard deviations for local energy clipping                       5
+                    Number of walkers                                 1000
+                  MCMC burn-in steps                                  5000
+             Training iterations for C,N,O                            1000
+               Training iterations for N2                             5000
+            MCMC steps between updates                                 10
+
+        Table B.5:  List of settings for the preliminary optimization phase.
+
+
+
+                                          27

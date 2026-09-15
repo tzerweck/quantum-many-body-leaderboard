@@ -1,0 +1,1377 @@
+  SciPost Physics                                                                                 Submission
+
+
+         Scalable Imaginary Time Evolution with Neural Network
+                                              Quantum States
+
+                           Eimantas Ledinauskas1,2⋆ and Egidijus Anisimovas1
+
+                1 Institute of Theoretical Physics and Astronomy, Vilnius University
+                               Saul˙etekio al. 3, LT-10257, Vilnius, Lithuania
+    2 Baltic Institute of Advanced Technology, Pilies St. 16-8, LT-01403, Vilnius, Lithuania
+                                      ⋆ eimantas.ledinauskas@ff.stud.vu.lt
+
+                                               November 17, 2023
+
+
+Abstract
+
+The  representation  of  a  quantum  wave  function  as  a  neural  network  quantum  state
+(NQS) provides a powerful variational ansatz for finding the ground states of many-body
+quantum systems.  Nevertheless, due to the complex variational landscape, traditional
+methods often employ the computation of quantum geometric tensor, consequently com-
+plicating optimization techniques.  Contributing to efforts aiming to formulate alterna-
+tive methods, we introduce an approach that bypasses the computation of the metric ten-
+sor and instead relies exclusively on first-order gradient descent with Euclidean metric.
+This allows for the application of larger neural networks and the use of more standard
+optimization methods from other machine learning domains.  Our approach leverages
+the principle of imaginary time evolution by constructing a target wave function derived
+from the Schrödinger equation, and then training the neural network to approximate
+this target.  We make this method adaptive and stable by determining the optimal time
+step and keeping the target fixed until the energy of the NQS decreases. We demonstrate
+the benefits of our scheme via numerical experiments with 2D J1–J2  Heisenberg model,
+which showcase enhanced stability and energy accuracy in comparison to direct energy
+loss minimization.  Importantly, our approach displays competitiveness with the well-
+established density matrix renormalization group method and NQS optimization with
+stochastic reconfiguration.
+
+
+Contents
+
+1   Introduction                                                                                            2
+
+2   Proposed method for ground state search with NQS                                           4
+    2.1    Problem definition and notation                                                                  4
+    2.2    Imaginary time evolution with NQS                                                                   4
+    2.3    Loss function                                                                                                5
+    2.4    Adaptive imaginary time step                                                                             6
+    2.5    Relation between ITE loss and E loss                                                                   7
+    2.6    NQS training procedure                                                                            7
+
+3   Neural network quantum state                                                                            8
+    3.1    Neural network architecture                                                                   8
+    3.2    Sampling of basis states                                                                                  10
+
+
+                                                           1
+  SciPost Physics                                                                                 Submission
+
+
+
+    3.3    Implementation details                                                                                 10
+
+4   Numerical experiments                                                                         10
+    4.1    J1 - J2 Heisenberg model on a 2D square lattice                                            10
+    4.2    Hyperparameters                                                                          11
+    4.3    Comparison with E loss                                                                                     11
+    4.4    Benchmarking                                                                                   13
+
+5   Conclusions                                                                                            15
+
+A   Energy moments                                                                                         16
+
+B   Gradient of ITE loss                                                                                            16
+
+C   Relation between gradients of ITE loss and E loss                                              17
+
+References                                                                                                                      18
+
+
+
+
+1 Introduction
+
+The remarkable accomplishments in applying machine learning techniques to a wide range
+of practical [1–6    ] and curiosity-driven [7–9    ] tasks have prompted the adoption of innovative
+concepts and approaches in the field of physical sciences;  see e.g. Refs. [10–15     ] for recent
+physics-motivated reviews and tutorials.   In particular,  in the numerical study of quantum
+many-body systems [16] one promising line of development rests on the observation that,
+given a suitable many-body basis, a pure quantum-mechanical state can be represented by a
+multivariate function that assigns a complex number to a given basis element.  For a typical
+quantum state of interest, such a wave function is an overwhelmingly complex entity, as the
+amount of information needed to fully encode a state in this manner grows exponentially with
+the system size.  On the other hand, it is fitting to note that many classes of neural network
+architectures are recognized [17–21     ] as efficient function approximators:  an arbitrary well-
+behaved function can be represented with a desired accuracy given a sufficient number of
+parameters, i.e. a sufficient neural network width or depth. Note, however, that such universal
+approximation theorems [20] only establish that a representation of a given function is possible,
+without providing an explicit scheme to construct such a representation.
+     The idea to represent a quantum wave function as a neural network quantum state (NQS)
+[11,15,22–28               ], can be viewed as a very powerful variational ansatz that aligns well with the
+well-established variational Monte-Carlo (VMC) [29,30     ] techniques to search for the ground
+state.   In the general application framework,  the approach typically includes the following
+elements:  (I)  The  variational  wavefunction ψθ  is  parameterized  in  terms  of  the  network
+weightsθ, and the expectation value of the studied Hamiltonian H (the variational energy)
+E(θ) =〈ψθ|H|ψθ〉 is identified as the objective function to be minimized, i.e. the loss function.
+(II) Since a direct computation of E(θ) is not feasible due to prohibitively large configuration
+space, E(θ) is estimated as a stochastic average from a set of sampled configurations.  Note
+that sampling can be performed either relying on a Markov chain of configurations [22,31     ] or
+direct sampling from a neural network endowed with the autoregressive property [25,26,32         ].
+(III) Since the variational landscapes of NQS states are rugged and difficult to navigate in the
+search of the ground state (see, e.g., the study reported in Ref. [31]), the stochastic reconfig-
+
+                                                              2
+  SciPost Physics                                                                                 Submission
+
+
+
+uration (SR) method [33,34     ] is often used instead of some variant of direct gradient-based
+descent [35]. According to the geometric interpretation [36,37     ], the benefits provided by the
+SR method stem from the correct determination of the non-Euclidean manifold structure of
+the space of quantum states. Thus, the minimization direction suggested by the raw gradient,
+−∇θ E(θ), is less meaningful than the ’natural’ Riemannian gradient [37,38     ] corrected by the
+inverse of the local metric tensor G(θ).  The educated update of parameters is made along
+the direction of−G−1(θ)∇θ E(θ).  However, while using the metric tensor may improve the
+convergence, it comes with a substantial computational cost since the metric tensor is of the
+order Nθ×Nθ, where Nθ represents the number of NQS variational parameters. Consequently,
+determining and calculating the (pseudo)inverse of the metric tensor becomes computation-
+ally expensive [10] and results in poor scaling with the system size [39].  This issue imposes
+significant limitations on the practical size of neural networks that can be utilized.  The scal-
+ing of SR can be enhanced by employing iterative solvers that avoid forming or inverting the
+tensor (e.g.,  see the implementation of SR in NetKet [40,41     ]).   However,  this still adds a
+significant computational cost and also increases the numerical instability, which necessitates
+adding a small diagonal shift to stabilize the method, which, in turn, reduces the precision of
+the estimated metric.
+    An alternative approach emerged recently, in which energy is not minimized directly. Rather,
+a target wave function, more proximate to the ground state, is crafted by employing the approx-
+imate imaginary time evolution and the issue is reformulated into a conventional regression
+problem [42–44     ]. In the present paper, we focus on this alternative methodology, refining and
+integrating modifications to shape it into a novel scheme that enhances its performance and
+stability. Firstly, we employ the more natural overlap loss function instead of the mean square
+error loss function, as introduced in works concerned with the real-time evolution [45–47     ].
+Secondly,  we derive the expression for the adaptive optimal imaginary time step.   Thirdly,
+instead of updating the target wave function after each step, we fix the target for multiple
+steps to stabilize the learning process and establish criteria for determining when the target
+should be updated.  We also explore the relationship between our scheme and direct energy
+minimization, demonstrating that they become equivalent when the target wave function is
+updated after every time step. This may elucidate why utilizing energy as a loss function does
+not always work well and requires more sophisticated methods like SR. Our simulations in-
+dicate that, with our proposed optimization scheme, the NQS is able to avoid being trapped
+in the numerous saddle points of the optimization landscape, eliminating the need for met-
+ric tensor computations and operating effectively with solely first-order gradient descent. We
+validate the efficacy of this scheme by applying it to the two-dimensional J1–J2  Heisenberg
+model [48,49     ], demonstrating that the proposed approach is competitive with direct energy
+loss minimization using first-order gradients or SR, as well as with density-matrix renormal-
+ization (DMRG) [50,51     ].
+    Our paper is organized as follows. Section2provides an overview of the proposed scheme
+for ground-state search and describes the neural network optimization procedure.  While the
+process assumes that the state is represented by a neural network, it is versatile and can be
+used with diverse network architectures.  Thus, in Section3we describe the specific archi-
+tecture used in our work.  It is based on a multilayer perceptron (MLP) [52] coupled with a
+preprocessing step inspired by vision transformers [3,6   ]. The physical model used for testing,
+i.e. the two-dimensional spin- 12  J1–J2  model, and the results of numerical experiments are
+discussed in Section4. Finally, we conclude with a brief summarizing Section5. A number of
+technical derivations are included in Appendices.
+
+
+
+
+
+
+                                                         3
+  SciPost Physics                                                                                 Submission
+
+
+2 Proposed method for ground state search with NQS
+
+2.1Problem definition and notation
+The focus of our work is the ground-state search for many-particle quantum systems defined
+on a lattice.  More specifically, we study two-dimensional (2D) square lattices, however, the
+described methods can be straightforwardly generalized to other lattice geometries and di-
+mensionalities.  In such systems, the space of quantum states can be modeled as a Cartesian
+product of identical single-site state spacesH  =NNj=1H1, where N  is the number of lattice
+sites andH1 is the state space characterizing a single site.
+    We choose to work in the product basis|s〉 =NNj=1|sj〉, where|sj〉 corresponds to a basis
+vector ofH1 on the j-th site. These basis states can be indexed with N-tuples  s = (s1, ..., sN ),
+thus we can introduce the notation|s〉  =|s1, ..., sN〉.   For example, in the case of spin-1/2
+particles occupying lattice sites we can choose|sj〉∈{|↑〉,|↓〉}, where|↑〉 and|↓〉 are the
+eigenstates of the spin operator ˆSz. In this basis, the wave function is represented as a complex-
+valued vector                                    X
+                                       |ψ〉 =          ψs1,...,sNs|s1, ..., sN〉 .                                            (1)
+                                               s1,...,sN
+The dimension of the vector space spanned by the basis vectors|s1, ..., sN〉 grows exponentially
+with increasing system size and rather quickly it becomes impractical to numerically represent
+and manipulate the wave function directly as an array. To model such directly intractable sys-
+tems, Ref. [22] proposed using a neural network which maps basis vectors|s1, ..., sN〉 to the
+corresponding wave function amplitudesψs1,...,sN ; this representation has become known as
+the NQS. The overarching motivation stems from the observation that in spite of the expo-
+nential scaling of the number of basis elements, typical ground states of physically realizable
+Hamiltonians have a simplified internal structure [51] that should allow for representations in
+terms of a relatively small number of parameters.  On the other hand, neural networks excel
+precisely at the task of finding efficient representations of intricate data structures.
+
+2.2Imaginary time evolution with NQS
+
+Imaginary time evolution is a well-known method for extracting the ground state from an
+arbitrary initial ansatz that is not strictly orthogonal to the sought ground state. In the energy-
+eigenstate basis the time-dependent Schrödinger equation is solved by:
+                                                       X
+                                               |ψ〉 =       Ψj(t)|ej〉                                                     (2)
+                                                         j
+with
+                                               Ψj(t) = Ψj,0e−iEj t                                                       (3)
+
+where  Ej,|ej〉 are the  j-th eigenvalue and eigenvector pair of the Hamiltonian  ˆH  and the
+amplitudes Ψj,0 encode an arbitrary intial condition.  If we now substitute in the imaginary
+timeτ = it, then with increasingτ the solution is expressed as an exponentially decaying
+(rather than the usual oscillating) superposition of energy eigenstates.  The contributions of
+all the excited states decay exponentially relative to the ground state|e0〉:
+
+                                               |Ψj|
+                                               |Ψ0|∝ e−(Ej−E0)τ .                                                     (4)
+Thus, asτ→∞, any initial state with nonzero overlap with|e0〉 converges toward the ground
+state. It is important to note that with imaginary time the evolution becomes non-unitary and
+the norm of the wave function increases or decreases exponentially with time.
+
+                                                          4
+  SciPost Physics                                                                                 Submission
+
+
+
+    In Ref. [28], the authors demonstrate that real time evolution of a quantum system can
+be modeled with NQS by minimizing the error between the variational wave function and the
+target wave function which is obtained with discrete ODE solver:
+                                             |ψm+1〉− Φ∆t|ψm〉                                                   (5)
+
+
+where Φ∆t is the discrete ODE flow operator. Minimizing this error draws the variational wave
+function closer to the target, computed approximately from the Schrödinger equation, thereby
+simulating the temporal evolution of the NQS. A similar approach has also been applied to
+simulate imaginary time evolution [42–44     ].
+    In this work, we use the Euler method to compute the target wave function:
+
+                                            |ψT〉 =|ψ〉− ∆τ ˆH|ψ〉 ,                                                  (6)
+
+that is, the wave function that is reached from the current wave function by a single linearized
+imaginary time evolution step ∆τ.   We note that for Hamiltonians consisting of only local
+terms, the matrix Hss′ =〈s| ˆH|s′〉 is sparse, i.e., given some s′, only a small number of elements
+Hss′ are non-zero. This enables the efficient computation of the target wave function
+                                                               X
+                                      ψT (s) =ψ(s)− ∆τ              Hss′ψ(s′),                                          (7)
+                                                                s′
+
+from the current state of the neural network. We perform a single time step to obtain a target
+and then train the variational NQS. Performing a second time step is not practical for large
+systems, as it would necessitate an additional application of the Hamiltonian to the resulting
+target wave function. This would change the copmutational complexity scaling from linear to
+quadratic with respect to system size (as similarly described in Eq.18).
+    As NQS cannot perfectly fit the target function, the resulting evolution is inherently noisy.
+Nevertheless, Ref. [43] has established a convergence guarantee for this type of evolution.
+
+2.3Loss function
+
+Multiple different loss functions can be used to maximize the consistency between the current
+wave function,|ψ〉, and the target wave function,|ψT〉. We experimented with several variants
+and found that the following loss function based on overlap works well in practice:
+                                                       |〈ψ|ψT〉|2
+                                         L =− log      〈ψ|ψ〉〈ψT|ψT〉                                               (8)
+
+where|ψ〉 denotes the NQS to be optimized and|ψT〉 denotes the target constructed by Eq. (6).
+This kind of overlap loss function has been employed in previous studies within the context of
+real-time evolution (e.g. [45–47     ]).  In the subsequent text, we will refer to this loss together
+with the target|ψT〉 as the ITE loss.  The gradient of ITE loss with respect to the variational
+NQS parametersθ can be estimated by using the following expression (derivation is presented
+in the appendix, Sec.B):
+                            ›∂                  •                  ›ψT (s)                    •
+               ∂ L                                                             ∂                 
+               ∂θ  = 2ℜ         ∂θ logψ∗(s)            ‹ψT (s)¶       ψ(s)    ∂θ logψ∗(s)         .              (9)
+                                                   s−       1ψ(s) s                              s
+
+The averages appearing in this equation can be estimated by sampling states, s, according toP
+the probability distribution,|ψ(s)|2, and then utilizing〈f (s)〉s≈  1N                   s j f (s j), where s j repre-
+sents individual states from a finite sample. During optimization Eq. (9) can be used directly
+
+                                                          5
+  SciPost Physics                                                                                 Submission
+
+
+
+without actually computing the loss. The gradients of NQS ∂∂θ logψ∗(s) can be calculated by
+utilizing the automatic differentiation provided by deep learning libraries.
+    The intuition behind the approach can be explained as follows:  The ITE loss pushes for
+an alignment between the current wave function|ψ〉 and the target|ψT〉. On the other hand,
+the two states are related by an imaginary time step, hence, in the target|ψT〉 all components
+spanned by low-energy eigenstates are exponentially amplified, and all components spanned
+by high-energy eigenstates are exponentially suppressed.  Now, since the target is kept fixed
+for a number of optimization steps, the update of the weights of the neural network encoding
+the current state|ψ〉 will effectively drive towards the minimization of the state energy, i.e.,
+towards the ground state.
+
+2.4Adaptive imaginary time step
+In the case of the Euler’s method, Eq. (6) can be used to obtain the following relation between
+the average energy of the target wave function and imaginary time step, ∆τ:
+
+                            〈ET〉 =〈ψT| ˆH|ψT〉〈ψT|ψT〉   =〈E〉− 2∆τ〈E2〉 + ∆τ2〈E3〉1− 2∆τ〈E〉 + ∆τ2〈E2〉                              (10)
+
+
+where〈En〉 =〈ψ| ˆHn|ψ〉/〈ψ|ψ〉. Setting∂∆τ〈ET〉 = 0 one obtains a quadratic equation which
+is solved by:
+                                             ∆τ = B±pB2 + 4Aσ2
+                                                              2A                                                           (11)
+where A =〈E2〉2−〈E〉〈E3〉,  B  =〈E〉〈E2〉−〈E3〉,  andσ2  =〈E2〉−〈E〉2.   We use Eq. (11)
+to find the optimal time step which minimizes the energy of the target wave function.  This
+significantly accelerates the convergence to the ground state.  The energy averages required
+in Eq. (10), similar to the averages appearing in Eq. (9), can be estimated by sampling basis
+states s according to the probability distribution,|ψ(s)|2, and using the following equations:
+
+                                           〈E〉 =〈Hloc(s)〉s ,                                                           (12)
+                                         〈E2〉 =
+|Hloc(s)|2s ,                                                       (13)
+                                         〈E3〉 =
+H∗loc(s) H2loc (s)s                                            (14)
+
+where Hloc is defined by:                              X
+                                          Hloc(s) =         ψ(s′)
+
+                                                        s′  ψ(s)〈s| ˆH|s′〉                                            (15)
+
+and H2loc is defined analogously but using  ˆH2 instead of  ˆH.  These expressions are widely
+known but for the sake of completeness, the derivations are presented in AppendixA. The
+computation of Hloc is efficient because in systems with local interactions (e.g. between near-
+est neighbors), the Hamiltonians are represented by highly sparse matrices, and only a small
+fraction of the terms in the sum need to be calculated.
+    In the case of local interactions the computational complexity of Hloc scales linearly with
+system size and for H2loc it scales quadratically because it requires computing nested sums
+of matrix elements:
+                                                X   ψ(s ′)   X
+                                  H2loc(s) =         ψ(s)        Hs s ′′Hs ′′ s ′                                            (16)
+                                                 s ′          s ′′
+                                                       X          X
+                                             =    1ψ(s)     Hs s ′′    ψ(s ′)Hs ′′ s ′                                    (17)
+                                                        s ′′        s ′
+
+
+                                                           6
+  SciPost Physics                                                                                 Submission
+
+
+
+where Hs s ′ =〈s| ˆH|s ′〉. This means that the computation of〈E3〉 quickly becomes impractical
+with increasing system size.  However, by experimenting we found that the following expres-
+sion gives sufficient accuracy for the optimal time step calculation even though it is not strictly
+correct:
+                                        〈E3〉≈
+Hloc(s)|Hloc(s)|2s .                                            (18)
+    Consequently, with this approximation, the computational complexity of all required en-
+ergy moments for our method scales linearly with the system size.
+
+2.5Relation between ITE loss and E loss
+
+In many standard applications of NQS for the ground state search it is performed by directly
+utilizing the energy as the loss function.  In that case, the gradient of the loss with respect to
+variational parameters is given by:
+              ∂ LE          §›                            •                  ›∂                 •“
+               ∂θ   = 2ℜ        Hloc(s) ∂∂θ logψ∗(s)                           ∂θ logψ∗(s)            .           (19)
+                                                            s−〈Hloc(s)〉s                          s
+In this work, we refer to LE as E loss.  By plugging the expression for|ψT〉 from Eq. (7) into
+Eq. (8) it can be shown that ITE loss with Euler step target becomes proportional to E loss (for
+derivation see AppendixC):
+                                            ∂ L                   ∂ LE
+                                            ∂θ  =     ∆τ1− ∆τ〈E〉   ∂θ  .                                                (20)
+So it would appear that ITE loss does not offer any advantages and it should perform more
+or less the same as E loss.  However, it is only so in the case when the target wave function
+|ψT〉 is updated after every optimizer step.  If instead it is held fixed for more than one step,
+Eq. (20) does not apply.
+    The relationship presented in Eq. (20) suggests an explanation for the poor performance
+of first-order gradient descent methods within the context of NQS ground state search. Using
+E loss is equivalent to fitting a constantly shifting target described by Eq. (7).  This perpetu-
+ally changing target can destabilize stochastic gradient descent. A similar problem also arises
+within the context of deep reinforcement learning.  For example, it is well established that
+using fixed targets significantly improves the performance of deep Q learning methods [53].
+Similarly, in this work, we also demonstrate in Sec.4.3that employing ITE loss with a fixed
+target can enhance stability and yield lower energy errors compared to E loss.
+
+2.6NQS training procedure
+
+As described in Sec.2.5,  computing    |ψT〉 with the latest NQS parameters every optimizer
+step would make ITE loss equivalent to E loss up to a learning-rate multiplier.  There are two
+simple methods to slow down the shift of the target:  1) using a duplicate neural network
+with weights given by the moving average of the neural network that is optimized; 2) using a
+duplicate neural network with fixed weights that are repeatedly updated after a certain number
+of optimizer steps. Both of these methods are widely used in reinforcement learning literature
+within the context of action value function learning [54]. We chose to use the second method
+because in that case it is straightforward to utilize the optimal time step described in Sec.2.4
+and also because it is a more natural fit for evolution with discrete time steps.
+    We explored various approaches to control the update frequency of the fixed parameters
+and found that the following approach provides good consistency and efficiency. The target is
+fixed until the mean energy of the optimized NQS becomes smaller than〈E〉−σE where〈E〉
+is the energy of the fixed NQS andσE is the standard error of the mean-energy estimate.
+
+
+
+                                                         7
+ SciPost Physics                                                                                 Submission
+
+
+
+    In this paragraph, we provide a concise summary of the training procedure that simulates
+the imaginary time evolution.  Training is split into multiple epochs where each epoch corre-
+sponds to a single discrete time step ∆τ. At the start of each epoch the energy moments〈E〉,
+〈E2〉,〈E3〉 are estimated by sampling NE states according to the NQS with the latest parameters
+and utilizing Eqs. (12), (13), and (18). These estimates are then used to calculate the adaptive
+time step ∆τ that minimizes the expected energy of|ψT〉〉 given by Eq. (10).  The duplicate
+NQS that is used to compute the target wave function,|ψT〉, is updated only at the start of the
+epoch and is kept fixed until the next epoch.  Conceptually this can be understood as fixing
+|ψT〉 until the next epoch. During the epoch, the loss function, given by Eq. (8), is gradually
+minimized with stochastic gradient optimizer (ADAM [55] in our case) so the optimized NQS
+becomes increasingly similar to|ψT〉 and the energy decreases. The epoch is terminated once
+the energy becomes smaller than the threshold value described in the previous paragraph.
+Accurately estimating the energy with a large number of basis state samples can be compu-
+tationally expensive.  To address this, we reuse the samples used in gradient estimation and
+then apply a running average to the resulting energies, reducing the noise.  Please note that
+we employ this approximate scheme solely for energy estimation during the epoch to compare
+with the threshold.  The threshold itself is computed more accurately with a large number of
+samples NE, as described in the beginning of this paragraph.  A simplified pseudocode of the
+training algorithm is provided in Alg.1.
+
+Algorithm 1 NQS training with ITE loss
+  NQS← RANDOMINITIALIZATION()
+  for Nepochs do
+      〈E〉,〈E2〉,〈E3〉,σE←  ENERGYSTATISTICS(NQS)
+      ∆τ←  OPTIMALTIMESTEP(〈E〉,〈E2〉,〈E3〉)
+       Ethr←〈E〉−σE
+      NQSfixed←  COPY(NQS)
+      smcmc←  WARMUPMCMC(NQS)    ▷ initial batch of basis states for MCMC sampling
+      while〈E〉> Ethr do
+           sbatch, smcmc← SAMPLEMCMC(NQS, smcmc)
+           ψtarget←  COMPUTETARGET(NQSfixed, sbatch, ∆τ)
+           grad←  LOSSGRADIENT(NQS,ψtarget, sbatch)
+           NQS←  UPDATEPARAMETERS(NQS, grad)
+           〈E〉←  MOVINGAVERAGEENERGY(NQS, sbatch)
+      end while
+  end for
+
+    The optimization scheme we presented has similarities with the one described in Ref. [42].
+However, we employ a different loss function, utilize different criteria for epoch termination,
+and incorporate an adaptive time step, which significantly enhances the convergence rate.
+
+
+3 Neural network quantum state
+
+3.1Neural network architecture
+The existing literature on NQS encompasses a wide range of neural network architectures. For
+example, Ref. [56] used multilayer perceptrons (MLPs), Ref. [57] used convolutional neural
+networks (CNNs), Ref. [25] used recurrent neural networks (RNNs), and Ref. [27] used trans-
+formers. In this work, we chose to employ MLPs since our preliminary experiments indicated
+that they offer the best balance between the required computational resources, simplicity, and
+
+                                                       8
+  SciPost Physics                                                                                 Submission
+
+
+
+performance. We do not claim that MLPs are the best architecture for NQS and acknowledge
+that a more detailed analysis is required. However, in this work, our focus is on introducing a
+novel NQS training method rather than achieving the best possible performance in modeling
+a specific system.  The resulting architecture imposes minimal assumptions on the physical
+system, enabling its application to cases beyond the scope of this work. This includes diverse
+lattice patterns, different symmetries, and varying numbers of dimensions.
+    In the case of 2D spin lattice models the most straightforward way to encode the input
+basis states would be to apply the following map on lattice site states:|↑〉→−1 and|↓〉→ 1.
+The resulting matrix can be flattened and used as input for the first layer of MLP. However, we
+discovered that a better performance can be obtained by utilizing the encoding based on 2D
+patches that is used with vision transformers [3].  The matrix described above is divided into
+patches of size dp× dp, which are subsequently mapped to vectors of dimension denc using a
+linear transformation with trainable weights. The resulting vectors are concatenated and then
+used as input for the first layer of MLP. This kind of encoding has been demonstrated to be
+beneficial in image processing, not only with transformers but also with other architectures
+(e.g. [6]).
+    There are two general approaches for defining the output of the neural network within the
+context of NQS. The first approach is to simply output a complex number that corresponds
+to the amplitude of the non-normalized wave function (e.g. [22,31,58         ]).   The second ap-
+proach involves factorizing the wave function into conditional factors, akin to the chain rule
+of probabilities, and autoregressively generating these conditional wave functions as output
+(e.g. [25,26,32         ]).   In this work,  we opted to utilize the first approach.   Nevertheless,  our
+method could be applied using the second approach as well.
+    For the sake of simplicity, we maintain a constant number of neurons across all hidden
+layers of the MLP. The final layer of the model produces two output values. The first value rep-
+resents the log-amplitude of the wave function, while the second value represents the phase.
+Because only the fractions of different wave function elements have meaning, the output am-
+plitudes could grow indefinitely during training. To prevent that we follow Ref. [31] and utilize
+the following nonlinearity for the log-amplitude value:  f (x) = a tanh(x/a).  We set a = 20
+which allows to express amplitudes within the range of 17 orders of magnitude. For the phase
+value, we do not apply any nonlinearities and allow values outside the (0, 2π) range.  All of
+the variational parameters of the neural network are real.  The neural network’s architecture
+is illustrated in Fig.1.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                    Figure 1: Scheme of the NQS architecture used in this work.
+
+
+
+                                                         9
+ SciPost Physics                                                                                 Submission
+
+
+3.2Sampling of basis states
+As described in Sec.2.3and2.4, the estimation of the gradient and energy statistics requires
+sampling the basis states according to the probability distribution associated with the wave
+function, p(s) =|ψ(s)|2. Due to the high dimensionality of the problem and the fact that our
+NQS outputs unnormalized amplitudes, direct sampling is not feasible.  Instead, we employ
+Markov chain Monte Carlo (MCMC) sampling, specifically the Metropolis-Hastings algorithm
+[59,60     ], which has become a standard practice in the field of NQS.
+    Here we provide a brief overview of the algorithm specifically for a spin-lattice model with
+fixed magnetization. Starting basis state, s0, is sampled according to the uniform distribution.
+At the m-th step a new basis state candidate, s′m, is generated by randomly choosing a pair of
+neighbor sites in sm−1 and interchanging their spin states. This candidate is accepted by setting
+sm = s′m if u≤|ψ(s′)|2/|ψ(s)|2 where u∈ [0, 1] is a random uniform number.  If a candidate
+is not accepted, then the basis state is kept unchanged:  sm = sm−1.  The algorithm proceeds
+to randomly walk in the sample space and generates samples that eventually start to follow
+the probability distribution|ψ(s)|2. The initial samples may follow a different distribution. To
+address this, we incorporate a warm-up period lasting Nwarmup = 10d2lat steps, during which the
+generated samples are discarded. To reduce sample correlation, we selectively retain samples
+at a regular interval of Nskip = 4.
+    To enhance the efficiency of MCMC sampling, we parallelize the algorithm by initializing
+multiple random basis states and subsequently conducting independent MCMC random walks
+for each of them. We also perform the warm-up period only at the beginning of the epoch and
+then reuse the MCMC walker values from the last step as initial values for the current step.
+These two optimizations increase the training speed by orders of magnitude. In this work, we
+set the number of MCMC walkers equal to the batch size, Nb.  Consequently, we only need to
+evaluate the NQS Nskip times to generate a batch of basis states sufficient for a single optimizer
+step.
+
+3.3Implementation details
+
+The code was written in Python [61].  Numerically demanding parts were implemented by
+using JAX [62] package.  Neural network computation and training parts were implemented
+by using FLAX [63] and OPTAX [64] packages.  In this work, JAX was useful not only because
+of its automatic differentiation but also because of its just-in-time compilation and automatic
+vectorization (vmap).  With these capabilities, we could easily parallelize and optimize local
+energy computation and state sampling functions which led to significant computation time
+improvements.
+    For SR computations we used the implementation in NETKET [40,41     ]. For exact diagonal-
+ization (ED) and DMRG computations based on QUSPIN [65,66     ] and TENPY [67], we utilized
+the AMD Ryzen Threadripper 2990WX CPU. NQS training was conducted using the Nvidia
+RTX 4090 GPU.
+
+
+4 Numerical experiments
+
+4.1    J1 - J2 Heisenberg model on a 2D square lattice
+Let us now benchmark the performance of the proposed approach by treating a specific nu-
+merical example. For this purpose, we choose the two-dimensional J1–J2  Heisenberg model,
+
+
+
+
+
+                                                       10
+  SciPost Physics                                                                                 Submission
+
+
+
+defined by the Hamiltonian
+                                                X   ⃗Si·⃗Sj + J2  X    ⃗Si·⃗Sj,                                          (21)
+                                       H = J1
+                                                〈i j〉            〈〈i j〉〉
+
+with⃗Sj denoting the spin- 12 operators defined on the sites (indexed by j) of 2D dlat×dlat square
+lattice with periodic boundary conditions.  The model features competing antiferromagnetic
+interactions:  J1 > 0 act between the nearest-neighbor spin pairs (〈i j〉), and J2 ⩾ 0 couple
+the next-nearest neighboring pairs situated on the opposite ends of diagonals of the square
+plaquettes.  In the absence of the second term, these nearest-neighbor interactions stabilize
+the  Néel order  with  two opposite-magnetization  sublattices intertwined  in  a checkerboard
+pattern. In the opposite limit of dominant long-range interactions J2≫ J1, the model features
+a striped antiferromagnetic phase.  In the vicinity of the classical boundary J2/J1  = 0.5 the
+model is frustrated and the exact phase diagram is subject to an ongoing debate,  see e.g.
+Refs. [48,49,68         ] and references therein.
+    This particular model exhibits several symmetries:  1) translation along the x-axis and y-
+axis; 2) rotation by multiples of 90 degrees; 3) reflection about the x-axis, y-axis, and diagonal;
+4) spin inversion; 5) SU(2) spin rotation.  These symmetries can be leveraged to effectively
+reduce the dimensionality of the problem, as was done in many previous studies (e.g. [31,58     ]
+and references therein).  However, in this work we do not enforce the NQS to be invariant
+with respect to any of the aforementioned transformations.  By adopting this approach, we
+aim to demonstrate that when utilizing large neural networks, there is no need for specialized
+architectures tailored to specific systems.
+
+4.2Hyperparameters
+
+The values of various hyperparameters, defined in the text, are listed in Table1.  Unless ex-
+plicitly stated otherwise, these values were consistently applied across all our numerical ex-
+periments.
+    In all our numerical experiments, we optimize NQS using ADAM optimizer with first order
+gradient descent. The learning rate is adjusted using an exponential decay schedule, with the
+initial learning rateα0 and the final learning rateαf.
+    To identify suitable values for the neural network width (number of neurons per hidden
+layer) and depth (number of hidden layers), we conducted a small grid search.  We explored
+three width values (128, 256, 512) and varied the depth from 1 to 5. As a performance metric,
+we utilized the achieved energy error (relative to ED results) for a 6×6 lattice with J2/J1 = 0.5.
+The results are illustrated in Fig.2.  It is evident that, in general, accuracy tends to improve
+with an increase in the number of parameters in the network. This is expected, as larger neural
+networks possess the capacity to represent a broader subspace of all possible wave functions.
+In fact, the accuracy does not appear to plateau as the network width increases. It is likely that
+further improvement in accuracy can be achieved by increasing the network width even more.
+However, the depth does exhibit an optimal value, as the accuracy tends to decline when the
+depth exceeds 4. This is also expected since training deeper neural networks necessitates ad-
+ditional techniques such as residual connections [69] or specific initialization [70]. Based on
+these results, we employ a depth of 4 and a width of 512 in the subsequent numerical experi-
+ments, as this configuration demonstrated the best performance. This particular network has
+893994 variational parameters.
+
+4.3Comparison with E loss
+
+In this section,  we compare the training of NQS using our proposed method with a more
+standard approach that utilizes the energy as a loss function (with and without SR). In all cases,
+
+                                                         11
+  SciPost Physics                                                                                 Submission
+
+
+
+                                   Hyperparameter                                  symbol        value
+                                    Input patch size                                   dp           2
+                                 Patch encoding size                                  denc          8
+                                  Training batch size                                  Nb         256
+                                  Initial learning rate                                α0        10−3
+                                  Final learning rate                                  αf        10−5
+           Number of samples for energy statistics during training                      -         105
+                 Number of samples for final energy estimation                          -         106
+                          Total number of optimizer steps                               -       5· 105
+                                MCMC warm-up steps                                 Nwarmup       10d2lat
+                            MCMC sample skip interval                                Nskip          4
+
+                                     Table 1:  Hyperparameters table.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+     Figure 2: Energy error dependence on neural network width (number of neurons per
+     hidden layer) and depth (number of hidden layers) for NQS trained with ITE loss.
+     The lattice consists of 6× 6 sites, and J2/J1  = 0.5.  The variable N  represents the
+     number of lattice sites.
+
+
+we investigate the performance on 6× 6 lattice, while keeping all shared hyperparameters
+unchanged.   The only exceptions are for SR, where we employ vanilla stochastic gradient
+descent instead of ADAM and increase the learning rate by a factor of 10.  Due to the longer
+optimization time required for SR (which varies from 4 to 6 times due to the iterative solver
+used), we also reduce the total number of optimizer steps by a factor of 5, bringing it down to
+105. The energy error is calculated by comparing the achieved energy with ED results.
+    Figure3(a) shows three energy minimization curves for each loss, with each curve repre-
+senting different random initializations of the NQS variational parameters.  It is evident that
+training NQS with E loss and vanilla gradient is highly unstable since the minimization curves
+exhibit sudden jumps in energy and converge to significantly different energy values depend-
+ing on initialization. In contrast, with ITE loss there are no abrupt energy jumps and the final
+energy value has almost no dependence on the initial variational parameters.  Moreover, em-
+ploying the ITE loss consistently leads to a lower final energy for the NQS compared to the E
+loss approach.  This instability of training with E loss likely arises because it is equivalent to
+ITE loss with a constantly changing target (see Sec.2.5).
+    Figure3(b) depicts the energy error’s dependence on             J2/J1.  Given that the final energy
+
+
+                                                        12
+ SciPost Physics                                                                                 Submission
+
+
+
+with E loss exhibits significant variation from run to run, we conduct 5 runs for each J2/J1
+value and only plot the best result.  The figure clearly illustrates that our proposed method
+achieves superior accuracy compared to E loss with vanilla gradient not only in the vicinity
+of the maximum frustration point at J2/J1 = 0.5 but also over a wider parameter range. Our
+method also demonstrates competitiveness with SR, achieving slightly lower energy errors at
+some points and slightly higher errors at others. With all losses, a distinct trend is visible: the
+energy error reaches its maximum near J2/J1 = 0.5 and subsequently decreases as it moves
+further from this point. However, the trend is noisier in the case of E-loss due to the instability
+of convergence.
+    In terms of computational time, the proposed scheme generally takes approximately 30%
+- 50% longer in practice than training with E loss and vanilla gradient.  The primary reason
+for this increase is the additional energy estimation performed after each optimizer step to
+determine when to update the target wave function (see Sec.2.6).  The calculation of the
+loss function requires a similar amount of computation in both cases.  This is because energy
+estimation in E loss and target computation in ITE loss involves computing the same terms,
+namelyPs′ Hss′ψ(s′), which dominate the computational cost. Compared to SR, our proposed
+method took, on average, about 5 times less computational time per iteration.  However, SR
+iterations seem to be more effective in reducing energy, as the final energy accuracy achieved
+in similar computation times (despite SR having 5 times fewer iterations) is comparable.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+     Figure 3: (a) Energy minimization curves for NQS trained with E loss (blue) and ITE
+     loss (green). Each loss function has three curves, representing different random ini-
+     tializations of NQS variational parameters. J2/J1 = 0.5 for this analysis. (b) Energy
+     error dependence on J2/J1 for NQS trained with E loss (blue), ITE loss (green), and
+     E loss with SR (orange). Both figures are based on a lattice size of 6×6. The variable
+     N represents the number of lattice sites.
+
+
+4.4Benchmarking
+In this section, we benchmark NQS trained with our proposed method against the well-established
+DMRG method.  We do this by investigating the relationship between the predicted ground
+state energy and lattice size, specifically when exceeding the practical modeling limits of ED.
+Additionally, we compare some of our results with those achieved in other studies.
+    Figure4shows the predicted ground state energy dependence on lattice border length,
+while keeping J2/J1 = 0.5. Since the performance of DMRG strongly depends on the number
+of bond dimensions,χ, we present the data for two values: 128 and 1024. Regarding the NQS,
+we observed that extending the training duration significantly can lead to a slight improvement
+
+
+                                                        13
+ SciPost Physics                                                                                 Submission
+
+
+
+in the predicted energy.  As a result, we also present the data for NQS with 5· 106 optimizer
+steps, which is an order of magnitude higher than our default value.  This decrease in final
+energy becomes increasingly prominent with larger lattice sizes.
+    From the presented data, it is evident that NQS clearly outperforms DMRG withχ = 128.
+However, whenχ = 1024, the situation becomes more intricate. Both NQS and DMRG achieve
+practically the same energy as ED for the 4× 4 lattice.  For the 6× 6 and 8× 8 lattices, NQS
+slightly outperforms DMRG, but only when using the extended training time.  However, for
+larger lattice sizes beyond 8× 8, DMRG starts to outperform NQS, and the difference appears
+to grow with increasing lattice size. In the matrix product state used in DMRG, the number of
+variational parameters grows proportionally with the lattice size. On the other hand, for NQS,
+the number of variational parameters remains almost constant as it increases only in the first
+hidden layer of the network, which represents a small fraction of the total number of param-
+eters. This disparity in the scaling of variational parameters could provide an explanation for
+why DMRG eventually outperforms NQS with increasing lattice size.
+    Regarding the computational resources, it is hard to compare since we utilized CPU for
+DMRG and GPU for NQS. However, the actual time it took to compute the models was on a
+similar scale for DMRG withχ  = 1024 and NQS with 5· 106 optimizer steps (e.g.  about 20
+hours for 12× 12 lattice).
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+     Figure 4:  (a) Dependence of the variational ground state energy on lattice size for
+     NQS  (ITE  loss)  and  DMRG.  The  blue  and  green  lines  represent  NQS  trained  for
+     5· 105  and 5· 106  optimizer steps,  respectively.   The orange and red lines corre-
+     spond to DMRG with 128 and 1024 bond dimensions, respectively.  In this context,
+     J2/J1  = 0.5, N  denotes the number of spins, and ’lattice size’ refers to the border
+     length of a square-shaped 2D lattice.  (b) Same as (a), but with energy measured
+     relatively to the variational energy of DMRG with 1024 bond dimensions.
+
+    For J2/J1 = 0.5 and 6× 6 lattice, Ref. [31] identified an energy error limit that appears
+to be hard to overcome for NQS. Multiple other works [58,71,72         ],  including theirs,  have
+achieved energy errors comparable to 2· 10−3, despite using different NQS architectures and
+optimization procedures.  In Fig.3(b) one can see that our method also achieves a similar
+value at  J2/J1  =  0.5.   After increasing the total number of optimizer steps to 5· 106,  our
+method achieves 1.4· 10−3, which is still comparable.  Here we used neural networks with a
+substantially larger number of variational parameters than the mentioned studies and still were
+unable to significantly surpass the 2· 10−3 limit. This adds more evidence that the problem is
+related to the variational landscape rather than the representation power of neural networks.
+    Several studies have explored the J2− J1 model using NQS. In Table2, we present some
+of the best energies per site achieved with a J2/J1 = 0.5 on a 10× 10 lattice.  All the other
+
+
+                                                        14
+ SciPost Physics                                                                                 Submission
+
+
+
+studies mentioned utilized translation-invariant CNNs and incorporated various symmetries
+of the physical system.  In our study, we achieved competitive results with a straightforward
+and generic MLP architecture, even though we used gradient descent with Euclidean metric
+and did not explicitly integrate symmetries into NQS.
+
+                                             Method               E/N
+                                       CNN, REMD [73]           −0.4736
+                                         CNN, SR [58]           −0.4952
+                                         CNN, SR [74]           −0.4958
+                                       CNN, minSR [75]          −0.4976
+                                        MLP, ITE (ours)         −0.4894
+
+     Table  2:     Comparison  of  energy  estimates  with  NQS  for  10× 10  lattice  with
+     J2/J1 = 0.5.
+
+
+
+5 Conclusions
+
+In this study, we proposed and analyzed an adaptive scheme for searching the ground state
+with NQS, built upon the principle of imaginary time evolution. In this method, we construct
+the target wave function by combining the current wave function with the discretized flow ob-
+tained from the Schrödinger equation with imaginary time. Subsequently, we train the neural
+network to approximate this target wave function. Through repeated iterations of this process,
+the state approximated by the neural network converges to the ground state. We employ a loss
+function based on the overlap of wave functions, utilize an adaptive, optimal imaginary time
+step and also fix the target wave function for multiple time steps, until a decrease in energy
+is observed.  Differently from the commonly used SR approach, our method uses the vanilla
+gradient with Euclidean metric.
+    In our exploration of the relationship between our proposed scheme and the direct mini-
+mization of energy, we uncovered a potential explanation for the unstable convergence often
+observed when employing energy as a loss function. Using the energy loss is equivalent to our
+method but with a target that changes after every optimizer step.  The instability might arise
+due to a constantly shifting target. In our approach, this issue is addressed by fixing the target
+for some number of optimizer steps, resulting in a more stable training process.
+    Our investigation included numerical experiments with the J1–J2 Heisenberg model on a
+2D square lattice, providing compelling evidence that our method offers higher stability and
+final energy accuracy than the optimization of NQS with energy as a loss function. Moreover,
+it showcases competitiveness with the well-established DMRG method and NQS optimization
+with SR.
+    We emphasize that our numerical experiments were performed without leveraging the
+symmetries of the physical system, which significantly increases the difficulty of the problem.
+Yet by utilizing neural networks with a large number of parameters compared to the commonly
+used values in this research area, we managed to achieve comparable accuracy to the results
+reported in works that do exploit symmetries and use specialized neural network architec-
+tures. This highlights the primary advantage of our proposed method: the capability to utilize
+large neural networks and apply standard optimization methods from other areas of machine
+learning.
+
+
+
+
+                                                       15
+  SciPost Physics                                                                                 Submission
+
+
+Acknowledgements
+
+The authors express their gratitude to Julius Ruseckas and Art¯uras Acus for discussions that
+prompted new insights.   Furthermore,  the authors extend their thanks to Marin Bukov for
+valuable correspondence regarding QUSPIN, and to Giuseppe Carleo for useful comments.
+
+Funding information    This work was performed under the "Universities’ Excellence Initia-
+tive" programme.
+
+
+A Energy moments
+
+First, we show that the mean value corresponding to any operator,  ˆA, is equal to the mean of
+its local value Aloc(s) :=P       ψ(s ′)
+                               s ′ψ(s) As s ′:
+                                              X    X
+                         〈A〉 =〈ψ|ˆA|ψ〉 =               ψ∗(s)ψ(s ′)As s ′
+                                                s   s ′            ﬁX                  ‚
+                                X                  ψ(s ′)                 ψ(s ′)                              (22)
+                              =      |ψ(s)|2X       ψ(s) As s ′ =          ψ(s) As s ′
+                                  s             s ′                    s ′               s
+                              =〈Aloc(s)〉s .
+
+By substituting ˆA =  ˆH, we obtain Eq. (12).
+    Now we show that the mean value corresponding to the product of any two operators,  ˆA
+and ˆB, can also be computed with their local values:
+                                     XX
+                           〈ˆAˆB〉 =          ψ∗(s ′)ψ(s ′′)(AB)s ′ s ′′
+                                     Xs ′Xs ′′                X
+                                  =          ψ∗(s ′)ψ(s ′′)        As ′ s ˆBs s ′′
+                                      s ′ s ′′                  s
+                                     X                 ψ∗(s ′)       X    ψ(s ′′)                             (23)
+                                  =      |ψ(s)|2X       ψ∗(s) As ′ s       ψ(s)  ˆBs s ′′
+                                     Xs             s ′               s ′′
+                                  =      |ψ(s)|2A∗loc(s)Bloc(s)
+                                      s
+                                  =〈A∗loc(s)Bloc(s)〉 .
+
+    By substituting  ˆA =  ˆB =  ˆH, we obtain Eq. (13).  By susbstituting       ˆA =  ˆH and  ˆB =  ˆH2 we
+obtain Eq. (14).
+    In both derivations, we made the simplifying assumption of a normalized state,|ψ〉. How-
+ever, it is clear that the same steps can be performed without this assumption, resulting in
+identical final expressions.
+
+
+B Gradient of ITE loss
+
+First we split the gradient into two terms:
+
+               ∂ L
+               ∂θ  =− ∂∂θ log |〈ψ|ψT〉|2〈ψ|ψ〉〈ψT|ψT〉 = ∂∂θ log〈ψ|ψ〉− ∂∂θ log|〈ψ|ψT〉|2 ,            (24)
+
+
+
+                                                        16
+ SciPost Physics                                                                                 Submission
+
+
+
+then calculate each term separately:
+                                   § ∂                “
+    − ∂∂θ log|〈ψ|ψT〉|2 =−2ℜ          ∂θ log〈ψ|ψT〉
+                                                  1       X
+                           =−2ℜ      P                         ψT (s) ∂∂θψ∗(s)
+                                 (      s ′ψ∗(s ′)ψT (s ′)  s                                 )
+                                              1           X                     ∂                   (25)
+                          − 2ℜ     P                          |ψ(s)|2ψT (s)ψ(s)∂θ logψ∗(s)
+                                      s ′|ψ(s ′)|2·ψT (s ′)ψ(s ′)s
+                                             ›ψT (s)                  •
+                                       1                ∂               
+                          − 2ℜ‹ψT (s)¶          ψ(s)   ∂θ logψ∗(s)       ,
+                                      ψ(s)  s                           s
+
+                       ∂                         ∂  X
+                      ∂θ log〈ψ|ψ〉 =     1〈ψ|ψ〉  ∂θ      ψ(s)ψ∗(s)
+                                                 1    sX
+
+                                     = 2ℜ     〈ψ|ψ〉       ψ(s) ∂∂θψ∗(s)
+                                                 1    Xs                                            (26)
+
+                                     = 2ℜ     〈ψ|ψ〉       |ψ(s)|2 ∂∂θ logψ∗(s)
+                                            §›∂        s       •“
+                                     = 2ℜ       ∂θ logψ∗(s)         .
+                                                                s
+Finally, putting these results back into Eq. (24), we obtain Eq. (9).
+
+
+C Relation between gradients of ITE loss and E loss
+
+The ratio between the target wave function [Eq. (7)   ] and the current wave function is related
+to the local value of the Hamiltonian:
+                                ψT (s)                     s ′  ˆHs s ′ψ(s ′)
+                                 ψ(s)  =ψ(s)− ∆τPXψ(s)
+                                         = 1− ∆τ        ψ(s ′)                                      (27)
+                                                     s ′ ψ(s)  ˆHs s ′
+                                         = 1− ∆τHloc(s) .
+
+By substituting this ratio into Eq. (9) we obtain Eq. (20):
+                       ›∂                •               ›ψT (s)                  •
+            ∂ L                                                     ∂                
+            ∂θ  = 2ℜ      ∂θ logψ∗(s)          ‹ψT (s)¶     ψ(s)   ∂θ logψ∗(s)       
+                                            s−       1ψ(s)                           s
+                       ¤›∂                      
+(1− ∆τHloc(s)) ∂s                  «
+                                         •
+                = 2ℜ                                                ∂θ logψ∗(s)s
+                           ∂θ logψ∗(s)     s−           〈1− ∆τHloc(s)〉s
+                       ¤ ∆τ
+Hloc(s) ∂                                               «               (28)
+                = 2ℜ                   ∂θ logψ∗(s)s− ∆τ〈E〉
+ ∂∂θ logψ∗(s)s
+                                    §›          1− ∆τ〈E〉      •         ›∂               •“
+
+                =      ∆τ1− ∆τ〈E〉2ℜ    Hloc(s) ∂∂θ logψ∗(s)               ∂θ logψ∗(s)
+                                                                s−〈E〉                      s
+                =      ∆τ       ∂ LE
+                   1− ∆τ〈E〉     ∂θ  .
+
+                                                   17
+  SciPost Physics                                                                                 Submission
+
+
+
+Here in the first line we used the result from Sec.B.
+
+
+References
+
+ [1]  Y.  LeCun,  Y.  Bengio  and  G.  Hinton,     Deep  learning,     Nature  521,  436  (2015),
+       doi:10.1038      /nature14539.
+
+ [2]  A. Vaswani, N. Shazeer, N. Parmar, J. Uszkoreit, L. Jones, A. N. Gomez, L. Kaiser and
+       I.  Polosukhin,    Attention  Is  All  You  Need,    arXiv  e-prints  arXiv:1706.03762  (2017),
+       doi:10.48550      /arXiv.1706.03762.
+
+ [3]  A. Dosovitskiy, L. Beyer, A. Kolesnikov, D. Weissenborn, X. Zhai, T. Unterthiner, M. De-
+       hghani,  M.  Minderer,  G.  Heigold,  S.  Gelly,  J.  Uszkoreit  and  N.  Houlsby,    An  Image
+       is  Worth  16x16  Words:   Transformers  for  Image  Recognition  at  Scale,    arXiv  e-prints
+       arXiv:2010.11929 (2020), doi:10.48550      /arXiv.2010.11929.
+
+ [4]  X. Liu, F. Zhang, Z. Hou, L. Mian, Z. Wang, J. Zhang and J. Tang, Self-supervised learning:
+       Generative or contrastive,   IEEE Transactions on Knowledge and Data Engineering 35,
+       857 (2021), doi:10.1109      /tkde.2021.3090866.
+
+ [5]  D. W. Otter, J. R. Medina and J. K. Kalita, A survey of the usages of deep learning for natural
+       language processing,  IEEE Transactions on Neural Networks and Learning Systems 32,
+       604 (2021), doi:10.1109      /tnnls.2020.2979670.
+
+ [6]  A.  Trockman  and  J.  Zico  Kolter,      Patches  Are  All  You  Need?,      arXiv  e-prints
+       arXiv:2201.09792 (2022), doi:10.48550      /arXiv.2201.09792.
+
+ [7]  D. Silver, A. Huang, C. J. Maddison, A. Guez, L. Sifre, G. van den Driessche, J. Schrit-
+       twieser,  I. Antonoglou,  V. Panneershelvam,  M. Lanctot,  S. Dieleman,  D. Grewe et al.,
+       Mastering the game of Go with deep neural networks and tree search,  Nature 529, 484
+       (2016), doi:10.1038      /nature16961.
+
+ [8]  D. Silver, T. Hubert, J. Schrittwieser, I. Antonoglou, M. Lai, A. Guez, M. Lanctot, L. Sifre,
+       D. Kumaran, T. Graepel, T. Lillicrap, K. Simonyan et al., A general reinforcement learning
+       algorithm that masters chess, shogi, and Go through self-play, Science 362, 1140 (2018),
+       doi:10.1126      /science.aar6404.
+
+ [9]  J.  Perolat,  B.  D.  Vylder,  D.  Hennes,  E.  Tarassov,  F.  Strub,  V.  de  Boer,  P.  Muller,  J.  T.
+       Connor,  N.  Burch,  T.  Anthony,  S.  McAleer,  R.  Elie  et  al.,     Mastering  the  game  of
+       stratego with model-free multiagent reinforcement learning,   Science 378,  990 (2022),
+       doi:10.1126      /science.add4679.
+
+[10]  P. Mehta, M. Bukov, C.-H. Wang, A. G. Day, C. Richardson, C. K. Fisher and D. J. Schwab,
+       A high-bias, low-variance introduction to machine learning for physicists,  Physics Reports
+       810, 1 (2019), doi:10.1016      /j.physrep.2019.03.001.
+
+[11]  G. Carleo, I. Cirac, K. Cranmer, L. Daudet, M. Schuld, N. Tishby, L. Vogt-Maranto and
+       L. Zdeborová, Machine learning and the physical sciences, Reviews of Modern Physics 91,
+       045002 (2019), doi:10.1103      /RevModPhys.91.045002.
+
+[12]  J. Carrasquilla, Machine learning for quantum matter, Advances in Physics: X 5, 1797528
+       (2020), doi:10.1080      /23746149.2020.1797528.
+
+
+
+                                                         18
+  SciPost Physics                                                                                 Submission
+
+
+
+[13]  J. Carrasquilla and G. Torlai,  How to use neural networks to investigate quantum many-
+       body physics, PRX Quantum 2, 040201 (2021), doi:10.1103      /PRXQuantum.2.040201.
+
+[14]  T.  Neupert,  M.  H.  Fischer,  E.  Greplova,  K.  Choo  and  M.  M.  Denner,     Introduc-
+       tion  to  Machine  Learning  for  the  Sciences,    arXiv  e-prints  arXiv:2102.04883  (2021),
+       doi:10.48550      /arXiv.2102.04883.
+
+[15]  A. Dawid,  J. Arnold,  B. Requena,  A. Gresch,  M. Płodzie´n,  K. Donatella,  K. A. Nicoli,
+       P.  Stornati,  R.  Koch,  M.  Büttner,  R.  Okuła,  G.  Muñoz-Gil  et  al.,   Modern  applications
+       of  machine  learning  in  quantum  sciences,    arXiv  e-prints  arXiv:2204.04198  (2022),
+       doi:10.48550      /arXiv.2204.04198.
+
+[16]  A. Avella and F. Mancini, eds., Strongly Correlated Systems: Numerical Methods, Springer
+       Berlin Heidelberg, doi:10.1007      /978-3-642-35106-8(2013).
+
+[17]  A. N. Kolmogorov,  On the representation of continuous functions of several variables as
+       superpositions of continuous functions of a smaller number of variables, Doklady Akademii
+       Nauk SSSR 114, 679 (1957).
+
+[18]  K. Hornik, M. Stinchcombe and H. White, Multilayer feedforward networks are universal
+       approximators, Neural networks 2, 269 (1989).
+
+[19]  G. Cybenko,  Approximation by superpositions of a sigmoidal function,  Mathematics of
+       Control, Signals, and Systems 5, 455 (1992), doi:10.1007      /bf02134016.
+
+[20]  R. DeVore,  B. Hanin and G. Petrova,   Neural Network Approximation,   arXiv e-prints
+       arXiv:2012.14501 (2020), doi:10.48550      /arXiv.2012.14501.
+
+[21]  M.  Blanchard  and  M.  Amine  Bennouna,     The  Representation  Power  of  Neural  Net-
+       works:  Breaking the Curse of Dimensionality,  arXiv e-prints arXiv:2012.05451 (2020),
+       doi:10.48550      /arXiv.2012.05451.
+
+[22]  G. Carleo and M. Troyer,  Solving the quantum many-body problem with artificial neural
+       networks, Science 355(6325), 602 (2017), doi:10.1126      /science.aag2302.
+
+[23]  G.  Carleo,  K.  Choo,  D.  Hofmann,  J.  E.  Smith,  T.  Westerhout,  F.  Alet,  E.  J.  Davis,
+       S.  Efthymiou,  I.  Glasser,  S.-H.  Lin,  M.  Mauri,  G.  Mazzola  et  al.,     NetKet:   A  ma-
+       chine learning toolkit for many-body quantum systems,  SoftwareX 10, 100311 (2019),
+       doi:10.1016      /j.softx.2019.100311.
+
+[24]  F.  Vicentini,  D.  Hofmann,  A.  Szabó,  D.  Wu,  C.  Roth,  C.  Giuliani,  G.  Pescia,  J.  Nys,
+       V.  Vargas-Calderón,  N.  Astrakhantsev  and  G.  Carleo,     Netket  3:   Machine  learning
+       toolbox  for  many-body  quantum  systems,     SciPost  Physics  Codebases  p.  7  (2022),
+       doi:10.21468      /SciPostPhysCodeb.7.
+
+[25]  M. Hibat-Allah, M. Ganahl, L. E. Hayward, R. G. Melko and J. Carrasquilla,  Recurrent
+       neural network wave functions, Physical Review Research 2, 023358 (2020).
+
+[26]  O. Sharir, Y. Levine, N. Wies, G. Carleo and A. Shashua, Deep autoregressive models for the
+       efficient variational simulation of many-body quantum systems,  Physical Review Letters
+       124, 020503 (2020), doi:10.1103      /PhysRevLett.124.020503.
+
+[27]  L.  L.  Viteritti,  R.  Rende  and  F.  Becca,    Transformer  Variational  Wave  Functions  for
+       Frustrated Quantum Spin Systems,   Physical Review Letters 130(23),  236401 (2023),
+       doi:10.1103      /PhysRevLett.130.236401.
+
+
+                                                         19
+  SciPost Physics                                                                                 Submission
+
+
+
+[28]  I. L. Gutiérrez and C. B. Mendl, Real time evolution with neural-network quantum states,
+       Quantum 6, 627 (2022), doi:10.22331      /q-2022-01-20-627.
+
+[29]  W.   M.   C.   Foulkes,    L.   Mitas,    R.   J.   Needs   and   G.   Rajagopal,         Quantum
+       Monte  Carlo  simulations  of  solids,      Reviews  of  Modern  Physics  73,   33  (2001),
+       doi:10.1103      /RevModPhys.73.33.
+
+[30]  F. Becca and S. Sorella,  Quantum Monte Carlo Approaches for Correlated Systems,  Cam-
+       bridge University Press, doi:10.1017      /9781316417041(2017).
+
+[31]  M. Bukov,  M. Schmitt and M. Dupont,   Learning the ground state of a non-stoquastic
+       quantum Hamiltonian in a rugged neural network landscape,   SciPost Physics 10,  147
+       (2021), doi:10.21468      /SciPostPhys.10.6.147.
+
+[32]  D. Luo, Z. Chen, K. Hu, Z. Zhao, V. M. Hur and B. K. Clark, Gauge-invariant and anyonic-
+       symmetric autoregressive neural network for quantum lattice models, Physical Review Re-
+       search 5, 013216 (2023), doi:10.1103      /PhysRevResearch.5.013216.
+
+[33]  S. Sorella,  Green function monte carlo with stochastic reconfiguration,  Physical Review
+       Letters 80, 4558 (1998), doi:10.1103      /PhysRevLett.80.4558.
+
+[34]  S. Sorella,  Generalized Lanczos algorithm for variational quantum Monte Carlo,  Physical
+       Review B 64, 024512 (2001), doi:10.1103      /PhysRevB.64.024512.
+
+[35]  S.  Ruder,    An  overview  of  gradient  descent  optimization  algorithms,    arXiv  e-prints
+       arXiv:1609.04747 (2016), doi:10.48550      /arXiv.1609.04747.
+
+[36]  C.-Y. Park and M. J. Kastoryano,  Geometry of learning neural quantum states,  Physical
+       Review Research 2, 023232 (2020), doi:10.1103      /PhysRevResearch.2.023232.
+
+[37]  S. Amari,  Natural gradient works efficiently in learning,  Neural Computation 10, 251
+       (1998), doi:10.1162      /089976698300017746.
+
+[38]  J. Stokes, J. Izaac, N. Killoran and G. Carleo,  Quantum natural gradient,  Quantum 4,
+       269 (2020), doi:10.22331      /q-2020-05-25-269.
+
+[39]  W. Zhang, X. Xu, Z. Wu, V. Balachandran and D. Poletti,   Ground state search by local
+       and sequential updates of neural network quantum states, Physical Review B 107, 165149
+       (2023), doi:10.1103      /PhysRevB.107.165149.
+
+[40]  G.  Carleo,  K.  Choo,  D.  Hofmann,  J.  E.  T.  Smith,  T.  Westerhout,  F.  Alet,  E.  J.  Davis,
+       S.  Efthymiou,  I.  Glasser,  S.-H.  Lin,  M.  Mauri,  G.  Mazzola  et  al.,     Netket:   A  ma-
+       chine learning toolkit for many-body quantum systems,   SoftwareX p. 100311 (2019),
+       doi:10.1016      /j.softx.2019.100311.
+
+[41]  F.  Vicentini,  D.  Hofmann,  A.  Szabó,  D.  Wu,  C.  Roth,  C.  Giuliani,  G.  Pescia,  J.  Nys,
+       V.  Vargas-Calderón,  N.  Astrakhantsev  and  G.  Carleo,    NetKet  3:   Machine  Learning
+       Toolbox  for  Many-Body  Quantum  Systems,    SciPost  Physics  Codebases  p.  7  (2022),
+       doi:10.21468      /SciPostPhysCodeb.7.
+
+[42]  D. Kochkov and B. K. Clark, Variational optimization in the AI era: Computational Graph
+       States  and  Supervised  Wave-function  Optimization,    arXiv  e-prints  arXiv:1811.12423
+       (2018), doi:10.48550      /arXiv.1811.12423.
+
+[43]  C.  Giuliani,  F.  Vicentini,  R.  Rossi  and  G.  Carleo,    Learning  ground  states  of  gapped
+       quantum Hamiltonians with Kernel Methods,   arXiv e-prints arXiv:2303.08902 (2023),
+       doi:10.48550      /arXiv.2303.08902.
+
+                                                         20
+  SciPost Physics                                                                                 Submission
+
+
+
+[44]  H. Atanasova, L. Bernheimer and G. Cohen, Stochastic representation of many-body quan-
+       tum states, Nature Communications 14, 3601 (2023), doi:10.1038      /s41467-023-39244-
+       4.
+
+[45]  B.   Jónsson,   B.   Bauer   and   G.   Carleo,        Neural-network   states   for   the   classi-
+       cal  simulation  of  quantum  computing,      arXiv  e-prints  arXiv:1808.05232  (2018),
+       doi:10.48550      /arXiv.1808.05232.
+
+[46]  M.  Medvidovi´c  and  G.  Carleo,      Classical  variational  simulation  of  the  Quantum
+       Approximate  Optimization  Algorithm,      npj  Quantum  Information  7,   101  (2021),
+       doi:10.1038      /s41534-021-00440-z.
+
+[47]  A. Sinibaldi, C. Giuliani, G. Carleo and F. Vicentini, Unbiasing time-dependent Variational
+       Monte Carlo by projected quantum evolution,   arXiv e-prints arXiv:2305.14294 (2023),
+       doi:10.48550      /arXiv.2305.14294.
+
+[48]  L. Wang and A. W. Sandvik,  Critical level crossings and gapless spin liquid in the square-
+       lattice spin-1/2 J1− J2 Heisenberg antiferromagnet, Physical Review Letters 121, 107202
+       (2018), doi:10.1103      /PhysRevLett.121.107202.
+
+[49]  F. Ferrari and F. Becca,  Gapless spin liquid and valence-bond solid in the J1-J2 Heisenberg
+       model on the square lattice:  Insights from singlet and triplet excitations,  Physical Review
+       B 102, 014417 (2020), doi:10.1103      /PhysRevB.102.014417.
+
+[50]  U. Schollwöck,   The density-matrix renormalization group in the age of matrix product
+       states, Annals of Physics 326(1), 96 (2011), doi:10.1016      /j.aop.2010.09.012.
+
+[51]  R. Orús,  Tensor networks for complex quantum systems,  Nature Reviews Physics 1, 538
+       (2019), doi:10.1038      /s42254-019-0086-7.
+
+[52]  I. Goodfellow,  Y. Bengio and A. Courville,   Deep learning,   MIT press,  http://www.
+       deeplearningbook.org (2016).
+
+[53]  V. Mnih, K. Kavukcuoglu, D. Silver, A. A. Rusu, J. Veness, M. G. Bellemare, A. Graves,
+       M. Riedmiller,  A. K. Fidjeland,  G. Ostrovski et al.,   Human-level control through deep
+       reinforcement learning, Nature 518, 529 (2015), doi:10.1038      /nature14236.
+
+[54]  K.  Arulkumaran,  M.  P.  Deisenroth,  M.  Brundage  and  A.  A.  Bharath,   Deep  reinforce-
+       ment  learning:   A  brief  survey,     IEEE  Signal  Processing  Magazine  34,  26  (2017),
+       doi:10.1109      /MSP.2017.2743240.
+
+[55]  D. P. Kingma and J. Ba,   Adam:  A Method for Stochastic Optimization,   arXiv e-prints
+       arXiv:1412.6980 (2014), doi:10.48550      /arXiv.1412.6980.
+
+[56]  H. Saito, Solving the Bose-Hubbard Model with Machine Learning, Journal of the Physical
+       Society of Japan 86, 093001 (2017), doi:10.7566      /JPSJ.86.093001.
+
+[57]  J. Stokes, J. R. Moreno, E. A. Pnevmatikakis and G. Carleo,  Phases of two-dimensional
+       spinless lattice fermions with first-quantized deep neural-network quantum states, Physical
+       Review B 102, 205122 (2020), doi:10.1103      /PhysRevB.102.205122.
+
+[58]  K.  Choo,  T.  Neupert  and  G.  Carleo,    Two-dimensional  frustrated  J1-J2  model  studied
+       with  neural  network  quantum  states,    Physical  Review  B  100(12),  125124  (2019),
+       doi:10.1103      /PhysRevB.100.125124.
+
+
+
+                                                         21
+  SciPost Physics                                                                                 Submission
+
+
+
+[59]  N. Metropolis, A. W. Rosenbluth, M. N. Rosenbluth, A. H. Teller and E. Teller,  Equation
+       of state calculations by fast computing machines, The Journal of Chemical Physics 21(6),
+       1087 (1953), doi:10.1063      /1.1699114.
+
+[60]  W. K. Hastings, Monte Carlo sampling methods using Markov chains and their applications,
+       Biometrika 57(1), 97 (1970), doi:10.1093      /biomet/57.1.97.
+
+[61]  G. Van Rossum and F. L. Drake,  Python 3 Reference Manual,  CreateSpace, Scotts Valley,
+       CA, ISBN 1441412697, doi:10.5555      /1593511(2009).
+
+[62]  J. Bradbury, R. Frostig, P. Hawkins, M. J. Johnson, C. Leary, D. Maclaurin, G. Necula,
+       A. Paszke, J. VanderPlas, S. Wanderman-Milne and Q. Zhang, JAX: composable transfor-
+       mations of Python+NumPy programs, http://github.com/google/jax (2018).
+
+[63]  J. Heek, A. Levskaya, A. Oliver, M. Ritter, B. Rondepierre, A. Steiner and M. van Zee,
+       Flax:  A neural network library and ecosystem for JAX, http://github.com/google/flax
+       (2023).
+
+[64]  I. Babuschkin, K. Baumli, A. Bell, S. Bhupatiraju, J. Bruce, P. Buchlovsky, D. Budden,
+       T. Cai, A. Clark, I. Danihelka, C. Fantacci, J. Godwin et al., The DeepMind JAX Ecosystem,
+       http://github.com/deepmind (2020).
+
+[65]  P. Weinberg and M. Bukov,  QuSpin:  a Python package for dynamics and exact diagonali-
+       sation of quantum many body systems. Part I: spin chains, SciPost Physics 2, 003 (2017),
+       doi:10.21468      /SciPostPhys.2.1.003.
+
+[66]  P. Weinberg and M. Bukov,  QuSpin:  a Python package for dynamics and exact diagonali-
+       sation of quantum many body systems. Part II: bosons, fermions and higher spins,  SciPost
+       Physics 7, 020 (2019), doi:10.21468      /SciPostPhys.7.2.020.
+
+[67]  J.  Hauschild  and  F.  Pollmann,      Efficient  numerical  simulations  with  Tensor  Net-
+       works:   Tensor  Network  Python  (TeNPy),    SciPost  Physics  Lecture  Notes  p.  5  (2018),
+       doi:10.21468      /SciPostPhysLectNotes.5, Code available from                https://github.com/tenpy/
+       tenpy.
+
+[68]  Y. Nomura and M. Imada, Dirac-type nodal spin liquid revealed by refined quantum many-
+       body solver using neural-network wave function, correlation ratio, and level spectroscopy,
+       Physical Review X 11, 031034 (2021), doi:10.1103      /PhysRevX.11.031034.
+
+[69]  K. He, X. Zhang, S. Ren and J. Sun, Deep Residual Learning for Image Recognition, arXiv
+       e-prints arXiv:1512.03385 (2015), doi:10.48550      /arXiv.1512.03385.
+
+[70]  L.  Xiao,   Y.  Bahri,   J.  Sohl-Dickstein,   S.  S.  Schoenholz  and  J.  Pennington,      Dy-
+       namical  Isometry  and  a  Mean  Field  Theory  of  CNNs:    How  to  Train  10,000-Layer
+       Vanilla  Convolutional  Neural  Networks,      arXiv  e-prints  arXiv:1806.05393  (2018),
+       doi:10.48550      /arXiv.1806.05393.
+
+[71]  F. Ferrari, F. Becca and J. Carrasquilla, Neural Gutzwiller-projected variational wave func-
+       tions, Physical Review B 100(12), 125131 (2019), doi:10.1103      /PhysRevB.100.125131.
+
+[72]  A. Szabó and C. Castelnovo, Neural network wave functions and the sign problem, Physical
+       Review Research 2, 033075 (2020), doi:10.1103      /PhysRevResearch.2.033075.
+
+[73]  X. Liang, W.-Y. Liu, P.-Z. Lin, G.-C. Guo, Y.-S. Zhang and L. He, Solving frustrated quantum
+       many-particle models with convolutional neural networks, Physical Review B 98, 104426
+       (2018), doi:10.1103      /PhysRevB.98.104426.
+
+                                                        22
+  SciPost Physics                                                                                 Submission
+
+
+
+[74]  M. Reh, M. Schmitt and M. Gärttner, Optimizing design choices for neural quantum states,
+       Physical Review B 107(19), 195115 (2023), doi:10.1103      /PhysRevB.107.195115.
+
+[75]  A. Chen and M. Heyl, Efficient optimization of deep neural quantum states toward machine
+       precision, arXiv e-prints arXiv:2302.01941 (2023), doi:10.48550      /arXiv.2302.01941.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                          23

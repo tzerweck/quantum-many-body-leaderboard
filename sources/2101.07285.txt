@@ -1,0 +1,613 @@
+                                   Scalable Neural Decoder for Topological Surface Codes
+
+                                                Kai  Meinerz,  Chae-Yeun  Park,  and  Simon  Trebst
+                                Institute for Theoretical Physics, University of Cologne, 50937 Cologne, Germany
+                                                                 (Dated: October 22, 2021)
+                    With the advent of noisy intermediate-scale quantum (NISQ) devices, practical quantum computing has seem-
+                 ingly come into reach.  However, to go beyond proof-of-principle calculations, the current processing architec-
+                 tures will need to scale up to larger quantum circuits which in turn will require fast and scalable algorithms
+                 for quantum error correction.  Here we present a neural network based decoder that, for a family of stabilizer
+                 codes subject to depolarizing noise and syndrome measurement errors, is scalable to tens of thousands of qubits
+                 (in contrast to other recent machine learning inspired decoders) and exhibits faster decoding times than the
+                 state-of-the-art union ﬁnd decoder for a wide range of error rates (down to 1%).  The key innovation is to au-
+                 todecode error syndromes on small scales by shifting a preprocessing window over the underlying code, akin
+                 to a convolutional neural network in pattern recognition approaches.  We show that such a preprocessing step
+                 allows to effectively reduce the error rate by up to two orders of magnitude in practical applications and, by
+                 detecting correlation effects, shifts the actual error threshold up to ﬁfteen percent higher than the threshold of
+                 conventional error correction algorithms such as union ﬁnd or minimum weight perfect matching, even in the
+                 presence of measurement errors.  An in-situ implementation of such machine learning-assisted quantum error
+                 correction will be a decisive step to push the entanglement frontier beyond the NISQ horizon.
+
+
+   Introduction.–    In quantum computing, recent years have                       decoder runs, for a surface code in a two-dimensional geom-
+seen   a   paradigm   shift   which   has   pivoted   experimental                 etry of linear sizeL, inO(L2 logL) time, often a signiﬁcant
+roadmaps from building devices of a few pristine qubits to-                        improvement over the MWPM approach (which, in the worst
+wards the realization of circuit architectures of 50-100 qubits                    case, scales cubic in the number of errors and thusO(L6) in
+but tolerating a signiﬁcant level of imperfections – the advent                    code distance).  However, its threshold value of∼ 0.129 for
+of  what  has  been  termed  noisy  intermediate-scale  quantum                    depolarizing noise [16] is lower than that of the MWPM al-
+(NISQ) technology [1]. This move has enabled a fundamental                         gorithm (∼  0.151 [14]).  The most efﬁcient conventional al-
+success in the recent demonstration that such a NISQ quan-                         gorithm is the recently developed UF decoder which runs in
+tum  processor  is  capable  of  exhibiting  a  true  ‘quantum  ad-                O(L2α(L2)), i.e.  almost linear in the number of qubits [20],
+vantage’ over classical computing resources [2].  One of the                       with  a  threshold∼  0.146  for  the  depolarizing  noise  model
+leading  NISQ  platforms  involves  arrays  of  superconducting                    (see below) [21].  In addition, the last two years have seen a
+charge qubits, so-called transmons [3], which by design are                        ﬂurry of activity to adopt machine learning (ML) techniques
+particular resilient with regard to charge ﬂuctuations.  How-                      to best the decoding times and threshold values of these ‘con-
+ever, building larger quantum circuits from transmons comes                        ventional’ algorithms [22–35].  As ML methods can be eas-
+with some intricate challenges [4, 5] and will eventually man-                     ily  parallelized  and  generally  offer  a  high  degree  of  adapt-
+date to incorporate quantum error correction (QEC) schemes                         ability,  one  might  easily  accept  their  potential,  but  the  ﬁrst
+[6]. Arguably the most promising approach here is the imple-                       practical ML-based decoders have typically delivered only on
+mentation of a surface code [7, 8], which exploits topological                     one of the two benchmarks – improving the error threshold
+properties of the system and, at the same time, remains exper-                     at the expense of scalability or the other way round, provid-
+imentally feasible [9, 10]. In practical settings, one downside                    ing good scalability but leading to error thresholds which are
+of realizing such surface code architectures is the relatively                     sometimes even below those of the conventional algorithms
+slow decoding time of current quantum error correction codes.                      outlined above [36].
+
+   The  decoding  step  in  quantum  error  correcting  codes  re-                    It  is  the  purpose  of  this  paper  to  introduce  a  powerful
+quires, at its core, a classical algorithm that efﬁciently infers                  two-step  decoding  algorithm  that  combines  neural  network
+the locations of errors from measured error syndromes [11].                        based  preprocessing  and  union-ﬁnd  decoding  to  simultane-
+The most widely adopted algorithm for this purpose is min-                         ously achieve (i) improved error thresholds for depolarizing
+imum weight perfect matching (MWPM) [12], an algorithm                             noise (even in the presence of syndrome measurement errors),
+which runs in polynomial time and is known to nearly achieve                       (ii) algorithmic scalability up to tens of thousands of qubits,
+the optimal threshold for the independent noise model [13, 14]                     and (iii) real-life wall-clock run times (i.e. the elapsed time
+(a characteristic which does not hold for more general noise                       passed to execute the decoding process) that, for a range of
+models, though).  One of the drawbacks of the MWPM algo-                           error rates, best even those of the bare union-ﬁnd algorithm,
+rithm, however, is that its implementations are often simply                       as summarized in Table I. Our main algorithmic idea can be
+too slow [15] even for the current generation of superconduct-                     described as a hierarchical approach [35] that employs an ML
+ing qubits.   To improve the algorithmic scaling and to push                       decoder to preprocess local error corrections and leave the un-
+error thresholds for more general noise situations, a number                       resolved longer-range errors to a conventional UF decoding.
+of alternative decoding approaches have been suggested,  of                        The  preprocessing  step  shifts  a  two-dimensional  subsystem
+which the most notable might be the renormalization group                          over  a  given  stabilizer  code  (akin  to  the  preprocessing  in  a
+(RG)  [16–18]  and  union-ﬁnd  (UF)  [19]  decoders.   The  RG                     convolutional neural network often employed in image pro-
+                                                                                                                                                               2
+
+                     depolarizing noise (L = 255)
+      algorithm            pth     tp=0.01   tp=0.05   tp=0.1   tp=0.1461
+    ML(7) + UF          0.167(0)    10.5      25.1      43.4       78.6
+    ML(5) + UF          0.162(5)     6.7      12.8      26.2       56.2
+     Lazy + UF          0.131(9)     6.9      20.7      51.1        —
+          UF            0.146(1)     8.4      22.5      44.9       92.8
+  ML(7) + MWPM          0.167(1)   ∼ 210     ∼ 530     ∼ 650      ∼ 980
+  ML(5) + MWPM          0.163(8)   ∼ 270     ∼ 510     ∼ 650      ∼ 970
+       MWPM             0.154(2)   ∼ 560     ∼ 840    ∼ 1100     ∼ 1300
+           depolarizing noise + syndrome errors (L = 31)
+      algorithm            pth      tp=0.01  tp=0.02   tp=0.03   tp=0.0378
+     ML(3) + UF         0.043(4)     12.1      13.5      15.4       17.8
+      Lazy + UF         0.031(3)     11.1      12.8      16.6        —             Figure  1.   Construction  of  the  input  data  and  neural  network.
+          UF            0.037(8)     11.5      13.4      15.7       18.9           A single qubit (cyan circle) is selected as the reference point of the
+ ML(3) + MWPM∗          0.044(5)     14.6      25.8      81.5       229            construction.  All syndromes in the immediate vicinity (red square)
+       MWPM             0.043(7)      211      239       273        294            are used as the input,  whereby measured syndromes (blue/yellow)
+Table I. Overview of results.  For a number of variants of our de-                 are assigned the value +1/-1 and not measured syndromes (grey) are
+coding algorithm we provide the error threshold pth  (2nd column)                  assigned value 0, respectively. Passing the input through the feed for-
+for depolarizing noise (upper panel) and additional syndrome mea-                  ward network results in the error probabilities of the initially selected
+surement errors (lower panel) where ancillary qubits for measuring                 qubit.
+
+syndromes are also subject to depolarizing noise,  as well as wall-
+clock time measurements (in milliseconds) of the decoding time for
+different error rates (averaged over 106 instances) for code distances             measurement errors.  For the latter, we use a phenomenologi-
+L = 255 andL = 31, respectively.  The bold-faced entries identify                  cal noise model where ancilla qubits for measuring syndromes
+the best performing algorithm when optimizing for error threshold or               are also subject to depolarizing noise but propagation of er-
+compute times. Comparisons are shown for the union-ﬁnd (UF) and                    rors between data and ancilla qubits is neglected.   We con-
+minimum  weight  perfect  matching  (MWPM)  decoders,  combined                    sider a standard setup,  where the toric code is deﬁned on a
+with either lazy [35] or machine learning (ML) assisted preprocess-                square lattice of sizeL×L and the stabilizer operators around
+ing using subsystems of size𝓁 = 3, 5 or 7 as indicated in brackets                 the vertices and plaquettes are given byXv  = ∏
+(see main text).  We have used a custom implementation for the UF                  Zp = ∏                                                          i∈vXi and
+decoder [37] and PyMatching [38] for the MWPM. In the presence                                i∈pZi.  The code space is then spanned by the basis
+of additional syndrome errors, the pure MWPM calculation was op-                   vectors{|ψ⟩  : Xv|ψ⟩  =  1∀v,Zp|ψ⟩  =  1∀p}, which, for
+timized by combining the Blossom and Dykstra algorithms and for                    periodic boundary conditions, is 4 dimensional (and thus en-
+the ML-assisted MWPM with precomputed shortest paths.  Details                     codes 2 qubits) and the distance of the code (i.e. the minimum
+of our CPU/GPU hardware setup are provided in the appendix Sec.                    length of a Pauli string that transforms one states in the code
+B.                                                                                 space to another state) isL. EachZ (X) error on a qubit (lo-
+                                                                                   cated on the edges of the lattice) ﬂips the value of the nearby
+                                                                                   Xv (Zp) operators.
+cessing) and decodes local errors in these subsystems.  After                         The decoding problem is then deﬁned as identifying the er-
+this  step,  the  system  still  exhibits  errors  that  require  longer           ror conﬁguration for a given syndrome, i.e. a given measure-
+range  corrections,  for  which  we  employ  a  conventional  UF                   ment of the outcomes of all stabilizersXv andZp.  To do so,
+decoder.   However,  since  the  preprocessing  reduces  the  ef-                  we employ a two-step hierarchical procedure. In the ﬁrst stage
+fective  error  rate  –  up  to  two  orders  of  magnitude  depend-               – the ML-assisted preprocessing – we aim to remove those er-
+ing on the original error rate – this second step is extremely                     rors that can be inferred from local syndromes.  To this end,
+performant as compared to, e.g., employing UF decoding to                          we  only  consider  qubits  directly  connected  to  so-called  de-
+the original unprocessed error instances. Extensive wall-clock                     fects (identiﬁed by an odd syndrome measurement Xv =−1
+time measurements of our approach (the true performance in-                        or Zp  =−1),  as they are the typical source of locally cor-
+dicator in many real-life applications) show that our algorithm                    rectable errors.  To infer which error is the most probable for
+outperforms the bare UF decoder in a noise regime from 1%                          a given qubit, our preprocessing step shifts through all qubits
+(in which one might want to operate quantum computing de-                          with a subsystem of size𝓁×𝓁 centered around an ‘examina-
+vices) up to the 10% regime where our ML-assisted approach                         tion qubit’ located at its center (see the setup in Fig. 1).  The
+is found to push the error threshold by some 15 percent above                      local inference task for each such examination qubit is then
+the value of the bare UF decoder.  Our approach bears some                         assigned to a neural network, whose details we discuss below.
+similarity to the ‘lazy UF decoder’ [35], which also employs                       The results of the inference are collected and the resulting cor-
+hierarchical decoding with a strictly local, hard decision pre-                    rections are applied in one shot at the end.  The result of this
+processing step and has been shown to substantially improve                        step is that a large number of local errors are decoded and only
+UF decoding for ultralow error rates below the per mil range.                      a small fraction of non-local errors, manifest on scales beyond
+   Hierarchical QEC.–    Throughout the paper, we apply our                        the range of our subsystem, remain.
+decoding algorithm to the toric code in the presence of depo-                         The second stage of our algorithm is to then process these
+larizing noise as well as a scenario with additional syndrome                      remaining non-local errors, which are left after updating the
+                                                                                                                                                             3
+
+syndromes  using  the  local  error  decoding  in  the  previous
+stage.   To do so,  we employ a conventional UF decoder on
+the remaining syndrome.  Doing so is signiﬁcantly more ef-
+ﬁcient than employing the UF decoder on the bare decoding
+problem (without the preprocessing), as we will see that the
+effective error rate for this UF decoding step is up to two or-
+ders of magnitude smaller than the original error rate (see the
+results section below).
+   Neural  decoder.–    At  the  heart  of  our  hierarchical  QEC
+approach  is  a  neural  network  that  decodes  error  syndromes
+within a local subsystem, as illustrated in Fig. 1. We train this
+neural network to output the most probable error (among the
+four possible{I,X,Y,Z} errors) of the central qubit given
+2𝓁2 nearby syndromes as an input (with the factor of 2 com-
+ing from the two types of X  and Z  measurements).  In ma-
+chine learning, this type of task is commonly known as mul-
+ticlass classiﬁcation problem and exceedingly well-studied in
+the context of supervised learning approaches (e.g. in image
+classiﬁcation).  To adopt such a supervised learning approach
+to optimize our neural network, we do training with a labeled
+dataset,  i.e. batches of error-syndrome pairs generated for a
+given error rate (and noise model), training separate networks                    Figure  2.    Error  threshold  and  scaling  behavior  for  the  con-
+for  each  error  rates.   In  doing  so,  we  use  the  error  of  each          ventional  union  ﬁnd  (UF)  algorithm  (upper  panel),  and  the  ma-
+qubit directly touching a defect (as in the inference step out-                   chine learning assisted union ﬁnd (ML+UF) algorithm (lower panel)
+lined  above)  as  a  label  and X, Z  syndromes  of  size 𝓁× 𝓁                   for  depolarizing  noise.   The  ML  assisted  algorithm  shifts  the  er-
+surrounding this qubit as input.  In practice, we train our net-                  ror threshold  by some 10%,  from perr  =  0.146(1)  for the  UF to
+works in 106 epochs, for which we create independent sets of                      perr = 0.162(5) for the ML+UF algorithm.
+512 error-syndrome batches ‘on the ﬂy’, which also reduces
+the chance of overﬁtting.
+   In designing the neural network architecture, we realize that                  and linear system sizes in the rangeL = 7,..., 127 we can
+there is an inherent trade-off between the two algorithmic lay-                   readily deduce the error threshold from the ﬁnite-size scaling
+ers of our hierarchical approach: If one opts for a small neural                  shown in Fig. 2. In comparison to the bare UF algorithm (top
+network, its computation time remains low but its accuracy in                     panel), which exhibits an error threshold ofpUFth   = 0.146(1),
+resolving local syndromes drops, resulting in more computa-                       our algorithm yields a 10% higher value of 0.162(5) (when
+tional load for the UF decoder on the higher algorithmic layer.                   we employ a 5× 5 subsystem) and an increase of more than
+If, on the other hand, one opts for a large neural network, its                   20% compared to the lazy UF decoder’s threshold of0.131(9)
+accuracy in resolving syndromes goes up at the cost of larger                     [39].   This  notable  increase  of  the  error  threshold  indicates
+compute times, while also alleviating the load of the higher-                     that our ML-assisted approach is capable of identifying and
+level UF decoder. Indeed, this trade off leads to a sweet spot,                   resolving correlated errors in the depolarizing noise,  which
+i.e.  an intermediate neural network size that results, e.g., in                  the bare UF decoder cannot handle.  The strength of the ML-
+minimal wall-clock run times or maximal error thresholds. To                      assisted decoder in the dense error regime can also be exem-
+identify an optimal conﬁguration, we have explored a multi-                       pliﬁed by the logical accuracy near the threshold plotted in
+tude of different network architectures for the case of depo-                     Fig. 3, which shows a higher logical accuracy for the ML+UF
+larizing  noise,  varying  the  size  of  the  subsystem,  the  depth             decoder in this regime, independent of system size.  It should
+of the network,  and the number of nodes per layer as main                        further be noted that our threshold values are higher than the
+parameters (as detailed in the appendix Sec.  A ). When opti-                     one of the bare RG decoder [16] withpRGth   = 0.153 and com-
+mizing for compute speed a 5× 5 subsystem turns out to be                         parable to those found for a combination of RG and sparse de-
+ideal, while pushing the error threshold one might want to go                     coders [18], or the best ML-based decoders using deep neural
+with a 7× 7 subsystem – see Table I. However, since the error                     networks, for which error thresholds ofpMLth ≈ 0.165 are re-
+threshold of the speed-optimized network is only 3% smaller                       ported [24, 30] for depolarizing noise.  However, our result is
+than the threshold-optimized network, we consider the 5× 5                        still signiﬁcantly below the optimal value ofpopt = 0.189(3),
+neural  network  approach  the  best  compromise  in  achieving                   inferred from a mapping [40] of the decoding problem to the
+fast decoding and high error thresholds for an algorithm that                     classical disordered eight-vertex Ising model.   Performing a
+also delivers on high scalability.                                                similar  analysis  for  the  scenario  of  depolarizing  noise  and
+   Benchmark  results.–    In  benchmarking  our  hierarchical                    syndrome  measurement  errors,  we  come  to  analogous  con-
+QEC algorithm, we start in the high-noise regime and calcu-                       clusions with a spread of the error threshold between pth  =
+late the error threshold of our approach.  Decoding 106  ran-                     0.031(3) for the lazy UF decoder and 0.044(5) obtained for
+dom instances of depolarizing noise for different error rates                     ML-assisted MWPM decoding (lower panel of Table I).
+                                                                                                                                                                   4
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 3. Logical accuracy of the conventional union ﬁnd (UF) de-
+coder and combined with lazy or ML-assisted preprocessing for de-
+polarizing noise.  The inset shows the case of additional syndrome
+measurement errors.  The ML+UF decoder increases the logical ac-
+curacy, independent of system size, for all error rates shown.
+
+
+   One measure to illustrate the inner workings of our hierar-                       Figure 5.   Algorithmic scaling of our hierarchical decoder for vari-
+chical approach is an ‘effective error rate’, i.e. the reduction of                  ous rates of depolarizing noise (top panel). The bottom panels show
+                                                                                     detailed comparisons with the bare UF decoder on a log-log scale.
+errors obtained after performing the ﬁrst step of our algorithm                      Shown in all panels is the average decoding time measured in wall
+– the  preprocessing using  a subsystem and  neural network-                         clock time averaged over 106 error instances.  The ‘kernel adjusted’
+based  local  decoding.   Shown  in  Fig.  4,  this  effective  error                time in the lower panels is the ML+UF decoding time subtracted by
+rate reveals that this preprocessing step is particularly power-                     a constant offset, to compensate kernel launch times (see main text).
+ful at low error rates, i.e. in the regime where few long-range
+errors occur. Here one can reduce the initial error rate by more
+than two orders of magnitude (see the right panel of Fig. 4),                        is  plotted  versus  the  linear  system  size  for  different  error
+thereby signiﬁcantly speeding up the subsequent UF decod-                            rates.  The top panel nicely demonstrates that, for large sys-
+ing step (as compared to a direct application to the original                        tem  sizes,  we  ﬁnd  near  linear  scaling  for  both  the  UF  and
+syndrome).                                                                           our  hierarchical  UF+ML  decoder,  independent  of  the  error
+   As such one might naively expect the biggest computing                            rate.  Note that our ML-assisted decoder easily scales up to
+gain  of  our  algorithm  in  the  low-noise  regime.   For  practi-                 2× 255× 255≈  130, 000 qubits where the decoding time
+cal implementations this is, however, not true as becomes ap-                        per instance is still a fraction of a second – this should be con-
+parent  when  performing  run  time  measurements  of  our  de-                      trasted to other ML-based decoders reported in the literature,
+coder.   Such  measurements  are  illustrated  in  Fig.  5  where                    which could not be scaled beyond a hundred qubits (see the
+the decoding time (again averaged over 106  error instances)                         overview in the appendix Table IV).
+                                                                                        If we look at the scaling of our algorithm for small to mod-
+                                                                                     erate system sizes (highlighted in the lower panels of Fig. 5),
+                                                                                     a breakdown of the linear scaling of the ML-assisted decoder
+                                                                                     becomes evident.  There is indeed a considerable ‘lag’ in the
+                                                                                     implementation  of  our  hierarchical  approach,  which  arises
+                                                                                     from  the  usage  of  an  external  GPU  to  perform  the  neural
+                                                                                     network-based preprocessing step (see appendix Sec.  B for
+                                                                                     hardware speciﬁcations). Doing so readily implies another in-
+                                                                                     herent trade off:  Initializing the neural network and loading
+                                                                                     the syndrome data to the GPU component has an almost con-
+                                                                                     stant overhead, which explains the plateau in our scaling plots
+                                                                                     for small system sizes where the advantage of fast GPU pro-
+Figure 4. Effective error reduction attained by the ML preprocess-                   cessing of the neural network is not compensating this over-
+ing step of our hierarchical algorithm. The left panel shows the effec-              head (as it is the case for large system sizes).  We have mea-
+tive error ratepeﬀ as a function of the original error probabilityperr,              sured  this  ‘kernel  start-up’  time  as  to  subtract  parts  of  this
+illustrating the effect of local decodings in the preprocessing step.                overhead  –  which  would  not  exist  in  a  dedicated  or  in-situ
+The effective error rate is calculated from the number of remaining                  device in a practical implementation of QEC in the lab – to
+syndromespeﬀ = ∑Si/( 43× 2× 2L2). The right panel shows the                          arrive  at  the  ‘kernel  adjusted’  scaling  curve  in  Fig.  5.   The
+ratio of the original error probability and the effective error rate.                crossing point at which the ML-assisted decoder outperforms
+                                                                                                                                                                        5
+
+the bare UF decoder in this setup comes down to code dis-                                  Acknowledgments.–    We   thank   M.   Kastoryano   and   T.
+tances ofL≈ 31, but we expect even smaller code distances                               Wagner  for  insightful  discussions,  as  well  as  O.  Higgott
+to beneﬁt from the ML-assisted approach when going for an                               for  comments  on  optimizing  the  PyMatching  results  for
+in-situ implementation [41], e.g. using FPGAs or TPUs [42].                             MWPM decoding the phenomenological noise model.   This
+   In summary, we have demonstrated that the combination of                             project was funded by the Deutsche Forschungsgemeinschaft
+machine-learning assisted preprocessing in conjunction with                             under Germany’s Excellence Strategy - Cluster of Excellence
+conventional  decoders  in  a  newly  devised  hierarchical  ap-                        Matter  and  Light  for  Quantum  Computing  (ML4Q)  EXC
+proach  results  in  a  vastly  scalable  algorithm.   Our  practical                   2004/1  -  390534769  and  within  the  CRC  network  TR  183
+implementation shows that one can increase logical accuracy                             (project grant 277101999) as part of project B01.
+and  push  the  error  threshold  by  resolving  correlated  errors,
+while also reducing the actual decoding times (to a few mil-
+liseconds in our hardware setup) particularly in the dense error                           Note  added.–    In  the  days  prior  to  submission  of  this
+regime.  As such our approach nicely complements the lazy                               manuscript  a  tensor  network  decoder  has  been  introduced
+UF decoder [35] which excels in the opposite regime of ul-                              [43],  for which  an error  threshold  for depolarizing  noise in
+tralow error rates.  Taken together, one might argue that one                           the toric code ofpth  = 0.1881(3) is reported, indistinguish-
+should always combine the UF decoder with some sort of pre-                             able within error bars from the upper bound inferred from a
+processing step – which one to go for depends on the expected                           mapping of the decoding problem to the classical disordered
+noise level and code distances.                                                         eight-vertex Ising model [40].
+
+
+
+
+
+ [1]J. Preskill,Quantum Computing in the NISQ era and beyond,                           [10]C. K. Andersen,  A. Remm,  S. Lazar,  S. Krinner,  N. Lacroix,
+      Quantum 2, 79 (2018).                                                                   G.  J.  Norris,  M.  Gabureac,  C.  Eichler,     and  A.  Wallraff,
+ [2]F.  Arute,  K.  Arya,  R.  Babbush,  D.  Bacon,  J.  C.  Bardin,                          Repeated  quantum  error  detection  in  a  surface  code, Nature
+      R. Barends, R. Biswas, S. Boixo, F. G. S. L. Brandao, D. A.                             Physics 16, 875 (2020).
+      Buell,  B.  Burkett,  Y.  Chen,  Z.  Chen,  B.  Chiaro,  R.  Collins,             [11]D. Gottesman,        Stabilizer codes and quantum error correction,
+      W.  Courtney,  A.  Dunsworth,  E.  Farhi,  B.  Foxen,  A.  Fowler,                      Ph.D. thesis, California Institute of Technology (1997).
+      C. Gidney, M. Giustina, R. Graff, K. Guerin, S. Habegger, M. P.                   [12]J.  Edmonds,Path,  Trees,  and  Flowers,Canadian  Journal  of
+      Harrigan,  M.  J.  Hartmann,  A.  Ho,  M.  Hoffmann,  T.  Huang,                        Mathematics 17, 449 (1965).
+      T.  S.  Humble,  S.  V.  Isakov,  E.  Jeffrey,  Z.  Jiang,  D.  Kafri,            [13]E. Dennis, A. Kitaev, A. Landahl,  and J. Preskill,Topological
+      K. Kechedzhi, J. Kelly, P. V. Klimov, S. Knysh, A. Korotkov,                            quantum memory, Journal of  Mathematical Physics   43, 4452
+      F. Kostritsa, D. Landhuis, M. Lindmark, E. Lucero, D. Lyakh,                            (2002).
+      S. Mandr`a, J. R. McClean, M. McEwen, A. Megrant,  X. Mi,                         [14]J. W. Harrington,        Analysis of quantum error-correcting codes:
+      K.  Michielsen,  M.  Mohseni,  J.  Mutus,  O.  Naaman,  M.  Nee-                        symplectic lattice codes and toric codes, Ph.D. thesis, Califor-
+      ley,  C.  Neill,  M.  Y.  Niu,  E.  Ostby,  A.  Petukhov,  J.  C.  Platt,               nia Institute of Technology (2004).
+      C. Quintana, E. G. Rieffel, P. Roushan, N. C. Rubin, D. Sank,                     [15]An impressive optimization of an MWPM implementation has
+      K.  J.  Satzinger,  V.  Smelyanskiy,  K.  J.  Sung,  M.  D.  Tre-                       recently been reported using a local variant of the matching de-
+      vithick,  A.  Vainsencher,  B.  Villalonga,  T.  White,  Z.  J.  Yao,                   coder [48] in form of the PyMatching package [38], which we
+      P. Yeh, A. Zalcman, H. Neven,   and J. M. Martinis,Quantum                              use for benchmarking purposes throughout this manuscript.
+      supremacy using a programmable superconducting processor,                         [16]G. Duclos-Cianci and D. Poulin,Fast decoders for topological
+      Nature 574, 505 (2019).                                                                 quantum codes,Phys. Rev. Lett.           104, 050504 (2010).
+ [3]J. Koch, T. M. Yu, J. Gambetta, A. A. Houck, D. I. Schuster,                        [17]G.  Duclos-Cianci  and  D.  Poulin,  in        2010  IEEE  Information
+      J.  Majer,  A.  Blais,  M.  H.  Devoret,  S.  M.  Girvin,   and  R.  J.                 Theory Workshop (2010) pp. 1–5.
+      Schoelkopf,Charge-insensitive qubit design derived from the                       [18]G. Duclos-Cianci and D. Poulin,Fault-Tolerant Renormaliza-
+      Cooper pair box,Phys. Rev. A        76, 042319 (2007).                                  tion Group Decoder for Abelian Topological Codes,Quantum
+ [4]D. Willsch, M. Nocon, F. Jin, H. De Raedt,  and K. Michielsen,                            Info. Comput. 14, 721 (2014).
+      Gate-error analysis in simulations of quantum computers with                      [19]N. Delfosse and N. H. Nickerson,Almost-linear time decoding
+      transmon qubits,Phys. Rev. A            96, 062302 (2017).                              algorithm for topological codes,(2017), arXiv:1709.06218.
+ [5]C. Berke, E. Varvelis, S. Trebst, A. Altland,  and D. P. DiVin-                     [20]The additional prefactor   α(L2) is the inverse of Ackermann’s
+      cenzo,Transmon platform for quantum computing challenged                                function whose value is< 3 for all practical purposes.
+      by chaotic ﬂuctuations,(2020), arXiv:2012.05923.                                  [21]It   has   been   claimed   that   parallelized   versions   of   the
+ [6]D. Gottesman,An introduction to quantum error correction and                              MWPM [50] or RG decoders [16] can achieve faster than lin-
+      fault-tolerant quantum computation,Proceedings of Symposia                              ear decoding time. However, algorithmic scaling of such par-
+      in Applied Matthematics 68, 13 (2010).                                                  allelized  algorithms  has  been  discussed  in  mostly  theoretical
+ [7]A. Y. Kitaev,Fault-tolerant quantum computation by anyons,                                terms and not demonstrated under realistic conditions yet (e.g.
+      Annals of Physics 303, 2  (2003).                                                       by measuring wall-clock times as done in this manuscript). In
+ [8]S. B. Bravyi and A. Y. Kitaev,Quantum codes on a lattice with                             particular, we believe that resolving data dependencies will re-
+      boundary,arXiv preprint quant-ph/9811052  (1998).                                       main a signiﬁcant bottleneck in any  practical implementation
+ [9]A. G. Fowler, M. Mariantoni, J. M. Martinis,   and A. N. Cle-                             of the proposed parallelized algorithms.
+      land,Surface  codes:   Towards  practical  large-scale  quantum                   [22]S. Varsamopoulos, B. Criger,  and K. Bertels,Decoding small
+      computation,Phys. Rev. A                      86, 032324 (2012).                        surface codes with feedforward neural networks,Quantum Sci-
+                                                                                                                                                                            6
+
+      ence and Technology 3, 015004 (2017).                                               [44]TensorFlow,https://github.com/tensorﬂow/tensorﬂow .
+[23]G.  Torlai  and  R.  G.  Melko,Neural  Decoder  for  Topological                      [45]H.  N.  Gabow,        Implementation  of  Algorithms  for  Maximum
+      Codes,Phys. Rev. Lett.            119, 030501 (2017).                                     Matching on Nonbipartite Graphs., Ph.D. thesis, Stanford Uni-
+[24]S. Krastanov and L. Jiang,Deep neural network probabilistic                                 versity (1974).
+      decoder for stabilizer codes,Scientiﬁc Reports           7, 11003 (2017).           [46]E. L. Lawler,        Combinatorial Optimization: Networks and Ma-
+[25]C. Chamberland and P. Ronagh,Deep neural decoders for near                                  troids (Holt, Rinehart, and Winston, 1976).
+      term fault-tolerant experiments,Quantum Science and Technol-                        [47]A. G. Fowler, A. C. Whiteside,  and L. C. Hollenberg,Towards
+      ogy 3, 044002 (2018).                                                                     practical classical processing for the surface code,Phys. Rev.
+[26]P. Baireuther, M. D. Caio, B. Criger, C. W. J. Beenakker,  and                              Lett. 108, 180501 (2012).
+      T.  E.  O’Brien,Neural  network  decoder  for  topological  color                   [48]O. Higgott and N. P. Breuckmann,Subsystem Codes with High
+      codes  with  circuit  level  noise,New  Journal  of  Physics           21,                Thresholds  by  Gauge  Fixing  and  Reduced  Qubit  Overhead,
+      013003 (2019).                                                                            Phys. Rev. X 11, 031039 (2021).
+[27]Y.-H. Liu and D. Poulin,Neural belief-propagation decoders for                        [49]N.  Delfosse  and  G.  Z       ´emor, Linear-time  maximum  likelihood
+      quantum error-correcting codes,Phys. Rev. Lett.           122, 200501                     decoding of surface codes over the quantum erasure channel,
+      (2019).                                                                                   Phys. Rev. Research 2, 033042 (2020).
+[28]P. Andreasson, J. Johansson, S. Liljestrand,   and M. Granath,                        [50]A.  G.  Fowler, Minimum  weight  perfect  matching  of  fault-
+      Quantum  error  correction  for  the  toric  code  using  deep  rein-                     tolerant topological quantum error correction in averageO(1)
+      forcement learning,Quantum               3, 183 (2019).                                   parallel time,Quantum Info. Comput.         15, 0145 (2015).
+[29]T. Wagner, H. Kampermann,   and D. Bruß,Symmetries for a
+      high-level neural decoder on the toric code,Phys. Rev. A          102,
+      042411 (2020).                                                                                            Appendix A: Neural Networks
+[30]D. Fitzek, M. Eliasson, A. F. Kockum,  and M. Granath,Deep
+      Q-learning  decoder  for  depolarizing  noise  on  the  toric  code,                   This  appendix  provides  a  detailed  overview  of  the  tested
+      Phys. Rev. Research 2, 023230 (2020).                                               network architectures to ﬁnd an optimal decoding setup, along
+[31]L.  Domingo  Colomer,  M.  Skotiniotis,   and  R.  Mu       ˜noz-Tapia,               with an expose of the hyperparameters used in the training of
+      Reinforcement  learning  for  optimal  error  correction  of  toric
+      codes,Physics Letters A           384, 126353 (2020).                               the neural network(s).
+[32]X. Ni,Neural Network Decoders for Large-Distance 2D Toric
+      Codes,Quantum            4, 310 (2020).
+[33]S.  Varona  and  M.  A.  Martin-Delgado,Determination  of  the                                                   Network Architecture
+      semion code threshold using neural decoders,Phys. Rev. A                102,
+      032411 (2020).                                                                         In order to optimize our hierarchical algorithm to simulta-
+[34]R. Sweke,  M. S. Kesselring,  E. P. L. van Nieuwenburg,   and                         neously achieve minimal wall-clock run times and high error
+      J.  Eisert,Reinforcement  learning  decoders  for  fault-tolerant                   thresholds, while remaining scalable, we have explored a mul-
+      quantum computation,Machine Learning:  Science and Tech-                            titude of different network architectures, varying the size of
+      nology 2, 025005 (2021).
+[35]N. Delfosse,Hierarchical decoding to reduce hardware require-                         the subsystem, the depth of the network, and the number of
+      ments for quantum computing,(2020), arXiv:2001.11427.                               nodes per layer as main parameters.  A systematic overview
+[36]We provide a snapshot of the current status of ML-based de-                           of some of the tested network architectures is provided in Ta-
+      coders in the appendix Sec. E , which provides detailed perfor-                     ble II below.
+      mance benchmarks and allows for direct comparisons of vari-
+      ous approaches.                                                                                     hidden    hidden          total parameters
+[37]C.-Y.  Park  and  K.  Meinerz,Open-source  C++  implementa-                                            layers    nodes     𝓁 = 3      𝓁 = 5      𝓁 = 7
+      tion  of  the  Union-Find  decoder, https://github.com/chaeyeun-
+      park/UnionFind .                                                                                        1        32       740       1764       3300
+[38]O.     Higgott     and     N.     P.     Breuckmann,PyMatching,                                           1        64       1476      3526       6596
+      https://pymatching.readthedocs.io/ .                                                                    1       128       2948      7044      13188
+[39]We found that one can slightly push the threshold value even                                              1       256       5892      14084     26372
+      further up (at the expense of additional compute time) by em-                                           2        32       1796      2820       4356
+      ploying a larger 7× 7 subsystem, which givespth = 0.167(0)                                              2        64       5636      7684      10756
+      (see also Table I). Going to even larger subsystems has not re-                                         2       128      19460      23556     29700
+      sulted in any further notable improvement of the threshold value                                        2       256      71684      79876     92164
+      in our measurements.                                                                                    3        32       2852      3876       5412
+[40]H. Bombin, R. S. Andrist, M. Ohzeki, H. G. Katzgraber,   and                                              3        64       9796      11844     14916
+      M. A. Martin-Delgado,Strong Resilience of Topological Codes                                             3       128      35972      40068     46212
+      to Depolarization,Phys. Rev. X                          2, 021004 (2012).                               3       256     137476     145668     157956
+[41]P.  Das,  C.  A.  Pattison,  S.  Manne,  D.  Carmean,  K.  Svore,
+      M.  Qureshi,    and  N.  Delfosse,A  Scalable  Decoder  Micro-                      Table II. Overview of neural network architectures tested to solely
+      architecture  for  Fault-Tolerant  Quantum  Computing,(2020),                       optimize the  wall-clock  run time  by varying  the size  of  the 𝓁×𝓁
+      arXiv:2001.06598.                                                                   subsystem (see Fig. 1 of the main text), the number of hidden layers,
+[42]N P. Jouppi et al., in       2017 ACM/IEEE 44th Annual International                  and nodes per layer. The optimal conﬁguration is highlighted in bold-
+      Symposium on Computer Architecture (ISCA) (2017) pp. 1–12.                          face. Note that when vying to solely maximizing the error threshold,
+[43]C.  T.  Chubb,General  tensor  network  decoding  of  2D  Pauli                       a different network architecture is singled out as ideal (see main text).
+      codes,(2021), arXiv:2101.04125.
+                                                                                                                                                                7
+
+                            depolarizing noise
+         𝓁 = 5 network parameters (optimal wall-clock time)
+                    hidden layers                         3
+              hidden nodes per layer                    128
+           total number free parameter                 40 068
+         activation functions hidden layer              Relu
+         activation functions output layer            Softmax
+         𝓁 = 7 network parameters (optimal error threshold)
+                    hidden layers                         5
+              hidden nodes per layer                    512
+           total number free parameter               1 103 364
+         activation functions hidden layer              Relu                        Figure 6.  Three-dimensional subsystem.  For the augmented noise
+         activation functions output layer            Softmax                       model  where  we  pair  depolarizing  noise  with  syndrome  measure-
+                                                                                    ment  errors  we  apply  an  octahedral  subsystem  in  lieu  of  the  two-
+         depolarizing noise + syndrome measurement errors                           dimensional setting described in Fig. 1 of the main text.
+         𝓁 = 3 network parameters (optimal wall-clock time)
+                    hidden layers                         3
+              hidden nodes per layer                    128                         as such is only slightly smaller than the maximal threshold of
+           total number free parameter                 43 396                       pth  =  0.167(0), which we ﬁnd for the efﬁciency-optimized
+         activation functions hidden layer              Relu                        network  –  in  particular  when  comparing  this  to  the  thresh-
+         activation functions output layer            Softmax                       old  values  of  the  conventional  decoders  (with  error  thresh-
+Table III. Optimized network architectures.  The upper two pan-                     olds  around pth ≈  0.150± 0.004)  and  the  ideal  threshold
+els provide, for depolarizing noise, detailed parameters for a speed-               pth  = 0.189 inferred from a mapping of the decoding prob-
+optimized decoder (minimizing the wall-clock time), based on a 5×5                  lem to the classical disordered eight-vertex Ising model [40].
+subsystem neural network and a threshold-optimized decoder, based                   As such, we conclude that the speed-optimized 5× 5 neural
+on a 7× 7 subsystem neural network.  The lower panel, for depo-                     network already presents a good compromise in achieving fast
+larizing noise and syndrome measurement errors, provides detailed                   decoding and high error thresholds for an algorithm that also
+parameters  for  a  3-dimensional  adaptation  of  the  speed-optimized             delivers on high scalability.
+decoder in this effectively three-dimensional settings with a 3×3×3
+octahedral subsystem as illustrated in Fig. 6.
+                                                                                                                     Training
+
+   As discussed in the main text, our hierarchical approach has                        Each neural network conﬁguration has been trained using
+an inherent trade off between the two hierarchical algorithmic                      standard  supervised  learning  techniques,  using  labeled  data
+layers:  If one opts for a small neural network, its computa-                       sets of syndromes and their corresponding underlying errors
+tion time remains low but its accuracy in resolving syndromes                       For each error rate we train a separate neural network, using
+drops,  resulting  in more computational load  for the UF de-                       only error-syndrome pairs generated at that given rate.   Be-
+coder on the higher algorithmic layer.  If, on the other hand,                      cause such error-syndromes pairs can be generated in very ef-
+one opts for a large neural network, its accuracy in resolving                      ﬁcient ways, we have generated, for every epoch of the train-
+syndromes goes up at the cost of larger compute times, while                        ing, a new set of 512 such pairs ‘on the ﬂy’.  In effect, this
+also alleviating the load of the higher-level UF decoder.  In-                      procedure increases the size of the training dataset to be of
+deed, this trade off leads to a sweet spot, i.e.  an intermediate                   the order ‘batch size× training epochs’, and signiﬁcantly re-
+neural network size that results, e.g., in optimal compute time.                    duces the chance of overﬁtting.  Detailed training parameters
+   If our goal is to optimize for decoding speed, i.e. minimiz-                     are provided in Table IV, which have been optimized (via a
+ing the wall-clock time measured for decoding 106  random                           grid search) for the error threshold probability of the decoder
+instances for a toric code with linear system size L  =  255                        and then employed to every training process regardless of the
+(corresponding  to  the  values  listed  in  Table  I  of  the  main                underlying error probability.
+manuscript), we ﬁnd that among the multitude of different net-
+work architectures listed in Table II, the 5× 5 neural network
+with 3 hidden layers and 128 nodes per layer (resulting in a                                              Appendix B: Benchmarking
+total of 40068 adjustable parameters) is the best choice (see
+also Table IV).                                                                        In performing our wall-clock run time benchmarks to pro-
+   If, on the other hand, our goal is to optimize the decoding                      vide a measure for real-life applicability we have employed a
+efﬁciency,  i.e.maximizing  the  error  threshold,  then  we  ﬁnd                   hardware setup based on the following CPU/GPU tandem for
+that a 7×7 neural network with 5 hidden layers and 512 nodes                        the depolarizing noise measurements
+per layer (resulting in more than 106 adjustable parameters in
+total) is the most favorable network conﬁguration.                                       •CPU: Intel Xeon CPU E5-2699A v4 @ 2.40 GHz,
+   However,  we  note  that  the  error  threshold  of  the  speed-
+optimized network already comes in at pth  =  0.162(5) and                               •GPU: Nvidia Tesla V100 SXM2.
+                                                                                                                                                           8
+
+and for the measurements of the depolarizing noise plus syn-
+drome measurement error model
+     •CPU: AMD EPYC Rome 7402 CPU @ 2.80 GHz,
+     •GPU: Nvidia A100 Tensor Core-GPU.
+   The times measured are the bare times needed to decode
+a  given  syndrome  and  apply  the  error  correction.   As  dis-
+cussed in the main text, our GPU-assisted calculations for the
+machine learning parts include a ‘kernel time’, i.e.  the time
+needed to launch the CUDA and TensorFlow [44] kernel, ev-
+ery time a syndrome is decoded. We estimate this kernel time
+as the GPU time needed to run a neural network with sub-
+system𝓁 = 7 for a relatively small error rate ofperr = 0.01,
+where the kernel launch times dominates over the data transfer
+time and actual GPU calculation time.
+
+
+  Appendix C: Minimum Weight Perfect Matching (MWPM)
+
+   To  make  this  manuscript  self-contained,  we  also  provide
+an error threshold calculation of the minimum weight perfect
+matching (MWPM) decoder for the depolarized noise model                          Figure 7.  Error threshold and scaling behavior for the conventional
+using PyMatching [38] – a particularly efﬁcient implementa-                      minimum  weight  perfect  matching  (MWPM)  algorithm  (upper
+tion of MWPM decoder. The most widely used MWPM algo-                            panel), and the machine learning assisted minimum weight per-
+rithm for general graphs is the one by Edmonds [12], which                       fect matching (ML+MWPM) algorithm (lower panel) for depolar-
+is  also  widely  known  as  the  Blossom  algorithm.   The  time                ized noise (left) and an augmented noise model with additional syn-
+complexity of the original Blossom algorithm isO(|E||V|2)                        drome measurement errors (right). The ML assisted algorithm shifts
+where|E|  and|V|  are  the  number  of  edges  and  vertices,                    the error threshold by some 10%, fromperr  = 0.1542 for the bare
+                                                                                 MWPM decoder toperr  = 0.1671 for the ML assisted MWPM al-
+respectively.   In  the  toric  code  set-up,  which  we  have  con-             gorithm (lower panel).
+sidered throughout the paper, a simple implementation gives
+O(n4)  (where n  =  2L2  is  the  total  number  of  qubits)  as
+|V|∝ n (number of qubits) and|E|∝ n2.  Fortunately, the                          combining this idea with an efﬁcient C++ implementation of
+algorithm for MWPM has been improved and some suggest                            graph algorithms.
+O(|V|3) [45, 46] which givesO(n3) for the toric code.  We                           We present the threshold result for PyMatching in the up-
+thus consider this as the worst-time complexity of the decod-                    per  panel  of  Fig.  7,  where  we  ﬁnd  an  error  threshold  of
+ing problem using the MWPM decoder.                                              perr = 0.1542± 0.0006. This value is consistent with the pre-
+   However, for decoding the toric code, an even more sub-                       viously established estimate of 3/2·pindeperr ≈ 0.1546 (where
+stantial  speed  up  is  possible  by  adopting  the  idea  of  lo-              pindeperr     =  0.1031± 0.0001 is the threshold for the indepen-
+cality  –  instead  of  constructing  edges  between  all  defects,              dent noise model estimated in Ref. [14]).  This conﬁrms that
+one may construct edges only between nearby defects within                       constructing edges only between nearby edges (as employed
+some  constant  distance.   Such  an  idea  has  been  considered                in PyMatching) barely shifts the threshold.
+in Refs. [47, 48] and gave a visible speed-up for the decod-                        We have also explored using the MWPM decoder within
+ing  problem  albeit  this  may  potentially  harm  the  threshold.              the hierarchical approach discussed in the main text (where
+PyMatching [38], which we have utilized for the MWPM de-                         the UF decoder is applied) in the lower panel of Fig. 7. Simi-
+coder in this paper, could achieveO(L2.11) in benchmarks by                      lar to our results for the UF decoder, we ﬁnd a shift of the error
+                                                                                 threshold by some 10% to a value ofperr = 0.1671± 0.0005.
+                           training parameters                                   While these observations show that our hierarchical approach
+                 batch size                        512                           can  be  employed  with  different  ‘conventional’  decoders  to
+                   epochs                          106                           achieve improved performance, we settled on the UF decoder
+               learning rate                      0.001                          for its algorithmic scalability bests all other conventional ap-
+                 optimizer                       ADAM                            proaches.
+               loss function           categorical cross-entropy
+        training lattice sizeLtrain                 7
+             section distance𝓁                      5                                           Appendix D: Union-ﬁnd (UF) decoder
+
+Table IV. Hyperparameters used for the training of our various net-
+work architectures.  An epoch corresponds to the number of gener-                   Let us ﬁrst brieﬂy summarize the UF decoding algorithm
+ated training batches (see text).                                                [19].  For simplicity, we consider Z  errors so that each syn-
+                                                                                                                                                                  9
+
+                                                                                    structure (which is also often called union-ﬁnd) to maintain
+                                                                                    data of all clusters,  as well as a clever updating scheme for
+                                                                                    boundary vertices for each cluster.  For more details on these
+                                                                                    algorithmic details, we refer to the original paper [19].
+                                                                                        For the UF decoder used in our hierarchical algorithm, we
+                                                                                    have implemented a custom,  open-source C++ code [37] of
+                                                                                    the union-ﬁnd algorithm and the decoder. A thorough analysis
+                                                                                    of the decoding times of the bare UF decoder and its scaling
+                                                                                    with system size for different error rates are provided in Fig. 9.
+                                                                                    Similar to the results in Ref. [19], we ﬁnd an almost perfect
+                                                                                    linear scaling of the UF decoder. Note that while the original
+                                                                                    implementation of the UF decoder has discussed only a spe-
+Figure  8.    Error  threshold  and  scaling  behavior  for  the  machine           ciﬁc error model (phase-ﬂip with eraser errors) [19], we here
+learning assisted union ﬁnd (ML+UF) algorithm using a 7×7 sub-                      present results for the depolarizing noise model used through-
+system. In comparison to the more time-efﬁcient 5× 5 subsystem of                   out this manuscript. Data for the error threshold for this noise
+Fig.  2 in the main text, the larger subsystem applied here leads to                model for 5× 5 subsystem are shown in Fig.  2 of the main
+a small shift of the error threshold toperr  =  0.167(0).  The insets               manuscript. We additionally present ﬁnite-size scaling results
+show a data collapse around this threshold value for different system               with 7× 7 subsystem in Fig. 8 where the threshold 0.167(0)
+sizes, consistently yielding a critical exponent ofν = 1.5(2).                      is obtained.
+                                                                                        Let us also note that when the UF decoder is used in con-
+                                                                                    junction with the ML preprocessing step,  we do not expect
+                                                                                    that the decoding time of the UF part will follow that of the
+                                                                                    bare UF decoder with a corresponding effective error rate (see,
+                                                                                    e.g.,  Fig.   3  of  the  main  text).   This  is  due  to  the  fact  that
+                                                                                    the  errors,  which  remain  after  the  ML  decoding,  exhibit  a
+                                                                                    signiﬁcant amount of  long-range corrections,  and thus need
+                                                                                    more Grow and Merge operations than independent i.i.d. noise
+                                                                                    cases. In fact, we have observed that, regardless of error rates,
+                                                                                    the UF decoder part dominates the overall decoding time in
+                                                                                    our ML+UF scheme for larger system sizes.
+                                                                                        Finally, we present results for the error threshold measure-
+                                                                                    ments for the lazy UF decoder [35] in Fig. 10.
+
+
+Figure 9. Scaling of the UF decoder. Average decoding time of our                                       Appendix E: Literature overview
+custom implementation of the UF decoder [37] as a function of linear                    To allow for a detailed comparison of our ML-assisted hi-
+lattice size.  We ﬁnd a linear scaling for a wide range of error rates
+(the lines are linear ﬁts to the data as a guide to the eye).  For the              erarchical decoder presented in this manuscript with other de-
+error rates near the threshold (perr  = 0.12 andpth in this plot), we               coding algorithms in the literature, in particular with regard to
+ﬁnd deviations from the linear ﬁt, which we believe to originate from               achievable error thresholds and algorithmic scaling, we pro-
+rehashing operations, as our implementation relies on a hash set data               vide  a  comprehensive  overview  of  the  existing  literature  in
+structure to maintain border vertices of a cluster.                                 Table V above.
+
+
+drome (Xv) is assigned to a vertex (when consideringX  er-
+rors, the algorithm needs to be applied on the dual lattice). The
+ﬁrst step of the UF decoder is to iteratively construct clusters
+such that each cluster contains an even number of syndromes.
+To do this,  one ﬁrst generates clusters where each one con-
+tains a single defect vertex.  Then one pursues the following
+two steps iteratively until all clusters contain an even number
+of defects: (i) Extend all clusters a half-edge in all four direc-
+tions (Grow step). (ii) When two clusters meet at an edge, one
+merges the two clusters (Merge step).  When these iterations
+terminate, one can then use a peeling decoder [49] to infer the                     Figure 10.     Error threshold and scaling behavior for the lazy UF
+error corrections from the constructed clusters. To achieve an                      decoder  [35]  for  both  the  depolarizing  noise  model  (left)  and  the
+algorithmic scaling ofO(nα(n)) (whereα(n) is the inverse                            augmented noise model with additional syndrome measurement er-
+of Ackermann’s function [19]), one needs a disjoint-set data                        rors (right).
+                                                                                                                                                                   10
+
+                               title                               date      QECC     noise model          pth          dmax          algorithmic scaling
+
+                                                               conventional decoders (non-ML)
+
+                                                                                                                                 O(n3)               (worst-case)
+   Analysis of quantum error-correcting codes:  sym-                                                                             O(d2.11)              (PyMatch-
+   plectic lattice codes and toric codes [14] (MWPM)             05/2004       TC         DP∗            0.154∗          63∗     ing [38])
+   Fast  Decoders  for  Topological  Quantum  Codes                                                                              O(d2 logd)               (serial)
+   [16] (RG-decoder)                                             02/2010       TC          DP             0.164          128     O(logd)                (parallel)
+   Almost-linear  time  decoding  algorithm  for  topo-
+   logical codes [19] (UF-decoder)                               09/2017       TC         DP∗            0.146∗         127∗     O(n·α(n))
+   General  tensor  network  decoding  of  2D  Pauli
+   codes [43] (TN-decoder)                                       01/2021       TC          DP           0.1881(3)        64      O(n logn +nχ3)
+
+                                                                      ML-assisted decoders
+
+   Decoding Small Surface Codes with Feedforward
+   Neural Networks [22]                                          05/2017       SC          DP            ∼ 0.15           7      O(MWPM)
+   Neural Decoder for Topological Codes [23]                     07/2017       TC     i.i.d bit ﬂip     ∼ 0.110           6      >O(MWPM)
+   Deep  Neural  Network  Probabilistic  Decoder  for
+   Stabilizer Codes [24]                                         09/2017       TC          DP             0.164          11      ≫O(MWPM)
+   Deep neural decoders for near term fault-tolerant                                                       ϵ∼
+   experiments [25]                                              07/2018       SC         CLN         7.11× 10−4          5      n.a.
+   Neural   network   decoder   for   topological   color
+   codes with circuit level noise [26]                           01/2019      CC          CLN         ϵ∼ 0.0023           7      n.a.
+   Neural Belief-Propagation Decoders for Quantum
+   Error-Correcting Codes [27]                                   05/2019       TC      i.i.d. X&Z        ∼ 0.07          10      n.a.
+   Quantum error correction for the toric code using
+   deep reinforcement learning [28]                              09/2019       TC     i.i.d. bit ﬂip      ∼ 0.1           7      ≫O(n)               (estimate)
+   Symmetries for a High Level Neural Decoder on
+   the Toric Code [29]                                           10/2019       TC          DP              n.a.           7      O(MWPM)
+   Deep Q-learning decoder for depolarizing noise on
+   the toric code [30]                                           05/2020       TC          DP           ∼ 0.165         7 (9)    ≫O(n)               (estimate)
+   Reinforcement  learning  for  optimal  error  correc-
+   tion of toric codes [31]                                      06/2020       TC     i.i.d bit ﬂip       0.103           9      >O(MWPM)
+   Neural Network Decoders for Large-Distance 2D
+   Toric Codes [32]                                              08/2020       TC     i.i.d. bit ﬂip    ∼ 0.103          64      >O(RG)
+   Determination of the semion code threshold using
+   neural decoders [33]                                          09/2020      SM           DP           ∼ 0.105          13      n.a.
+   Reinforcement learning decoders for fault-tolerant                                 i.i.d. bit ﬂip
+   quantum computation [34]                                      12/2020       SC         & DP             n.a.           5      ≫O(n)               (estimate)
+   Scalable Neural Decoder for Topological Surface
+   Codes (this work)                                             01/2021       TC          DP             0.167          255     O(UF)
+
+
+Table V. Literature overview summarizing key characteristics of a selection of ‘conventional’ decoders and ML-assisted decoders for different
+quantum error correcting codes (QECC) including the toric code (TC), the surface code (SC), the semion code (SM), and the color code (CC).
+For each decoder, we indicate the noise model (DP = depolarizing noise, i.i.d.  = independent and identically distributed, CLN = circuit level
+noise), provide the error thresholdpth, the largest code distance testeddmax, and the algorithmic scaling in order of the total number of qubits
+n. The asterisk for the threshold values for the MWPM and UF decoders indicates that these numbers have been determined in this work.

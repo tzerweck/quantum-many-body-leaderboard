@@ -1,0 +1,974 @@
+HYPERSHAPE: Hyperelasticity Across Diverse Shapes
+
+
+
+
+                      Leo Widmer                                          Sidaty El Hadramy
+       Department of Biomedical Engineering                    Department of Biomedical Engineering
+                   University of Basel                                     University of Basel
+               leo.widmer@unibas.ch                               sidaty.elhadramy@unibas.ch
+
+                   Stéphane Cotin                                   Philippe Claude Cattin
+                   MIMESIS Team                            Department of Biomedical Engineering
+              Inria, Strasbourg, France                                University of Basel
+           stephane.cotin@inria.fr                             philippe.cattin@unibas.ch
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 1: Overview ofHYPERSHAPEdata generation pipeline. A base shape (e.g., circle) is morphed
+into a synthetic shape of controllable complexity, Dirichlet (blue) and Neumann (red) boundary
+conditions are randomly assigned, and a FEM simulation is performed under the applied traction
+force to produce the resulting displacement field.
+
+                                                    Abstract
+
+
+          Hyperelastic deformations are highly sensitive to domain geometry and bound-
+          ary conditions, making generalization across both a critical capability for neural
+          operators applied to these problems.  However, existing benchmarks for neural
+          operators on hyperelasticity rely on simple or few geometries, which makes it
+          difficult to assess this capability rigorously.  To address this gap, we introduce
+          HYPERSHAPE, an extensible framework designed to generate synthetic shapes
+          and their corresponding hyperelastic simulation data, producing a suite of 2D and
+          3D datasets with adjustable complexity and controllable shape variations.  This
+          design enables systematic assessment of generalization across in-distribution, out-
+          of-distribution, and synthetic-to-real transfer settings. Using this framework, we
+          evaluated the performance of several state-of-the-art neural operators over diverse
+          shape distributions.  Our findings reveal that neural operators perform well on
+          simple shapes but struggle as shape complexity, geometric diversity, and boundary
+          condition variability increase, requiring large amounts of training data in such
+          regimes. Performance degrades consistently and predictably with geometric com-
+          plexity highlighting the need for further model development.  As an open and
+          extensible benchmark,HYPERSHAPEis designed to grow alongside the field: new
+          geometries, material models, loading conditions, and evaluation settings can be
+          easily incorporated to validate hyperelastic surrogate models.
+
+
+
+
+Preprint.
+1    Introduction
+
+
+Numerous engineering tasks require accurate modeling of deformable, nonlinear structures subjected
+to complex loads and boundary conditions, often with an emphasis on real-time or near real-time
+computation [41]. Such requirements arise across fields such as biomechanics [22], materials science
+[17], and interactive system development [10], where bothprecisionandcomputational efficiency
+are critical. In this context, hyperelastic simulations are well-established in biomechanics and support
+a variety of medical applications [9].  Hyperelastic models are commonly employed to simulate
+soft tissues,  forming the basis for surgical training simulators [24],  preoperative planning [11],
+intraoperative guidance systems [20, 48, 19], and can be used to solve inverse problems, such as
+estimating material parameters or identifying boundary conditions [39, 15]. To perform hyperelastic
+simulations, one must solve the governing partial differential equations (PDEs) over the domain while
+accounting for the material’s nonlinear constitutive behavior, the applied boundary conditions, and
+external loads. A variety of numerical solvers have been developed to address this [35, 7]. Among
+these, the finite element method (FEM) remains the most widely used due to its ability to model
+complex geometries and material responses [17]. However, to meet real-time requirements, these
+methods often require substantial model simplifications to enable parallelization or reduce the number
+of degrees of freedom, which can lead to loss of accuracy in the resulting approximate solutions [38].
+In recent years, deep learning–based approaches have emerged as an alternative to traditional numeri-
+cal solvers, offering an interesting trade-off between computational speed and accuracy [21]. Among
+the earliest of these methods are physics-informed neural networks (PINNs) [42], which embed the
+governing PDEs directly into the loss function. PINNs are trained to solve a single forward or inverse
+problem associated with a given geometry and boundary conditions. Building on this, patient-specific
+data-driven approaches were later proposed, in which deep neural networks (CNNs [36], GNNs [12])
+are trained on a predefined geometry to generalize across different loading conditions or boundary
+settings.  This allows them to predict multiple deformation states for the same anatomical shape.
+Both approaches share the advantage of being fully differentiable, which makes them particularly
+attractive for inverse problems [39, 15].  However, a key limitation is that they are tied to either a
+specific problem setup or a fixed geometry; thus, extending them to new cases requires additional
+training, limiting their general applicability. A further class of methods is data-driven approaches that
+generalize across local variations within a distribution of geometries [14]. These methods capture
+small geometric variations from data and can only predict deformations for unseen samples drawn
+from the same distribution. This improves generalization compared to patient-specific models, but
+performance still degrades on out-of-distribution shapes.
+Many recent works have therefore focused on developing models
+capable  of  generalizing  across  multiple  shapes.   In  this  context,
+neural operators have gained significant attention due to their ability
+to learn mappings between function spaces, with the promise of
+generalizing over distributions of PDE solutions [26, 6]. Among the
+most representative approaches are Fourier Neural Operator (FNO)
+[28, 25, 13], which leverages spectral convolutions to capture global
+interactions. The Convolutional Neural Operator (CNO)[43] extends                     Figure 2: Illustrative example
+convolutional architectures to operator learning, while Graph Neural                  showing  the  influence  of  ge-
+Operators [27] adapt the framework to irregular domains by relying                    ometry on the solution.  Both
+on graph-based representations. In parallel, architectures inspired                   beams  are  fixed  on  the  left
+by image processing, such as U-Net–based neural operators [45],                       and pulled with the same force.
+have also been explored. More recent point-cloud-based approaches                     The only difference is a small
+include GINO [29], Transolver [50], and GAOT [49], which aim to                       local change in the red beam’s
+handle complex geometries and unstructured data more flexibly.                        geometry, which leads to a sig-
+While neural operators offer strong advantages in learning solution                   nificantly different global de-
+mappings across families of PDEs, their application to hyperelastic                   formation response.
+simulations remains relatively limited. Most existing studies focus
+on standard benchmark problems commonly used in the literature, such as Darcy flow, Burgers’
+equation, or the incompressible Navier–Stokes equations[28], which use simple geometries and con-
+trolled settings. In contrast, hyperelasticity exhibits a largesensitivity to geometric variations: even
+small, localized changes in the domain can induce significant differences in the global deformation
+response, as illustrated in Figure 2. Although many neural operator frameworks claim the ability to
+
+
+                                                            2
+Figure 3: Comparison between the Elasticity benchmark [30] andHYPERSHAPE. In Elasticity (left),
+all samples share the same geometry (a square with a hole), with fixed Dirichlet boundary conditions
+(zero displacement at the bottom) and identical traction applied at the top. In contrast,HYPERSHAPE
+(right) features varying geometries, boundary conditions, and forces, making the problem more
+realistic and challenging. This is reflected in the histograms (middle): while state-of-the-art neural
+operator models perform well on Elasticity (inblue), their errors increase significantly on the more
+diverseRandom2Ddataset generated withHYPERSHAPE(inred).
+
+
+generalize across geometries [29, 26, 49], this assumption is particularly difficult to sustain in the
+context of hyperelasticity. Current benchmarks include limited geometric variability and therefore
+fail to capture the strong sensitivity of hyperelastic responses to shape changes.  One of the most
+commonly used hyperelasticity benchmarks [30] uses a distribution of shapes consisting of squares
+with randomly shaped holes and thesame boundary conditions for every geometry(applied to
+the top and bottom of the square). The left-most image in Figure 3 illustrates example geometries
+from the Elasticity benchmark [30], while the blue histograms highlight the strong performance of
+state-of-the-art models on this dataset.  In contrast, the performance of the same models degrades
+significantly on complex irregular shapes with varying boundary conditions and force loads, as
+illustrated in the right-most image and reflected by the red histograms. These observations suggest
+thatexisting benchmarks may considerably overestimate the robustness and generalization
+capabilities of current neural operatorsby relying on overly simplified and homogeneous settings.
+This motivates the need for more realistic and controllable benchmarks that capture the variability
+encountered in practical applications.
+This paper introducesHYPERSHAPE, a controllable and versatile method for generating synthetic
+shapes and a suite of 2D and 3D hyperelasticity datasets designed to evaluate neural operators across
+varying geometries, boundary conditions, and distribution shifts. The shape generation process can
+be adjusted and tailored to a specific application or to change the difficulty level of the problem for
+evaluation and failure-mode analysis. Our contributions are the following.
+
+        •  We introduceHYPERSHAPE, a controllable synthetic shape generation framework, along
+           with a suite of 2D and 3D hyperelasticity datasets of adjustable complexity, released with
+           the corresponding generation code.
+        •  We evaluated state-of-the-art neural operator architectures on various datasets generated
+           usingHYPERSHAPE, covering in-distribution, out-of-distribution, and synthetic-to-real
+           transfer settings.
+        •  We find that current neural operators struggle to handle complex shape distributions, high-
+           lighting the need for further model development.
+        •  We propose an analysis of geometry-dependent failure modes,  data efficiency,  and the
+           conditions under which synthetic pretraining transfers to anatomical geometries.
+
+The  paper  is  organized  as  follows.   Section  2  introduces  the  hyperelastic  problem  formulation.
+Section 3 presentsHYPERSHAPE, with details about shape sampling, boundary conditions, data
+representation, evaluation metrics, and the generation of datasets with varying levels of difficulty.
+Section 4 provides benchmarking of state-of-the-art neural operators on 2D/3D datasets and discuss
+the main findings. Finally, Section 5 concludes the paper.
+
+
+                                                             3
+2    Problem formulation
+
+Let Ω be a domain representing the geometry of interest, ΓD ⊆∂Ω       and ΓN  =∂Ω\Γ     D  are
+respectively the Dirichlet and Neumann boundaries (see Figure 5). We aim at solving the boundary
+value problem by finding a displacement fieldu: Ω→R        d that satisfies:
+
+                                            (−∆P(u) =f,      inΩ,
+                                                        u=u   D,   inΓ  D,                                                 (1)
+                                               P(u)·⃗n=t,     inΓ         N,
+
+whereP(u) =    ∂W(F(u))∂F       is the first Piola-Kirchhoff stress tensor andF=I+∇u               the deformation
+gradient.   Following the formulation in [37],  we assume f=  0   in the current setting since no
+volumetric body forces are applied and the deformation is driven solely by boundary conditions
+and external surface tractions. W  represents the strain energy density associated with the chosen
+hyperelastic material model, and characterizes the nonlinear constitutive behavior of the material.
+
+3    HYPERSHAPE
+
+This section presents the data generation pipeline proposed inHYPERSHAPE(overview in Figure 1).
+We describe the general procedure for sampling shapes and boundary conditions and for constructing
+the corresponding hyperelastic simulation problems. While the proposed framework is general and
+not restricted to a specific constitutive law, in this work, we consider a Neo-Hookean [44] material
+model for all experiments. Given the sampled shapes, we compute solutions to the hyperelasticity
+problem (1) using the open-source finite element software FEniCS [3, 46, 47, 1].
+
+3.1    Shape sampling
+
+The basic approach for sampling a shape is that we start with an initial shape that is always the
+same, and then apply a random deformation to it. In most cases, we use a circle or a sphere as an
+initial shape.  However, this choice is not restrictive, and the initial geometry can be informed by
+prior knowledge of the target shape distribution. We first describe a method for applying a random
+deformation to a shape, which can be split into two steps. In the first step, we sample a stationary
+velocity fieldv∼G(0,C)from a Gaussian random field with covariance:
+                                        C(v(x),v(y)) =m                      2e−∥x−y∥             22/(2σ      2)                                               (2)
+for given parametersm,σ. Then, in the second step, we compute the deformation ˜x=ϕ(x,1)               , where
+ϕ:R  d×[0,1]→R       d is the solution to the following ODE:
+
+                                       dϕ(x,t)
+                                           dt      =v(ϕ(x,t)),  ϕ(x,0) =x.                                         (3)
+This can be solved using the scaling and squaring methods proposed in [2].  In Equation 2, the
+parameterm controls the magnitude of the deformation, whileσ describes the scale.  This means
+that for lowerσ, the velocity field has a lot of variation over a smaller distance, while for larger
+σ, the velocity field changes more slowly, leading to more global deformations.  We apply this
+deformation process K  times, with K∈{1,2,3}              , to progressively build shape complexity.  In
+practice, higher-frequency deformations (smallσ) are introduced in later steps to refine local details,
+while lower-frequency components (largeσ) capture the global structure, as illustrated in Figure 4.
+
+3.2    Boundary conditions
+
+We consider homogeneous Dirichlet boundary conditions as well as Neumann boundary conditions,
+i.e., surface traction. We first uniformly sample a point on the boundary of the domain, i.e., the surface
+of the shape,pD∼U(∂Ω)          .The Dirichlet boundaryis then defined as the region on the boundary
+at most distancer away from the pointpD, i.e. ΓD :=B  r(p D)∩∂Ω      .The Neumann boundaryis
+simply ΓN  =∂Ω\Γ     D.  To define the tractiont: Γ N→R  d, we uniformly sample a point on the
+surfacepN∼U(∂Ω\Γ       D) and sett(x) =α·⃗g·        φ(x−p         N)R
+                                                                   ΓN φ(y)dy       , whereα∈R  ≥0    is a scaling factor,
+
+                                                              4
+Figure 4: Example of the random shape generation process. Starting                     Figure  5:   Illustration  of  the
+from a circle, we applyK= 2    deformations: a coarse followed by a                    boundary condition sampling
+higher-frequency deformation to introduce local details.                               procedure.
+
+
+⃗g is a random vector sampled fromN(0,I)          and normalized to 1, andφ(x) = exp(−∥x∥                         22/(2γ       2))
+distributes the traction over a small region aroundpN ,γ is a parameter that describes the concentration
+of the traction aroundpN . The scalingα can either be given as a parameter or adjusted to achieve a
+given displacement magnitude. See Figure 5.
+
+3.3    Data representation
+
+There are different ways neural operators encode their input function. In this study, we focus on two
+of the most common ways: grid samples and point clouds.
+Grid-based representation:We represent the input shape as a signed distance field (SDF) evaluated
+on the grid over the domain [−1,1]   d.  This is possible since all shapes are contained in [−1,1]   d.
+Similarly, the Dirichlet boundary ΓD is also encoded as a signed distance field. Since ΓD is not a
+closed surface, its SDF has no negative values, just 0 for points on the surface. Lastly, we need to
+encode the Neumann boundary condition. Since ΓN =∂Ω\Γ     D, the information on the boundary
+itself is already given. The domain ΓN  of the traction force is extended to [−1,1]        andt is given as a
+fieldt: [−1,1]    d→R  d that is evaluated on the same grid as the other functions. The output is the
+displacement field, also extended to the domain [−1,1]   d and evaluated on the same grid. To evaluate
+the prediction, we interpolate the function values at the points of the original mesh.
+Point cloud representation:Our simulations were performed on volumetric meshes, therefore, we
+can directly use the nodes of the mesh as an input point cloud. However, it is difficult to determine
+which points lie on the surface of the shape solely from their spatial coordinates. To address this, we
+augment the point cloud with signed distance function (SDF) values evaluated at each point, enabling
+the identification of surface regions. In addition, we encode the Dirichlet boundary by including its
+corresponding SDF values in the same manner. Finally, to ensure consistency with the grid-based
+representation, the traction fieldt is extended to all points in the point cloud, including interior points,
+where it is set to zero outside the Neumann boundary.
+
+3.4    Datasets generation
+
+We usedHYPERSHAPEto generate a suite of 2D and 3D datasets (see Table 1).  In general, we
+set a single Dirichlet boundary condition for each shape in the dataset and then perform a specified
+number of simulations with randomly selected surface tractions, as described in Section 3.2.  For
+all simulations, we set the scaling of the tractionα such that the simulations for each shape cover a
+uniform range of displacement magnitudes from 0.1    to 0.5   . Since all shapes are normalized to the
+domain[−1,1]         d, the largest displacement magnitude is therefore1/4of the domain’s length.
+For the 2D datasets,HYPERSHAPEfollows the procedure described in Section 3.1, where shapes
+are generated by applying random deformations to an initial circular geometry. Using this pipeline,
+we generate four datasets (Random2D,EasyRandom2D,OODRandom2D, andOneRandom2D
+see Table 1), which all share the same circular base shape but differ in the number of distinct shapes,
+the number of simulations per shape, and the deformation parameters controlling complexity and
+distribution.  The specific parameters used for shape generation are reported in the last column
+of Table 1, and examples are shown in Figure 6.  For consistency, the same boundary condition
+parameters are used across all 2D datasets (r= 0.5andγ= 0.2), with a grid resolution of 128.
+For the 3D datasets, we consider both purely synthetic shapes and anatomically derived geometries.
+Specifically, we use 92 liver meshes obtained from segmentations of the publicly available Liver
+Tumor Segmentation Dataset [5] (CC BY-NC-ND 4.0). Based on these, we construct two datasets:
+
+
+                                                             5
+Table 1: Overview of the datasets generated withHYPERSHAPE, including the number of shapes,
+simulations per shape, base geometry, and deformation parameters. They vary in geometric complex-
+ity and are designed to evaluate in-distribution, out-of-distribution, and single-shape settings.
+
+     Dim     Name                      # Shapes     # Sim./Shape      Base              Params{(σ,m)}
+               Random2D                 1000                 50              Circle   (0.2,4),(0.1,1)
+     2D        EasyRandom2D          500                  50              Circle        (0.1,0.5)
+               OODRandom2D         500                  50              Circle  (0.2,2),(0.05,1)
+               OneRandom2D             1                10 000           Circle   (0.2,4),(0.1,1)
+               Random3D                 1000                 20             Sphere(0.2,4),(0.1,4),(0.05,1)
+     3D        AugLiver                     500                  20               Liver   (0.2,2),(0.1,1),(0.05,1)
+               Liver                             92                  100                 –                             –
+               OneLiver                       1                10 000               –                             –
+
+
+one containing all available liver shapes (Liver), and another restricted to a single liver geometry
+(OneLiver). In addition, we usedHYPERSHAPEto generate synthetic 3D datasets. This includes (i)
+generic shapes obtained by applyingHYPERSHAPEwith a sphere as a base shape (Random3D),
+and (ii) a synthetic liver dataset generated by usingHYPERSHAPEwith a real liver as a base shape
+(AugLiver). Example shapes are shown in Figure 7. For consistency across experiments, we used the
+same boundary condition parameters for all 3D datasets (r= 0.4     ,γ= 0.1     ), and grid resolution of 64.
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 6: Examples of generated 2D shapes from                       Figure 7: Examples of generated 3D shapes from
+Random2D(a),EasyRandom2D(b) and (c)                                  (a)Random3D, (b)AugLiverand (c)Liver.
+OODRandom2D.
+
+4    Experiments
+
+In this section, we describe several experiments that investigate different aspects of generalizing
+hyperelasticity to distributions of shapes.  For the experiments, we consider the grid-based neural
+operators FNO [28, 25],  CNO [43] and a modified version of the U-Net [45, 32] (described in
+Appendix C.1), and point-cloud-based neural operators GINO [29] and Transolver [50]. Each model
+has 2D and 3D versions that remain the same across all experiments and whose hyperparameters
+were primarily taken from the standard settings of the respective papers introducing them (see
+Appendix C.2).  Unless stated otherwise, we use an 80-10-10 training-validation-test split of the
+datasets, with each shape appearing in only one split. The loss function and the evaluation metrics
+were computed from the predicted displacement values ˆu={ˆu     i}Ni=1  at the mesh points used in the
+FEM simulations, with corresponding ground-truth valuesu={u   i}Ni=1 . Following previous work
+[50, 6, 13], we define a discretized version ofL    2 andH       1 norm respectively as:
+                           vuut                                      vuut                                             !
+                                     NpX                                       NpX                  dX
+             ∥u∥  L2N  :=        1        ∥u i∥22, ∥u∥   H1N  =           1           ∥u i∥22 +         ∥∇xkui∥22                 (4)
+                               Np    i=1                                 Np    i=1                 k=1
+
+We then can define standard error metrics such as Root Mean square error asLL2(u,ˆu) :=∥u−ˆu∥            L2N ,
+also calledL2-loss, and its analogue including derivativesLH1(u,ˆu) :=∥u−ˆu∥            H1N , which we simply
+
+
+                                                                  6
+callH1-loss. The corresponding relative errors are defined asLrelL2(u,ˆu) :=∥u−ˆu∥            L2N/∥u∥   L2N  and
+LrelH1(u,ˆu) :=∥u−ˆu∥            H1N/∥u∥   H1N . For training, grid-based models are optimized with the relative
+H1-lossLrelH1, since spatial derivatives can be approximated using finite differences.  In contrast,
+point-based models are trained using the relativeL  2-lossL         relL2.
+To assess the correlation between geometric complexity and prediction error, we use two measures.
+In 2D, we use the isoperimetric ratio [     40] to characterize the complexity of shapes.  Given a 2D
+shape with a closed curve of lengthP  and an areaA. Theisoperimetric ratioequals        4πA/P   2. It
+measures how close a given shape is to a circle. The circle maximizes this ratio with 1. Meanwhile,
+by considering a star shape and increasing the number of spikes in the star, we can get arbitrarily
+close to 0.In 3D, we use the Hausdorff distance. Since this metric is generally scale-dependent, all
+shapes are normalized to the domain[−1,1]         d to ensure comparable distances across geometries.
+
+4.1    In-distribution benchmark
+
+In this section, we evaluate the ability of the models to generalize within a given data distribution
+when trained and tested on samples drawn from the sameHYPERSHAPEsetting.  As mentioned
+previously, between the 2D and 3D datasets, only the distribution of geometries is different, while the
+sampling process for the boundary conditions is the same. This allows us to isolate and study the
+effect of increasing geometric complexity. As shown in Table 2, all models exhibit a clear degradation
+in performance as the variability of the underlying geometry increases, moving from the single-shape
+setting (OneRandom2D/OneLiver), to slightly varying geometries (EasyRandom2D/Liver), and
+finally to more diverse shape distributions (Random2D/Random3D). This highlights the increasing
+difficulty of the problem as geometric variability grows. In the 2D case, point-cloud-based methods
+achieve the best performance in the single-shape setting, whereas grid-based methods become more
+competitive when multiple shapes are introduced. A similar behavior is observed in 3D, where all
+models perform best in the fixed-geometry setting and show increased errors as the number and
+variability of shapes grow. To further analyze this effect, Figure 8 shows the relationship between the
+isoperimetric ratio and prediction error on theRandom2Dtest set. Across all models, more regular
+shapes (higher isoperimetric ratio, closer to a circle) consistently yield lower errors, while more
+complex shapes lead to higher errors, confirming the strong impact of geometry on performance.
+
+Table 2: In-distribution performance onHYPERSHAPEdatasets, reported as mean relative     L2-error.
+We compare models across increasing geometric variability, from single-shape to diverse shape
+settings. Best results are inboldand second-best are underlined
+
+  Dim            Dataset                                      Grid                                             Point-cloud
+                                    U-Net [45]     FNO [28]     CNO [43]     GINO [49]     Transolver [50]
+            OneRandom2D         0.0183          0.0191          0.0146           0.0087                       0.0057
+   2D      EasyRandom2D0.02930.0599          0.0588           0.0965               0.0391
+              Random2D            0.1209               0.18860.11800.2921               0.1429
+               OneLiver              0.0402            0.0474          0.0424           0.0440    0.0378
+   3D             Liver                 0.1915          0.1843          0.16770.2179               0.1886
+              Random3D            0.1295               0.14980.12710.1766               0.1484
+
+
+4.2    Out-of-distribution benchmark
+
+In this part, we investigate the ability of neural operators to generalize to shapes that are out of the
+training distribution but still arguably close enough. We address this question using a specific use
+case. We perform experiments for 2D and 3D cases and the results are reported in Table 3.
+
+2D case:We first evaluated out-of-distribution generalization in 2D. Models were trained on
+subsets of theRandom2DandEasyRandom2Ddatasets (see Section 4.1) and then tested on the
+OODRandom2Ddataset, which consists of shapes drawn from a differentHYPERSHAPEgeneration
+setting (see Table 1) and therefore from a different distribution. This setup allowed us to measure how
+well models generalize beyond the geometric variations seen during training. As shown in Table 3, in
+
+
+                                                              7
+Figure 8:  Relationship between geometric complexity and prediction error.  Each plot shows the
+isoperimetric ratio (x-axis) against the per-shape average relative L2-error on the test split (500
+shapes) of theRandom2Ddataset, for five different models.  Across all cases, shapes closer to a
+circular geometry (isoperimetric ratio near 1) consistently yield lower prediction errors.
+
+Table 3:  Model comparison under out-of-distribution and transfer settings.   Models trained on
+Random2DandEasyRandom2Dare evaluated onOODRandom2D. For the 3D transfer setting,
+models are trained onRandom3D,AugLiver, andLiver, and evaluated on the Liver dataset. Reported
+is the mean relativeL  2-error. Best results are inboldand second-best are underlined                       .
+
+  Dim     Dataset                                             Grid                                             Point-cloud
+                                    U-Net [45]     FNO [28]     CNO [43]     GINO [49]     Transolver [50]
+
+  2D       Random2D0.09910.1551          0.1082           0.2467               0.1160EasyRandom2D0.18930.3393          0.2418           0.5240               0.2167
+
+           Random3D0.33470.3621                                         0.3654           1.4073               0.8096
+  3D       AugLiver                   0.46410.31600.7191           0.3967               0.3807
+           Liver                          0.1915          0.18430.16770.2179               0.1886
+
+
+the 2D setting, we observe a clear improvement in out-of-distribution performance when models are
+trained on the more diverseRandom2Ddataset compared to the simpler settings.
+
+3D case:We then consider the 3D setting, where we define three training scenarios. First, models
+are trained on fully synthetic shapes fromRandom3D. Second, they are trained onAugLiver, which
+consists of a single liver shape augmented with random deformations, thereby more closely reflecting
+anatomical variability. Finally, models were trained directly on liver shapes. We evaluated models
+trained onRandom3Don the fullLiverdataset, and models trained onAugLiveron all liver shapes
+except the original base shape used for augmentation.  The results for models trained directly on
+80% of theLiverand tested on         10% of the same dataset are reported, serving as a reference. These
+experiments aimed at assessing how well synthetic pretraining transfers to real anatomical geometries.
+As observed in Table 3, point-cloud-based models struggle significantly when evaluated on shapes
+that differ substantially from the training distribution. In particular, models trained onRandom3Dfail
+to produce meaningful predictions on theLiverdataset, while performance improved substantially
+when trained onAugLiver, whose shapes are closer to the target anatomical distribution. In contrast,
+grid-based models such asU-Net,FNO, andCNOperformed better when trained onRandom3D.
+One possible explanation is thatRandom3Dcontains a larger number of training samples than
+AugLiver, providing better coverage of shape variability.
+To analyze the correlation between the geometric variability and prediction accuracy, since the 92
+shapes in theLiverdataset are registered, we compute the Hausdorff distance between the liver shape
+used as the base inAugLiverand each of the remaining 91 shapes. We then compared this geometric
+discrepancy with the corresponding prediction errors, as shown in Figure 9. The results show a clear
+trend: as the Hausdorff distance increases, the relativeL2 error also increases consistently across all
+models. This indicates that model accuracy gradually deteriorates as the target shape deviates further
+from the training geometry.
+
+4.3    Impact of training data size
+
+A key question is how much training data is required for models to generalize over a given distribution
+of problems. We focus on theU-Net,FNO, andTransolvermodels, and evaluate their performance
+
+
+                                                              8
+Figure 9: Shape-averaged relativeL2-error for the remaining 91 liver shapes from the Liver dataset
+plotted against the normalized Hausdorff distance of the respective shapes to the first liver shape.
+Evaluated models were trained on AugLiver, which uses the first liver shape as the base shape.
+
+
+when trained on increasing amounts of data (10K, 20K, and 40K samples), corresponding to 200, 400,
+and 800 shapes respectively. We assess data efficiency by measuring test error on a hold-out set from
+the same distribution and on the out-of-distribution datasetOODRandom2D, thereby evaluating how
+scaling the training data affects both in- and out-of-distribution performance. As shown in Figure 4.3,
+all models consistently improve as the amount of training data increases, with gains still visible
+beyond 20,000 samples for both in-distribution and out-of-distribution test sets. This indicates that
+current models require large training datasets to fully capture geometric variability and achieve strong
+generalization.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 10:  Data efficiency ofU-Net,FNO, andTransolvertrained on increasing dataset sizes
+and evaluated on in-distribution (Random2D) and out-of-distribution (OODRandom2D) settings.
+Results show consistent gains with more data for both distributions.
+
+5    Conclusion and limitations
+
+We introducedHYPERSHAPE, a controllable and extensible framework for generating synthetic
+hyperelastic datasets in 2D and 3D, designed for in-distribution, out-of-distribution, and synthetic-
+to-real evaluation. In contrast to existing benchmarks,HYPERSHAPEenables controlled variation
+in both shape complexity and physical setup, including boundary conditions and applied forces,
+providing a more realistic testbed for hyperelastic surrogate models.  We usedHYPERSHAPEto
+generate multiple 2D and 3D datasets with increasing geometric complexity, ranging from single-
+shape settings to diverse synthetic and anatomical shape distributions, and used them to benchmark
+five state-of-the-art neural operators. The results show a consistent performance degradation as the
+geometric diversity increases. Out-of-distribution and synthetic-to-real experiments further highlight
+the limited robustness of current models, which remain highly sensitive to the training distribution
+and require large amounts of data to perform reliably. These findings emphasize the need for further
+development of geometry- and physics-aware models and positionHYPERSHAPEas a benchmark for
+hyperelastic surrogate modeling. Yet, we envision several areas of improvement for our framework.
+In its present form,HYPERSHAPEis restricted to homogeneous materials, which excludes important
+applications such as heterogeneous soft tissue simulation.  Additionally, the influence of material
+
+
+                                                            9
+parameters and their variability on model performance remains unexplored.  Another limitation
+concerns boundary conditions and applied forces, which are currently constrained to a single surface
+location; enabling multiple simultaneous forces at different locations would further improve realism.
+Finally, while we observe that increasing geometric complexity generally leads to reduced model
+performance, the joint effect of geometry and boundary conditions is not yet fully understood. In
+particular, these factors do not act independently: different levels of geometric complexity can amplify
+or mitigate the difficulty introduced by specific boundary conditions or force configurations. As a
+result, their combined influence leads to varying degrees of problem difficulty, making it challenging
+to isolate which aspect is primarily responsible for performance degradation.
+
+References
+ [1]  M. S. Alnaes, A. Logg, K. B. Oelgaard, M. E. Rognes, and G. N. Wells. Unified Form Language:
+      A domain-specific language for weak formulations of partial differential equations, Nov. 2012.
+      URLhttps://arxiv.org/abs/1211.4047v2.
+ [2]  V. Arsigny, O. Commowick, X. Pennec, and N. Ayache.  A Log-Euclidean Framework for
+      Statistics on Diffeomorphisms.  In R. Larsen, M. Nielsen, and J. Sporring, editors,Medical
+      Image Computing and Computer-Assisted Intervention – MICCAI 2006, pages 924–931, Berlin,
+      Heidelberg, 2006. Springer. ISBN 978-3-540-44708-5. doi: 10.1007/11866565_113.
+ [3]  I. A. Baratta, J. P. Dean, J. S. Dokken, M. Habera, J. S. Hale, C. N. Richardson, M. E. Rognes,
+      M. W. Scroggs, N. Sime, and G. N. Wells. DOLFINx: The next generation FEniCS problem
+      solving environment, Dec. 2023. URLhttps://zenodo.org/records/10447666.
+ [4]  P. J. Besl and N. D. McKay. A method for registration of 3-D shapes.IEEE Trans. Pattern Anal.
+      Mach. Intell., 14(2):239–256, Feb. 1992.
+ [5]  P. Bilic, P. Christ, H. B. Li, E. Vorontsov, A. Ben-Cohen, G. Kaissis, A. Szeskin, C. Jacobs,
+      G. E. H. Mamani, G. Chartrand, F. Lohöfer, J. W. Holch, W. Sommer, F. Hofmann, A. Hostettler,
+      N. Lev-Cohain, M. Drozdzal, M. M. Amitai, R. Vivanti, J. Sosna, I. Ezhov, A. Sekuboyina,
+      F. Navarro,  F. Kofler,  J. C. Paetzold,  S. Shit,  X. Hu,  J. Lipková,  M. Rempfler,  M. Piraud,
+      J. Kirschke, B. Wiestler, Z. Zhang, C. Hülsemeyer, M. Beetz, F. Ettlinger, M. Antonelli, W. Bae,
+      M. Bellver, L. Bi, H. Chen, G. Chlebus, E. B. Dam, Q. Dou, C.-W. Fu, B. Georgescu, X. Giró-i
+      Nieto, F. Gruen, X. Han, P.-A. Heng, J. Hesser, J. H. Moltz, C. Igel, F. Isensee, P. Jäger, F. Jia,
+      K. C. Kaluva, M. Khened, I. Kim, J.-H. Kim, S. Kim, S. Kohl, T. Konopczynski, A. Kori,
+      G. Krishnamurthi, F. Li, H. Li, J. Li, X. Li, J. Lowengrub, J. Ma, K. Maier-Hein, K.-K. Maninis,
+      H. Meine, D. Merhof, A. Pai, M. Perslev, J. Petersen, J. Pont-Tuset, J. Qi, X. Qi, O. Rippel,
+      K. Roth, I. Sarasua,  A. Schenk, Z. Shen, J. Torres, C. Wachinger, C. Wang, L. Weninger,
+      J.  Wu,  D.  Xu,  X.  Yang,  S.  C.-H.  Yu,  Y.  Yuan,  M.  Yue,  L.  Zhang,  J.  Cardoso,  S.  Bakas,
+      R. Braren, V. Heinemann, C. Pal, A. Tang, S. Kadoury, L. Soler, B. van Ginneken, H. Greenspan,
+      L. Joskowicz, and B. Menze.  The Liver Tumor Segmentation Benchmark (LiTS).Medical
+      Image Analysis, 84:102680, Feb. 2023. ISSN 1361-8415. doi: 10.1016/j.media.2022.102680.
+      URLhttps://www.sciencedirect.com/science/article/pii/S1361841522003085.
+ [6]  N. Boullé and A. Townsend. Chapter 3 - A mathematical guide to operator learning. In S. Mishra
+      and A. Townsend, editors,Handbook of Numerical Analysis, volume 25 ofNumerical Analysis
+      Meets Machine Learning, pages 83–125. Elsevier, Jan. 2024. doi: 10.1016/bs.hna.2024.05.003.
+      URLhttps://www.sciencedirect.com/science/article/pii/S1570865924000036.
+ [7]  J.-N. Brunet, V. Magnoux, B. Ozell, and S. Cotin. Corotated meshless implicit dynamics for
+      deformable bodies. InComputer Science Research Notes. Západo             ˇceská univerzita, 2019.
+ [8]  CAMLab ETH Zürich. Convolutionalneuraloperator. https://github.com/camlab-ethz/
+      ConvolutionalNeuralOperator, 2024. GitHub repository.
+ [9]  S. Cotin, H. Delingette, and N. Ayache. Real-time elastic deformations of soft tissues for surgery
+      simulation.IEEE Trans. Vis. Comput. Graph., 5(1):62–73, 1999.
+[10]  H. Courtecuisse, H. Jung, J. Allard, C. Duriez, D. Y. Lee, and S. Cotin. GPU-based real-time
+      soft tissue deformation with cutting and haptic feedback.Prog. Biophys. Mol. Biol., 103(2-3):
+      159–168, Dec. 2010.
+
+
+                                                          10
+[11]  H. Delingette and N. Ayache. Soft Tissue Modeling for Surgery Simulation. InHandbook of
+      Numerical Analysis, volume 12, pages 453–550. Elsevier, 2004. ISBN 978-0-444-51566-7. doi:
+      10.1016/S1570-8659(03)12005-4. URL https://linkinghub.elsevier.com/retrieve/
+      pii/S1570865903120054.
+[12]  S. Deshpande, S. P. A. Bordas, and J. Lengiewicz.  MAgNET: A graph U-Net architecture
+      for mesh-based simulations.Engineering Applications of Artificial Intelligence, 133:108055,
+      July 2024.   ISSN 0952-1976.   doi:  10.1016/j.engappai.2024.108055.   URL https://www.
+      sciencedirect.com/science/article/pii/S0952197624002136.
+[13]  M. Duprez, V. Lleras, A. Lozinski, V. Vigon, and K. Vuillemot. Phi-FEM-FNO: a new approach
+      to train a Neural Operator as a fast PDE solver for variable geometries,  Feb. 2025.   URL
+      http://arxiv.org/abs/2502.10033. arXiv:2502.10033 [math].
+[14]  S. El Hadramy, N. Padoy, and S. Cotin. Deform any Liver in Real-Time. In2025 IEEE 22nd
+      International Symposium on Biomedical Imaging (ISBI), pages 1–5, Apr. 2025. doi: 10.1109/
+      ISBI60581.2025.10981061. URL https://ieeexplore.ieee.org/document/10981061.
+      ISSN: 1945-8452.
+[15]  S. El Hadramy, B. Acidi, N. Padoy, and S. Cotin.  Optimization in latent space for real-time
+      intraoperative characterization of digital twins.Eng. Comput., 42(2), Apr. 2026.
+[16]  D. A. Field. Laplacian smoothing and delaunay triangulations.Commun. Appl. Numer. Meth., 4
+      (6):709–712, Nov. 1988.
+[17]  M. Freutel, H. Schmidt, L. Dürselen, A. Ignatius, and F. Galbusera. Finite element modeling of
+      soft tissues: material models, tissue interaction and challenges.Clin. Biomech. (Bristol, Avon),
+      29(4):363–372, Apr. 2014.
+[18]  H. Gründemann. Ogden, R. W., Non-Linear Elastic Deformations. Ellis Horwood Ltd. 1984.
+      Chichester, Distributors: John Wiley & Sons Ltd., XV, 532 S., £ 35.00. ISBN 0-85 312-273-3.
+      ZAMM - Journal of Applied Mathematics and Mechanics / Zeitschrift für Angewandte Mathe-
+      matik und Mechanik, 65(9):404–404, 1985. ISSN 1521-4001. doi: 10.1002/zamm.19850650903.
+      URLhttps://onlinelibrary.wiley.com/doi/abs/10.1002/zamm.19850650903.
+[19]  S. E. Hadramy, J. Verde, N. Padoy, and S. Cotin. Towards real-time vessel guided augmented
+      reality for liver surgery. In2024 IEEE International Symposium on Biomedical Imaging (ISBI),
+      volume 1, pages 1–5. IEEE, May 2024.
+[20]  N. Haouchine, J. Dequidt, I. Peterlik, E. Kerrien, M.-O. Berger, and S. Cotin.  Image-guided
+      simulation of heterogeneous tissue deformation for augmented reality during hepatic surgery.
+      In2013 IEEE International Symposium on Mixed and Augmented Reality (ISMAR), pages
+      199–208, Oct. 2013. doi: 10.1109/ISMAR.2013.6671780. URL https://ieeexplore.ieee.
+      org/abstract/document/6671780.
+[21]  L. Herrmann and S. Kollmannsberger.  Deep learning in computational mechanics: a review.
+      Comput. Mech., 74(2):281–331, Aug. 2024.
+[22]  G. A. Holzapfel, J. D. Humphrey, and R. W. Ogden. Biomechanics of soft biological tissues and
+      organs, mechanobiology, homeostasis and modelling.J. R. Soc. Interface, 22(222):20240361,
+      Jan. 2025.
+[23]  M. Kazhdan, M. Bolitho, and H. Hoppe. Poisson surface reconstruction. InProceedings of the
+      Fourth Eurographics Symposium on Geometry Processing, volume 7. Eurographics Association,
+      2006.
+[24]  M. Kojanazarova, S. E. Hadramy, J. Wilkie, G. Rauter, and P. C. Cattin. Soft tissue simulation
+      and force estimation from heterogeneous structures using equivariant graph neural networks.
+      Healthc. Technol. Lett., 12(1):e70042, Jan. 2025.
+[25]  J. Kossaifi, N. Kovachki, K. Azizzadenesheli, and A. Anandkumar.  Multi-Grid Tensorized
+      Fourier Neural Operator for High-Resolution PDEs, Sept. 2023. URL http://arxiv.org/
+      abs/2310.00120. arXiv:2310.00120 [cs].
+
+
+                                                        11
+[26]  N. Kovachki, Z. Li, B. Liu, K. Azizzadenesheli, K. Bhattacharya, A. Stuart, and A. Anandkumar.
+      Neural Operator: Learning Maps Between Function Spaces, May 2024. URL http://arxiv.
+      org/abs/2108.08481. arXiv:2108.08481 [cs].
+
+[27]  Z. Li, N. Kovachki, K. Azizzadenesheli, B. Liu, K. Bhattacharya, A. Stuart, and A. Anandkumar.
+      Neural operator: Graph kernel network for partial differential equations. Mar. 2020.
+
+[28]  Z. Li, N. Kovachki, K. Azizzadenesheli, B. Liu, K. Bhattacharya, A. Stuart, and A. Anandkumar.
+      Fourier Neural Operator for Parametric Partial Differential Equations, May 2021. URL http:
+      //arxiv.org/abs/2010.08895. arXiv:2010.08895 [cs].
+
+[29]  Z. Li, N. B. Kovachki, C. Choy, B. Li, J. Kossaifi, S. P. Otta, M. A. Nabian, M. Stadler, C. Hundt,
+      K. Azizzadenesheli, and A. Anandkumar. Geometry-Informed Neural Operator for Large-Scale
+      3D PDEs, Sept. 2023. URLhttp://arxiv.org/abs/2309.00583. arXiv:2309.00583 [cs].
+
+[30]  Z. Li,  D. Z. Huang,  B. Liu,  and A. Anandkumar.   Fourier Neural Operator with Learned
+      Deformations for PDEs on General Geometries, May 2024. URL http://arxiv.org/abs/
+      2207.05209. arXiv:2207.05209 [cs].
+
+[31]  T.-Y. Lin, P. Dollár, R. Girshick, K. He, B. Hariharan, and S. Belongie.   Feature Pyramid
+      Networks for Object Detection,  Apr. 2017.   URL http://arxiv.org/abs/1612.03144.
+      arXiv:1612.03144 [cs].
+
+[32]  Z. Liu, H. Mao, C.-Y. Wu, C. Feichtenhofer, T. Darrell, and S. Xie. A ConvNet for the 2020s,
+      Mar. 2022. URLhttp://arxiv.org/abs/2201.03545. arXiv:2201.03545 [cs].
+[33]  W. E. Lorensen and H. E. Cline. Marching cubes: A high resolution 3D surface construction
+      algorithm.Comput. Graph. (ACM), 21(4):163–169, Aug. 1987.
+
+[34]  I. Loshchilov and F. Hutter.   Decoupled weight decay regularization,  2019.   URL https:
+      //arxiv.org/abs/1711.05101.
+
+[35]  N. Matos, M. Gomes, and V. Infante.  Numerical modelling of soft body impacts: A review.
+      Eng. Fail. Anal., 153(107595):107595, Nov. 2023.
+
+[36]  A. Mendizabal, P. Márquez-Neila, and S. Cotin. Simulation of hyperelastic materials in real-
+      time using deep learning.Medical Image Analysis, 59:101569, Jan. 2020.  ISSN 1361-8415.
+      doi:  10.1016/j.media.2019.101569.   URL https://www.sciencedirect.com/science/
+      article/pii/S1361841519301094.
+
+[37]  A. Mendizabal, E. Tagliabue, J.-N. Brunet, D. Dall’Alba, P. Fiorini, and S. Cotin.  Physics-
+      based deep neural network for real-time lesion tracking in ultrasound-guided breast biopsy. In
+      Computational Biomechanics for Medicine, pages 33–45. Springer International Publishing,
+      Cham, 2020.
+
+[38]  T.-N.  Nguyen,  M.-C.  Ho  Ba  Tho,  and  T.-T.  Dao.    A  Systematic  Review  of  Real-Time
+      Medical  Simulations  with  Soft-Tissue  Deformation:   Computational  Approaches,  Interac-
+      tion Devices, System Architectures, and Clinical Validations.Applied Bionics and Biome-
+      chanics,  2020(1):5039329,  2020.   ISSN  1754-2103.   doi:  10.1155/2020/5039329.   URL
+      https://onlinelibrary.wiley.com/doi/abs/10.1155/2020/5039329.
+[39]  L. G. Olson, R. D. Throne, A. J. Nolte, A. Crump, K. Griffin, T. Han, N. Iovanac, T. Janssen,
+      M. Jones, X. Ling, and M. Samp. An inverse problem approach to stiffness mapping for early
+      detection of breast cancer:  tissue phantom experiments.Inverse Problems in Science and
+      Engineering, 27(7):1006–1037, July 2019.  ISSN 1741-5977.  doi:  10.1080/17415977.2018.
+      1538367. URLhttps://doi.org/10.1080/17415977.2018.1538367.
+
+[40]  R. Osserman. The isoperimetric inequality.Bulletin of the American Mathematical Society, 84
+      (6):1182–1238, Nov. 1978.  ISSN 0002-9904, 1936-881X.  URL https://projecteuclid.
+      org/journals/bulletin-of-the-american-mathematical-society/volume-84/
+      issue-6/The-isoperimetric-inequality/bams/1183541466.full.             Publisher:
+      American Mathematical Society.
+
+
+                                                        12
+[41]  A. Polenghi, L. Fumagalli, and I. Roda. Role of simulation in industrial engineering: focus on
+      manufacturing systems.IFAC-PapersOnLine, 51(11):496–501, 2018.
+
+[42]  M. Raissi, P. Perdikaris, and G. E. Karniadakis.  Physics-informed neural networks: A deep
+      learning  framework  for  solving  forward  and  inverse  problems  involving  nonlinear  partial
+      differential equations.J. Comput. Phys., 378:686–707, Feb. 2019.
+
+[43]  B. Raoni´c, R. Molinaro, T. D. Ryck, T. Rohner, F. Bartolucci, R. Alaifari, S. Mishra, and E. d.
+      Bézenac. Convolutional Neural Operators for robust and accurate learning of PDEs, Dec. 2023.
+      URLhttp://arxiv.org/abs/2302.01178. arXiv:2302.01178 [cs].
+
+[44]  R. S. Rivlin. Large elastic deformations of isotropic materials iv.Philosophical Transactions of
+      the Royal Society A, 241:379–397, 1948.
+
+[45]  O. Ronneberger, P. Fischer, and T. Brox. U-Net: Convolutional Networks for Biomedical Image
+      Segmentation, May 2015.  URL http://arxiv.org/abs/1505.04597.  arXiv:1505.04597
+      [cs].
+
+[46]  M. W. Scroggs, J. S. Dokken, C. N. Richardson, and G. N. Wells.  Construction of arbitrary
+      order finite element degree-of-freedom maps on polygonal and polyhedral cell meshes, Feb.
+      2021. URLhttps://arxiv.org/abs/2102.11901v5.
+
+[47]  M. W. Scroggs, I. A. Baratta, C. N. Richardson, and G. N. Wells.  Basix:  a runtime finite
+      element basis evaluation library. Journal of Open Source Software, 7(73):3982, May 2022.
+      ISSN 2475-9066. doi: 10.21105/joss.03982. URL https://joss.theoj.org/papers/10.
+      21105/joss.03982.
+
+[48]  S. Suwelack, S. Röhl, S. Bodenstedt, D. Reichard, R. Dillmann, T. dos Santos, L. Maier-Hein,
+      M. Wagner, J. Wünscher, H. Kenngott, B. P. Müller, and S. Speidel.  Physics-based shape
+      matching for intraoperative image guidance.Medical Physics, 41(11):111901, 2014.  ISSN
+      2473-4209.   doi:  10.1118/1.4896021.   URL https://onlinelibrary.wiley.com/doi/
+      abs/10.1118/1.4896021.
+
+[49]  S. Wen, A. Kumbhat, L. Lingsch, S. Mousavi, Y. Zhao, P. Chandrashekar, and S. Mishra. Geom-
+      etry Aware Operator Transformer as an Efficient and Accurate Neural Surrogate for PDEs on Ar-
+      bitrary Domains, Jan. 2026. URL http://arxiv.org/abs/2505.18781. arXiv:2505.18781
+      [cs].
+
+[50]  H. Wu, H. Luo, H. Wang, J. Wang, and M. Long.  Transolver:  A Fast Transformer Solver
+      for PDEs on General Geometries, June 2024.  URL http://arxiv.org/abs/2402.02366.
+      arXiv:2402.02366 [cs].
+
+
+A    Simulation details
+
+A.1    Material model
+
+Hyperelastic material can be modeled in different ways. In this work, we consider the commonly
+used Neo-Hookean model [18], which defines the strain energy density function as
+
+                         W=  µ2 (tr(F  ⊤F)−3−2 ln(detF)) +          λ2 (ln(detF))                 2.
+
+The scalarsµ,λ are so-called Lamé parameters and can be expressed byµ=E/(2(1 +ν)),λ=
+Eν/((1 +ν)(1−2ν))                   , whereE is the Young’s modulus andν the Poisson ratio. BothE andν are
+material parameters and can vary between different materials. The Poisson ratioν is between 0 and
+0.5   . The closerν is to 0.5    the more volume preserving it is. For our datasets, we keep the parameters
+fixed atE= 500 (Pa)    andν= 0.49     . These parameters can be easily changed in the configuration
+file for the data generation. Furthermore, also the material model can be replaced by changing a few
+lines of code and writing a different formula forW.
+
+
+                                                          13
+A.2    Dataset size
+
+We already report the size of the dataset in Table1. However, in a few cases, the FEM simulations
+are unable to converge. This means that some of the shapes inRandom2Dhave a few simulations
+less than reported in the table. Concretely the total number of simulations inRandom2Dis 49’924.
+We believe that this does not have a meaningful impact on our results and conclusions. In all other
+datasets the number of simulations is complete and as reported.
+
+
+A.3    Liver shape extraction
+
+The liver geometries used in this work were derived from the binary segmentation masks provided
+in the Liver Tumor Segmentation Dataset [5]. For each segmentation, a thresholding operation was
+first applied to isolate the liver region. Surface meshes were then extracted from the resulting binary
+volumes using the Marching Cubes algorithm [33], which produces a triangulated surface mesh from
+the iso-surface of the segmentation mask. To remove the staircase artifacts inherent to voxel-based
+segmentations, Laplacian smoothing [16] was subsequently applied to the extracted meshes. Finally,
+Poisson surface reconstruction [23] was performed to obtain a clean, watertight surface mesh suitable
+for FEM simulation. The resulting meshes were then registered using iterative closest point [4].
+
+
+B    Experiment details
+
+
+B.1    Training
+
+For every training, the models are validated every 10 epochs of the training on a hold-out validation
+split (always 10% of the dataset). Over the whole training run, the checkpoint performing best on the
+validation split is selected for testing. For the training onRandom2Das well as the data efficiency
+study onRandom2D, the number of training epochs is 500.  For all other trainings, the number
+of epochs is 200. All models use the AdamW optimization algorithm [34]. The specific scheduler
+as well as the other hyperparameters depend on the model and are reported in Appendix C.2. The
+training dataset split is 80% of the dataset, unless stated otherwise. For the training ofRandom2D, a
+40% training split is used, resulting in 400 shapes, which is the same number of shapes as used in the
+training onEasyRandom2D.
+
+
+B.2    Comparison to Elasticity benchmark
+
+Here we explain the results in Figure 3 depicting the comparison between our Random2D dataset and
+the popular hyperelasticity benchmark [30], which we call Elasticity. The neural operator models
+have the same hyperparameter configurations as elsewhere.  While the original benchmark only
+provides the point cloud of the geometry itself, we took a similar approach as described in Section 3.3,
+where we add the signed distance function values of the given geometry to the input. This means that
+the point-cloud-based models are given the point cloud and the SDF value of the shape, while the
+grid-based model are simply given the SDF evaluated on the grid.
+
+
+B.3    Computational resources
+
+All deep learning experiments were conducted on NVIDIA A100 (40 GB) and RTX 6000 (24
+GB) GPUs.  Individual training runs ranged from approximately 0.5 to 5 days depending on the
+configuration.  The experiments reported in the paper required a total of approximately 75-100
+GPU-days. FEM-based synthetic data generation was performed on a standard laptop CPU, requiring
+approximately 12 to 48 hours per dataset, depending on its size. Beyond the reported experiments,
+additional training runs were conducted during the research process; the total compute including
+these is difficult to estimate precisely but was likely higher than the reported experiments alone.
+
+
+                                                           14
+C    Model details
+
+C.1    Modified U-Net
+
+Our U-Net model is mainly based on the standard U-Net architecture [45], but with two important
+modifications. First, we replace standard convolution blocks by ConvNeXt convolutions [32]. Second,
+we combine the outputs predicted from all upsampling layers of the U-Net, similar to [31]. Concretely,
+we extract multi-scale feature maps from the upsampling blocks of our U-Net, project each to the
+output channel dimension via 1x1-convolutions, upsample them to the final output resolution, and sum
+them up to produce the final output. Along with this second modification, we use bilinear interpolation
+for up- and downsampling throughout the architecture. The intuition for this modification is that we
+want the model to predict the lower frequency modes of the displacement field in the lower resolutions
+and adding the details of the displacement fields in the higher resolution layers.
+Furthermore, we also use a different normalization method for the U-Net model, where we only
+normalize the force field and displacement field by the root mean square (RMS) averaged over the
+complete training dataset. The signed distance functions encoding the shape and Dirichlet boundary
+are not normalized.  We argue that this is a more natural way to normalize the data.  For all other
+models, we use the standard method or channelwise normalization [28].
+We study the impact of these three modifications as well as the influence of using relativeL2-error vs.
+H1-error in a small ablation study. We train U-Net with different settings on the first 400 shapes of
+the Random2d dataset, use 100 shapes as validation and the remaining 500 for testing. All versions
+have around 500’000 trainable parameters. The results are in Table 4 and report the average result
+over three training runs with different seeds.
+
+Table 4: Ablation study for the U-Net architecture. The last row represents the final configuration
+used in all the experiments.
+
+         ConvNeXt     Multi-scale comb.          Norm                Loss           rel.L      2-error (±std)
+               ✗                 ✗                     RMS          rel.H         1-loss0.4534±0.0043
+               ✓                 ✗                     RMS          rel.H         1-loss0.1044±0.0042
+               ✓                 ✓               channelwise     rel.H          1-loss0.0918±0.0035
+               ✓                 ✓                    RMS           rel.L         2-loss0.1090±0.0018
+               ✓                 ✓                    RMS          rel.H          1-loss0.0905±0.0017
+
+We can observe that the normalization method does not seem to have an influence on performance.
+However, using the relativeH1-loss instead of theL2-loss leads to an improvement. The ConvNeXt
+modification seems to have the most significant impact, but also the multi-scale feature combination
+improves the result.
+
+C.2    Hyperparameter settings
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                              15
+                   Table 5: Hyperparameters for the U-Net [45, 32].
+
+                 Hyperparameter                     U-Net (2D)         (3D)
+                 Resolution                                    128                 64
+                 Input / Output Channels               4 / 2               5 / 3
+                 Channels per Level            [16, 32, 64, 128]       —
+                 Blocks per Level                     [4, 4, 4, 4]            —
+                 Kernel Size                                     7                   —
+                 Normalization Strategy               RMS                —
+                 Loss Function                             rel-H1               —
+                 Batch Size                                     16                  —
+                 Learning Rate                    10  −3                  —
+                 Weight Decay                  10   −5                  —
+                 LR Scheduler                             cosine               —
+                 Min. Learning Rate            10  −6                  —
+
+
+
+             Table 6: Hyperparameters for the Transolver model [50].
+
+                Hyperparameter                Transolver (2D)       (3D)
+                Resolution                                   128                   64
+                In / Out / Space Dim.               4 / 2 / 2            5 / 3 / 3
+                Number of Layers                         8                     —
+                Hidden Dimension                      256                   —
+                Slice Number                               64                    —
+                Attention Heads                            8                     —
+                MLP Ratio                                    4                     —
+                Normalization Strategy        channelwise            —
+                Loss Function                           rel-L2                 —
+                Batch Size                                    16                     8
+                Learning Rate                   10  −3                    —
+                Weight Decay                10   −5                    —
+                Grad. Clipping                       True (1.0)              —
+                LR Scheduler                    cosine_warmup         —
+
+
+
+Table 7: Hyperparameters for the Fourier Neural Operator (FNO) [28, 25].
+
+              Hyperparameter                     FNO (2D)            (3D)
+              Resolution                                   128                   64
+              Input / Output Channels             4 / 2                 5 / 3
+              Spectral Modes                        [24, 24]        [12, 12, 12]
+              Hidden Channels                         64                    —
+              Number of Layers                         6                     —
+              Lifting / Projection Ratio              2                     —
+              Factorization                              None               tucker
+              Rank                                           N/A                  0.4
+              Normalization Strategy        channelwise            —
+              Loss Function                           rel-H1                 —
+              Batch Size                                    16                     8
+              Learning Rate                   10  −3                     —
+              Weight Decay                              0.0                   —
+              LR Scheduler                        step_decay             —
+
+
+
+                                                      16
+Table 8: Hyperparameters for the Convolutional Neural Operator (CNO) [43]. Importantly, we use
+theCNO2d_simplifiedimplementation [8] and its straight-forward 3d adaptation.
+
+                                        Hyperparameter                  CNO (2D)      (3D)
+                                        Resolution                                128             64
+                                        Input / Output Dim                  4 / 2           5 / 3
+                                        Number of Layers                      4               —
+                                        Residual Blocks                         4               —
+                                        Neck Res. Blocks                      6               —
+                                        Channel Multiplier                   32              —
+                                        Use Batchnorm                       True             —
+                                        Normalization Strategy     channelwise       —
+                                        Loss Function                        rel-H1           —
+                                        Batch Size                                 16               8
+                                        Learning Rate                10  −3               —
+                                        Weight Decay              10   −6               —
+                                        LR Scheduler                     step_decay        —
+
+
+
+
+
+
+
+
+
+
+
+
+
+                 Table 9: Hyperparameters for the Geometry-Informed Neural Operator [29].
+
+                       Hyperparameter                                GINO (2D)                    (3D)
+                       Resolution                                               128                            64
+                       Input / Output Channels                         4 / 2                          5 / 3
+                       Latent Grid Resolution                        [64, 64]                  [32, 32, 32]
+                       GNO Radius                                           0.09                            —
+                       FNO Modes                                         [24, 24]                  [12, 12, 12]
+                       FNO Layers / Hidden                            6 / 64                           —
+                       FNO Factorization                                 None                        tucker
+                       FNO Rank                                              N/A                            0.4
+                       GNO MLP Width (In/Out)                   64 / 64                          —
+                       Loss Function                                       rel-L2                          —
+                       Batch Size                                                 4                               8
+                       Learning Rate                           2·10   −4                            —
+                       Weight Decay                                          0.0                             —
+                       LR Drop Epochs                     [50, 100, 200, 300, 400]       [50, 100]
+
+
+
+
+
+
+
+
+                                                                         17

@@ -1,0 +1,938 @@
+ Permutation-based Reasoning and Intelligence Search
+                                             Method (PRISM)
+                        Predicting When Search Helps with a Pre-Flight Protocol,
+                     and an Exhaustive Map of Language-Model Instruction Order
+
+                                                     Blessings Mambwe
+                                                          ML Collective
+
+                                                       August 8, 2026
+
+
+                                                            Abstract
+           PRISM addresses permutation-valued decisions in systems whose components are fixed but whose order
+       is not: compiler passes, preprocessing steps, neural modules, or reasoning instructions. Before selecting
+       an optimizer, it asks whether structured search is likely to beat uniform sampling. PRISM’spre-flight
+       uses a small fixed measurement budget to estimate one-move fitness autocorrelation and fitness–distance
+       correlation, forecasts the search regime, selects a method, and records the forecast beside the outcome. On
+       exactly enumerated landscapes, the protocol predicts its own failures: on a 5,040-ordering neural landscape,
+       evolutionary search finds an optimum in 19 of 40 runs, versus 30 of 40 for uniform sampling, as near-zero
+       local correlation forecasts. In the flagship application, all 720 orderings of six fixed reasoning instructions
+       span 6.3% to 96.9% accuracy on a GSM8K subset. The position effects transfer across model families and
+       survive automated rewriting of the instruction text. Cross-domain evidence includes six scientific-pipeline
+       systems, 18 registered tabular architecture forecasts, and two preliminary reinforcement-learning ordering
+       surfaces. Code and artifact index:https://github.com/bleymambwe/PRISM.
+
+
+              worst example                                               6.3%        fixed wording and model
+                               R       P      K      A       C       I               fixed questions and grader
+                                                                                       0.063                0.969
+               best example    K      C       I      A       R      P     96.9%
+                                                                                     all6! = 720orderings evaluated
+Figure 1: Order alone moves measured accuracy by 90.6 percentage points.The strips show one worst and
+one best ordering of RESTATE (R), IDENTIFY (I), PLAN (P), COMPUTE (C), CHECK (K), and ANSWER (A).
+Every ordering is evaluated on the same 32 GSM8K questions with fixed wording, deterministic decoding, and the
+same grader.
+
+1  Introduction
+
+Many systems have already selected the right components but have not justified their order. A compiler has
+passes, a scientific pipeline has preprocessing operations, a neural model has modules, and a prompt has
+instructions. Once the component multiset is fixed, a candidate is a permutationπ∈S  n, and the optimization
+problem is
+                                                      π∗∈arg max
+                                                               π∈S  n  F(π),                                    (1)
+where F is the task score. Composition is generally non-commutative: moving a nonlinear operation, a
+normalizer, or an instruction changes what later components receive. The magnitude of this effect in the
+exhaustive instruction study is previewed inFigure 1.
+Fixing the multiset is a genuine restriction on a broader configuration space. If n ordered slots draw from k
+component types, unrestricted assignment yieldsk     n sequences. With fixed countsc    1,...,ck, ∑ici =n, the
+reachable arrangements number
+                                                   |S(c)|=       n!c1!···c k!≤k  n,                                 (2)
+
+because they form one subset of the length-n sequences over the same alphabet. When all components are
+distinct, as in the experiments here,|S|     = n!. This restriction buys exact ground truth at small n: six
+instructions have 720 orderings, compared with6          6 = 46,656unrestricted six-slot configurations.
+
+
+                                                                 1
+                          Figure 2: Objects required for a PRISM study.The landscape is not merely the search-space size: it is the
+                          scored structure induced by the evaluator and the chosen neighbourhood operators. The empirical landscape regimes
+                          are visualized inFigure 4.
+
+                          Restriction is not simplification. Cardinality does not determine search difficulty. The exact parity landscape
+                          over7! = 5 ,040orderings defeats elitist evolutionary search, which finds an optimum in 19 of 40 runs against
+                          30 of 40 for uniform sampling. A matched-operator synthetic landscape over16! ≈ 2.09× 1013 orderings is
+                          solved in roughly 405 generations. A five-thousand-point space can be harder than a twenty-trillion-point
+                          one. The difference is structure: whether a search move preserves fitness information and whether better
+                          candidates tend to lie closer to an optimum. Neither property is visible inn, so both must be measured.
+                          In this work, we introduce a pre-flight protocol that spends a small, fixed budget before the main search.
+                          It measures local fitness preservation and global guidance, checks whether the evaluator can distinguish
+                          candidates, forecasts whether structured search should help, and selects anexecutor—the method that spends
+                          the remaining budget. Possible executors include exact enumeration, uniform sampling, an evolutionary
+                          searcher, a surrogate, or a transfer-guided list.  The forecast, rather than any single executor, is the
+                          contribution.
+                          Our contributions are four results:
+                        C1. A two-statistic pre-flight separates operator-aligned, near-random, and deceptive regimes and turns null
+                              results into testable forecasts (Sections 3and5).
+                        C2. Exact enumeration exposes a decisive boundary: structured search can be worse than uniform sampling
+                              when its neighbourhood contains almost no fitness signal (Section 6).
+                        C3. A complete 720-order map of fixed reasoning instructions reveals a 6.3%–96.9% accuracy range, transferable
+                              position effects, and ordering variation that survives automated wording optimization (Sections 7and8).
+                        C4. Cross-domain studies cover six scientific-computing pipelines, registered tabular architecture forecasts,
+                              and preliminary option-ordering and curriculum-ordering surfaces in reinforcement learning (Sections 9
+                              and12).
+                          The argument can be read as five claims: (1) order is a real optimization coordinate; (2) space size is not a
+                          difficulty measure; (3) search operators define the relevant locality; (4) exact ground truth makes failures
+                          visible; and (5) forecasts must be retained beside outcomes, including misses. The rest of the paper follows
+                          that order, then closes with cross-domain calibration and specific limitations. The final synthesis inTable 2
+                          connects each headline finding to its practical recommendation.
+
+
+
+
+                          2  Terminology and Prerequisites
+
+                          PRISM assumes a constrained permutation problem rather than unrestricted system design. Acomponentis
+                          a fixed item whose internal content does not change during the study. Acandidateis one legal ordering       π of
+                          those components, and theevaluatorassigns its task score         F (π). The resultingfitness landscapeis the set of
+                          legal orderings together with their scores. A move operator—swap, insertion, inversion, or scramble—defines a
+                          neighbourhood on that landscape. Anexecutoris the method selected to spend the post-diagnostic evaluation
+                          budget, such as enumeration, sampling, a surrogate, or the evolutionary searcher. These objects and their
+                          dependencies are summarized inFigure 2.
+                          Five prerequisites should hold before optimization begins: (1) the component set and legal-order constraints
+                          are explicit; (2) candidate scores are reproducible or accompanied by a declared noise model; (3) the
+                          evaluator has sufficient resolution to distinguish orderings; (4) repeated evaluations can be identified so
+                          distinct-evaluation budgets are comparable; and (5) at least one uninformed and one domain-specific baseline
+                          are available. If these conditions fail, the correct action is to repair the experimental design rather than
+                          interpret an optimizer ranking.
+
+          Takeaway                                                                           2
+          Ordering is a real optimization surface, but the size of the space says nothing about whether searching it will pay.
+    FixedDifficulty must be measured from landscape structure before budget is spent.Legal orderingsEvaluatorFitness landscapePre-flight
+componentsC                 S⊆S  n                   F(π)              L={(π,F(π))}            and executor
+
+
+
+                       constraints define                               operators define
+                       which permutations                               neighbourhoods;
+                         are admissible                                ρ1 and FDC sum-
+                                                                        marize structure
+                                                                Protocol 1:PRISM pre-flight protocol
+                 Input:frozen evaluatorF, component multiset, probe budgetB                                               p, main budgetB, candidate executors.
+                 Output:recorded forecast, selected executor, verified outcome.
+                 1.SampleB                   p distinct orderings; measure variance, tie density, and evaluator resolution.
+                 2.Estimateρ      1(o)for each meaningful moveo; estimate exact or proxyFDC.
+                 3.Forecast the regime and select enumeration, sampling, evolution, a surrogate, or transfer.
+                 4.Execute exactlyBdistinct evaluations; repeated proposals do not increase the count.
+                 5.Record forecast, outcome, uncertainty, and any mismatch in the forecast ledger.
+
+                        Table 1:Conservative decision rule. Thresholds are empirical operating bands, not universal constants.
+
+                       Pre-flight observation      Action
+                       Negligible variance or dense              Improve the evaluator or sample modestly and stop.
+                       top ties
+                       One operator has clearly                  Use its neighbourhood if search is otherwise justified.
+                       largestρ               1
+                       Materially negativeFDC    Structured search may exploit global guidance.
+                       Near-zero or modestly positive            Use uniform sampling as the method of record.
+                       FDC
+                       Strongly positiveFDC     Avoid local evolutionary search.
+
+
+
+
+
+                 3  The Pre-Flight Protocol
+
+                 A pre-flight uses a small probe set P⊂S   n before the main optimization budget. Repeated orderings are
+                 served from cache and do not count again; we call this thedistinct-evaluation budget. The probe first checks
+                 score variance and the density of top ties. If the evaluator cannot distinguish candidates, optimizer comparison
+                 is premature.
+                 For a one-move operatoro, local fitness preservation is estimated by
+
+                                                                      ρ1(o) = corr(F(π),F(o(π))),                                (3)
+
+                 over sampled parent–child pairs. A positive value means that the neighbourhood preserves fitness information;
+                 a value near zero means that one move resembles a fresh draw. Global guidance is measured by fitness–distance
+                 correlation
+                                                                       FDC = corr(F(π),d(π,Ω)),                                (4)
+
+                 whereΩis the exact optimum set when known and otherwise the best frozen probe sample. Because fitness
+                 is maximized, negative FDC indicates that better candidates tend to lie nearer the target; near-zero values
+                 imply weak global guidance; strongly positive values warn that local improvement points away from the
+                 optimum. The protocol below routes these measurements to the executor that spends the remaining budget,
+                 while quantitative decision bands appear inTable 1andFigure 4.
+
+
+
+
+
+
+                 Algorithm 1:Elitist permutation executor
+                 Input:fitnessF, moveo, population sizem, distinct-evaluation budgetB
+                 Output:best evaluated ordering
+              1Initializemrandom permutations and evaluate unseen candidates
+              2whilefewer thanBdistinct orderings have been evaluateddo
+              3   select a parent by tournament; proposeπ                ′ =o(π)
+              4   evaluateπ                           ′ only if its cache key is new
+              5   replace the worst non-elite member; retain the best-so-far ordering
+
+              6returnbest cached ordering
+
+
+TakeawayTakeaway                                                                         3
+A permutation experiment is scientifically meaningful only when the components, legal space, evaluator, landscapeTwo cheap measurements separate locally informative, near-random, and deceptive regimes. The protocol can
+neighbourhood, and comparison budget are defined before search.therefore select uniform sampling as a successful outcome rather than treating it as a failed optimizer.
+               4  Related Work
+
+               Landscape analysis and permutation search.One-step autocorrelation and fitness–distance correlation
+               are classical measures of local preservation and global guidance [1,2]. Permutation landscape analysis
+               further connects distance metrics and move operators to position, precedence, and adjacency structure [3];
+               convergence under irreducible mutation and elitist retention is standard [4]. PRISM does not claim these
+               ingredients as new. Its contribution is to operationalize them as a low-budget, recorded selector among
+               enumeration, sampling, evolutionary search, and a structure-matched surrogate, then test the forecast on
+               exact and live application landscapes.
+
+
+               Prompt order, position, and calibration.Lu et al. show that reordering few-shot demonstrations can
+               produce large performance differences and that effective orders need not transfer across models [5]. Zhao et
+               al. reduce prompt-induced instability through contextual calibration [6]. These studies motivate robustness
+               interventions; PRISM instead asks whether an ordering surface has enough measurable structure to justify
+               search. Lost-in-the-middle effects concern the placement of retrieved evidence in long contexts [7], while Sclar
+               et al. quantify sensitivity to formatting choices [8]. The present experiments hold component wording and
+               rendering fixed and vary only the order of instruction modules.
+               Option-order studies expose related positional bias in multiple-choice evaluation. Reordering answer options
+               can substantially change measured performance [9], and selection bias toward option identifiers motivates
+               explicit debiasing methods [10]. Those works permute answer choices; PRISM permutes the internal order
+               of a fixed reasoning scaffold and characterizes the full six-component landscape. Recent causal attention
+               and presentation-order accounts provide candidate mechanisms for why later information may be used
+               differently [11,12], but they do not determine whether a given ordering landscape is searchable.
+
+
+               Prompt optimization.Chain-of-thought and self-consistency alter elicited computation [13,14]; APE,
+               OPRO, and DSPy optimize prompt text or programs [15–17]. PRISM freezes component content and isolates
+               order as a separate coordinate. The OPRO experiment therefore tests complementarity rather than claiming
+               that ordering replaces content optimization.
+
+               5  Landscapes, Operators, and Locality
+
+               Search operators define what “nearby” means. Absolute-position landscapes reward elements in specific slots
+               and align with swap moves. Precedence landscapes reward pairwise order and align with insertion. Adjacency
+               landscapes reward neighbouring pairs and align with inversion. Scramble is a broad disruption rather than a
+               precise neighbourhood. These types are diagnostic ideals, not a claim that real applications are pure. The
+               three operator-landscape pairings are illustrated inFigure 3.
+               The difference is operationally large. At n = 16, the matched operator solves the absolute-position objective
+               in 405 generations, the precedence objective in 396, and the adjacency objective in 1,199, while mismatched
+               operators often reach the 10,000-generation cap without an optimum. We call such a runcensored: it exhausts
+               its cap without success, and it remains in the denominator rather than being discarded. When the type is
+               unknown, a uniform four-operator portfolio removes censoring on these typed landscapes at an observed
+               1.1–4.1×cost.
+               The pre-flight automates the choice.  With 100 move pairs per operator, the pair-sampled ρ1 selector
+               identifies the matched move with mean accuracy 0.925 across typed synthetic and enumerated language-model
+               landscapes. Representation can matter even more than population tuning: on a 5,040-order precedence
+               landscape, a ridge surrogate using pairwise precedence features reaches the unique optimum in 14.8 evaluations,
+               bootstrap 95% interval [14,15], versus 54.2 [50,59] for matched elitist search.
+
+
+
+
+               6  Ground Truth and the Falsification
+
+               Search evaluation is circular when the optimizer’s best observation is also treated as the answer key. Repeated
+               stochastic queries make the maximum optimistically biased, and a method that explores more candidates can
+
+Takeaway                                                                        4
+Search operators define locality. A mismatched move can prevent success rather than merely slow it, while a
+representation aligned with the measured structure can outperform population search.
+                          Figure 3: Operator-to-landscape alignment.The conceptual illustration pairs absolute position with swap,
+                          precedence with insertion, and adjacency with inversion. It is a schematic, not a measured surface; the observed
+                          censoring and locality statistics are reported in the text andFigure 4.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                          Figure 4: The two pre-flight axes separate guiding, near-random, and deceptive regimes.The four neural,
+                          three typed synthetic, and one deceptive point use exact FDC and the largest ρ1 among swap, insertion, and inversion;
+                          scramble is excluded because identity moves can inflate its correlation. Three later language-model and mathematics
+                          probes use the same axes with frozen-sample approximations where exact enumeration is unavailable. The shaded
+                          regions summarize the conservative rule inTable 1; optimum density and evaluator resolution remain additional gates.
+
+
+
+
+
+
+ 0.8                                                                                   deceptive
+
+                                                                               deceptive
+
+
+
+ 0.4
+
+
+                               MATH-500
+                                                                         sample / caution
+
+   0
+
+            parity                                                                  eight modules
+
+
+
+                                                          six instructions
+−0.4
+                neural
+           typed, matched                                                                          5
+               deceptive                                                        guiding
+−0.8         LLM / math
+
+        0                      0.2                     0.4                     0.6                     0.8
+                           Selected-operator one-move autocorrelationρ                        1
+               Figure 5: Parity is the central falsification case.The schematic marks 14 optima among 5,040 orderings and
+               audited hit counts of 19/40 for elitist search versus 30/40 for sampling. Wilson score 95% intervals are [0.33,0.63] and
+               [0.60,0.86].
+
+               redefine the apparent target in its own favour. We therefore enumerate every ordering whenever feasible,
+               freeze sampled pools otherwise, and compare methods at equal distinct-evaluation budgets. Exact landscapes
+               report the optimum set, its density, hit probability, and regret rather than distance to a method-dependent
+               best observation. The complete parity counterexample and its audited hit counts are summarized inFigure 5.
+               The decisive test is a deterministic neural parity landscape with seven fixed modules. It contains 14 optima
+               among7! = 5     ,040orderings. The study was intended to show that scale-aware tuning would preserve an
+               evolutionary advantage. It did not. Default elitist search found an optimum in 4 of 15 exploratory runs.
+               Larger populations and stronger mutation removed population collapse but required 384 mean evaluations,
+               versus 318 for uniform sampling.
+               The failure is structural rather than a tuning anecdote. Swap, insertion, and inversion have ρ1 between
+               0.00 and 0.06, and exact FDC =−0.063. One local move therefore carries almost no information about the
+               next candidate, and global distance provides little additional guidance. Aging and surrogate variants raise
+               coverage, but no tested structured method establishes a decisive advantage over the uninformed baseline.
+               The pre-flight predicts this boundary before the search comparison is run.
+               This negative result changed the research claim. The supported statement is not “evolution beats random”;
+               it is that the benefit of structured permutation search is conditional on measurable landscape structure. A
+               correct forecast that sampling should be competitive saves budget and is a success for the protocol.
+
+
+
+
+               7  The Instruction-Ordering Landscape
+
+               The flagship landscape freezes six one-sentence modules—RESTATE, IDENTIFY, PLAN, COMPUTE,
+               CHECK, and ANSWER—and changes only their order. Each permutation is rendered as numbered steps
+               before the same 32-question GSM8K subset [18]. Gemini 2.5 Flash-Lite is queried with deterministic decoding;
+               answers are scored by a frozen numeric extractor; every ordering–question response is cached. All6! = 720
+               orderings are evaluated.
+               Accuracy ranges from 0.063 to 0.969, with mean 0.717 and standard deviation 0.230. The effect is not merely
+               a few exceptional prompts: marginal position averages inFigure 6reveal a coherent mechanism.
+               Every one of the three worst orderings places ANSWER before COMPUTE; the best examples reverse
+               that precedence. This is consistent with the idea that presentation order should respect the order in which
+               information is used [12], while not identifying a unique causal mechanism. The pre-flight selects insertion:
+               ρ1 = 0.547, compared with 0.411 for swap and 0.297 for inversion. Exact       FDC =−0.346confirms guiding
+               structure.
+
+Takeaway                                                                        6
+Structured search is not universally better than random sampling. On a landscape with almost no local signal,
+the honest baseline wins, and the pre-flight identifies that condition in advance.
+                                    Figure 6: ANSWER is favoured late and COMPUTE early.Each cell is mean accuracy over all 720 orderings
+                                    in which the named module occupies the given position. ANSWER rises from 0.435 in the first position to 0.870 in
+                                    the last; COMPUTE falls from 0.908 first to 0.585 fifth.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                   (a)Cross-family transfer with 95% intervals.                             (b)Variation survives OPRO rewriting.
+                                    Figure 7: Ordering structure transfers and is complementary to wording optimization.Left: source top
+                                    orderings beat random for Qwen [+0.013,+0.051], Llama [+0.003,+0.118], and Gemma [+0.008,+0.234]. Right: after
+                                    24 OPRO rewriting rounds, ordering-driven variation retains 94% of its original standard deviation.
+
+                                    Guidance does not guarantee a large optimizer advantage. Sixty orderings, 8.3% of the space, attain the
+                                    maximum measured accuracy. Across 40 replay runs, evolutionary search reaches an optimum in 9.9 mean
+                                    distinct evaluations, bootstrap percentile 95% interval [7,13], versus 10.8 [8,14] for uniform sampling. The
+                                    intervals overlap. An earlier 15-run estimate suggested a large speedup; the higher-powered audit withdrew
+                                    that claim.
+                                    Two additional modules expand the space to8! = 40 ,320. A probe of 222 unbiased orderings on 20 questions
+                                    finds accuracy from 0.10 to 1.00 and selects insertion at ρ1 = 0.75, but approximate     FDC =−0.095forecasts
+                                    that sampling will be competitive. Evolutionary search and uniform sampling both reach measured accuracy
+                                    1.0 at budgets 30, 60, and 120 in all four replay runs. At this resolution, one question changes accuracy by
+                                    0.05 and perfect ties are dense; the protocol recommends a modest sample or a better evaluator rather than
+                                    a more elaborate searcher.
+
+
+
+
+                                    8  Transfer and Baselines
+
+                                    The exact six-module landscape supports transfer at three resolutions. First, a score constructed from
+                                    its module–position table correlates with fitness on the 222 unbiased eight-module orderings at Spearman
+                                    ρ = 0.665, bootstrap 95% interval [0.582,0.733]. Second, source-selected top orderings are tested on fixed
+                                    pools for Gemma-3-27B, Qwen3-30B-A3B, and Llama-3.2-3B. Fine rank transfer varies, but the practical top-
+                                    ordering advantage is positive on all three targets, with bootstrap intervals excluding zero. Third, on a filtered
+                                    MATH-500 hard-reasoning pool [19], the easy-task position score correlates with target fitness at   r = 0.432,
+Qwen3-30B-A3B0.08                   while the pre-flight’s random-competitive forecast is confirmed by overlapping search intervals.Figure 7
+
+         RESTATE0.063   0.70     0.72reports both the cross-family effects and the persistence of ordering variation after wording optimization.0.720.730.730.70
+            0.06                                0.059
+        IDENTIFY        0.76     0.74The wording baseline directly tests the objection that order sensitivity is only a symptom of poor instruction0.720.710.710.65
+                                    text. OPRO raises held-out accuracy by +0.032, paired bootstrap 95% interval [+0.013,+0.052], yet the
+   Llama-3.2-3B0.04PLAN 0.77     0.72    0.70     0.71     0.72    0.68
+
+        COMPUTETakeaway0.91      0.78    0.71     0.64     0.58    0.68                                7
+            0.02
+            CHECKA fixed set of six reasoning instructions spans 90.6 accuracy points under order alone, with interpretable position0.730.760.710.690.680.72
+  Gemma-3-27B       effects. Dense optima nevertheless make uniform sampling competitive.
+          ANSWER0     0 0.43  0.050.58  0.10.73 0.150.81  0.20.87  0.250.87
+            Original     1        2     Rewritten3  4       5        6
+                      Top-ordering advantage over randomprompt position
+                    Figure 8: Registered NAS forecast calibration by dataset and stratum.Each bar summarizes three
+                    fixed-operation slices. Thirteen of 18 forecasts are correct. CIFAR-100 and ImageNet16-120 are correct in all cells; the
+                    CIFAR-10 LOW misses are conservative under-calls because search wins.
+
+                    ordering standard deviation changes only from 0.0626 to 0.0587. Content and order are therefore separate
+                    optimization coordinates.
+                    We also compare OPRO with the evolutionary executor on the same 25-evaluation ordering budget, using
+                    five shared runs. Final best-found accuracy is 0.500 [0.467,0.527] for evolution and 0.507 [0.480,0.540] for
+                    OPRO; their difference is−0.007[  −0.053,+0.040]. The comparison is a tie at the tested budget, consistent
+                    with the near-zero-guidance forecast. The point is not that the methods are identical, but that the pre-flight
+                    correctly avoids promising a directional win.
+
+
+
+
+                    9  Cross-Domain Calibration
+
+                    The protocol is also tested outside prompting. A scientific machine learning suite based on sparse identification
+                    ofnonlineardynamics[20]permutessixpreprocessingoperationsforsparseidentificationofnonlineardynamics.
+                    All 720 orderings are enumerated for each of six systems. Ordering changes fitness in every system; insertion
+                    has the largestρ1 in all six; and the evolutionary executor has more successful runs than uniform sampling in
+                    all six, with pronounced advantages in four. The main miss is diagnostic: Cayley distance is aligned with
+                    swaps and underestimates guidance on several insertion-shaped pipeline landscapes.
+                    A tabular neural architecture search study using a compact NAS-Bench-201 backend [21] registers 18
+                    HIGH/LOW forecasts on fixed-operation multiset slices before search. Thirteen are correct. CIFAR-100
+                    and ImageNet16-120 are each 6/6; all five misses occur on CIFAR-10-valid, and the three LOW misses are
+                    conservative because search wins despite the cautious forecast. These studies test calibration, not a claim
+                    that PRISM is a new pipeline learner or architecture-search algorithm. The registered architecture forecasts
+                    are broken down by dataset and stratum inFigure 8.
+                    Aforecast ledgerpairs every recorded call with its outcome, including corrections, ties, and null results. The
+                    complete numerical record appears inTable 5; retaining misses is what exposes the current distance-metric
+                    limitation rather than converting it into a post hoc success.
+                    Across the full program, recorded external-model inference expenditure remains below US$20, and the
+                    synthetic, neural, scientific-pipeline, and tabular architecture studies use CPU execution. Exact tables, frozen
+                    pools, caches, and registered forecasts are retained so a wrong call remains auditable rather than being
+                    rewritten as a successful post hoc explanation.
+
+                    10  Limitations
+
+                   HIGH: search predicted      LOW: sampling predicted
+                    Exact neural ground truth stops at seven modules and exact language-model ground truth at six; the eight-3333
+3                   module study observes 222 of 40,320 orderings. The language evidence covers two mathematical reasoning
+                    benchmarks and frozen model snapshots, not general generation, retrieval, coding, or future model versions.
+                    Fixed question pools and graders also bound resolution: with 20 binary questions, one answer moves fitness
+2                   by 0.05 and produces dense ties.
+
+
+
+1   Takeaway1                                                                        8
+
+    Ordering is a separate optimization axis from wording. Rewriting improves the average prompt but does not
+    flatten the ordering surface, while optimizer differences vanish in the forecast near-random regime.0
+0
+    CIFAR-10                           CIFAR-100                        ImageNet16-120
+                              Table 2:Final summary of the paper’s key findings, limitations, and recommended actions.
+
+                   Focus              Key finding                      Takeaway or action
+                   Searchability          Space size does not predict difficulty;        Run the PRISM pre-flight before committing the main budget
+                                             measured locality and guidance do
+                   Executor selection      No executor dominates across guiding,         Select enumeration, sampling, evolution, a surrogate, or
+                                             near-random, and deceptive regimes          transfer conditionally
+                   Exact falsification      On parity, elitist search hits 19/40         Treat a correct sampling forecast as a successful result
+                                             optima versus 30/40 for sampling
+                   Instruction order       Six fixed modules span 6.3%–96.9%             Treat ordering as a distinct optimization coordinate
+                                             accuracy and show coherent position
+                                             effects
+                   Transfer and              Position structure transfers                Revalidate rankings on each target and optimize wording and
+                   baselines                 imperfectly and survives wording            order separately
+                                             optimization
+                   Cross-domain              Scientific pipelines and NAS slices         Retain a forecast ledger and revise diagnostics from failures
+                   calibration               reveal both correct calls and
+                                             distance-metric misses
+                   Scope                 Evidence is concentrated at smalln,             Replicate at larger scale with aligned metrics, uncertainty, and
+                                             fixed evaluators, and bounded task          safety constraints
+                                             families
+
+                Exact FDC requires known optima. Sampled studies use the best frozen probe observation, which can miss the
+                relevant basin, while swap-aligned Cayley distance conservatively under-calls some insertion-shaped pipelines.
+                Precedence-aligned distance remains future work. The OPRO comparison has five runs and supports a tie
+                rather than fine equivalence.
+
+
+
+
+                11  Conclusion
+
+                Permutation-space difficulty follows structure rather than cardinality: a 5,040-order parity landscape can
+                be harder for elitist search than a matched synthetic space with roughly twenty trillion orderings. PRISM
+                therefore measures locality, global guidance, score variance, and tie density before allocating budget. Its
+                exhaustive instruction map spans 6.3%–96.9% accuracy, yet dense optima and weak guidance still make
+                uniform sampling the correct executor.
+                Recommendations.Define legal orderings, enumerate small spaces, verify evaluator resolution, align
+                distance with the move, and compare executors under one distinct-evaluation budget. Register the forecast
+                first and retain ties, censored runs, null results, and misses.
+                Future work and further research.Prioritiesareprecedence-andadjacency-aligneddistances, uncertainty-
+                aware probes, adaptive probe allocation, scalable surrogates, and independent replication across tasks and
+                model families. Language-agent pipelines, compiler and database plans, scientific workflows, and laboratory
+                automation offer low-cost replay; clinical, security, financial, and autonomous applications require safety
+                constraints and prospective human oversight. The 24-domain roadmap inTable 3separates opportunities
+                from validated evidence.
+
+
+
+
+                12  Applications and Experimental Roadmap
+
+                The protocol applies to fixed component sets whose order can change without changing their content.Table 3
+                maps 24 problem domains where ordering may affect accuracy, cost, latency, safety, robustness, or resource
+                use. Each study must define the legal space, verify score resolution, register the forecast, and compare with
+                sampling and the strongest domain baseline; the entries are testable opportunities rather than claims of
+                validated gains.
+
+
+
+
+
+
+
+
+TakeawayTakeaway                                                                      9
+The evidence supports calibrated decisions on measured landscapes, not universal optimizer superiority orPRISM is a falsifiable protocol for deciding when to search, when to sample, and when to improve the evaluator
+guaranteed transfer and calibration at largern.first; its value lies in calibrated choice rather than universal optimizer superiority.
+               Table 3:Twenty-four problem domains in which PRISM can test ordering effects. Each entry defines a legal
+               permutation unit and an impact objective; it identifies a testable opportunity rather than a validated win. New
+               studies still require evaluator-resolution, safety, pre-flight, and equal-budget baseline checks.
+
+                                                                                     Domain            Permuted unit and impact
+                 Domain            Permuted unit and impact                                                objective
+                                       objective                                     Cybersecurity         Detection, containment,
+
+                 Language-             Reasoning or tool instructions;               response              recovery steps; risk and
+                 model                 accuracy, robustness, token use                                     response time
+                 prompting                                                           Network               Routing, filtering, inspection
+                 Agent                 Retrieval, planning, action,                  service chains        functions; throughput and
+                 workflows             checking; success, calls, latency                                   latency
+                 Compiler              Legal passes; runtime, code                   Cloud                 Build, test, deploy, migrate
+                 optimization          size, energy                                  deployment            stages; downtime and cost
+                 Neural                Fixed blocks or edge operations;              Database              Joins, filters, and aggregations;
+                 architecture          accuracy and efficiency                       execution             latency and resource use
+                 Scientific            Preprocessing and identification              Image                 Denoising, normalization,
+                 discovery             stages; recovery and stability                processing            segmentation; quality and
+                 Data                  Cleaning, joining,                                                  accuracy
+                 engineering           transformation stages; quality                Signal                Filters and transforms; signal
+                                       and cost                                      processing            quality and latency
+                 Clinical              Test, triage, and review steps;               Remote sensing  Correction, fusion, classification
+                 diagnostics           safety, time, accuracy                                              stages; mapping accuracy
+                 Genomics       Quality control, alignment, and                      Financial risk    Cleaning, modelling, stress
+                                       variant calling; sensitivity and                                    testing, reporting; stability and
+                                       runtime                                                             compliance
+                 Drug discovery   Screening, synthesis, and assay                    Supply chains    Sourcing, stocking, routing
+                                       stages; yield and experimental                                      steps; cost and service level
+                                       cost                                          Maintenance     Inspection, diagnosis, repair
+                 Manufacturing   Process operations; yield,                                                actions; reliability and
+                                       defects, energy                                                     downtime
+                 Robotics        Perception, planning, and                           Education       Lessons, examples, and
+                                       control modules; success and                                        exercises; mastery and
+                                       safety                                                              retention
+                 Reinforcement         Options or curriculum tasks;                  Laboratory            Preparation, mixing,
+                 learning              sample efficiency and return                  automation            measurement, quality control;
+                                                                                                           reproducibility and time
+
+
+
+
+
+
+               Acknowledgments.The author gratefully acknowledges God for guidance and strength, and thanks Jake
+               Beck for reviewing the manuscript and providing constructive feedback. This work was conducted within the
+               ML Collective research community. The author retains responsibility for the analyses and conclusions.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Takeaway                                                                        10
+High-impact use requires a legal ordering space, a resolvable evaluator, a registered forecast, and equal-budget
+domain baselines.
+References
+
+ [1]  Edward Weinberger. “Correlated and Uncorrelated Fitness Landscapes and How to Tell the Difference”.
+       In:Biological Cybernetics63 (1990), pp. 325–336.doi:10.1007/BF00202749.
+ [2]  Terry Jones and Stephanie Forrest. “Fitness Distance Correlation as a Measure of Problem Difficulty
+       for Genetic Algorithms”. In:Proceedings of the Sixth International Conference on Genetic Algorithms.
+       Morgan Kaufmann, 1995, pp. 184–192.
+ [3]  Vincent A. Cicirello. “On Fitness Landscape Analysis of Permutation Problems: From Distance Metrics
+       toMutationOperatorSelection”. In:Applied Sciences12.19(2022), p.9976.doi:                       10.3390/app12199976.
+       arXiv:2208.11188 [cs.NE].
+ [4]  Günter Rudolph. “Convergence Analysis of Canonical Genetic Algorithms”. In:IEEE Transactions on
+      Neural Networks5.1 (1994), pp. 96–101.doi:10.1109/72.265964.
+ [5]  Yao Lu, Max Bartolo, Alastair Moore, Sebastian Riedel, and Pontus Stenetorp. “Fantastically Ordered
+       Prompts and Where to Find Them: Overcoming Few-Shot Prompt Order Sensitivity”. In:Proceedings
+      of the 60th Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers).
+      Association for Computational Linguistics, 2022, pp. 8086–8098.doi:                      10 . 18653 / v1 / 2022 . acl -
+       long.556.
+ [6]  Zihao Zhao, Eric Wallace, Shi Feng, Dan Klein, and Sameer Singh. “Calibrate Before Use: Improving
+       Few-Shot Performance of Language Models”. In:Proceedings of the 38th International Conference on
+      Machine Learning. Vol. 139. Proceedings of Machine Learning Research. PMLR, 2021, pp. 12697–12706.
+       url:https://proceedings.mlr.press/v139/zhao21c.html.
+ [7]  Nelson F. Liu, Kevin Lin, John Hewitt, Ashwin Paranjape, Michele Bevilacqua, Fabio Petroni, and
+       Percy Liang. “Lost in the Middle: How Language Models Use Long Contexts”. In:Transactions of the
+      Association for Computational Linguistics12 (2024), pp. 157–173.doi:10.1162/tacl_a_00638.
+ [8]  MelanieSclar,YejinChoi,YuliaTsvetkov,andAlaneSuhr.“QuantifyingLanguageModels’Sensitivityto
+       Spurious Features in Prompt Design or: How I Learned to Start Worrying about Prompt Formatting”. In:
+      The Twelfth International Conference on Learning Representations. 2024.url:https://openreview.
+       net/forum?id=RIu5lyNXjT.
+ [9]  Pouya Pezeshkpour and Estevam Hruschka. “Large Language Models Sensitivity to The Order of
+       Options in Multiple-Choice Questions”. In:Findings of the Association for Computational Linguistics:
+      NAACL 2024. Association for Computational Linguistics, 2024, pp. 2006–2017.doi:                                  10.18653/v1/
+       2024.findings-naacl.130.
+[10]  Chujie Zheng, Hao Zhou, Fandong Meng, Jie Zhou, and Minlie Huang. “Large Language Models
+      Are Not Robust Multiple Choice Selectors”. In:The Twelfth International Conference on Learning
+      Representations. 2024.url:https://openreview.net/forum?id=shr9PXz7T0.
+[11]  Hyunjong Ok and Jaeho Lee.Lost in the Prompt Order: Revealing the Limitations of Causal Attention
+      in Language Models. 2026. arXiv:2601.14152 [cs.CL].
+[12]  Yue Zhou, Henry Peng Zou, Barbara Di Eugenio, and Yang Zhang. “The Curse of Verbalization: How
+       Presentation Order Constrains LLM Reasoning”. In:Findings of the Association for Computational
+      Linguistics: EACL 2026. Association for Computational Linguistics, 2026, pp. 4175–4185.doi:                                  10.
+      18653/v1/2026.findings-eacl.218.
+[13]  Jason Wei, Xuezhi Wang, Dale Schuurmans, Maarten Bosma, Fei Xia, Ed Chi, Quoc V. Le, and
+       Denny Zhou.Chain-of-Thought Prompting Elicits Reasoning in Large Language Models. 2022. arXiv:
+       2201.11903 [cs.CL].
+[14]  XuezhiWang,JasonWei,DaleSchuurmans,QuocV.Le,EdChi,SharanNarang,AakankshaChowdhery,
+       and Denny Zhou.Self-Consistency Improves Chain of Thought Reasoning in Language Models. 2022.
+       arXiv:2203.11171 [cs.CL].
+[15]  Yongchao Zhou, Andrei Ioan Muresanu, Ziwen Han, Keiran Paster, Silviu Pitis, Harris Chan, and
+      Jimmy Ba.Large Language Models Are Human-Level Prompt Engineers. 2022. arXiv:            2211.01910
+       [cs.LG].
+[16]Chengrun Yang, Xuezhi Wang, Yifeng Lu, Hanxiao Liu, Quoc V. Le, Denny Zhou, and Xinyun Chen.
+      Large Language Models as Optimizers. 2023. arXiv:2309.03409 [cs.LG].
+[17]  Omar Khattab, Arnav Singhvi, Paridhi Maheshwari, Zhiyuan Zhang, Keshav Santhanam, Sri Vard-
+       hamanan, Saiful Haq, Ashutosh Sharma, Thomas T. Joshi, Hanna Moazam, Heather Miller, Matei
+       Zaharia, and Christopher Potts.DSPy: Compiling Declarative Language Model Calls into Self-Improving
+      Pipelines. 2023. arXiv:2310.03714 [cs.CL].
+
+
+                                                               11
+[18]  Karl Cobbe, Vineet Kosaraju, Mohammad Bavarian, Mark Chen, Heewoo Jun, Lukasz Kaiser, Matthias
+       Plappert, Jerry Tworek, Jacob Hilton, Rei Nakano, Christopher Hesse, and John Schulman.Training
+      Verifiers to Solve Math Word Problems. 2021. arXiv:2110.14168 [cs.LG].
+[19]  Dan Hendrycks, Collin Burns, Saurav Kadavath, Akul Arora, Steven Basart, Eric Tang, Dawn Song,
+       and Jacob Steinhardt.Measuring Mathematical Problem Solving With the MATH Dataset. 2021. arXiv:
+       2103.03874 [cs.LG].
+[20]  Steven L. Brunton, Joshua L. Proctor, and J. Nathan Kutz. “Discovering Governing Equations from
+       Data by Sparse Identification of Nonlinear Dynamical Systems”. In:Proceedings of the National Academy
+      of Sciences113.15 (2016), pp. 3932–3937.doi:10.1073/pnas.1517384113.
+[21]  Xuanyi Dong and Yi Yang.NAS-Bench-201: Extending the Scope of Reproducible Neural Architecture
+      Search. 2020. arXiv:2001.00326 [cs.CV].
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                              12
+Figure 9: Evolutionary executor loop.A population is evaluated, its best member is retained, tournament
+selection chooses parents, and the selected mutation operator produces the next generation.  The convergence
+statements below apply to this executor, not to enumeration or uniform sampling.
+
+Table 4:Headline comparisons and uncertainty statements retained in the short paper. Bootstrap entries are
+percentile intervals over the archived replay units; hit-rate entries use Wilson score intervals for binomial proportions.
+
+ Comparison          Method A           Method B           Interpretation
+ Parity optimum hits, 40         elitist 19/40 [0.33,0.63]    random 30/40                     no evolutionary advantage
+ runs                                                           [0.60,0.86]
+ Six-instruction                 evolution 9.9 [7,13]       random 10.8 [8,14]       intervals overlap
+ evaluations to optimum
+ MATH-500 final                  guided 0.407                   random 0.397                   random-competitive call holds
+ best-found accuracy             [0.367,0.447]                  [0.367,0.433]
+ OPRO ordering search    evolution 0.500                        OPRO 0.507                     difference spans zero
+                                 [0.467,0.527]                  [0.480,0.540]
+ Wording level change     +0.032 [0.013,0.052]      SD ratio 0.94            wording helps; ordering remains
+A  Executor Guarantees and Scope
+
+
+The protocol’s empirical claims do not depend on a novel convergence theorem. The evolutionary executor
+inherits the standard reachability argument for elitist evolutionary algorithms with an irreducible mutation
+kernel [4]. The executor cycle to which the following guarantees apply is shown inFigure 9.
+
+Proposition A.1(Reachability).Let            Sn be finite. If mutation has positive probability of proposing every
+transposition and selection can choose every current population member with positive probability, then every
+permutation is reachable from every population state in finitely many steps with positive probability.
+
+
+
+Proof. Every permutation can be transformed into every other by a finite sequence of transpositions. The
+stated mutation and selection conditions assign positive probability to each step of such a sequence. Their
+finite product is positive.
+
+
+Theorem A.2(Almost-sure optimum discovery).Under the conditions ofTheorem A.1, an elitist executor
+run without a finite budget discovers a global optimum with probability one and never loses the best observed
+fitness.
+
+
+
+Proof. From any non-optimal state there is a finite positive-probability path to an optimum. Finiteness gives
+a positive lower bound on reaching an optimum over sufficiently long blocks. The probability of avoiding all
+such blocks tends to zero. Elitism preserves the best fitness after discovery.
+
+
+
+The guarantee is qualitative. A direct worst-case bound scales with the number of permutations and is
+therefore factorial; it does not explain the empirical n3 logn   -shaped fits observed on matched synthetic
+landscapes through n = 16. Those fits are conditional evidence about particular structures and moves, not a
+universal runtime theorem.
+For aging replacement, the incumbent optimum can leave the active population. Nevertheless, the best-ever
+record still converges almost surely under the same reachability conditions. This is why the paper distinguishes
+active-population convergence from record convergence and makes all finite-budget claims empirical.
+
+
+                                                                  13
+          Table 5:Numerical forecast ledger. Correct, mixed, tie, and null outcomes remain in the record.
+
+   Study            Recorded call           Outcome                                           Verdict
+   Six instructions     insertion; guiding            insertion signal; search/sampling intervals overlap              scoped
+                        structure
+   Eight modules      sampling competitive        both methods reach 1.0 at every budget                      correct
+   Cross-family        source top orderings           positive effect on all three targets; exact ranks vary            mixed
+                        transfer
+   MATH-500         sampling competitive        guided, evolutionary, and random intervals overlap             correct
+   Wording and          order survives rewriting;     SD ratio 0.94; final difference spans zero                      correct
+   search               search comparison
+                        uncertain
+   Pipelines and        cautious pre-search calls     pipeline distance under-calls; NAS 13/18                      partial
+   NAS
+B  Additional Statistical Record
+
+B.1  Forecast ledger
+
+B.2  Selector reliability
+
+At equal pre-flight budgets, pair-sampled ρ1 is more reliable than random-walk autocorrelation or negative
+mean absolute fitness change. Averaged across typed synthetic and the enumerated instruction landscape
+over 200 resamples per cell, selector accuracies are:
+
+                           Estimator        B= 50B= 100B= 500
+                           Pair-sampledρ                          1                         0.831      0.925       0.998
+                           Random-walkρ       1                0.734     0.848     0.992
+                           Negative mean absolute change   0.827     0.915     0.991
+
+B.3  Pipeline and architecture-search details
+
+The six pipeline systems comprise damped and cubic oscillators, Van der Pol, Lotka–Volterra, Lorenz-63, and
+Rössler dynamics. Fitness ranges under order alone are 0.40–1.00, 0.70–1.00, 0.31–0.88, 0.00–1.00, 0.89–0.99,
+and 0.37–0.81, respectively. Evolutionary-versus-random hit counts over 40 runs are 21/16, 34/30, 40/20,
+40/37, 40/23, and 40/14.
+The architecture-search forecast matrix contains three HIGH and three LOW slices per dataset. CIFAR-100
+and ImageNet16-120 are correct in all six cells. On CIFAR-10-valid, one HIGH call is correct, two HIGH
+calls miss, and all three LOW calls are conservative misses because search wins. Thus 13 of 18 registered
+forecasts are correct, and every LOW miss errs toward underusing rather than overselling search.
+
+B.4  Completed experiment coverage
+
+Table 6maps the complete research program into experiment families. The short main text emphasizes the
+results that determine the current claim; the archive retains per-run data, negative redesigns, corrections,
+and implementation details.
+
+C  Reproducibility, Resource Accounting, and Data Schema
+
+All externally hosted model evaluations use frozen question pools, deterministic decoding where supported,
+canonical ordering identifiers, and append-only response records. Repeated orderings are resolved from the
+archived record and do not count as new distinct evaluations. Recorded external-model inference expenditure
+across the program remains below US$20; the synthetic, neural, scientific-pipeline, reinforcement-learning,
+and tabular architecture studies use CPU execution.
+The data schema preserves one row per unique ordering with a stable study identifier, canonical ordering
+key, component list, fitness statistic, sample provenance, evaluator version, exact-space status, and resource
+record. Derived neighbourhood tables retain parent and child orderings, the move operator, both scores, and
+the sampling seed; distance tables declare the metric and whether the target is an exact optimum or a frozen
+proxy.
+The canonical project repository, including the paper source, experiment summaries, data manifests, and
+regeneration instructions, is available athttps://github.com/bleymambwe/PRISM.
+
+
+                                                                 14
+                         Table 6:Coverage of completed experiment families through August 3, 2026.
+
+  Experiment family      Included studies            Retained conclusion
+  Reproduction and                 Historical neural toys; failed         Headlines reproduce with corrections; deterministic exact ground
+  benchmark repair                 deep-stack redesign; residual,         truth replaces noisy best-ever fitness.
+                                   seeded v4 benchmarks
+  Operator and landscape           Typed synthetic landscapes;            Operator matching is necessary on plateau-rich landscapes; portfolio
+  science                          deceptive objective; uniform           removes configuration failure at bounded observed cost; deception
+                                   and adaptive portfolios                remains a limit.
+  Exact neural search tests   Enumerated XOR and parity                   Exact hit rate and regret expose both success and the pivotal
+                                   landscapes from 120 to 5,040           random-sampling falsification.
+                                   orderings
+  Diagnosis and method             Locality study; aging and              Measurements select operators, replacement, and representation;
+  selection                        restart replacement;                   pair-sampledρ                        1 is the most reliable tested low-budget selector.
+                                   precedence surrogate; 40-seed
+                                   audit;ρ           1 ablation
+  Language-model ordering   Exhaustive and sampled                        Ordering has a large structured effect, transfers imperfectly, survives
+                                   instruction landscapes; size           wording optimization, and does not guarantee a search-speed win.
+                                   and family transfer; guided
+                                   evaluation; MATH-500; OPRO
+                                   rewriting and search
+  Cross-domain calibration   Six-system scientific-pipeline               Scientific and NAS studies calibrate the protocol beyond prompting;
+                                   suite; 18 tabular NAS forecasts;       RL shows preliminary executor transfer but has not yet passed a
+                                   two lightweight RL ordering            registered pre-flight.
+                                   pilots
+
+Table 7:Resource accounting for externally hosted language-model studies. Expenditure is reported for reproducibility
+and is not used as a performance metric.
+
+     Study surface      Evaluation                                   Observed               Reproducibility record
+                                     coverage                        cost
+     Six instruction                 720×32≈23,000                   US$3–5        exhaustive ordering-by-question table
+     modules                         responses
+     Eight instruction               23,805 model                    US$5.56        fixed sampled pool with per-response
+     modules                         evaluations                                            records
+     Cross-family transfer   11,955 model                            US$0.66        shared prompts, orderings, and question set
+                                     evaluations                                            across three families
+     MATH-500           31,998 model                                 US$4.43        pilot-selected model, frozen pool, and
+                                     evaluations                                            registered forecast
+     Wording and search              12,724 target                   US$2.68        held-out scoring and shared evaluation
+     baselines                       evaluations                                            budgets
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                            15

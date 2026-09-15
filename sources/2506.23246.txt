@@ -1,0 +1,1386 @@
+        Quantum Physics-Informed Neural Networks for Maxwell’s
+Equations: Circuit Design, “Black Hole” Barren Plateaus Mitigation,
+                                          and GPU Acceleration
+
+        Ziv Chena,c∗       Gal G. Shavinerb     Hemanth Chandravamsib     Shimon Pisnoyb
+                                      Steven H. Frankelb,c     Uzi Perega,c
+
+                    aThe Andrew and Erna Viterbi Faculty of Electrical & Computer Engineering,
+                                 Technion - Israel Institute of Technology, Haifa, Israel.
+             bFaculty of Mechanical Engineering, Technion - Israel Institute of Technology, Haifa, Israel.
+
+                cHelen Diller Quantum Center, Technion - Israel Institute of Technology, Haifa, Israel.
+
+
+                                                        Abstract
+         Physics-Informed Neural Networks (PINNs) have emerged as a promising approach for
+         solving partial differential equations (PDEs) by embedding the governing physics into the
+         loss function associated with a deep neural network. In this work, aQuantum Physics-
+         Informed Neural Network(QPINN) framework is proposed to solve two-dimensional (2D)
+         time-dependent Maxwell’s equations. Our approach utilizes a parametrized quantum circuit
+         (PQC)inconjunctionwiththeclassicalneuralnetworkarchitectureandenforcesphysicallaws,
+         including a global energy conservation principle, during training. A quantum simulation
+         library,TorQ - Tensor Operations for Research in Quantum systems,was developed to
+         efficiently compute circuit outputs and derivatives by leveraging GPU acceleration based on
+         PyTorch, enabling end-to-end training of the QPINN. The method was evaluated on two
+         2D electromagnetic wave propagation problems: one in free space (vacuum) and the other
+         has an added dielectric medium. Multiple quantum circuit ansätze, input scales, and an
+         added loss term were compared in a thorough ablation study. Furthermore, recent techniques
+         to enhance PINN convergence, including random Fourier feature embeddings and adaptive
+         time weighting, have been incorporated. Our results demonstrate that the QPINN achieves
+         accuracy comparable to, and even greater than, the classical PINN baseline, while using
+         a significantly smaller number of trainable parameters. This study also demonstrates that
+         adding an energy conservation term to the loss stabilizes training and improves the physical
+         fidelity of the solution in the lossless free-space case. This added term helps mitigate a
+         new kind of barren plateau (BP) related phenomenon -“black hole”(BH) loss landscape
+         for the quantum experiments in that scenario. By optimizing the quantum-circuit ansatz
+         and embedding energy-conservation constraints, our QPINN achieves up to a19%higher
+         accuracy on 2D Maxwell benchmark problems compared to a classical PINN.
+KeywordsQuantum Machine Learning and Maxwell’s Equations · QPINNs· Barren Plateaus· Ansatz
+Design
+1  Introduction
+Recent advances in quantum computing have drawn growing interest due to its potential to accelerate scientific
+machine learning. Among the promising approaches in this domain arePhysics-Informed Neural Networks
+(PINNs) [1, 2, 3], which have emerged as mesh-free, differentiable function-approximation frameworks for
+solving forward and inverse problems governed by ordinary differential equations (ODEs)/ PDEs [4, 5]. PINNs
+have been successfully applied to problems in wave propagation [6], fluid dynamics [7], solid mechanics [8], and
+electromagnetic simulations [9]. Building on this foundation, QPINNs extend the classical PINNs paradigm
+by embedding parametrized quantum circuits (PQCs) within the neural network ansatz, either partially or
+fully replacing classical components [10, 11]. The integration of quantum models into PINNs is motivated by
+
+    ∗Corresponding author:ziv.chen@campus.technion.ac.il
+
+
+                                                              1
+the prospect of enhanced expressivity and improved scalability, particularly for high-dimensional problems
+where classical neural networks often face limitations.
+    Recent works on QPINNs have explored hybrid quantum-classical PINN architectures on simple benchmark
+problems, demonstrating feasibility for ODEs and small-scale PDEs. For instance, Trahan et al. [11] employed
+a QPINN architecture to solve a an ODE (spring-mass oscillator) and a PDE (Poisson’s equation), and
+employed a hybrid architecture for the one-dimensional Burgers’ equation. Sedykh et al. [12] extended the
+framework to a three-dimensional fluid flow problem using a hybrid QPINN, reporting improved accuracy over
+classical PINNs in a complex geometry. These early studies indicate that QPINNs are capable of solving PDEs
+and can sometimes yield improved accuracy or parameter efficiency. However, despite these promising results,
+prior work has primarily focused on relativelysimple and canonical problems, and the performance of QPINNs
+on high-dimensional, unsteady, and nonlinear systems remains largely unexplored. Motivated by this, in the
+present work, we study challenges associated with using QPINNs to solve the set of coupled two-dimensional,
+time-dependent Maxwell’s equations - representative of multi-dimensional unsteady field problems. Notable
+works related to solving Maxwell’s equations using classical PINN networks include: [13,14,15,16,17,18].
+    Despite the success of PINNs and their broad applicability, training them remains notoriously hard [19]
+due to several practical issues. These include (a)spectral bias, wherein high-frequency components are
+learned significantly more slowly than low-frequency modes, (b) the complex loss landscapes associated with
+high-dimensional, multiscale problems, and (c) strong sensitivity to hyperparameter choices. To address these
+limitations, a range of architectural and training strategies have been proposed in the literature to enhance
+convergence, stability, and generalization [20, 19, 21, 3, 22, 23, 24]. These techniques have been demonstrated
+to substantially enhance PINN performance across various applications. In this work, we incorporate a subset
+of these architectural enhancements within the QPINN framework, focusing specifically on their application
+to two-dimensional time-dependent Maxwell’s equations.
+    In this paper, we develop a QPINN for solving the 2D time-dependent Maxwell’s equations and conduct a
+detailed analysis of the quantum network ansatz and enforcement of physical conservation laws. The study
+focuses on a model problem of electromagnetic pulse propagation both in free space (vacuum) and through a
+dielectric medium. Our contributions are as follows:
+      • We develop the first hybrid quantum-classical PINN for Maxwell’s equations, embedding a PQC as a
+          neural network layer and leveraging an in-house GPU-accelerated PyTorch-based quantum simulator
+          with native automatic differentiation for PDE residuals - something no prior work has combined.
+      • We observe a new phenomenon, BH, in which after several hundred epochs of descending toward an
+          approximate PDE solution, the solution suddenly descends to the trivial solution instead. Due to
+          this effect, the solution has no physical meaning, and its values become approximately 0 at every
+          point in space and time but t = 0as it captures only the initial condition. This collapse is distinct
+          from known BP and laziness effects [25] (elaborated in section5).
+      • We introduce a novel, physics-informed penalty based on the Poynting energy conservation law. We
+          demonstrate that enforcing this global constraint is crucial to avoid BH collapse in the free-space
+          case.
+      • We perform a comprehensive ablation, including six quantum ansätze and five input-angle encoding
+          schemes, demonstrating exactly how circuit depth, entanglement pattern, and encoding choice affect
+          both convergence and final accuracy.
+      • We carry out a head-to-head comparison of our QPINN against a leading classical PINN architecture
+          on both vacuum and dielectric test cases, quantifying errors, convergence rates, and the impact of
+          the energy-conservation term.
+    The rest of the paper is structured in the following manner: Section2describes the problem setup and
+methodology (2.1), including the Maxwell equations, the PINN and QPINN formulations (2.2,2.3), and
+the quantum circuit ansatz designs. In Section3, we detail the custom quantum simulation approach and
+optimization strategy. Section4presents the experiments and results for the two test scenarios (4.1,4.2),
+with comparisons of different ansätze and analysis of the impact of the energy conservation term. This section
+also elaborates on the “black hole” phenomenon (5). Section6provides a discussion of the implications of
+our findings, including advantages and current limitations of the QPINN approach, followed by concluding
+remarks and potential directions for future research.
+
+2  Methodology and problem formulation
+
+2.1  Maxwell’s equations in two dimensions and problem setup
+The microscopic form of Maxwell’s equations governs the behavior of electric and magnetic fields in space
+and time. They are expressed as:
+
+
+                                                                 2
+                                                                                         (            )
+                        ∇·E=  ρε, ∇·B= 0, ∇×E=−       ∂B∂t , ∇×B=µ                         J+ε  ∂E∂t    .             (1a–d)
+
+    HereEandBdenote the electric and magnetic fields;         ρ is the electric charge density;Jis the current
+density; ε is the electric permittivity; and µ is the magnetic permeability. In regions free of charges and
+currents, these equations simplify to:
+
+                                            ∇×B=µε    ∂E∂t, ∇×E=−    ∂B∂t                             (2a–b)
+
+    For linear, isotropic, and homogeneous materials, the constitutive relations connecting the electric fieldE,
+magnetic fieldB, electric displacement fieldD, and the magnetizing fieldHare given by:
+                                                      D=εE,   B=µH                                            (3a–b)
+whereεandµdenote the permittivity and permeability of the medium, respectively.
+    Substituting Eqs.3    a–b into Eq.2   a–b, the Maxwell’s equations in terms of the electric fieldEand the
+magnetic fieldHare obtained:
+                                            ∂E
+                                            ∂t  = 1ε∇×H,     ∂H∂t  =−   1µ∇×E                             (4a–b)
+    For simplicity, a transverse electric (TEz) polarization, where the electric field has only a z-component
+Ez(x,y,t)(out of plane) and the magnetic field has in-plane components(  Hx(x,y,t),Hy(x,y,t))was used.
+The Maxwell equations for this 2D TE case can be written as:
+                          ∂Ez        (∂Hy              )                    ∂Ez                   ∂Ez
+                           ∂t   = 1ε     ∂x − ∂Hx∂y      ,  ∂Hx∂t   =−   1µ  ∂y ,  ∂Hy∂t   =  1µ   ∂x                (5a–c)
+
+    The permittivity and permeability are different by several orders of magnitude, so the equations are
+manipulated by changing the electric field:                     √
+                                                           ˜E=      ε0
+                                                                    µ0 E                                      (6)
+ Hence Eqs.5a–cbecome:
+                ∂ ˜Ez             (∂Hy              )                           ∂ ˜Ez                       ∂ ˜Ez
+                 ∂t   =      1√ε0µ0   ∂x − ∂Hx∂y      ,  ∂Hx∂t   =−       1√ε0µ0∂y ,  ∂Hy∂t   =      1√ε0µ0  ∂x         (7a–c)
+
+    After the transformation in Eq.6, the field amplitudes          ˜Ez, Hx, andHy become comparable in magnitude.
+This allows us to normalize the permittivity and permeability by setting ε0  = µ0  =  1, which improves
+numerical stability. In vacuum, the material parameters are given by ε =ε0 andµ =µ0. In dielectric regions,
+we assume µ = µ0 remains constant, while the permittivity becomes ε = εrε0. In our setup, the relative
+permittivity is set to εr = 4inside the dielectric medium. For notational simplicity, we drop the tilde and
+henceforth denote the normalized electric field simply asE  z.
+    The domain in which both cases were tested is spatially periodic x,y∈   [−1, 1]. The time domain in the
+vacuum case wast∈  [0, 1.5]to capture wall-reflection effects and in the dielectric case  t∈  [0, 0.7]so the waves
+were well contained within the boundaries to simulate a boundaryless space.(2order×#occurrences of the relevant input dependence )
+    Closs, per point ≈1  +  ∑needed derivatives
+2.2  PINN architecture and convergence enhancements
+As a baseline, a classical PINN for the 2D Maxwell problem is first established, which is also the basis for our
+hybrid QPINN. The solution fields are represented by a neural network fθ(x,y,t)with trainable parameters
+θ. The network takes continuous coordinates(      x,y,t)as input and outputs a vector(    Ez,Hx,Hy)which
+constitutes the PINN’s prediction for the fields at that point.
+Residuals for each equation are defined to calculate the PDE loss -Lphys. For the first equation, in the
+vacuum test case, a single residual is defined:
+                                                                   (∂Hy             )
+                                            res1,vac    = ∂ ˜Ez∂t −   ∂x − ∂Hx∂y       ,                             (9)
+
+While in the dielectric test case, two residuals are defined. The first (res1,vac ) is the same as in the vacuum
+case (9) and consists of the points in the vacuum part of the domain, and consists of the points in the
+
+
+                                                                 3
+dielectric part of the domain:                                       (∂Hy              )
+                                          res1,diel   = ∂ ˜Ez∂t −  1εr   ∂x − ∂Hx∂y       ,                           (11)
+
+Residuals 2 and 3 are the same for both cases:
+
+                                        res2 = ∂Hx∂t   + ∂ ˜Ez∂y ,  res3 = ∂Hy∂t − ∂ ˜Ez∂x                       (12a–b)
+
+A physics-informed lossL       phys that penalizes the PDE residuals is defined as follows (one for each case):
+                               Lphys, vac =MSE(res        1,vac  ) +MSE(res        2) +MSE(res        3)                   (13)
+ Lphys, diel =MSE(res        1,vac  (x,y,t) ∈N   vac) +MSE(res        1,diel  (x,y,t) ∈N   diel) +MSE(res        2) +MSE(res        3) (14)
+where Nvac is the number of collocation points in the grid in which ε = 1, and Ndiel are the rest of the
+collocation points. The MSE function is defined as follows:
+                                                                          ∑
+                                        MSE(F(x,y,t)   ∈N  ) =  1N               F 2(x,y,t)                           (15)
+                                                                        x,y,t∈N
+In the dielectric case, this loss function weights equally the vacuum part and the dielectric part of the domain,
+even though there are fewer collocation points in the dielectric part than in the vacuum part. The emphasis
+on the dielectric part stabilizes convergence and avoids BH as explained later, in subsection5.1. The grid
+size used was64    3 (64 per coordinate), spread equally.
+    The initial conditions are the same for both cases, a 2-D Gaussian pulse in the electric field, while the
+magnetic fields are initialized as zero:
+
+                                                Ez0(x,y,t= 0) =e  −25(x          2+y    2)                               (16)
+                                                      Hx0(x,y,t= 0) = 0                                  (17)
+                                                      Hy0(x,y,t= 0) = 0                                  (18)
+Therefore, the initial-condition lossL       IC is defined as follows:[
+               LIC =    1      ∑     (E z(x,y,0)−E    z0(x,y,t= 0))   2 + (H x(x,y,0))   2 + (H y(x,y,0))   2]                   (19)
+                        Nx,y   x,y
+
+ whereN     x,y is the amount of collocation points in thex-yplane, i.e.64                  2 in this case.
+    It is possible to add any other loss terms that fit the specific problem to aid in convergence, while
+accounting for the caveat that each added loss term enlarges the optimization tradeoff against other loss
+terms if they do not fully comply with each other. In this case, two more loss terms are added.
+
+    The first term is symmetry loss, which penalizes deviations from spatial (anti-)symmetry values. In the
+vacuum case, the PDE+IC+domain are invariant under reflections x→−x   and y→−y   . With a centered
+Gaussian initial condition inE  z and uniform(ε,µ)imply the following parities:
+
+       (i)E  z is even inxandy:         E       z(x,y,t) =E   z(−x,y,t) =E    z(x,−y,t),
+       (ii)H   x is even inxand odd iny:    H     x(x,y,t) =H   x(−x,y,t), H    x(x,y,t) =−H    x(x,−y,t),
+       (iii)H   y is odd inxand even iny:   H      y(x,y,t) =−H    y(−x,y,t), H    y(x,y,t) =H   y(x,−y,t).
+We encode these parities with a symmetry penaltyL  sym defined below, where for any fieldfwe write
+f mirrx(x,y,t) :=f(−x,y,t)andf                                    mirry(x,y,t) :=f(x,−y,t).
+                                                ∑     [(Ez−E     mirrxz)2 +(Ez−E     mirryz  )2
+                                 Lsym =  1N             /bracehtipupleft/bracehtipdownright/bracehtipdownleft/bracehtipupright
+                                               (x,y,t)                     (i)
+                                                     +(Hx−H     mirrxx  )2 +(Hx +H     mirryx )2
+                                                        /bracehtipupleft/bracehtipdownright/bracehtipdownleft/bracehtipupright(20)
+                                                                           (ii)
+                                                                        )2 +(Hy−H     mirryy  )2 ]
+                                                     +(Hy +H     mirrxy/bracehtipupleft/bracehtipdownright/bracehtipdownleft/bracehtipupright,
+
+                                                                           (iii)
+
+                                                                  4
+    In the dielectric case, the terms mirrored along the x axis should be omitted, as the dielectric medium
+addition cancels the symmetry along this axis.
+
+    The second term isenergy conservation loss-   Lenergy. An important physical property of Maxwell’s
+equations (in lossless media) is the conservation of electromagnetic energy. In a closed domain with periodic
+boundaries and no absorption, the total energy of the fields should remain constant in time. Numerically,
+PINN solutions might violate this principle due to approximation errors. A global energy conservation term
+in the loss is introduced to push the network towards this invariance according to the Poynting theorem:
+
+                                                       −∂u∂t  =∇·S+J·E                                          (21)
+
+    where−∂u∂t is the rate of decrease of electromagnetic energy density in the volume,∇·Sis the net energy
+flux out of the volume - i.e., Poynting vector divergence, andJ  ·Eis the electrical work-rate density (Wm −3 )
+done by the fields on the charges - i.e., the power per unit volume transferred from the field to matter, which
+is positive when energy leaves the field and enters the charges. For Maxwell’s equations,
+
+                                  u≡    12(E·D+B·H)
+                                          (εE2z +µ (H2x +H    2y   ))= 1    (εE2z +H    2x +H    2y).                            (22)
+                                     = 12                                 2
+
+Furthermore
+                                      S=E×H⇒S         x =−E   zHy,  Sy =E zHx                        (23)
+and
+                                                             J·E= 0,                                            (24)
+µ = 1, hence the last expression in Eq. (22), and Eq. (24) is correct due to the fact that in the problems
+considered hereJ= 0. Now the energy residual can be evaluated, which represents our energy conservation
+loss:                                        (                                       )
+                               Lenergy =       εEz∂Ez∂t   +H x∂Hx∂t   +H y∂Hy∂t
+                                             (∂Ez                     )    (∂Ez                     )                   (25)
+                                          −      ∂x Hy +E z∂Hy∂x         +     ∂y Hx +E z∂Hx∂y
+
+    In the lossless, time-independent setting considered here, the local Poynting balance ∂tu +∇· (E×H      ) = 0
+is implied by the TEz Maxwell system (Eq.5    a–c). Hence,Lenergy does not add new physics; it reweights a
+continuum identity. This reweighting was found to be beneficial in the QPINN runs of the vacuum test case
+(Subsec.4.1) because it penalizes spurious global amplitude decay (the “black-hole” failure mode, Subsec.5),
+but it can be detrimental in heterogeneous media where the PDE residual scales with1   /ε(x)while the energy
+residual scales with ε(x), leading to stiff, unbalanced gradients near interfaces, as in the dielectric test case
+(Subsec.4.2).
+    Including the loss termLenergy aids the training process in two ways: it provides a global feedback that
+couples the network’s errors across the domain (e.g., if the network tries to introduce a spurious attenuation or
+growth in the wave amplitude, it will be penalized), and it encodes a physical constraint that might otherwise
+require many PDE residual points to capture. The derivatives in this loss term were already calculated, hence
+its computational overhead is negligible. In addition, it turns out that theenergy conservation losshad a
+significant impact on the network’s convergence, and it was thus an integral part of this ablation study.
+    The total loss combines the contributions from the initial condition, symmetry, and the equations’ residual
+(L  phys) losses:
+                                       Ltot =L   phys  + 10L    IC + 10L    sym + 10L    energy                        (26)
+Several recently developed techniques to improve PINN training were also incorporated:
+      • Random Fourier Features (RFF):A mapping layer that embeds(       x,y,t)into a higher-dimensional
+          feature space was applied using randomized sinusoidal features [26, 20]. Specifically, the inputs were
+          transformed as( x,y,t)↦→(cos(Ω[  x,y,t]T ),sin (Ω[  x,y,t]T ))whereΩis a fixed random projection
+          tensor whose entries are sampled from a Gaussian distribution and remain constant throughout
+          training (i.e., they are not trainable parameters). This transformation incorporates high-frequency
+          components into the input representation, enhancing the network’s capacity to capture multiscale
+          features of the PDE solution and thereby mitigating spectral bias inherent in PINNs.
+
+
+                                                                  5
+      • Strict spatial periodicity enforcement:The  x and y coordinates are each mapped through sine
+          and cosine functions, scaled according to the domain length, to enforce periodic boundary conditions.
+          Specifically, for an input(x,y,t)we replacexbyx              sin andx   cos:
+                                                           xsin = sin(2πx/L  x)                               (27)
+                                                           xcos = cos(2πx/L    x)                               (28)
+          and similarly for y, where Lx,Ly are the domain lengths. This ensures fθ(x)≡f θ(x +Lx)and
+          fθ(y)≡f θ(y +Ly)for the domain boundaries, eliminating the need for an explicit boundary loss
+          term as suggested by Dong et al. [24].
+      • Periodic time domain mapping:the        t coordinate is also passed through a sin and cos mapping,
+          but instead of dividing by the domain length, the denominator (the periodicity time length) is a
+          learned parameter to the neural network, as the simulation length is not long enough to complete a
+          full period.
+      • Adaptive temporal weighting:A time-domain curriculum strategy similar to Wang et al. [     2] is
+          adopted, such that the network learns early-time dynamics first. In practice, the collocation points
+          are divided into M = 5time bins, with lower loss residual weights assigned to subsequent time bins
+          at the beginning of training; these weights are gradually increased as the network converges on the
+          early-time dynamics. This method allows the model to focus on the early-time behavior (closer
+          to initial conditions), thus propagating the solution forward in a causality-respecting manner. For
+          further details, refer to [18].
+    Using these enhancements, the classical PINN with a feed-forward architecture (fully connected layers)
+was trained. In our experiments, a network with4hidden layers as used in Shaviner et al. [     18], and two
+additional networks for experimentation, with an extra layer and a reduced layer. Each layer consists of
+H  = 128neurons, except the first one after the RFF layer that is set to256neurons, because the RFF
+layer has128   sine and128   cosine outputs. Aside from the sinusoidal embedding, all models (Fig.1) used
+hyperbolic tangent activations on hidden layers. Training was performed using the Adam optimizer [27], with
+a learning rate of0.001, that decayed by a factor of0.85every2000epochs.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 1: Schematic of a classical PINN architecture employed in the present work for solving 2D Maxwell’s
+equations. The inputs(    x,y,t)are mapped to outputs(      Ez,Hx,Hy). A periodic mapping layer first enforces
+strict periodic boundary conditions in space and learned periodicity in time, followed by a random Fourier
+feature (RFF) layer that expands the inputs into a higher-dimensional sinusoidal feature space.  The
+transformed inputs then pass through fully connected hidden layers before producing the final field outputs.
+
+
+
+                                                                 6
+2.3  QPINN architecture and ansatz designs
+Our QPINN extends the classical PINN by replacing the second-to-last layer of the classical neural network
+with a PQC. The location was chosen such that the layer is near the end of the network, which isassumedto
+bear more impact. Nevertheless, we do not use it as the last one to guarantee a generic amount of outputs.
+This is much easier to achieve using a classical layer rather than a quantum one. In essence, a hybrid model
+fθ(x,y,t), where   θ is a parameter vector that includes both classical network parameters and parameters of
+the constructed quantum circuit. The PQC’s architecture is structured by first setting an angle embedding
+layer, followed by L ansatz layers, and finally a Pauli-Z measurement. This architecture is depicted in Fig.2,
+where 7 qubits and 4 layers are used in all experiments. The amount of classical learnable parameters in all
+QPINN models is 66848 for all ansatz types.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 2: Schematic of the QPINN architecture. It shares the same overall structure as the PINN in Fig.1,
+but a quantum circuit layer is inserted near the output. The preceding classical layer and subsequent output
+layer adjust dimensions for the quantum layer’s 7 qubits (each qubit acting as a neuron).
+    The integration between the classical and quantum neural networks layer, i.e., the PQC, is done based on
+an angle embedding such that the output values propagate from the activation layer preceding the PQC,
+into the PQC itself. The angle embedding layer in the PQC rotates each qubit around the X axis by an
+angle that corresponds to the scaled activation layer output. Five different scaling methods are tested in this
+experiment, as the variableatakes thetanhoutput values, ranging between[−1,1]:
+
+   scalenone(a) =a⇒∈[−1,1],  scale          π(a) =a·π⇒∈[−π,π],  scale           bias(a) =     (a+ 1)2 ·π⇒∈[0,π],
+
+   scaleasin(a) = arcsin (a) +   π2 ⇒∈[0,π],  scale    acos(a) = arccos (a)⇒∈[0,π]
+                                                                                                                                (29a–e)
+    This choice of scaling aims to utilize the Bloch sphere with a better distinction between the inputs, as
+illustrated in figure3c. Furthermore, when using the Pauli-Z measurement, several considerations apply. The
+first is that only the projection along the z-axis in the Bloch sphere matters, hence symmetric angle rotations
+yield the same probabilities for different results, such as−1and1, which are supposed to be the most distant
+from one another in thetanh output. The second consideration is that using Pauli-Z measurement after angle
+embedding results in a sinusoidal shape of the results (as can be seen in Figs.3a,3b). Thereby,       scaleasin and
+scaleacos are also tested to help shape the probability density into a uniform one, as shown in Fig.3d.
+    The six ansätze picked for this ablation study are based on previous selections [28, 29, 30]. The ansätze
+are presented in Fig.4. Each ansatz layer consists of two parts: parametrized single qubit rotation gates
+applied on each qubit and two-qubit gates, that can be either parametrized or not.
+The ansätze are:
+      1.Basic Entangling Layers (4a): in this ansatz, the single qubit rotations areRotgates:
+                                                   Rot(α,β,γ) =RZ(γ)RY(β)RZ(α)                        (30)
+          which are arbitrary rotations around the Bloch sphere, using 3 parameters per gate. The two-qubit
+          gates are constructed by a cyclic chain ofCNOTgates connecting nearest-neighbor qubits.
+
+
+                                                                   7
+                                (a)                                                                    (b)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                    (c)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                    (d)
+Figure 3: Effect of input-angle scalings for the  Rx embedding and Z readout.  (a) General case with
+linear inputs a∈   [−1, 1]: with ⟨Z⟩     = cosθ   , scaleacos (θ = arccosa     ) yields⟨Z⟩     =a (identity) and scaleasin
+(θ = arcsina          + π2) yields⟨Z⟩     =−a  (sign flip). (b) Same analysis for our actual setting, where the PQC
+receives tanh-bounded activations a∈   [−1, 1]from the preceding layer. (c) Distribution of the scaled angles
+θ induced by each mapping in Eqs.29    a–e for a∼Unif     [−1, 1]. (d) Probability distribution of the Pauli-Z
+measurement outcomes for the corresponding inputs in (c).
+
+
+       2. Strongly Entangling Layers (4b): this ansatz is similar to theBasic Entangling Layersansatz, but
+           the gap between the target and control qubits in each layer is incremented by 1. This means that the
+           first layer will be the same as the first layer of theBasic Entangling Layers, but in the second one,
+           the first gate will beCNOT(0, 2), thenCNOT(1, 3), and so on. The motivation behind choosing the
+           Basic and Strongly is that they are both widely used, especially the basic one, many times referred to
+           as “hardware efficient ansatz", usually when considering the architecture of superconducting qubits.
+       3. Cross-Mesh (4c): in this ansatz, the single qubit rotations are   RXα(i)   gates, which have a single
+           parameter. The entangling part of each layer consists of CRZβ(i,j)    gates, connecting each qubit to
+
+
+                                                                     8
+                               (a)                                                                 (b)
+
+
+
+
+
+
+
+
+                               (c)                                                                 (d)
+
+
+
+
+
+
+
+
+                               (e)                                                                 (f)
+Figure 4: Schematics of all ansätze used in this study. (a) Basic Entangling Layers. (b) Strongly Entangling
+Layers. (c) Cross-Mesh. (d) Cross-Mesh-2-Rotations. (e) Cross-Mesh-CNOT. (f) No Entanglement Ansatz.
+
+
+          each of the other qubits:
+
+
+                                                                     N−1∏N−1∏
+                                             Entangling Part=                   CRZ(i,j)   α(i,j)                         (31)
+                                                                      i=0  j̸=i
+
+          There are three main reasons behind testing theCross-Meshansatz here: the first is to check if
+          a “fully-connected” circuit achieves better results than less-connected circuits, analogous to the
+          difference between fully-connected layers and convolutional layers in a classical neural network. The
+          second reason is checking if and how the full connectivity affects BH, and the third is that there are
+          hardware implementations able to apply all of those gates in parallel as Nemirovsky et al. [31]. This
+          ansatz had196quantum learnable parameters.
+      4. Cross-Mesh-2-Rotations (4d): this ansatz is almost identical to theCross-Mesh, but instead of having
+          only RXα(i)   per qubit in the single qubit rotations part, it has RXα(i)  RZβ(i)  . This ansatz had224
+          quantum learnable parameters.
+      5. Cross-Mesh-CNOT (4e): this ansatz is similar to the previousCross-Meshes, but it hasRotgates in
+          the single qubit rotations part, and instead of parametrized CRZβ(i,j)    gates, it consists ofCNOT
+          gates connected in the same manner.
+      6. No Entanglement Ansatz (4f): this ansatz consists only of aRotgate per qubit in each layer,
+          without any two-qubit gates. The motivation for using such an ansatz is to investigate the effect of
+          entanglement on our QPINN model, as the role of entanglement in QML is not fully understood [32].
+The ansätze besidesCross-Mesh,Cross-Mesh-2-Rotations, andCross-Mesh-CNOThad84quantum learnable
+parameters besides the classical learnable parameters (summary of learnable parameters can be found in
+Table1).
+    The measurement method used here was to measure the expectation value of a Pauli-Z observable
+measurement for each qubit, and each qubit was considered a “neuron” for the subsequent layer. The
+circuit is differentiable with respect to both the circuit parameters and the input angles, so automatic
+differentiation is enabled to update classical and quantum parameters and to get the derivatives for the PDE.
+The runs throughout this work were all made by a classical simulator, so derivatives were calculated using
+backpropagation. When running on real quantum hardware, this would not be possible, and other methods
+such as theparameter-shift rule[33] should be used.
+
+
+                                                                  9
+           Table 1: Summary of the number of learnable parameters in each network architecture.
+                          Ansatz / network’s             # Classical     # Quantum           # Total
+                             hidden layers               parameters       parameters       parameters
+                           Classical - regular              82820               0             82820
+                       Classical - reduced layer            66308               0             66308
+                        Classical - extra layer             99332               0             99332
+                              Cross-Mesh                    66848             196             67044
+                       Cross-Mesh-2-Rotations               66848             224             67072
+                          Cross-Mesh-CNOT                   66848              84             66932
+                      No Entanglement Ansatz                66848              84             66932
+                       Basic Entangling Layers              66848              84             66932
+                     Strongly Entangling Layers             66848              84             66932
+
+3  Quantum simulator and performance optimization
+All experiments in this work were run on a classical GPU-based ideal quantum simulator. Moreover, all runs
+were noiseless and calculated analytically, meaning that the measurements’ values were determined according
+to the circuit’s final state-vector (no “shots” used). However, it should be noted that this architecture doesn’t
+require additional measurements, but rather multiple shots per circuit and the use of a hardware-compatible
+differentiation method when running on quantum hardware. Gradients were computed via backpropagation
+on the simulator. We developedTorQ - Tensor Operations for Research in Quantum systems, an in-house
+quantum simulation library using PyTorch, which we found to be over 50× faster than using PennyLane’s
+default.qubit simulator with Torch integration (see Table2). Qiskit runs were slower than PennyLane’s.
+The custom simulator also had significantly better memory usage: the largest grid of collocation points we
+could run without memory overflow was87    3 on our simulator, versus43          3 on PennyLane’s default.qubit.
+All simulations were run on NVIDIA L40s and A100 GPUs. We did not use mini-batching or multi-GPU
+training, since, according to Hao et al. [34], PINN batch training yields worse results, and using multiple
+GPUs behaves similarly to mini-batching.
+
+                    Table 2: Comparison between different PennyLane simulators and TorQ
+  Package name             Hardware                Simulator           Diff. method         Grid size     Average seconds
+                                                                                                          per epoch
+   PennyLane          CPU for the PQC,           default.qubit       backpropagation           403            7.729721
+                      GPU for the rest
+   PennyLane          CPU for the PQC,           default.qubit       backpropagation           433            9.580446
+                      GPU for the rest
+   PennyLane                  GPU                lightning.gpu             adjoint              53           113.327774
+   PennyLane                  GPU              lightning.kokkos            adjoint              53           99.751072
+       TorQ                   GPU                       -            backpropagation           403            0.145136
+       TorQ                   GPU                       -            backpropagation           873            0.849967
+
+4  Experiments and results
+In this section, the ablation study results are presented for both test cases, and the metric each experiment is
+evaluated according to is L2 relative error norm (later referred to as L2 error for convenience) of the electric
+field Ez compared to a high-fidelity4 th-order Padé scheme, considered as a high-fidelity reference solution.
+The error is computed over a dense grid of512×512spatial points and 1500 time steps:
+                                                     /radicaltp
+                                                     /radicalvertex∑N(            )2
+                                                     /radicalvertexE(n)z −E    (n)
+                                                     /radicalvertexn=1      z,Padé
+                                       L2 error=     /radicalvertex(           )2   ,                         (32)
+                                                     √      ∑N
+                                                               n=1   (E  (n)z,Padé
+wherenindexes the grid points in space and time.
+    Each ablation study (vacuum and dielectric) consists of multiple QPINN runs varying: (1) the ansatz,
+(2) the input scaling, and (3) whether the energy conservation loss termLenergy (Eq.25) is included. For
+comparison, classical PINN runs with different network depths (regular, extra layer, and reduced layer) were
+also performed, both with and without the energy conservation loss term. Each configuration was run 5
+
+
+                                                              10
+                   (a)                                        (b)                                            (c)
+Figure 5: (a) Initial conditions (i.e. t = 0) for both test cases, with the training size grid (64    2). Contours of
+the electric field Ez at the final time of the wave propagation are shown for (b) vacuum at t = 1.5and (c)
+dielectric medium at t = 0.7, as obtained from the QPINN simulations. The corresponding classical PINN
+and Padé scheme solutions appear visually identical; please refer to [18] for the classical results. The region
+occupied by the dielectric medium is shaded in (c).
+
+times to compute the mean and standard deviation. Results of the final time slice for both cases are shown
+in Fig.5.
+
+4.1  Case 1: Pulse in vacuum
+According to Figs.6and7, four key observations can be made for the vacuum case:
+      1. Scalesandansätze:Theperformanceusingdifferentscalingmethodscanbedividedintotwogroups:
+          scaleπ and scalebias performed poorly compared to the other scaling methods; the other scalings
+          achieved similar results. For comparison, the scaleπ achieved higher L2 errors than the scaleasin
+          by more than62%. From the comparison of different ansätze after omitting the       scaleπ because it
+          wouldn’t be used for such case according to its performance across all ansätze, the Cross-Mesh-CNOT
+          and No Entanglement Ansatz performed worse than the other ansätze, the Cross-Mesh-2-Rotations
+          achieved similar accuracy to the classical and the rest were much better as the Cross-Mesh-CNOT
+          had higher L2 error than the Strongly Entangling Layers by approximately14%. However, the
+          different ansätze didn’t vary as much as the different scales, meaning that choosing a scale that fits
+          the most is more impactful than choosing the most fitting ansatz.
+      2. Parameter reduction:42        .2%of converged QPINN runs achieved lower   L2 errors than the classical
+          regular-depth network, despite having approximately19%fewer total trainable parameters (Table1).
+          To isolate the effect of parameter count, we also ran classical PINNs with a reduced layer (similar in
+          terms of parameters to the quantum models) and an extra layer (approximately48%more parameters
+          than the quantum models). The QPINN runs still outperformed both, indicating the quantum
+          model’s efficiency is not solely due to fewer parameters.
+      3. Faster convergence:The QPINN runs converged faster to the PDE solution than the PINN runs
+         ( Fig.6a). This cannot be attributed simply to having fewer parameters, as the QPINN run also
+          surpassed the PINN reduced-network case (that achieved a much worse final L2 error). Note that
+          the QPINN run’s loss included the additional energy term, which the PINN run did not have.
+      4. Impact of energy loss term:Including the energy conservation term   Lenergy (Eq.25) is critical in
+          the vacuum case. Otherwise, the QPINN runs would suffer from the BH phenomenon. With the
+          energy term included, the QPINN runs not only avoid this collapse, but also significantly outperform
+          the PINN runs in L2 error. Interestingly, the PINN runs show the opposite effect: adding the energy
+          loss term degrades their performance. In particular, this is the case for the ‘No Entanglement ansatz’,
+          which behaves like a classical network in many aspects. For the PINN runs, the energy term remains
+          a redundant bilinear penalty that distorts gradient scales and slows learning; we therefore observe
+          consistent degradation. In contrast, the QPINN runs in the vacuum case are susceptible to the
+          BH collapse: the PQC head has an expressive entangling ansatz that admits a degenerate low-loss
+          trajectory that fades amplitudes after the initial slice. The energy penalty acts as a structural
+          regularizer that removes this discrete failure mode and is therefore beneficial specifically for QPINNs.
+
+4.2  Case 2: Pulse-dielectric medium interaction
+Based on Figs.8and9, we make four observations for the dielectric case:
+
+
+                                                                11
+                                                                (a)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                (b)
+Figure 6: (a) Mean loss (log scale) for the runs of the best combination for the vacuum case: Strongly
+Entangling Layers ansatz with scaleacos and energy loss included. The semi-transparent band indicates the
+standard deviation. (b) L2 errors for all combinations in the vacuum case. The dashed yellow line shows the
+classical result for the regular-depth network; black stars mark runs that outperformed this baseline. The
+dash-dot line indicates the best run’s error (highlighted by a gold star). An “X” denotes configurations where
+none of the 5 runs converged.
+
+
+
+                                                                12
+                              (a)                                                                 (b)
+Figure 7: Average L2 errors for the vacuum case grouped by (a) input scale and (b) ansatz, the scaleπ runs
+were omitted from the average as they performed much worse than the rest of the scales in all ansätze. The
+yellow dashed line shows the classical average error, and the dash-dot line (same color as the lowest bar)
+shows the lowest average error achieved. In (b), the color for each bar is set according to theL      2 value.
+
+      1. Scales and ansätze:Unlike the vacuum case, in the dielectric case, the variance between different
+          scales is much smaller, as the worst scale - scalebias has a higher L2 error compared to the best
+          scaling method - scalenone, by approximately13%. The gaps between ansätze are similar to the
+          vacuum, where the Strongly Entangling Layers have approximately14%higher         L2 error than the
+          No Entanglement Ansatz and the Cross-Mesh (for which the performance is almost the same on
+          average).
+      2. Parameter reduction:Similar to the vacuum case, there is a19%reduction in the total number of
+          parameters achieved compared to the classical regular network (Table1). Nonetheless, the QPINN
+          still performs competitively, and in many cases even outperforms the classical baseline.
+      3. Stability:The dielectric runs are significantly more stable than the vacuum runs in terms of
+          convergence and variance. Nearly all dielectric runs converge (there are no severe BH issues), and
+          the spread in final errors is smaller.
+      4. Effect of energy loss term:Including the energy loss term   Lenergy has a negative impact on the
+          dielectric runs. Runs with the energy term generally yield higher errors than those without, for both
+          classical and quantum models (with the possible exception of the Basic and Strongly Entangling
+          ansätze, though those improvements could be statistical anomalies). Since BH does not manifest in
+          the dielectric case, as almost all runs converge regardless, the added energy term remains a redundant
+          bilinear penalty that distorts gradient scales and slows learning by creating a stiff constraint without
+          added information.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                 13
+                                                                  (a)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                  (b)
+Figure 8: (a) Mean loss (log scale) for the runs of the best combination for the dielectric case: No Entanglement
+ansatz with scaleasin, without energy loss. The semi-transparent band indicates the standard deviation. (b)
+L2 errors for all combinations in the dielectric case. The dashed yellow line shows the classical result for the
+regular-depth network; black stars mark runs that outperformed this baseline. The dash-dot line indicates
+the best run’s error (highlighted by a gold star).
+
+
+
+
+                                                                  14
+                               (a)                                                                   (b)
+Figure 9: Average L2 errors for the dielectric case grouped by (a) input scale and (b) ansatz. The yellow
+dashed line shows the classical average error, and the dash-dot line (same color as the lowest bar) shows the
+lowest average error achieved. In (b), the color for each bar is set according to theL      2 value.
+5  “Black hole” loss landscape
+In the vacuum case without the energy-conservation loss, we consistently observe a catastrophic training
+collapse to the trivial solution (TS). This TS is characterized by satisfying only the initial condition, and the
+field amplitudes become nearly zero for all t> 0, matching the t = 0initial state and yielding a physically
+meaningless solution (Fig.11). When it occurs consistently, we term this phenomenon the “black hole” loss
+landscape (BH) phenomenon , as the initial conditions don’t matter - the loss landscape will eventually pull
+the solution towards this collapse. This BH effect is distinct from known issues such as barren plateaus
+(BPs) [35, 36], weak barren plateaus (WBPs) [37], and laziness training regime [25]. Unlike BPs and WBPs,
+which are often associated with high-entanglement states or global cost functions, the BH collapse shows
+no clear correlation with entanglement metrics, apart from that it doesn’t occur with the no entanglement
+ansatz. As presented in Fig.10e, the Meyer-Wallach entanglement entropy [      38] remains essentially unchanged
+throughout training and specifically during the collapse, and it is very similar between the runs with and
+without energy conservation loss. Furthermore, the BH emerges despite the use of local observables, a single
+Pauli-Z measurement per qubit as the objective. Moreover, whereas traditional BPs or laziness phenomena
+typically manifest as vanishing gradients from the start of optimization, the BH phenomenon only occurs
+after an initial period of successful learning.
+    To make the notion of BH and the TS precise, an operational criterion based on the total electromagnetic
+energy is defined. The total energy in time operator Uθ(t), a sum over the spatial dimensions of the operator
+u, defined in Eq.22, defined as:    ∫
+
+                                         1(εE2z(x,y,t;θ) +H          2x(x,y,t;θ) +H          2y(x,y,t;θ)  )dxdy
+                          Uθ(t) =        2
+                                      Ω     ∑      (εE2z(x,y,t;θ) +H          2x(x,y,t;θ) +H          2y(x,y,t;θ)  ),               (33)
+                                 ≈ ∑              1
+                                                  2
+                                    x∈N     xy∈N     y
+and the normalized energy:
+                                                       ~Uθ(t) :=U   θ(t)/U  θ(0)                                (34)
+We say thattraining exhibits collapse to the TSif there exists a small     δ> 0such that   mint∈[δ,T]   ~Uθ(t)≪ 1
+whileLphys(θ)remains small. Equivalently, we report the scalar for cases with a constant energy amount
+(i.e., there is no dissipation and no additional energy added after initialization):
+                                                    IBH  :=  1−mint∈[δ,T]   ~Uθ(t),                                (35)
+
+so that IBH close to1indicates collapse to the TS. ABH phenomenonis said to occur if over 95% of runs
+with randomly chosen seeds collapse to the TS.
+    Experimentally, on the order of10    2 training epochs of steadily decreasing L2 error, which means the
+model does learn correctly, the quantum model withoutLenergy begins collapsing to a TS. This collapse is
+evident from the sharp drop in gradient norms and variances (Figs.10c,10d) and the sudden drop in loss
+once the network falls into the TS (Fig.10b). Importantly, adding the energy-conservation term completely
+
+
+                                                                   15
+mitigates this failure mode: with theLenergy term included, none of the vacuum QPINN runs exhibited BH
+behavior, and the training instead continued to converge to the correct physical solution, while yielding better
+accuracy than the PINN run on average. IncludingL           energy restores the skew-adjoint conservative structure,
+i.e., a global energy invariance in the periodic, source-free case, making uniform “fade-to-zero” expensive and
+eliminating the BH attractor; the result is stable convergence and improved accuracy (Fig.6).
+
+
+
+
+
+
+
+
+
+
+
+
+                               (a)                                                                   (b)
+
+
+
+
+
+
+
+
+                    (c)                                           (d)                                           (e)
+Figure 10: (a) L2 error, (b) loss, (c) gradient norm, (d) gradient variance, and (e) global Meyer-Wallach
+entanglement entropy, which is correlated to the amount of entanglement during optimization. The graphs
+compare the results with and without the energy conservation loss term for the vacuum test case, averaged
+over 5 runs. The legend to graphs (a) - (e) is the same, and appears in (a). Graphs (b) - (d) are presented in
+log scale.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                    (a)                                           (b)                                           (c)
+Figure 11: Ez at (a) t = 0, (b) t = 0.3, and (c) t = 1.5(final time slice) in a QPINN run without energy
+conservation loss. In (b) and (c), note the scale in the colorbar, which is approximately0.
+
+5.1  Stabilizing the dielectric test case by the loss function
+Unlike the QPINN runs in the vacuum test case, in the dielectric case, the BH phenomenon does not occur
+when theLphys, diel as defined in Eq.14is used, thanks to a non-homogeneous loss that makes the zero
+solution less favorable. When res1,diel  and thereforeLphys, diel are defined more intuitively (as res1,intuitive ,
+andL       phys, intuitive) by:                                                (∂Hy               )
+
+                                   res1,intuitive   (x,y,t) =  ∂ ˜Ez∂t −    1ε(x)  ∂x − ∂Hx∂y       ,                     (36)
+
+Where ε(x)has a value of1for collocation points in the vacuum part of the domain and a value of   εr in the
+dielectric part of the domain. The intuitive physics loss is defined by:
+                          Lphys, intuitive =MSE(res        1,intuitive   ) +MSE(res        2) +MSE(res        3),                (37)
+
+
+                                                                   16
+where all collocation points weigh the same, the QPINN and PINN runs in the dielectric case experience the
+same behavior as the QPINN runs in the vacuum case, in which, without adding the energy loss, they don’t
+converge, but with it, they do. Overall, the results for runs usedLphys, intuitive and energy conservation loss
+are worse than results for runs withLphys, diel (as the ones reported in Fig.8b). Hence, the loss used was the
+one defined in Eq.14.
+5.2  Impact of parameter initialization on “black holes”
+We had several assumptions for why in the vacuum case, the QPINN runs suffer from BH, while the PINN runs
+and the QPINN with the No Entanglement Ansatz (which would be referred to as classical for brevity for this
+discussion) don’t. One was the tendency of the outputs of PQCs, as used in this work, with random parameter
+initialization, to cluster around zero due to several effects. First, for expressive ansätze with randomly
+initialized parameters that approximate unitary 2-designs, the expectation of any traceless observable (e.g.,
+Pauli-Z) over the parameter ensemble is zero, and typical values concentrate near zero in high dimension;
+formally, the Haar average satisfies:
+                                                      E[⟨O⟩] = Tr(O)/d= 0                                 (38)
+and the distribution narrows with system size [35, 39, 28]. Second, with a single Pauli-rotation data-encoding
+layer (e.g.,RX(θ)per qubit), a fixed trainable block, and a Pauli readout, the model output is a first-harmonic
+trigonometric polynomial without a constant term; hence its average overθ (uniform on[0  , 2π]) is exactly zero
+[40]. Combined with the bounded range of Pauli expectations (⟨O⟩∈     [−1, 1]), this bias can create a “zero-field”
+basin that impedes escape at early training. This provides intuition for why adding the energy-conservation
+penalty improves optimization in the vacuum setting by reshaping gradients away from the trivial solution.
+    Opposed to that, the outputs of a classical linear, fully connected layer with hyperbolic tangent activation
+function, which is the second-to-last layer in our PINN comparison, "spread" much wider around zero even
+though those outputs are bounded in[−1,1]as in the QPINN’s cases.
+    We assumed that this difference was the root cause for the BH occurrence in the QPINN runs, as most
+of its outputs are around zero and the TS is geometrically close to the random initialization on the loss
+landscape. To test this assumption, several parameter initialization strategies were employed, and we tracked
+the quantum layer’s outputs in the initial epoch (Fig.12). The initialization strategies tested were:
+      •init reg: The method used throughout this work was random parameter initialization between[0  , 2π].
+      •init zeros: Initializing all quantum parameters to 0. Without the angle embedding layer, this would
+          result in all output values equal to 1.
+      •init π: Initializing all quantum parameters toπ.
+      •init π/2 : Initializing all quantum parameters toπ/2.
+    The different initializations did not affect BH at all, and each run kept its original BH behavior as before.
+According to this and Fig.12, we can infer that the different output spread at initialization is not the root
+cause of BH in the QPINN runs, nor is it what mitigates BH in PINN runs; hence, this assumption is
+refuted. Understanding why the QPINN runs exhibit BH but the classical ones don’t remains as a future
+work direction.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                  17
+                    (a)                                        (b)                                         (c)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                   (d)                                         (e)                                         (f)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                    (g)                                        (h)                                         (i)
+Figure 12: Different outputs generated in the second-to-last layer in the network, either the quantum layer
+or the hyperbolic tangent in the PINN runs. Each run was made with a different combination of ansatz,
+scaling method, and parameter initialization method. The addition of the No Entanglement Ansatz was to
+investigate the origin of BH further, as it is a quantum circuit, but it does not experience BH. Please note
+the x-axis range.
+
+6  Discussion and Conclusion
+
+6.1  Discussion
+Our results demonstrate that a hybrid quantum-classical PINN can successfully learn solutions for 2D
+Maxwell’s equations, with better accuracy compared to a fully classical PINN, by more than19%    L2 error
+reduction, and even better than much larger networks - the classical extra layer setup. The inclusion of a
+quantum circuit does not degrade performance; in fact, in some runs, we observe that the QPINN achieves
+exceptionally low errors, which hints at the potential representational advantages of the quantum ansatz.
+However, these advantages do not consistently manifest across all trials, pointing to current optimization
+challenges. Furthermore, much faster learning is observed in most QPINN runs, especially for the vacuum
+case with an energy loss, that demonstrates even higher potential than before.
+    One clear finding is the importance of enforcing physical constraints, especially energy conservation, in
+QPINN training. For the vacuum case, adding a global energy conservation term is essential for a stable
+training of the quantum model. This suggests that QPINNs can significantly benefit from additional physical
+“guidance” beyond just raw PDE residuals.
+
+
+                                                               18
+    Regarding the quantum circuit ansatz, our ablation study yields several insights. In the vacuum case, the
+best performing are ansätze based on mid-depth entangling layers - the Basic and Strongly Entangling Layers.
+On the other hand, in the dielectric case, those ansätze perform worse than the rest. We do not claim a
+monotonic relation between entanglement strength and accuracy. In the vacuum (with the energy-conservation
+term), mid-depth entangling ansätze achieve the best L2 errors, whereas in the dielectric case, less-entangled
+or differently connected variants perform better. We attribute this to problem- and loss-specific inductive
+biases rather than entanglement per se.
+    The effect of different input scales has a significant impact in the vacuum case, where all schemes are
+substantially better than the PINN run except for the case with scaleπ. In case 2 with a dielectric medium,
+as in the rest of the criteria compared, the input scaling has a more subtle effect, where only scaleasin (best)
+and scalenone achieve better results than the PINN run. Following this behavior, we observe that: (a) the
+ML model can overcome the input and measurement distribution problems as scalenone is the second best in
+both cases. (b) The scaling is problem-specific, and the performance is better when it is coupled with the
+correct model.
+    Computationally, we observe a significant reduction in the number of learnable parameters in quantum
+models, even when they outperform all classical models. Specifically, in the regular model, there is a19%
+reduction in the QPINN’s case, and a decrease of33%compared to the extra layer setup. Moreover, if one
+can tolerate a lower accuracy, the difference in lower epochs is far greater in favor of the QPINN runs.
+    Developing solutions for large cases, such as those in this study, required us to optimize the simulator
+using our own in-house developed quantum simulator, which was more than50times faster than the current
+industry’s most common development packages, while reducing the memory needed by more than 6 times,
+leveraging the tremendous power of GPU-based simulations.
+    Another primary consideration is the parameter reduction scaling, although we were unable to run
+significantly larger simulations due to computational limitations and therefore could not explore this aspect
+more rigorously. In our 2D unsteady test cases (pulse in a box and dielectric medium), the variational circuits
+achieved a parameter reduction of approximately19%(66,932-67,072 in the QPINN’s case, and 82,820 in the
+PINN’s case) relative to classical baselines at comparable, and even lower, error levels. As mentioned, due
+to computational limitations, we were unable to explore significantly deeper or wider circuits; however, we
+confirmed consistent trends in the shallower configurations studied. Moreover, other works, such as Trahan
+et al. [11], which have worked on significantly smaller cases, support similar findings. In their 1D Burger’s
+equation test case with a similar architecture to our network architecture, they observed approximately58%
+(1,456 in the QPINN’s case, and 3,441 in the classical case) parameter amount reduction. Still, it should be
+noted that those are substantially smaller networks compared to the one used in this work.
+
+6.2  Why might the quantum layer help?
+Across our ablations, the hybrid model frequently converges faster and attains lower L2 errors than the purely
+classical PINN while using fewer trainable parameters (Table1; Figs.6-9). We outline below severalplausible
+mechanisms by which the parametrized quantum circuit (PQC) may contribute to these gains in our setting.
+These mechanisms are consistent with our observations, but were not directly verified in this study.
+      • Harmonic feature expansion aligned with wave physics:With single-qubit  Rx data encoding
+          and Pauli-Z readout, PQC outputs are trigonometric polynomials in the encoded angles; different
+          input scalings modulate this effective harmonic basis (see Fig.3and Subsec.2.3). This is theoretically
+          expected: the measurement expectations produced by such encodings generate Fourier-like features
+          whose span grows with depth [40, 30]. Because time-dependent Maxwell solutions contain rich
+          oscillatory content and we enforce periodicity in space/time, placing a periodic, high-frequency
+          basis late in the network can plausibly mitigate spectral bias and lower the depth/width needed to
+          represent wavefields [20,19].
+      • Multiplicative, high-order interactions via entanglement (in moderation):Entangling
+          layers cause the measured observables to involve multi-qubit Pauli strings, which correspond to
+          products of sines/cosines across the encoded coordinates. This yields multiplicative cross-terms (e.g.,
+          in x, y, and t) akin to higher-order features that may compactly capture the coupled curl relations
+          in the TEz system. Prior analyses relate an ansatz’s entangling capability and expressibility to the
+          richness of such interactions [28, 40]. Our results suggest a “sweet spot”: mid-depth, moderately
+          entangling ansätze perform best in vacuum, whereas the no-entanglement variant is competitive in
+          the heterogeneous case (Figs.6-9), indicating that the optimal interaction order is problem- and
+          loss-dependent rather than “more entanglement is always better”.
+      • Alignment between learned periodic embeddings and late-stage quantum harmonics:
+          The classical front-end already enforces strict spatial periodicity and a learned temporal periodicity
+
+
+                                                                 19
+         (Subsec2.2). The PQC then injects additional periodic (trigonometric) featuresnear the output,
+          effectively refining the spectrum after the PDE-informed residuals have shaped lower-frequency
+          structure. This division of labor, where classical layers capture the coarse structure and the quantum
+          layer contributes targeted harmonic refinements, offers a plausible explanation for the faster loss
+          decay we observe when the PQC is present.
+    Scope and limitations.We emphasize that these points arehypothesesconsistent with our ablations and
+with existing theory on encoding-induced expressivity and entangling capability [40, 28, 30]. We did not
+directly measure the spectral content, interaction order, or effective model dimension; therefore, we do not
+claim a definitive causal mechanism. In line with recent guidance on benchmarking quantum ML [32], we
+view our evidence as suggestive rather than conclusive. Moreover, we do not claim that adding the PQC will
+be beneficial for other test cases beyond those studied here; further research is needed to generalize these
+findings.
+    Suggested follow-ups.To validate the points above, future work could (a) quantify the frequency spectra of
+the learned fields and of the PQC outputs over( x,y,t); (b) compare against a classical control that augments
+the penultimate layer with an equal-size trigonometric basis; (c) use data-reuploading cycles in varying sizes
+and measure changes in accuracy/parameter efficiency; (d) probe interaction order by ablating entanglement
+patterns while keeping parameter counts fixed; and (e) monitor gradient norms/variances versus depth to
+locate an expressivity-trainability sweet spot [35,41,42].
+
+6.3  Conclusions and future work
+We present a QPINN approach for solving two-dimensional Maxwell’s equations and analyze the effects of the
+ansatz design, input scaling, and energy conservation enforcement. The study finds that under appropriate
+physical constraints and architectural settings, QPINNs can achieve better accuracy with lower parameters
+compared to classical PINNs. The enforcement of energy conservation is critical for physically consistent
+solutions for the QPINN runs in the vacuum case, which would experience BH without it, highlighting that
+domain knowledge can substantially enhance PINN training.
+    We demonstrate how quantum machine learning can be leveraged to enhance and accelerate scientific
+computing for field simulations. While our experiments were performed on a classical simulator, they lay
+the groundwork for future tests on quantum hardware as it matures. Key directions for future research
+include scaling up the problem size (both in finer resolution and 3D problems) to test whether QPINNs can
+retain performance with fewer parameters than classical networks. Additionally, investigating more advanced
+quantum circuit training techniques, such as quantum natural gradient or circuit-specific regularization, is
+crucial to improve convergence. It would also be worthwhile to explore other physics-informed tasks, such
+as inverse problems (e.g., identifying material properties from field observations), to see whether QPINNs
+offer any advantage there. Another important direction for future work would be to incorporate noise into
+the quantum circuits and investigate the impact of noise mitigation and error correction methodologies on
+QPINNs.
+    The reason the PINN runs don’t suffer from the BH phenomenon in the vacuum test case is still not fully
+clear. Several assumptions were tested, including whether it occurs in the QPINNs but not in the PINNs
+due to the different spread of outputs from the second-to-last layer (the quantum layer in QPINN runs and
+tanh activation function in the PINN runs) right from initialization. It turns out that this isn’t the root
+cause of BH, as even when similar spreads were used, the QPINN still suffered from BH, while the classical
+didn’t. Therefore, another future work direction is to understand why this happens in the QPINN runs and
+not in the PINNs. By understanding this, it may be possible to improve other aspects of both classical and
+quantum networks.
+    We present a quantum-enhanced physics-informed neural network (QPINN) that reduces L2 solution
+error for Maxwell’s equations by up to19%relative to classical PINNs. Our model’s energy conservation
+loss mitigates the “black hole” phenomenon, enabling stable training in high-dimensional spatiotemporal
+domains. This work utilizes an in-house, GPU-accelerated framework implementation that delivers substantial
+end-to-end training speedups, bringing high-dimensional electromagnetic simulations within practical reach
+on existing hardware.
+
+Author Contributions Statement
+
+Z.C. wrote the main manuscript text, and collected all data, and developed the code for the model and the
+quantum simulator based on a classical PINN code developed by G.S., H.C. and S.H.. H.C. reviewed the
+manuscript several times and was a significant part of shaping and correcting it. S.F. and U.P. have jointly
+supervised the work and reviewed the manuscript.
+
+
+                                                                20
+Data availability statement
+Data sets and results generated during the current study are available from the corresponding author on
+reasonable request.
+Code availability
+The in-house developed quantum library,TorQ - Tensor Operations for Research in Quantum systems, used
+for all simulations in this work, is available at:  https://github.com/zivchen9993/TorQ.git. Also, for
+performance benchmarking against PennyLane’s simulators, an expansion is required, and can be found at:
+https://github.com/zivchen9993/TorQ-bench.git.
+Conflicts of interest
+The authors declare that they have no conflicts of interest.
+Acknowledgements
+We would like to thank Yigal Ilin for providing an early version of the quantum simulator code, and we are
+grateful to the Israel Innovation Authority for funding this research. Z. C. and U. P. were supported by
+the Israel Science Foundation (ISF), Grants n. 939/23 and 2691/23, German-Israeli Project Cooperation
+(DIP) n. 2032991, Ollendorff-Minerva Center of the Technion n. 86160946, and the Helen Diller Quantum
+Center at the Technion. 2033613. U. P. was also supported by Chaya Chair n. 8776026, and Planning and
+Budgeting Committee of the Council for Higher Education of Israel (VATAT) Program for Quantum Science
+and Technology through Grant n. 86636903.
+References
+ [1] Maziar Raissi, Paris Perdikaris, and George E Karniadakis. Physics-informed neural networks: A deep
+     learning framework for solving forward and inverse problems involving nonlinear partial differential
+     equations.Journal of Computational Physics, 378:686–707, 2019.
+ [2] Sifan Wang, Shyam Sankaran, and Paris Perdikaris. Respecting causality for training physics-informed
+     neural networks.Computer Methods in Applied Mechanics and Engineering, 421:116813, 2024.
+ [3] Juan Diego Toscano, Vivek Oommen, Alan John Varghese, Zongren Zou, Nazanin Ahmadi Daryakenari,
+     Chenxi Wu, and George Em Karniadakis. From pinns to pikans: Recent advances in physics-informed
+     machine learning.Machine Learning for Computational Science and Engineering, 1(1):1–43, 2025.
+ [4] Yuyao Chen, Lu Lu, George Em Karniadakis, and Luca Dal Negro. Physics-informed neural networks
+     for inverse problems in nano-optics and metamaterials.Optics express, 28(8):11618–11633, 2020.
+ [5] Lei Yuan, Yi-Qing Ni, Xiang-Yun Deng, and Shuo Hao. A-pinn: Auxiliary physics informed neural
+     networks for forward and inverse problems of nonlinear integro-differential equations.Journal of
+     Computational Physics, 462:111260, 2022.
+ [6] Majid Rasht-Behesht, Christian Huber, Khemraj Shukla, and George Em Karniadakis. Physics-informed
+     neural networks (pinns) for wave propagation and full waveform inversions.Journal of Geophysical
+     Research: Solid Earth, 127(5):e2021JB023120, 2022.
+ [7] Xiaowei Jin, Shengze Cai, Hui Li, and George Em Karniadakis. Nsfnets (navier-stokes flow nets): Physics-
+     informed neural networks for the incompressible navier-stokes equations.Journal of Computational
+     Physics, 426:109951, 2021.
+ [8] Ehsan Haghighat, Maziar Raissi, Adrian Moure, Hector Gomez, and Ruben Juanes. A physics-informed
+     deep learning framework for inversion and surrogate modeling in solid mechanics.Computer Methods in
+     Applied Mechanics and Engineering, 379:113741, 2021.
+ [9] Oameed Noakoasteen, Shu Wang, Zhen Peng, and Christos Christodoulou. Physics-informed deep neural
+     networks for transient electromagnetic analysis.IEEE Open Journal of Antennas and Propagation,
+     1:404–412, 2020.
+[10] Giorgio Panichi, Sebastiano Corli, and Enrico Prati. Quantum physics-informed neural networks for
+     multivariable partial differential equations.Physical Review Applied, 25(1):014001, 2026.
+[11] Corey Trahan, Mark Loveland, and Samuel Dent. Quantum physics-informed neural networks.Entropy,
+     26(8):649, 2024.
+
+
+                                                               21
+[12] Alexandr Sedykh, Maninadh Podapaka, Asel Sagingalieva, Karan Pinto, Markus Pflitsch, and Alexey
+     Melnikov. Hybrid quantum physics-informed neural networks for simulating computational fluid dynamics
+     in complex shapes.Machine Learning: Science and Technology, 5(2):025045, 2024.
+[13] Shiyuan Piao, Hong Gu, Aina Wang, and Pan Qin. A domain-adaptive physics-informed neural network
+     for inverse problems of maxwell’s equations in heterogeneous media.IEEE Antennas and Wireless
+     Propagation Letters, 2024.
+[14] Philipp Brendel, A. Rosskopf, and V. Medvedev. Physics-informed neural networks for quasi-static
+     maxwell’s equations.Fraunhofer IISB Erlangen, 2022.
+[15] Joowon Lim and Demetri Psaltis. Maxwellnet: Physics-driven deep neural network training based on
+     maxwell’s equations.A Photonics, 7(1), 2022.
+[16] Yi-Ru Zheng, Zheng-Yu Huang, Xiu-Zhen Gong, and Xue-Zhi Zheng. Implementation of maxwell’s
+     equations solving algorithm based on pinn. In2024 IEEE International Conference on Computational
+     Electromagnetics (ICCEM), pages 1–3. IEEE, 2024.
+[17] Sami Barmada, Shayan Dodge, Mauro Tucci, Alessandro Formisano, Paolo Di Barba, and Maria Evelina
+     Mognaschi. A novel hybrid boundary element–physics informed neural network method for numerical
+     solutions in electromagnetics.IEEE Access, 2024.
+[18] Gal G Shaviner, Hemanth Chandravamsi, Shimon Pisnoy, Ziv Chen, and Steven H Frankel. Pinns for
+     solving unsteady maxwell’s equations: convergence issues and comparative assessment with compact
+     schemes.Neural Computing and Applications, 37(29):24103–24122, 2025.
+[19] Sifan Wang, Hanwen Wang, and Paris Perdikaris. On the eigenvector bias of fourier feature networks:
+     From regression to solving multi-scale pdes with physics-informed neural networks.Computer Methods
+     in Applied Mechanics and Engineering, 384:113938, 2021.
+[20] Matthew Tancik, Pratul Srinivasan, Ben Mildenhall, Sara Fridovich-Keil, Nithin Raghavan, Utkarsh
+     Singhal, Ravi Ramamoorthi, Jonathan Barron, and Ren Ng. Fourier features let networks learn high
+     frequency functions in low dimensional domains.Advances in neural information processing systems,
+     33:7537–7547, 2020.
+[21] Sifan Wang, Shyam Sankaran, Hanwen Wang, and Paris Perdikaris. An expert’s guide to training
+     physics-informed neural networks.arXiv preprint arXiv:2308.08468, 2023.
+[22] Sokratis J Anagnostopoulos, Juan Diego Toscano, Nikolaos Stergiopulos, and George Em Karniadakis.
+     Residual-based attention in physics-informed neural networks.Computer Methods in Applied Mechanics
+     and Engineering, 421:116805, 2024.
+[23] Aditi Krishnapriyan, Amir Gholami, Shandian Zhe, Robert Kirby, and Michael W Mahoney. Charac-
+     terizing possible failure modes in physics-informed neural networks.Advances in neural information
+     processing systems, 34:26548–26560, 2021.
+[24] Suchuan Dong and Naxian Ni. A method for representing periodic functions and enforcing exactly
+     periodic boundary conditions with deep neural networks.Journal of Computational Physics, 435:110242,
+     2021.
+[25] Junyu Liu, Zexi Lin, and Liang Jiang. Laziness, barren plateau, and noises in machine learning.Machine
+     Learning: Science and Technology, 5(1):015058, 2024.
+[26] Ali Rahimi and Benjamin Recht. Random features for large-scale kernel machines.Advances in neural
+     information processing systems, 20, 2007.
+[27] Diederik P Kingma and Jimmy Ba. Adam: A method for stochastic optimization.arXiv preprint
+     arXiv:1412.6980, 2014.
+[28] Sukin Sim, Peter D Johnson, and Alán Aspuru-Guzik. Expressibility and entangling capability of
+     parameterizedquantumcircuitsforhybridquantum-classicalalgorithms.Advanced Quantum Technologies,
+     2(12):1900070, 2019.
+[29] Maria Schuld, Alex Bocharov, Krysta M Svore, and Nathan Wiebe. Circuit-centric quantum classifiers.
+     Physical Review A, 101(3):032308, 2020.
+[30] Adrián Pérez-Salinas, Alba Cervera-Lierta, Elies Gil-Fuster, and José I Latorre. Data re-uploading for a
+     universal quantum classifier.Quantum, 4:226, 2020.
+[31] Jonathan Nemirovsky, Maya Chuchem, and Yotam Shapira. Efficient compilation of quantum circuits
+     using multi-qubit gates.Quantum Science and Technology, 2025.
+
+
+                                                               22
+[32] Joseph Bowles, Shahnawaz Ahmed, and Maria Schuld.  Better than classical?  the subtle art of
+     benchmarking quantum machine learning models.arXiv preprint arXiv:2403.07059, 2024.
+[33] Kosuke Mitarai, Makoto Negoro, Masahiro Kitagawa, and Keisuke Fujii. Quantum circuit learning.
+     Physical Review A, 98(3):032309, 2018.
+[34] Hao Zhongkai, Jiachen Yao, Chang Su, Hang Su, Ziao Wang, Fanzhi Lu, Zeyu Xia, Yichi Zhang,
+     Songming Liu, Lu Lu, et al. Pinnacle: A comprehensive benchmark of physics-informed neural networks
+     for solving pdes.Advances in Neural Information Processing Systems, 37:76721–76774, 2024.
+[35] Jarrod R McClean, Sergio Boixo, Vadim N Smelyanskiy, Ryan Babbush, and Hartmut Neven. Barren
+     plateaus in quantum neural network training landscapes.Nature communications, 9(1):4812, 2018.
+[36] Martín Larocca, Supanut Thanasilp, Samson Wang, Kunal Sharma, Jacob Biamonte, Patrick J. Coles,
+     Lukasz Cincio, Jarrod R. McClean, Zoë Holmes, and M. Cerezo. Barren plateaus in variational quantum
+     computing.Nat Rev Phys 7, 174–189 (2025), 2025.
+[37] Stefan H Sack, Raimel A Medina, Alexios A Michailidis, Richard Kueng, and Maksym Serbyn. Avoiding
+     barren plateaus using classical shadows.PRX Quantum, 3(2):020365, 2022.
+[38] David A Meyer and Nolan R Wallach.  Global entanglement in multiparticle systems.Journal of
+     Mathematical Physics, 43(9):4273–4278, 2002.
+[39] Marco Cerezo, Akira Sone, Tyler Volkoff, Lukasz Cincio, and Patrick J Coles. Cost function dependent
+     barren plateaus in shallow parametrized quantum circuits.Nature communications, 12(1):1791, 2021.
+[40] Maria Schuld, Ryan Sweke, and Johannes Jakob Meyer. Effect of data encoding on the expressive power
+     of variational quantum-machine-learning models.Physical Review A, 103(3):032430, 2021.
+[41] Martin Larocca, Supanut Thanasilp, Samson Wang, Kunal Sharma, Jacob Biamonte, Patrick J Coles,
+     Lukasz Cincio, Jarrod R McClean, Zoë Holmes, and Marco Cerezo. Barren plateaus in variational
+     quantum computing.Nature Reviews Physics, pages 1–16, 2025.
+[42] Su Yeon Chang and M Cerezo. A primer on quantum machine learning.arXiv preprint arXiv:2511.15969,
+     2025.
+[43] The quantum simulation library we created, TorQ - Tensor Operations for Research of Quantum systems,
+     is available athttps://github.com/zivchen9993/TorQ.git.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                              23
+A  Asymmetrical pulse in vacuum
+This asymmetrical test case is identical to the vacuum case, except for the initial condition that enforces
+an asymmetrical solution. Also, as in the vacuum case, the boundary conditions are periodic. It was a test
+case added to check if the solution’s behavior changes with respect to whether the energy conservation loss
+(Eq.25) is added in an asymmetrical test case. Obviously, the symmetry loss (Eq.20) wasn’t used here.
+For this test case, only the best performing QPINN runs in the vacuum case (Fig6b) - Strongly Entangling
+Layers ansatz withscale    acos scaling method was chosen.
+    According to the results in Fig.14, the same behavior as in the vacuum case is observed: the QPINN
+runs without energy conservation loss experienced BH, but with it, the QPINN model outperformed both
+PINN runs, with and without it. Also, the PINN run without the energy conservation loss achieved better
+results than the one with.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                (a)                                                               (b)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                               (c)                                                                 (d)
+Figure 13: (a) Initial conditions (i.e. t = 0) for the asymmetrical pulse test case. The Gaussian pulse is
+initialized at( x,y) = (0.4, 0.3)and stretched by(  σx,σy) = (0.85, 0.65). (b) Shows the contours of the electric
+field Ez at the moment the wave’s propagation reaches the boundaries of the domain, where t = 0.5. (c)
+Captures the propagation at time t = 0.8, in which waves from nearby domains reach the wave in the domain
+simulated (the boundaries are periodic, one can view it as infinite tiles of the same domain tiled next to each
+other). (d) Shows the final simulation time att= 1.5.
+
+
+
+
+
+                                                                 24
+                                                                 (a)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                 (b)
+Figure 14: (a) Mean loss (log scale) for the runs made in this asymmetric test case, which was the best
+combination for the vacuum case: Strongly Entangling Layers ansatz with scaleacos and energy loss included.
+The semi-transparent band indicates the standard deviation. (b)L2 errors for the classical regular with energy
+loss (dark yellow), without energy loss (light yellow), and the Strongly Entangling Layers ansätze, where only
+the runs with energy conservation converged and the ones without are marked with “X”. The dashed yellow
+line shows the classical result for the regular-depth network. The dash-dot line indicates the best run’s error
+(highlighted by a gold star). An “X” denotes configurations where none of the 5 runs converged.
+
+
+
+
+
+
+                                                                 25

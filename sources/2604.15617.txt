@@ -1,0 +1,2236 @@
+   A Structure-Preserving Graph Neural Solver for Parametric
+                            Hyperbolic Conservation Laws
+
+
+                                              Jiamin Jiang
+
+    School of Artificial Intelligence and Data Science and Suzhou Institute for Advanced Research,
+University of Science and Technology of China, and Suzhou Big Data & AI Research and Engineering
+                                              Center, China
+
+                                              Shanglin Lv
+
+       School of Mathematical Sciences, University of Science and Technology of China, China
+
+                                             Jingrun Chen
+ School of Mathematical Sciences and Suzhou Institute for Advanced Research, University of Science
+   and Technology of China, and Suzhou Big Data & AI Research and Engineering Center, China
+
+
+
+
+
+Abstract
+    Hyperbolic conservation laws govern a wide range of transport-driven dynamics fea-
+turing shocks, contact discontinuities, and complex wave interactions, posing distinct
+challenges for deep-learning-based surrogate modeling. While classical numerical meth-
+ods provide robust and physically admissible solutions, their computational cost restricts
+applicability in many-query tasks such as parametric studies and design optimization.
+Conversely, existing neural surrogates offer rapid inference but often fail to respect in-
+trinsic PDE structures, leading to non-physical artifacts, rollout instability, and poor
+generalization.
+    We present an interpretable, structure-preserving graph neural solver that bridges
+classical numerical principles with graph neural networks (GNNs).  The network is
+designed as a learned reconstruction-and-flux operator rather than a black-box state
+updater, thereby inherently preserving key properties such as local conservation and
+upwinding.  Inspired by Arbitrary high-order DERivatives schemes, we further recast
+message-passing GNNs as high-order space-time predictors, enabling conservative and
+stable neural updates with large time steps.
+    Evaluation is performed on challenging supersonic flow benchmarks spanning broad
+parametric variations in geometry, initial/boundary conditions, and flow regimes. The
+neural solver achieves superior long-horizon rollout stability and accuracy compared with
+strong surrogate baselines, outperforms low-order discretizations, and delivers orders-of-
+magnitude runtime speedups over high-resolution simulations.
+
+
+
+1.  Introduction
+
+    Partial differential equations (PDEs) underpin predictive modeling of complex physi-
+cal phenomena across a wide range of scientific and engineering disciplines. High-fidelity
+numerical solvers—built on well-established finite-volume (FV) and finite-element (FE)
+discretizations—have reached a remarkable level of maturity and reliability. Yet their
+considerable computational expense often becomes prohibitive in settings that require
+
+
+    Email addresses:jiaminjiang@ustc.edu.cn(Jiamin Jiang),lvshanglin@mail.ustc.edu.cn
+(Shanglin Lv),jingrunchen@ustc.edu.cn(Jingrun Chen)
+thousands of repeated forward simulations, such as large-scale parametric analysis, de-
+sign optimization, and real-time decision support. The computational cost of traditional
+solvers has spurred growing interest in data-driven and hybrid data–physics surrogates,
+where deep neural networks are trained to approximate evolution operators from sim-
+ulation data, thereby shifting the bulk of expense to an offline training phase (e.g.,
+[1, 2, 3, 4, 5, 6]). While such models enable rapid inference and show potential for gen-
+eralizing across families of PDE parameters, most demonstrated successes to date have
+been confined to regimes with smooth solutions or weakly nonlinear dynamics.
+    By contrast, PDEs admitting discontinuous solutions—most notably hyperbolic con-
+servation laws—remain significantly underexplored, with existing studies typically lim-
+ited in scope, dimensionality, or physical complexity. A central difficulty stems from the
+intrinsic mathematical and physical nature of hyperbolic systems. Consider, for exam-
+ple, the multidimensional Euler equations, whose solutions display rich nonlinear wave
+phenomena—shocks, contact discontinuities, expansion fans, and complex shock–shock
+or shock–wall interactions. In such regimes, numerical accuracy and stability depend not
+only on representational capacity but, more fundamentally, on adherence to underlying
+structural constraints: conservation, upwinding, correct wave propagation, and solution
+admissibility (e.g., positivity and entropy conditions). Black-box neural surrogates lack
+explicit mechanisms to enforce these properties and may therefore produce non-physical
+states, smear discontinuities, or develop spurious oscillations. More critically, when ap-
+plied autoregressively, one-step errors can rapidly accumulate and amplify, leading to
+temporal drift and eventual rollout failure.
+    Over the past decades, robust high-resolution schemes have been developed within
+the Godunov paradigm [7], where local Riemann problems at cell interfaces yield upwind
+numerical fluxes that enforce conservation and propagate information along character-
+istics.  Modern Godunov-type methods pair (approximate) Riemann solvers [8] with
+non–oscillatory high-order nonlinear reconstructions (e.g., MUSCL [9], WENO [10, 11])
+and strong-stability-preserving time integrators [12, 13], enabling sharp shock capturing
+while controlling spurious oscillations. Their robustness stems precisely from embedding
+key structures directly into the algorithm. This offers a clear conceptual blueprint for
+reliable surrogate modeling of hyperbolic conservation laws; however, within a learning
+framework, how to incorporate such structure-preserving mechanisms of classical algo-
+rithms remains open and challenging.
+    In this work, we introduce an interpretable and structure-preserving graph neural
+solverthatsystematicallyintegratestherigorofclassicalGodunov-typemethodswiththe
+expressive capacity of graph neural networks (GNNs). We demonstrate that the succes-
+sive, geometry-aware message-passing and neighborhood aggregation in GNNs effectively
+emulate the action of wide spatial stencils used in high-order nonlinear reconstructions,
+withdirectionaledge-basedpropagationnaturallyinducingone-sidedbiasinginthelatent
+representations. Crucially, the network is not treated as a black-box state updater, but
+rather as alearned reconstruction-and-flux operator: the GNN outputs interface-oriented
+states via edge-wise decoding, a differentiable Riemann solver maps them to consistent
+numerical fluxes, and a conservative flux-aggregation layer advances the solution. This
+design enforces local conservation and upwinding directly at the architectural level.
+    A further limitation is the reliance of high-fidelity solvers on explicit time integration
+constrained by the Courant–Friedrichs–Lewy (CFL) condition, leading to prohibitively
+small time steps and densely sampled trajectories.  To circumvent this, we propose a
+formulation inspired by Arbitrary high-order DERivatives (ADER) schemes [14], wherein
+the message-passing GNN serves as ahigh-order space-time predictorthat encodes fine-
+scale dynamical evolution over each coarse time interval.  The resulting implicit-like
+one-step update remains fully conservative and compatible with Riemann solvers, yet
+operates stably with∆t≫∆t                      CFL, dramatically improving both training efficiency and
+inference speedups.
+    Toevaluatetheproposedframework,weconductextensiveexperimentsonfourcanon-
+
+
+                                                     2
+ical families of supersonic flow benchmarks, generated using a high-order discontinuous
+Galerkin spectral element (DGSEM) solver on unstructured meshes. The datasets en-
+compass wide parametric variations in geometry and free-stream Mach number, covering
+diverse initial/boundary conditions and flow regimes. Across all benchmarks, our neural
+solver demonstrates significantly improved long-horizon rollout stability, accuracy (with
+up to 80% error reduction), and qualitative reliability compared to a strong GNN-based
+surrogate baseline. It also outperforms low-order DGSEM discretizations. These advan-
+tages are especially pronounced in capturing sharp shock fronts, contact discontinuities,
+and coupled shock–subsonic interactions, while suppressing non-physical artifacts and
+curbing error accumulation during autoregressive inference.  Furthermore, the solver
+achieves substantial runtime acceleration—exceeding two orders of magnitude—relative
+to high-resolution reference simulations.
+
+
+2.  Related Work
+
+2.1. ML-Enhanced Numerical Methods
+    A prominent line of research seeks to enhance classical numerical solvers through
+machine-learning (ML) techniques.  In this hybrid paradigm, neural networks are in-
+tegrated to augment or replace specific algorithmic steps—retaining the foundational
+strengths of established discretizations while leveraging data-driven modules to improve
+accuracy or computational efficiency. Representative efforts include learning discontinu-
+ity detectors or “troubled-cell” sensors that refine shock-capturing capability [15, 16],
+as well as enhancing high-resolution schemes (e.g., WENO) by adjusting/optimizing
+smoothness indicators, nonlinear weights, or reconstruction coefficients [17, 18]. Such
+learned components can sharpen discontinuities while preserving high-order accuracy in
+smooth regions; in certain designs, they act directly as data-driven weighting functions
+within compact stencils [19]. Another strategy involves learning the numerical flux func-
+tion itself within the FV framework. Chen et al. [20] construct data-driven interface
+fluxes for unknown systems and show that neural updates formulated via conservative
+flux differences yield correct shock-dominated dynamics. Similarly, Morand et al. [21]
+optimize numerical fluxes from Riemann-problem solutions using a three-point stencil,
+achieving improved accuracy for scalar conservation laws over classical Godunov and
+Engquist-Osher fluxes.  Note that both approaches are restricted to one-dimensional
+hyperbolic PDEs and first-order FV discretizations.
+    While such hybrid strategies illustrate the promise of combining ML with established
+numerical schemes, they largely remain confined to localized improvements—often tar-
+geting individual components rather than rethinking the end-to-end solution process
+within a coherent, structure-preserving learning framework. Furthermore, because the
+replaced modules typically account for only a fraction of the total computational cost,
+the achievable runtime acceleration is inherently capped.
+
+2.2. Operator Learning and Neural Surrogates
+    Recent years have witnessed rapid growth in data-driven neural surrogates for com-
+putational fluid dynamics, aiming to enable fast, end-to-end predictions of flow fields
+for parametric studies and real-time applications [22]. Early successes were largely built
+upon grid-based architectures such as convolutional neural networks (CNNs) and U-Net
+variants [23, 24, 25], as well as Transformers and GNNs [26, 27, 28, 29, 30, 31, 32, 33],
+which better accommodate irregular geometries and unstructured discretizations. In par-
+allel, operator learning has become a principled framework for approximating solutions
+of parametric PDEs, mapping problem inputs (coefficients, boundary/initial conditions)
+to solution functions across families of instances. Representative approaches, including
+DeepONet, Fourier Neural Operators, and their variants [1, 2, 34], have demonstrated
+strong performance on a range of elliptic/parabolic problems (smooth flow regimes).
+
+
+
+                                                    3
+    Despite these advances, accurate modeling of PDEs—especially hyperbolic conserva-
+tion laws—remains fundamentally challenging and is not adequately addressed by exist-
+ing black-box neural surrogates. High-fidelity solutions are constrained by intrinsic PDE
+structures, but standard neural architectures cannot preserve them. To alleviate these
+issues, data–physics hybrid strategies—physics-informed neural networks (PINNs) and
+related approaches—incorporate PDE residuals or physical constraints into the training
+objective [35, 36, 37, 38, 39, 40, 41]. While such loss regularization can improve accuracy
+and generalization to some extent, it imposes only soft constraints: satisfaction is encour-
+aged during optimization but not guaranteed at inference, and violations can still arise
+under distribution shift and long-horizon rollouts. This gap highlights an important yet
+under-explored direction in the surrogate literature: embedding conservation laws and
+key structures directly into the model architecture as hard constraints, so that invariants
+and stability mechanisms are preserved by design rather than learned implicitly.
+
+2.3. Conservation-Enforcing Neural Surrogates
+    Physicalconservationlawsarefundamentalinvariantsofmanydynamicalsystemsand
+PDEs, and their satisfaction is essential for numerical fidelity and long-horizon stability.
+Previous works broadly fall into two categories. (i)Correction-based methodsperform
+post-processing to network outputs by solving constrained minimization problems [42],
+or by projecting predictions onto invariant manifolds [43]. While these techniques can
+guarantee conservation, they incur extra inference overhead. Moreover, most formula-
+tions are developed for low-dimensional conserved quantities in dynamical systems, and
+their extension to nonlinear PDEs can be nontrivial.  (ii)Architectural-based methods
+embed conservation directly into network design. Examples include divergence-free pa-
+rameterizations that satisfy continuity equations [44], and divergence-free output layers
+with numerical differentiation incorporated into neural operators [45]. For Lagrangian
+systems, Müller [46] leveraged Noether’s theorem to guarantee conservation of quan-
+tities associated with symmetry invariance.  Recent graph-based surrogates establish
+conservation-informed message passing and treat GNNs as FV-like flux exchanges on
+general graphs [47].
+    For shock-dominated hyperbolic systems with multiple coupled conserved variables,
+correct wave propagation and discontinuous solutions rely on discrete-level local conser-
+vation through interface flux balances. Despite the aforementioned advances, existing
+methods primarily target global/linear constraints or smooth conservation forms, and
+therefore remain insufficient for preserving the key numerical properties required by mul-
+tidimensional hyperbolic PDEs.
+
+
+3.  Finite Volume Methods
+
+    Hyperbolic conservation laws describe a broad range of transport-driven phenomena
+such as compressible aerodynamics, high-speed propulsion, and astrophysical flows. This
+work focuses on the two-dimensional unsteady Euler equations. LetΩ⊂R             2 denote the
+computational domain with spatial coordinatesx= (x,y)∈Ω. The governing equations
+in conservative form are written as
+                                      ∂u(x,t)
+
+                                           ∂t      +∇·F(u) = 0,                                          (1)
+                                        u(x,0) =u            0(x),
+
+subjecttosuitableboundaryconditions. Here,u= (ρ,ρv               1,ρv2,E) ⊤ andh= (ρ,v            1,v2,p) ⊤
+denote the vectors of conserved and primitive variables, respectively, with the density
+ρ, velocity components(v        1,v2), and the total energyE. The nonlinear physical fluxes
+
+
+
+
+
+                                                      4
+F(u) = (F          1,F 2)in thex- andy-directions are given by
+                                           ρv1                           ρv2      
+                              F1 =     ρv21 +p    ,  F 2 =       ρv1v2      ,                (2)
+                                           ρv1v2                         ρv22 +p
+                                        v1(E+p)                        v2(E+p)
+
+and the system is closed by the ideal-gas equation of state
+
+                                      p= (γ−1)    E−     12ρ(v    21 +v    22)                       (3)
+
+with ratio of specific heatsγ= 1.4.
+    The design of our structure-preserving graph neural solver is underpinned and guided
+by the core algorithmic components of finite volume (FV) methods for hyperbolic con-
+servation laws, which we briefly outline here.
+
+3.1. Godunov Framework
+    In an FV discretization,Ωis tessellated into a set of non-overlapping control volumes
+(triangular or quadrilateral cells). For each cellΩ   i, lets  ij denote the shared edge (inter-
+face) betweenΩ   i andΩ   j, wherej∈N(i)withN(i)being the index set of the adjacent
+cellsΩ   j (seeFigure 1). The quantities|Ω         i|and|s    ij|measure the cell area and the edge
+length, respectively.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                (a) Region around target celli                          (b) Numerical flux
+
+Figure 1: Schematic illustration of the mesh ingredients and numerical flux in the Godunov framework.
+
+    The unknowns are the cell-averaged states
+                                                        Z
+                                       ui(t) =      1|Ω i|    u(x,t) dxdy.                       (4)
+                                                          Ωi
+
+Integrating Eq. (1) overΩ  i and applying the divergence theorem yields the semi-discrete
+form                                     dui(t)            I
+                                        dt       =−     1|Ω i|    F(u)·nds                     (5)
+                                                             ∂Ω i
+withnthe outward unit normal along the cell boundary∂Ω             i. The boundary integral is
+approximated by summing interface fluxes
+                            I
+                                  F(u)·nds≈      X            |s ij|F  u−ij,u +ij,n ij,               (6)
+                             ∂Ω i                    j∈N(i)
+
+whereF(u    −,u +,n)is a numerical flux function depending on the left and right states
+u−ij (inside the target cell) andu       +ij (resp. outside) of the interface (seeFigure 1).
+
+
+
+                                                          5
+    Within the Godunov framework [7], the numerical flux at each cell interface is ob-
+tained by solving a local Riemann problem, in the local coordinateτaligned with the
+interface normaln
+                                      ∂u(τ,t)
+                                         ∂t      + ∂ F(u)·n   (∂τ         = 0,                            (7)
+                                     u(τ,0) =       u−,  τ <0
+                                                    u+,  τ >0
+with initial condition given by the jump states. The Riemann problem describes the evo-
+lution of such a discontinuity, giving rise to nonlinear waves propagating along charac-
+teristic directions. Upwind methods explicitly exploit this wave propagation information
+to ensure stability and physical fidelity [8]. In practice, solving the exact Riemann prob-
+lem is computationally prohibitive.  Instead, approximate Riemann solvers (Rusanov,
+HLL-family, Roe, etc.) are widely adopted. Riemann solvers guarantee that perturba-
+tions are propagated in an upwind-consistent manner, forming the backbone of modern
+Godunov-type FV methods for compressible flows.
+
+3.2. High-order Reconstructions
+    High-order spatial discretizations have been developed to overcome the excessive nu-
+merical diffusion of first-order approximations.  A standard approach is the piecewise
+linear reconstruction (second-order accuracy) as in MUSCL schemes [48, 9], where the
+solution of a scalar variable within celliis represented as
+
+                                      u(x) =    ui +∇u   i·(x−x    i)                        (8)
+
+withx    i denotingthecellcentroidand∇uthevectorialslope,oftenobtainedbyleast–squares
+fitting of neighboring cell averages [49]. This reconstruction is typically applied compo-
+nent–wise to either conservative or primitive variables.
+    Near shocks or discontinuities, however, such reconstructions generate spurious os-
+cillations. To prevent the formation of new local extrema, nonlinear slope limiters are
+introduced [50, 51]. The limited reconstruction takes the form
+
+                                    u(x) =    ui +φ i∇u  i·(x−x    i),                      (9)
+
+whereφ     i∈[0,1]is a limiter coefficient. The limiting strategies ensure that any recon-
+structed values satisfy a discrete maximum principle for scalar problems under suitable
+CFL conditions, and in practice they provide non–oscillatory shock–capturing capability
+for the Euler system. At a given edge midpointx ij, the reconstructed interface values
+become
+
+              u−ij =  ui +φ i∇u  i·(x ij−x i),   u  +ij =        uj +φ j∇u  j·(x ij−x j).      (10)
+
+    To reach the third–order spatial accuracy, quadratic polynomial reconstruction can
+be employed, with the unlimited form as
+
+                                   u(x) =    ui +∇u   i·r+     12r⊤Hir,                    (11)
+
+wherer= (x−x         i)andH    i is an approximation to the Hessian matrix∇             2u. For third-
+and fourth-order schemes, the line integrals in Eq. (6) need to be discretized by two-point
+Gaussian quadrature on every edge. At each quadrature point, the reconstructed left and
+right states are passed to a Riemann solver for evaluating the numerical flux.
+    Analternativefamilyofreconstructionsisweightedessentiallynon-oscillatory(WENO)
+schemes [10, 11, 52]. The key idea of WENO is to build, for each target cell, a high-order
+polynomial that preserves conservation. The reconstruction is carried out on a wide spa-
+tial stencil{S     z}, which is the union of multiple small sectorial stencils. Each such stencil
+consists of the target cellΩ   i with several layers of neighbors. A polynomialP        z(x)onS     z
+
+                                                      6
+is determined so that it matches the cell averages, while ensuring that the mean overΩ  i
+coincides with     ui. The final approximation is then formed as a convex combination of
+these candidate polynomials
+                                         P(x) =   X     ωz Pz(x),                         (12)
+                                                   z=1
+where the nonlinear weightsω  z (satisfying Pzωz  =  1) are computed based on linear
+weights and smoothness indicatorsβ        z.  The smoothness of a candidate polynomial is
+measured by                                            ∂|α|                 2
+                                KX
+                       βz =          |Ω i||α|−1  Z     ∂xα1∂yα2 Pz(x)          dxdy,             (13)
+                              |α|=1              Ωi
+
+whereKis the polynomial degree andαis a multi-index.ω                   z favors smooth stencils
+in regions without discontinuities, thereby recovering optimal order of accuracy, while
+suppressing stencils that cross discontinuities, thereby preventing oscillations. Through
+this mechanism, WENO schemes achieve stable and robust shock capturing without
+requiring explicit limiters.
+    On each cell interface, point-wise data are obtained from the reconstructed polynomi-
+als, which are then used for the evaluation of numerical fluxes. To advance the solution
+in time, the semi-discrete form (5) can be cast as a method-of-lines ordinary differential
+equation (ODE) system. Time integration is typically performed with explicit schemes,
+among which high-order total variation diminishing (TVD) Runge–Kutta methods are a
+popular choice [12, 13].
+
+
+4.  Neural PDE Solvers
+
+    Consider the problem of solving parametric Euler equations. In a FV discretization,
+Ωis tessellated into an unstructured mesh{Ω       i}comprisingncells. The discrete state
+vector at time levelt m is denoted byU m ={u  mi}ni=1 , whereu     mi  represents the solution
+value at each cell centroid.  A high-fidelity numerical solverH, based on high-order
+spatial and temporal schemes, maps the current mesh stateU    m to the next timestep
+stateU    m+1  . A trajectory (sequence) of states  U0,U 1,...,U  nt can be computed by
+repeated application ofU  m+1    =H(U    m,µ)acrossn        t timesteps, whereµdenote PDE
+parameters (e.g., coefficients, boundary conditions, and geometries).
+    The deep learning task aims to replace the costly high-fidelity solverHwith a neural
+solverNthat predicts the right-hand side (state increment) of the semi-discrete system
+(5). A standard choice is a first-order explicit scheme. Given the current state and a
+selected timestep size∆t, the discrete update formula is given as
+
+                            Um+1 ≈ eUm+1    =U m + ∆tN(U    m,µ; Θ),                (14)
+
+where eUm+1  denotes the predicted state from the neural solver, andΘcollects the net-
+work parameters learned through end-to-end, data-driven optimization. It is important
+to note that the discrete update should operate on the conservative variablesu, ensuring
+consistency with the underlying conservation laws, rather than the primitive variablesh.
+    Our approach consists of two main stages, as outlined inFigure  2, which pro-
+vides an overview of the proposed structure-preserving solver framework. The training
+stage requires building a dataset of multiple trajectories generated with the high-fidelity
+solver under varying PDE parameters, which serve as ground-truth labels. Once trained,
+N(·; Θ)is applied autoregressively during inference, starting from an initial stateU                     0 to
+produce the entire rollout trajectory             U0,eU1,...,eUnt .  The neural solver essentially
+learns to approximate the nonlinear evolution operator of the underlying PDEs, allowing
+generalization to new PDE parameters unseen in the training data. Compared with clas-
+sical numerical methods, this learning-based approach enables rapid trajectory rollout,
+achieving orders of magnitude simulation speedups. Such efficiency gains make it highly
+
+                                                      7
+promising for large-scale flow problems and engineering applications such as design, op-
+timization, and real-time prediction.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                    (a) Training and inference workflows.
+
+
+
+
+
+
+
+
+
+
+
+                                          (b) Core design components.
+
+Figure2: Overviewoftheproposedstructure-preservinggraphneuralsolverforinterpretablemodelingof
+parametric hyperbolic conservation laws. Our framework tightly integrates classical Godunov-type dis-
+cretization principles with GNNs, built around three interconnected innovations: 1) Directional message-
+passing operations emulate wide spatial stencils for high-order nonlinear reconstructions, with one-sided
+(left/right) biasing representations emerging naturally in the latent space.  2) Rather than a black-
+box state updater, the network is treated as a learned reconstruction-and-flux operator via edge-wise
+decoding coupled with a differentiable Riemann solver, enforcing local conservation, upwinding, and
+entropy-satisfying properties directly in the architecture. 3) Inspired by ADER schemes, the message-
+passing GNN is further recast as a high-order space-time predictor that captures fine-scale temporal
+dynamics, yielding one-step implicit-like conservative updates that remain Riemann-solver compatible
+while operating stably at large time steps.
+
+
+
+5.  Graph Neural Networks
+
+    We develop data-driven neural solvers based on GNNs to obtain parametric PDE
+solutions defined on mesh-based or point-cloud representations of spatial domains. In
+contrast to grid-based neural architectures, GNNs operate natively on unstructured data,
+making them well-suited for irregular and complex geometries commonly encountered in
+computational fluid dynamics. By explicitly encoding spatial connectivity and enabling
+localized information exchange through neighborhood message passing, GNNs provide a
+flexible and expressive framework for learning nonlinear dynamics while respecting the
+underlying geometric structure of the simulation domain [53].
+
+5.1. Graph Representation
+    A computational mesh can be represented as an undirected graphG=  (X,E), as
+shown inFigure 3. For a cell-centered FV discretization, the node setXconsists of
+elementsi∈X, where each corresponds to a control volumeΩ        i. The spatial coordinate
+of nodei, denoted byx    i, is taken as the centroid ofΩ  i.  The edge setEcontains
+undirected (unique) edges. Each unique edgeε    ij connects adjacent nodes (cells)(i,j)
+and is represented in computations by two directed edges(i→j)and(j→i).  We
+further denote byN(i)the set of nodes neighboring nodei.
+
+
+                                                        8
+                          (a) Cell-centered                        (b) Vertex-centered
+
+Figure 3: Schematic of graph representations for a simulation mesh. Dots denote nodes, and dashed
+lines denote edges (connections between neighboring cells or vertices).
+
+
+5.2. Generic message passing layer
+    ThebuildingblockofGNNsisthemessage passingmechanism, inwhichnodefeatures
+are iteratively updated through information exchange with neighbors [54]. Letq   i denote
+the feature vector associated with nodei, and lete     ij represent the feature vector carried
+by a directed edge(i→j), encoding pairwise geometric or physical interactions. Within
+a single message passing layer, node features are updated by aggregating messages from
+neighboring nodes through a permutation-invariant operationL (such as summation or
+averaging), combined with learnable nonlinear transformations. In general, the update
+rule can be written as                                                     
+
+                                  q′i =ϕ υ  qi, M        ϕe (q i,q j,e ij),                   (15)
+
+                                                   j∈N(i)
+whereϕ     e(·)computes edge-wise messages from each neighborjto the target nodei, and
+ϕυ(·)integrates the aggregated messages with the original node features.
+    We collect the node and edge features into matricesQ∈R          n×ℏ  υ andE∈R             2n e×ℏ e,
+respectively, where each row corresponds to a feature vector. Here,ndenotes the number
+of nodes,n   e the number of unique edges, andℏ   υ,ℏ e the feature dimensions. The MPNN
+layerincompactmatrixformthatupdatesbothnodeandedgefeaturesforℓ= 0,...,L−1.
+can then be expressed as
+
+                             Q(ℓ+1) ,E (ℓ+1)    =MPNN   (ℓ)  Q(ℓ) ,E (ℓ) ,A         ,                (16)
+
+whereA∈R        n×n   is the sparse adjacency matrix encoding the graph connectivity.
+    In this work, we consider a specific realization of Eq. (16), with its update equations
+given by
+                    be(ℓ+1)ij      =ϕ eq(ℓ)i ,q (ℓ)j ,e (ℓ)ij=MLP   (ℓ)e[q (ℓ)i |q (ℓ)j |e (ℓ)ij  ],         (17)
+                                                                                              
+             bq(ℓ+1)i       =ϕ υq(ℓ)i , X   be(ℓ+1)ij =MLP   (ℓ)υ  [q (ℓ)i | X       be(ℓ+1)ij      ],     (18)
+
+                                     j∈N(i)                                     j∈N(i)
+                          q(ℓ+1)i       =bq(ℓ+1)i       +q    (ℓ)i , e (ℓ+1)ij      =be(ℓ+1)ij      +e   (ℓ)ij ,              (19)
+where|denotes vector concatenation. Residual connections [55] are employed for both
+node and edge features to improve training stability and facilitate the construction of
+deep architectures.
+    By composing several message passing layers with independent parameters, the effec-
+tive receptive field of each node progressively expands from immediate neighbors (one-
+ring connectivity) to distant regions of the graph, enabling the network to capture longer-
+range dependencies.
+
+                                                        9
+5.3. Edge Convolution Layer
+    We further propose anedge convolutionalmessage passing layer by establishing an
+analogy with FV schemes. The update rules take the following form
+
+                                be(ℓ+1)ij      =MLP   (ℓ)e[q (ℓ)i |q (ℓ)j |e (ℓ)ij  ],                   (20)
+
+
+                                  bq(ℓ+1)i       =W    (ℓ)υ q(ℓ)i    + Xbe(ℓ+1)ij  ,                    (21)
+                                                            j∈N(i)
+
+                               q(ℓ+1)i       =ReLU LayerNorm       bq(ℓ+1)i   ,                  (22)
+
+
+                                         e(ℓ+1)ij      =be(ℓ+1)ij      +e   (ℓ)ij ,                         (23)
+whereW     υ is a learnable weight matrix. This design discardsMLP       υ, thereby reducing
+the cost of Eq. (18), and can be viewed as a learnable skip connection.  The layer is
+expressed compactly as
+
+                            Q(ℓ+1) ,E (ℓ+1)    =EConv    (ℓ)  Q(ℓ) ,E (ℓ) ,A    .                (24)
+
+    To better guide the network toward learning local nonlinear interactions of hyperbolic
+PDEs, we further extend the above formulation into anenriched edge convolutionthat
+emphasizes discrete differential operators on graph edges. Concretely, the edge inputs
+are enriched by incorporating a difference term between adjacent nodes, yielding a more
+expressive representation of local gradients. The edge message function becomes
+
+                        be(ℓ+1)ij      =MLP   (ℓ)e[q (ℓ)i |q (ℓ)j |e (ℓ)ij |(q   (ℓ)j −q    (ℓ)i   ) ].             (25)
+
+5.4. Encode-Process-Decode Architecture
+    Encode-Process-Decode (EPD) architectures are commonly employed to build neural
+surrogate models for predicting the next-step dynamic state eUm+1  of PDEs.  For a
+simulation graph, the input node features consist of the current state variableseUm at each timestep alongside geometric and PDE-related information. Edge featuresU      m or
+
+encode pairwise relationships between adjacent nodes.
+    Dedicated node and edge Encoders concatenate the raw inputs and project them into
+initial latent embeddingsQ               (0)∈R n×ℏ  υ andE       (0)∈R   2n e×ℏ e, offering essential physical
+and geometric representations of flow problems.  The Processor module then applies
+a stack of message passing layers to iteratively refine the latent features. Finally, the
+Decoder maps the refined node embeddings after the last processing layer to the nodal
+predictions of the target state eUm+1  .
+
+
+6.  Godunov Graph Neural Solvers
+
+    Data-driven neural surrogates in the form of Eq. (14), when built from black-box
+neural network models, lack the capability to preserve the intrinsic structures of the
+underlying conservation laws.  Consequently, they are prone to produce non-physical
+solutions, generalize poorly, and lose predictive reliability during long-term rollouts. In
+this work, we pursue a novel, interpretable neural solver design by integrating the rigor
+of classical Godunov numerical principles (Section 3.1) with the expressive power of
+GNNs. The resulting framework enforces discrete conservation and key properties such
+as upwinding at the architectural level (hard constraints).
+
+
+
+
+
+                                                     10
+6.1. Numerical Fluxes
+    Numerical fluxes (Riemann solvers) form the foundation of Godunov-type methods,
+and are crucial for ensuring upwinding and stability when solving the Euler equations
+[8]. A suitable numerical flux function should satisfy several key properties:
+
+•Conservation.The numerical flux must be antisymmetric with respect to the exchange
+  of its left and right arguments
+
+                                  F u−,u +,n =−F   u+,u−,−n                    (26)
+
+  so that fluxes across an interface cancel exactly between neighboring cells.
+
+•Consistency.Consistent with the physical flux
+
+                                          F(u,u,n) =F(u)·n                       (27)
+
+  guaranteeing the correct continuous limit in smooth regions of the flow.
+
+•Lipschitz continuity.Lipschitz continuous with respect to its arguments.
+•Rankine–Hugoniot consistency.Enforce the Rankine–Hugoniot (jump) relation across
+  discontinuities, thereby capturing the correct shock propagation and wave speeds.
+
+•Entropy satisfaction.Ensurethatdiscontinuitiesarecapturedinaphysicallyconsistent
+  way, avoiding non-admissible solutions and helping suppress oscillations.
+
+    Common approximate Riemann solvers that satisfy the above properties include the
+Rusanov [56], HLL-family [57, 58] and Osher–Solomon [59] fluxes. In this work, we adopt
+the general central formulation. For a given cell interface(ij), the numerical flux in the
+normal directionn       ij is written as
+               F u−                       F(u −
+                    ij,u +ij,n ij = 12        ij) +F(u        +ij)·n ij− 12Dij (u  +ij−u −ij),       (28)
+
+whereD     ij in the upwinding term is a dissipation matrix depending on the local states
+and properties of the flux Jacobian∇              uF(u). Its specific definition characterizes different
+Riemann solvers.
+    A well-known example is the Roe solver [60], which employs the Roe-averaged matrix
+Dij  =A(u −ij,u +ij). The Roe flux achieves good resolution of contact and shear waves
+owing to its characteristic decomposition, but is not strictly entropy-satisfying; thus, an
+entropy fix is typically required. A popular alternative is the Rusanov flux [56], which
+uses a scalar multiple of the identityD ij  = maxλ(u −ij),λ(u      +ij)	I, withλ(u)denoting
+the maximal absolute eigenvalue of the flux Jacobian. This yields a simple and entropy-
+stable flux based on an upper bound for propagation speed.
+
+6.2. Neural Spatial Reconstruction
+    In high-order Godunov-type methods, spatial reconstruction is applied to obtain the
+leftandrightstatesateachcellinterface(asdescribedinSection3.2), ensuringupwinding
+compatible with Riemann solvers. The nonlinear reconstruction process can be learned
+through a GNN, which operates on unstructured meshes and encodes local connectivity,
+acting as a data-driven counterpart to high-order schemes such as MUSCL or WENO.
+Through successive geometry-aware message-passing operations, each node aggregates
+information from its neighbors, effectively emulating the action of large, spatially biased
+stencils (as illustrated inFigure 4). Because message propagation along directed graph
+edges is asymmetric, one-sided (left/right) biasing emerges naturally within the latent
+embeddings.
+    Compared to node-wise decoders commonly used in neural surrogates, here we rely
+on an edge-wise decoderϕ      dece  to predict the states on both sides of each interface(i→j).
+
+                                                     11
+Specifically, given the processed node and edge featuresq               (∗)  ande       (∗)  from the GNN, the
+decoder outputs component–wise primitive variables
+                       ehmij  =ϕ   dece
+                                       q(∗)i ,e (∗)ij,   ehmji =ϕ   dece   q(∗)j ,e (∗)ji.            (29)
+
+These quantities serve as neural analogs ofu −ij andu       +ij in the classical Godunov formu-
+lation. When converted to conserved variables eumij and eumji, they are then input to a
+Riemann solver to evaluate the numerical flux.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+(a) Large spatial stencil for     (b) Successive message-          (c) Directed edges and edge-wise decod-
+reconstruction                    passing operations               ing to obtain left/right interface states.
+
+Figure 4: Schematics of neural reconstruction process via message-passing GNN as a counterpart to
+WENO scheme (the target cell is marked with red color).
+
+    The GNN essentially learns to produce limited (or non-oscillatory) interface approx-
+imations from the known cell averages at the current timestepm. The subsequent first-
+order explicit conservative FV update of the target node (cell)ifollows
+
+                           eum+1                          |s ij|
+                             i      =eumi −∆t   X         |Ω i|  F eumij,eumji,n ij.              (30)
+                                                 j∈N(i)
+
+7.  ADER-inspired Neural Solver
+
+    The GNN-based reconstruction proposed earlier effectively replaces the cumbersome
+and costly computations of high-order polynomials and nonlinear weights required in
+WENO. However, each FV update depends only on the solutions att m. Consequently, a
+purely learned spatial reconstruction remains bound by the stability (CFL) restrictions of
+explicit integration, enforcing timestep sizes on the order of10 −4 ∼10 −5 . This severely
+limits training and inference efficiency of the neural solver, diminishing potential speed-
+ups over classical numerical solvers. To enable conservative and stable updates with large
+timesteps, we instead treat the GNN as a high-order space-time predictor, and construct
+a one-step implicit-like neural solver inspired by the Arbitrary high order DERivatives
+(ADER) methodology.
+
+7.1. ADER schemes
+    ADER schemes [14] are high-order extensions of Godunov methods and rely on two
+building blocks: (1) spatial reconstruction and (2) solution of generalized Riemann prob-
+lems (GRPs) at cell interfaces for flux evaluation. The ADER formulation begins by
+integrating the conservation laws over the space-time control volumeΩ  i×[t  m,tm+1   ],
+leading to the one-step FV update
+
+                                   um+1                           |s ij|
+                                     i      =u mi −∆t   X         |Ω i|Fij,                    (31)
+                                                         j∈N(i)
+
+
+
+                                                       12
+whereF     ij denotes the time-integral average of fluxes
+                                             Z tm+1
+                                Fij =   1∆t              u(x  ij,t)   ·n ij dt.                 (32)
+                                               tm   F
+    ADER employs a set of polynomials{P          i(x)}of degreeK, provided by nonlinear re-
+construction procedure such as WENO. At each interface, the reconstructed polynomials
+define the initial conditions for a GRP [61, 62] posed in the local normal coordinate
+
+                                      ∂u(τ,t)
+                                          ∂t      + ∂ F(u)·n   (∂τ         = 0,                           (33)
+                                      u(τ,0) =       P−(τ),  τ <0,
+                                                     P+(τ),  τ >0.
+
+    One strategy available for solving this GRP is the HEOC solver [63], which consists
+of a temporal evolution step and a data interaction step. The evolution step evolves the
+interface states via Taylor series expansions in timet=ς
+                                                   KX
+                                u−ij(ς) =P   i(x ij) +        ∂(k)t  Pi(x ij)ςkk! ,
+                                                         k=1                                               (34)
+                                                     KX
+                                u+ij(ς) =P   j(x ij) +        ∂(k)t  Pj(x ij)ςkk! ,
+                                                         k=1
+whereς=t−t         m denotes the local time. Through the Cauchy-Kovalevskaya procedure,
+the high-order time derivatives are replaced by spatial derivatives.
+    During the subsequent data interaction step, a classical Riemann problem is defined
+by the left and right evolved states, which serve as inputs to an approximate Riemann
+solverF  u−ij(ς),u      +ij(ς),n   ij. Finally, the time-averaged numerical fluxF   ij is obtained
+by approximating the time-integral via a suitable quadrature rule, achieving high-order
+accuracy in both space and time.
+
+7.2. Space-time Formulation
+    Within the Godunov framework, solutions are typically advanced through explicit
+FV updates constrained by the CFL condition. To circumvent this and achieve accurate
+predictions on temporally sparse trajectories with large timestep sizes∆t≫∆t                      CFL,
+we reinterpret the message-passing GNN as a space-time predictor rather than a purely
+spatial reconstructor.
+    The central idea is to let the GNN emulate the ADER mechanism: instead of gener-
+ating instantaneous reconstructions att  m, the network learns to approximate high-order
+polynomials that encode temporal evolution over each time interval. Accordingly, the
+edge-wise decoderϕ  dece  , analogous to the ADER-HEOC solver, is extended to output
+left/right interface states
+                     ehimp
+                       ij    =ϕ   dece q(∗)i ,e (∗)ij,   ehimpji    =ϕ   deceq(∗)j ,e (∗)ji,           (35)
+
+which embed both space and time high-order information.
+    During flux evaluation, the predicted states are transformed into conserved variables
+and supplied to a numerical flux function. The resulting fluxes correspond to integral
+averages rather than quantities att  m. The discrete update then follows as
+
+                eum+1i      =eumi −∆t   X     eg ijFij,  F ij =F          euimpij ,euimpji ,n ij,       (36)
+                                      j∈N(i)
+
+
+                                                       13
+yielding a one-step implicit-like neural solver that remains conservative and stable even
+for time steps far exceeding the explicit CFL bound, as fine-scale dynamics are ab-
+sorbed into the space-time latent representations.  The resulting formulation retains
+the strengths of the Godunov framework—conservation, upwinding, and Riemann-solver
+compatibility. The computation of the geometric weightseg   ij is described in Section 8.3.
+    In summary, the proposed ADER-inspired neural solver unifies spatial reconstruction
+and temporal evolution into a single end-to-end learnable operator, transforming the
+GNNintoaone-stepspace-timepredictorcapableofcapturingcomplexwaveinteractions
+over large time intervals.
+    Trajectory data for training the solver are generated using high-order numerical
+solvers.  Temporal coarsening is then performed by sampling the reference solutions
+at larger time intervals, creating new trajectories with fewer timesteps. Each coarse in-
+terval embodies the cumulative effect of high-order space–time discretizations, allowing
+the GNN to learn the integral behavior of the underlying solver.
+
+
+8.  Network Architecture Details
+
+    Our conservation-preserving Godunov-type (CPG) neural solver relies on an EPD
+architecture (as illustrated inFigure 5) tailored to point-cloud graphs. All components
+utilize two-hidden-layer MLPs withℏ= 128and ReLU nonlinearities (unless otherwise
+specified). Layer normalization [64] is applied to all MLP outputs except the decoders.
+The architecture concludes with a conservative update layer.
+
+
+
+
+
+
+
+
+
+
+
+
+     Figure 5: Schematic of the forward pass through the proposed EPD architecture (CPGNet).
+
+    Input features and target states are standardized to zero mean and unit variance
+using dataset statistics for training stability. Within the conservative framework, both
+predictions and ground-truth targets are passed through a shared output normalizer
+before loss computation to ensure consistent scaling.
+
+8.1. Encoder
+    To initialize latent representations that incorporate both the physical flow states
+and geometric information, we employ dedicated node and edge encoders. For a point-
+cloud graph, each node implicitly corresponds to a control volume, with input features
+comprising the current primitive stateH    m and geometric context. The concatenated
+input is processed by an MLP to produce initial node embeddings as
+
+                                  q(0)i    =MLP    encυ[h mi |M∞|q gi ]  ,                    (37)
+
+whereM   ∞ denotes the free-stream Mach number treated as a global condition appended
+to all nodes. The geometric vectorq    gi  = [x i|η i ]includes the node coordinatesx        i and a
+one-hot encodingη    i indicating the node type (e.g., interior, wall, inflow, outflow).
+    The edge Encoder integrates pairwise relations between nodes. Each directed edge is
+assigned a geometric feature vector
+
+                           egij = [ ∆x  ij|d ij|n ij ],  n ij = ∆x  ij/dij,               (38)
+
+
+
+                                                    14
+where∆x      ij  =x j−x i is the relative position vector andd   ij  =|∆x    ij|is the Euclidean
+distance. Thisrelativepositionalencodingpreservesspatialequivariance, whichiscrucial
+for capturing directional flow patterns.
+    The initial edge feature matrix is then obtained as
+
+                                       E(0) =ENC e (Q g,E g,A),                       (39)
+where the encoderENC   e consists of three stacked message passing layers, each with the
+hidden dimension ofℏ    ence    = 32.
+    Together, these encoders transform raw simulation data into rich latent representa-
+tions that serve as the input to the subsequent GNN processor. The design allows the
+network to operate directly on point clouds while effectively handling varying geometries
+and boundary configurations.
+
+8.2. Processor
+    The Processor serves as the core module of the network. It is built from a stack of
+L=  12EConvlayers, each incorporating a directional difference term in the message
+function (Eq. 25). The resulting node and edge features are denoted byQ  (L)   andE       (L)  ,
+respectively, with the processed embeddings defined as
+
+                               Q(∗)    =Q   (L) ,     E (∗)    = [E (L) |E (0) ].                  (40)
+Here, the final and initial edge features are fused to augment the learned space-time
+couplings with geometric priors for the downstream decoders.
+    To emulate upwind-biased reconstructions of Godunov-type methods,Q      (∗)  andE       (∗)
+are concatenated to form directed edge embeddings, which are then supplied to the
+edge-wise decoderϕ      dece  , as in Eq. (35).
+
+8.3. Decoder
+    There are two decoders.  The first, an edge-wise decoderϕ      dece  , predicts implicit
+left/right interface statesehimpij  andehimpji , representing space-time high-order reconstruc-
+tions. Separate lightweight MLPs with hidden dimensionℏ      dece    = 32are used for each
+primitive variable. Exponential mapsexp(·)enforce positivity of density (ρ >0) and
+pressure (p >0), and numerical fluxes are then evaluated through a differentiable Rie-
+mann solver—Rusanov in our studies.
+    The second decoder, also edge-wise, estimates positive geometric weights using a
+Softplus mapping
+                                 eg ij =softplus   MLP dece    e(∗)ij   +ϵ,                  (41)
+
+which learns to approximate the ratio|s    ij|/|Ω  i|. A constantϵ= 10 −6  is added for numer-
+ical robustness. The learned geometric weights enable the network to operate directly
+on irregular point-cloud simulation data without requiring an explicit FV mesh—only
+graph connectivity and nodal coordinates as inputs. This allows the neural solver to pre-
+servetheconservativestructurewhileremainingagnostictotheunderlyingdiscretization.
+Consequently, the solver gains flexibility across different geometries and resolutions and
+achieves improved efficiency during both training and inference.
+
+8.4. Conservative Update Layer
+    This layer employs a message aggregation operator and serves as the final stage of
+the neural solver, responsible for advancing the conserved variables. Directed numerical
+fluxesF     ij are first evaluated along alln  e unique edges, followed by obtaining undirected
+pairsF    ji =−F ij (antisymmetry), ensuring that flux contributions across a shared inter-
+face cancel exactly between the two connected nodes. The aggregation step (Eq. 36) is
+implemented as a scatter-add of weighted fluxes (edge messages) over incoming/outgoing
+directed edges to update each node’s state, thereby guaranteeing local conservation by
+construction.
+
+                                                      15
+9.  Training Strategies
+
+9.1. One-step Training
+    Under the one-step training setting, the learning task is formulated as a sequence of
+immediate temporal mappings. Specifically, the training dataset consists of input–output, with℘= 1,...,n      r as the index
+pairs at each time levelt m, denoted as Hm℘ →H  m+1℘
+of the rollout trajectories produced by a high-fidelity numerical solver.
+    Training is supervised by a mean squared error (MSE) objective, which measures the
+discrepancy between the predicted primitive variables eHm+1℘   and their corresponding
+ground truth labelsH  m+1℘   . The loss function is defined as
+
+                                               1   nrX nt−1X eHm+1℘ −H m+1℘     2
+                        Lonestep(Θ) =  1nr     nt                                  2.             (42)
+                                                  ℘=1  m=0
+
+Here,n    t denotes the number of timesteps (temporal snapshots). The network parameters
+Θare optimized via backpropagation using mini-batch stochastic gradient descent. Note
+that eHm+1℘   is converted from the updated conserved values
+
+                                  eUm+1℘      =U m℘  + ∆tN   Um℘,µ ℘; Θ.                   (43)
+
+    Neural solvers trained solely with the one-step objective are prone to error accumula-
+tion during long-term autoregressive inference: small prediction errors can amplify over
+time, leading to substantial deviations from the true solution trajectory [26]. To allevi-
+ate the mismatch between training and inference input distributions, we inject additive
+Gaussian noiseN(0,σ)with zero mean and fixed variance into the input statesH              m℘ dur-
+ing training. This perturbation strategy exposes the network to mildly corrupted inputs,
+improving robustness when the solver is driven by its own predictions during inference.
+
+9.2. Multistep Strategy
+    To address the shortcomings inherent to one-step supervision, we employ a mul-
+tistep training strategy [65, 30].  This approach explicitly accounts for temporal er-
+ror accumulation by unrolling the neural solver over multiple future time levels within
+each training iteration.  A sliding window of lengthn     w is used to expose the model
+to longer temporal contexts, enabling it to learn both short-term evolution and longer-
+horizon dynamics.  Concretely, training samples consist of contiguous state sequences
+(H m℘,H m+1℘  ,...,H m+n   w℘       ). The corresponding multistep objective aggregates prediction
+errors across all unrolled steps and is defined as
+                                             1         nrX nt−n wX nwX eHm+k℘  −H m+k℘     2
+              Lmultistep(Θ) =  1nr    nt−n w + 1                                              2,      (44)
+                                                      ℘=1   m=0    k=1
+
+where eHm+k℘   denotes the primitive values at thek-th step of the rollout window initiated
+at timet    m. Within each window, predictions are produced recursively using the solver’s
+own outputs
+     eUm+k℘      = eUm+k−1℘         + ∆tN eUm+k−1℘    ,µ ℘; Θ
+                                                             ,  k= 1,...,n  w,  eUm℘  =U m℘.   (45)
+
+Stochastic perturbations are applied exclusively to the initial input of each rollout win-
+dow, with noise amplitudes that are an order of magnitude smaller than those employed
+during one-step training. Since subsequent states are generated autoregressively from
+the model’s own predictions, the multistep formulation exposes the network to the dis-
+tributional shifts and cumulative errors encountered during inference.
+
+
+
+                                                      16
+9.3. Two-stage Curriculum
+    Directly optimizing the multistep loss from random initialization is often challenging,
+as the network must simultaneously capture accurate local dynamics and maintain stabil-
+ity over extended temporal horizons [28]. To improve optimization robustness, we adopt
+a two-stage curriculum training strategy. In the first stage, the model is pretrained using
+the one-step loss, providing a stable initialization that emphasizes short-term accuracy.
+In the second stage, the pretrained network is fine-tuned using the multistep objective
+over a limited number of epochs, allowing the model to explicitly reduce accumulated
+rollout errors without incurring excessive optimization difficulty.
+    GNN models are trained on an NVIDIA L20 GPU using the Adam optimizer [66].
+The one-step (teacher-forcing) stage in the two-stage curriculum runs for 15 epochs with
+a learning rate of10 −4 . Then the multistep stage runs 5 epochs with the learning rate
+reduced to10 −5 . In both stages, the temporal context window size is fixed atn  w = 3.
+Our implementation relies on PyTorch [67] and the PyTorch Geometric library [68].
+
+
+10.  Benchmark Datasets
+
+    We construct high-fidelity datasets targeting four canonical benchmarks of supersonic
+Euler flows that are challenging even for state-of-the-art numerical methods. All simula-
+tions are performed through the Trixi.jl framework [69, 70] on unstructured quadrilateral
+meshes generated by Gmsh [71]. The Euler equations withγ= 1.4are discretized using
+the DGSEM [72].  Polynomials of degreeK=  3(fourth-order spatial accuracy) with
+a Lobatto–Legendre nodal basis are used on all elements, and the Rusanov numerical
+flux is chosen for surface flux evaluations. An entropy-stable shock-capturing strategy is
+enabled based on the Hennemann–Gassner indicator [73]. Time integration advances the
+semi-discrete system by a third-order adaptive strong-stability-preserving Runge-Kutta
+(explicit SSPRK43) scheme [74, 75], with the Zhang-Shu positivity-preserving limiter
+[76] applied at every RK stage.
+    Free-stream states are defined by fixed densityρ ∞  =  1.4, pressurep      ∞  =  1.0, and
+randomly sampled Mach numberM ∞. The velocity components are computed via
+                          v∞ =M ∞pγp∞/ρ∞,       (v   1,v2) = (v∞,0.0),              (46)
+
+
+and these values specify both the initial and Dirichlet inflow conditions.
+    This configuration enables the systematic construction of parametric datasets across
+diverse geometries and flow regimes, covering a broad spectrum of unsteady, strongly
+nonlinear high-speed phenomena. Each dataset comprises 300 training and 20 test tra-
+jectories generated with adaptive timestep control on the order of10 −4 ∼10 −5  to satisfy
+stability and accuracy requirements. High-resolution DGSEM solutions are temporally
+coarsened by sampling at large intervals (∆t≫∆t               CFL), yielding a sequence length of
+nt  =  80per trajectory. Such design provides consistent simulation data for assessing
+neural solvers under challenging conditions. Key dataset statistics are given in Table 1.
+
+Table 1:  Dataset Statistics.  Notation:T—total simulation time;∆t                                      neural—coarsened timestep;
+navg—average node count.
+
+                  Dataset               T     ∆t    neural  navg    noise scaleσ(ρ,v             1,v2,p)
+            Supersonic Bump            2.0      0.025       19k       (2e-2, 2e-2, 1e-2, 2e-2)
+              Forward Step             2.0      0.025       23k      (5e-2, 2e-2, 1e-2, 10e-2)
+            Shock Diffraction          0.7    0.00875       22k       (4e-2, 2e-2, 2e-2, 8e-2)
+          Supersonic Cylinder          1.6      0.02        24k       (2e-2, 1e-2, 1e-2, 3e-2)
+
+
+
+
+
+
+                                                     17
+10.1. Supersonic Bump
+    Thedatasetinvolvessupersonicflowsthrougharectangularchannelwithacircular-arc
+bump on the lower wall [77]. The computational domain is the rectangle[0,3]×[0,1];
+the bump is parameterized by its chord length, maximum height, and starting position,
+generating variation of channel geometries with diverse shock structures and boundary
+interactions.  The top and bottom boundaries are treated as inviscid slip walls (zero
+normal velocity), the left boundary prescribes an inlet with a free-stream Mach number
+sampled randomly fromM   ∞∈[1.5,2.5], and the right side is a non-reflecting outflow
+boundary, implemented by returning the physical flux computed from interior states. All
+simulations evolve over the time intervalt∈[0,2]. A lower-resolution counterpart of the
+dataset is additionally generated using a second-order DGSEM discretization (K= 1),
+containing only 200 training trajectories.
+    Figure  6illustrates an example DGSEM simulation mesh and the corresponding
+point cloud. The point cloud, along with its node connectivity, defines the graph repre-
+sentation that serves as direct input to the proposed graph neural solver (see Section 8 for
+details). This formulation allows the solver to operate purely on point clouds, eliminating
+the need for an explicit FV mesh during inference.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 6: Example DGSEM simulation mesh (top) and the associated point cloud (bottom) for the
+Supersonic Bump benchmark.
+
+
+10.2. Forward-facing Step
+    Supersonic flow past a forward-facing step is a well-known benchmark for assessing
+high-resolution methods [78, 79].  While the standard configuration considers a Mach
+3 flow in a wind tunnel with a fixed step geometry, we generalize it into a parametric
+dataset by randomly varying both geometric and flow parameters. The domain is the
+rectangle[0,3]×[0,1], inwhichasharpsteponthelowerwalltriggerscomplexphenomena
+including shock reflections, expansion fans, and flow separation. The step is defined by
+its streamwise location and height.  Boundary conditions are set as: the inflow with
+M∞∈[2.5,3.5]on the left, outflow on the right, and slip-wall conditions along the top,
+bottom, and step surfaces. All simulations are advanced overt∈[0,2].
+
+10.3. Shock Diffraction
+    Shock diffraction at a sharp backward-facing corner is another popular benchmark
+for the Euler equations [79], known for producing negative density and/or pressure when
+numerical schemes lack positivity-preserving limiters. The domain is the square[0,3]×
+[0,3]containing a rectangular obstacle in the lower-left region, parameterized by its
+streamwise length and height. A planar shock initially located atx= 0.3moves into
+
+
+
+                                                     18
+undisturbed air. The pre-shock state (x >0.3) ish              0pre  = (1.4,0.0,0.0,1.0)       ⊤, while the
+post-shock state (x≤0.3) is obtained via the Rankine–Hugoniot relations
+
+                                    ρpo
+                                   ρpre  =     (γ+ 1)M        2∞(γ−1)M            2∞ + 2,
+                                    ppo                                                                  (47)
+                                   ppre  = 1 +   2γrγ+ 1  (M  2∞−1),
+
+                                   vpo =M ∞        γppreρpre 1− ρpreρpo   .
+
+The initial condition is therefore defined piecewise for each case according to this shock
+profile. The free-stream Mach number is randomly sampled fromM   ∞∈[2.5,3.5].
+    Boundary conditions include inflow on the left, outflow on the bottom and right, and
+slip-wall conditions along the top boundary and obstacle surfaces. Note that this differs
+from the standard setup where the top is also treated as an outflow. The simulation time
+interval is set tot∈[0,0.7].
+
+10.4. Supersonic Cylinder
+    The dataset is constructed from a family of supersonic flows past a cylinder [80, 81]
+embedded in a tunnel of size[0,4]×[0,2]. The obstacle is a closed ellipse whose geom-
+etry is parameterized by its center location and semi-axis lengths. Boundary conditions
+include inflow on the left, outflow on the right, and slip-wall conditions along the top,
+bottom, and elliptical surfaces. The free-stream Mach number is randomly sampled per
+case fromM   ∞∈[1.4,2.2]. This configuration produces a parametric dataset spanning a
+widerangeofshockstructures, flowdeflections, andwakepatternsarisingfromvariations
+in the Mach number and obstacle geometry. All simulations evolve overt∈[0,1.6].
+
+11.  Results and Evaluation
+
+    We systematically evaluate the accuracy, stability, and generalization performance of
+our graph neural solver constructed based on the Conservation-preserving Godunov-type
+network (CPGNet) architecture (see Section 8 for architectural details), by comparing
+it with three strong baselines: (1)GINO: geometry-informed neural operator [82]; (2)
+GNOT: general neural operator transformer [83]; (3)MGN(MeshGraphNet) [27] con-
+figuredwith12MPNNlayers. Allbaselinesfollowthedefaultsettingsoftheiropen-source
+implementations, with model capacities (parameter counts and hidden dimensions) ad-
+justed to match that of CPGNet where applicable. Performance is evaluated both quan-
+titatively, using error metrics computed against high-fidelity numerical simulations, and
+qualitatively, by inspecting the solution fields.
+
+11.1. Quantitative results
+    To quantitatively assess rollout accuracy, we measure the cumulative root mean
+squared error (RMSE) over a full trajectory.  Averaging across all timesteps and tra-
+jectories in a test set yields the all-step RMSE
+                                                vuut
+                                            nrX     1  nt−1X eHm+1℘ −H m+1℘     2
+                         RMSEall =  1nr             nt                             2,             (48)
+                                            ℘=1         m=0
+
+where eHm+1℘   denotes the autoregressively predicted state.  This metric reflects error
+growth of rollouts during inference, and is reported separately for each primitive variable.
+    Table 2 summarizes the results under the one-step training. For the processor module
+of CPGNet, we further compare the enriched edge convolutionEConvwith two widely-
+used attention-based GNNs: the graph attention operator (GAT) and the graph trans-
+former(GT), asdetailedinSection14. Acrossalldatasetsandvariables, ourgraphneural
+
+                                                      19
+Table 2: Rollout errors RMSEall comparisons of different methods under the one-step training. Datasets
+are generated with the second-order DGSEM in (a) and with the fourth-order DGSEM in (b-e). The
+best results are inbold, the second-best are underlined     , and the third-best are   overlined. Across every
+datasetandtestcase, theproposedCPGNetconsistentlyoutperformsallbaselinearchitectures, achieving
+the lowest rollout errors. Within the CPGNet processor module,EConvdelivers higher accuracy relative
+toGT, which in turn surpassesGAT.
+
+                               (a) Supersonic Bump (second-order DGSEM)
+
+                    Var.     GINO  GNOT  MGN        CPGNetGAT       GT      EConv
+                      ρ       0.034    0.043   0.036            0.012    0.010      0.008
+                     v1       0.015    0.020   0.013            0.0050.004          0.003
+                     v2       0.028    0.031   0.028            0.0080.007          0.005
+                      p       0.034    0.041   0.035            0.0150.013          0.009
+
+                                            (b) Supersonic Bump
+
+                    Var.     GINO  GNOT  MGN        CPGNetGAT       GT      EConv
+                      ρ       0.062    0.064   0.056            0.0210.018          0.015
+                     v1       0.042    0.045   0.035            0.0090.008          0.007
+                     v2       0.034    0.035   0.029            0.0130.011          0.009
+                      p       0.067    0.071   0.059            0.0220.020          0.017
+
+                                               (c) Forward Step
+
+                    Var.     GINO  GNOT  MGN        CPGNetGAT       GT      EConv
+                      ρ       0.473    0.421   0.337            0.1880.178          0.134
+                     v1       0.248    0.202   0.149            0.0830.077          0.058
+                     v2       0.192    0.168   0.135            0.0850.078          0.062
+                      p       0.817    0.794   0.623            0.3400.333          0.244
+
+                                                (d) Diffraction
+
+                    Var.     GINO  GNOT  MGN        CPGNetGAT       GT      EConv
+                      ρ       0.215    0.251   0.236            0.1160.112          0.110
+                     v1       0.108    0.136   0.123            0.0600.059          0.058
+                     v2       0.044    0.058   0.052            0.0280.023          0.025
+                      p       0.439    0.516   0.482            0.2390.235          0.232
+
+                                           (e) Supersonic Cylinder
+
+                    Var.     GINO  GNOT  MGN        CPGNetGAT       GT      EConv
+                      ρ       0.094    0.103   0.059            0.0540.050          0.047
+                     v1       0.079    0.101   0.047            0.0510.049          0.047
+                     v2       0.072    0.095   0.052            0.0500.048          0.046
+                      p       0.108    0.122   0.067   0.056              0.0570.053
+
+
+
+solver consistently achieves the lowest rollout errors RMSEall, substantially outperform-
+ing the baselines. In particular, CPGNet equipped withEConvdelivers the best perfor-
+mance in nearly all cases, reducing errors by approximately 40%–80%, depending on the
+dataset and variable. Comparisons among different processor variants indicate that the
+attention-based operators (GATandGT) do not offer advantages overEConv, suggesting
+that the edge-enriched message passing is more effective for capturing local nonlinear
+
+
+                                                       20
+                              (a) Supersonic Bump (second-order DGSEM)
+
+
+
+
+
+
+
+
+
+
+
+                                           (b) Supersonic Bump
+
+
+
+
+
+
+
+
+
+
+
+                                              (c) Forward Step
+
+
+
+
+
+
+
+
+
+
+
+                                               (d) Diffraction
+
+
+
+
+
+
+
+
+
+
+
+                                          (e) Supersonic Cylinder
+
+       Figure 7: Mean RMSE over all test cases vs. time steps under the two training strategies.
+
+
+interactions of hyperbolic PDEs. Although RMSE is an absolute, scale-dependent met-
+ric whose magnitude varies across flow variables, the relative performance trends remain
+consistent throughout the tests. These results confirm the superior accuracy and rollout
+robustness of the proposed solver framework.
+    To assess how solution errors accumulate during rollouts,Figure 7shows the evolu-
+tion of the mean RMSE over successive time steps, averaged across all test cases under
+the two training strategies. While the MGN baseline displays pronounced error growth as
+the rollout proceeds—ultimately degrading long-term predictive accuracy—the proposed
+CPGNet-based solver effectively suppresses temporal error propagation, maintaining a
+markedly more controlled and stable error profile. Furthermore, adopting the two-stage
+
+
+
+                                                     21
+training strategy yields additional gains, highlighting the benefit of a multistep loss in
+capturing temporal dependencies and boosting the reliability of autoregressive inference.
+
+11.2. Qualitative results
+    To complement the quantitative assessment, we plot flow fields at the final time step
+for representative test trajectories.  The proposed graph neural solver remains stable
+in regions of intense nonlinear wave interactions, producing high-fidelity rollouts across
+diverse supersonic regimes. Visual comparisons confirm that our method is markedly
+superior to the MGN baseline and generalizes robustly to varying geometries, Mach
+numbers, and flow complexities.
+
+11.2.1. Supersonic Bump
+    We begin by visualizing the final-time flow fields for two representative test cases
+from the supersonic-bump dataset generated with the second-order DGSEM (K= 1).
+Figure 8compares the high-fidelity reference (REF) solution with the predictions of the
+neural solvers;Figure 9further shows density and pressure fields for three additional
+cases. This flow is characterized by oblique shocks originating at the bump corners. The
+leading shock reflects off the upper wall and interacts with the trailing shock, producing
+complex shock–shock and shock–wall interference patterns. Across all cases, CPGNet
+faithfully captures the global shock topology and reproduces the interaction patterns
+seen in the reference. In particular, near the shock apex, the predicted shock location,
+inclination, andthicknesscloselymatchthereference, retainingasharplyresolvedprofile.
+By contrast, the MGN baseline exhibits pronounced shock smearing and positional drift,
+reflecting excessive numerical dissipation accumulated during the rollout.
+    CPGNet also delivers superior accuracy in smooth but dynamically sensitive regions.
+In the stagnation zone upstream of the bump leading edge, where the flow transitions
+to subsonic and pressure gradients are pronounced, CPGNet restores the reference pro-
+files. MGN predictions are overly smoothed and exhibit distorted contours, reflecting
+shock propagation errors and insufficient preservation of local solution structure. These
+observations highlight that CPGNet not only enhances shock capturing but also ensures
+the fidelity of the coupled shock–subsonic flow field. To further assess performance in
+smoother flow regimes,Figure 10shows final solution fields of two representative test
+casesfromthedatasetgeneratedusingthefourth-orderDGSEM(K= 3), andFigure 11
+provides comparisons of density and pressure for three additional cases. As can be seen,
+CPGNet maintains excellent agreement with the high-order reference across both shock-
+dominated and smooth regions, preserving sharp features with minimal degradation.
+MGN, on the other hand, shows clear visual artifacts and pattern deviations, consistent
+with the large rollout errors reported in Table 2.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                    22
+                                                      (a)M   ∞ = 1.92
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                      (b)M   ∞ = 1.93
+
+Figure 8: Solution fields of two representative cases in the Supersonic Bump dataset (generated with the
+second-order DGSEM).
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 9: Density and pressure fields of representative cases in the Supersonic Bump dataset (generated
+with the second-order DGSEM).
+
+
+                                                              23
+                                                      (a)M   ∞ = 1.92
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                      (b)M   ∞ = 2.18
+
+Figure 10: Solution fields of two representative cases in the Supersonic Bump dataset (generated with
+the fourth-order DGSEM).
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 11: Density and pressure fields of representative cases in the Supersonic Bump dataset (generated
+with the fourth-order DGSEM).
+
+
+                                                             24
+                                                (a)M   ∞ = 2.77
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                               (b)M   ∞ = 2.89
+
+     Figure 12: Solution fields of two representative cases in the Forward Step dataset.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 13: Density and pressure fields of representative cases in the Forward Step dataset.
+
+
+                                                       25
+11.2.2. Forward-facing Step
+    This benchmark provides a demanding test for shock-capturing schemes, requiring
+both the resolution of fine-scale vortical structures and the suppression of spurious nu-
+merical oscillations near strong shocks. Solution fields of representative test cases from
+the dataset generated with the fourth-order DGSEM are shown inFigure 12andFig-
+ure 13. While the MGN baseline recovers the primary shock topology, it reveals key
+limitations in handling complex wave interactions.  Although it captures the flow ex-
+pansion at the step corner, the method exhibits severe oscillations around the critical
+triple point formed during Mach reflection—a known challenge for classical numerical
+schemes—and yields a smeared representation of the slip line that emanates from the
+triple point, thereby blurring the entropy-distinct flow regions.
+    In contrast, the CPGNet-based solver effectively suppresses such oscillations not only
+near the triple point but throughout the computational domain. Moreover, CPGNet ro-
+bustly captures the downstream flow evolution, including the transition from an initially
+detached shock to a lambda shock, its reflection from the upper wall, and subsequent
+wave interactions. Key features—contact discontinuities, multiple shock reflections, and
+well-defined slip lines—are preserved without introducing non-physical artifacts, show-
+casing a clear advance in numerical stability and predictive fidelity.
+    To further examine the effect of numerical order, solution fields of a representative
+casearecomparedacrossDGSEMdiscretizationswithdifferentpolynomialdegrees, using
+theK= 3simulation as the high-resolution reference. Corresponding predictions from
+the graph neural solver (CPGNet) are included for direct comparison.  As visualized
+inFigure 14, lower-order DGSEM solutions exhibit increased numerical diffusion and
+reduced resolution of shock structures, whereas CPGNet closely reproduces the key flow
+features of the reference, including sharp shock fronts and post-shock flow patterns.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 14: Comparison of solution fields across DGSEM polynomial degrees and graph neural solver for
+a representative case in the Forward Step dataset.
+
+
+
+Table 3: Computational time (s) required to simulate a full trajectory for the representative Forward
+Step case using CPGNet inference and DGSEM with different polynomial degrees.
+
+                                CPGNet        K= 1       K= 2        K= 3
+                                   2.0         33.2       135.6      457.5
+
+    Our graph neural solver delivers a substantial computational advantage over tradi-
+tional high-order DGSEM simulations, as quantified in Table 3. For the representative
+case, CPGNet completes a full trajectory in roughly two seconds, achieving speed-up fac-
+tors exceeding10×relative to the lowest-order DGSEM and over100×compared to the
+high-resolution (K= 3) reference. All DGSEM runs were performed on a 4th-generation
+Intel Xeon CPU using shared-memory multi-threaded parallelization. Importantly, these
+efficiency gains are attained while CPGNet preserves solution fidelity on par with the
+K=  3DGSEM profiles.  The combination of high accuracy and orders-of-magnitude
+
+                                                     26
+faster inference underscores the potential of the proposed framework for real-time pre-
+diction and large-scale parametric analysis of compressible flows.
+
+11.2.3. Shock Diffraction
+    Figure 15andFigure 16present representative results from the Shock Diffraction
+benchmark, a test problem that showcases complex wave patterns arising from the shock
+interaction with a sharp corner. While both methods capture the primary flow struc-
+tures—the diffracted shock, Mach stem, and expansion fan—clear differences emerge
+near the upper boundary of the expansion fan. The MGN baseline shows local contour
+distortions and mild non-physical oscillations in this region, whereas CPGNet main-
+tains physically coherent contours that align with the reference. Across all tested cases,
+CPGNet demonstrates consistently higher stability and visual fidelity when resolving
+strong shock–expansion interactions.
+
+11.2.4. Supersonic Cylinder
+    Figure 17andFigure 18show comparisons for the supersonic flow past an elliptic
+cylinder, a configuration characterized by a detached bow shock upstream, strong flow
+acceleration around the body, and a complex, unsteady separated wake with vortex shed-
+ding downstream. The MGN baseline captures the primary features, including the global
+bow-shock structure and the expansion fans. However, its prediction of the downstream
+separated wake appears overly diffused and geometrically distorted.  By comparison,
+the proposed CPGNet solver yields smaller discrepancies in the shape and details of the
+wake. The formation of a well-defined Mach disk and the associated triple points—where
+the incident shock, reflected shock, and Mach stem meet—are also accurately resolved,
+together with the emanating slip lines that separate regions of different entropy.
+    Overall, the qualitative comparisons confirm that the structure-preserving design of
+CPGNet delivers stable and accurate spatio-temporal solutions across all benchmark
+problems considered. The solver consistently captures global shock topology, fine-scale
+discontinuities, and coupled shock–subsonic interactions with high fidelity, while mit-
+igating the non-physical oscillations and excessive dissipation prevalent in the MGN
+baseline. Its robust performance generalizes across a broad spectrum of Mach numbers,
+geometries,andflowregimes,demonstratingstrongadaptabilitytounseenconfigurations.
+These findings mark a distinct step forward relative to black-box neural surrogates and
+underscore the reliability of the CPGNet framework for challenging supersonic flows.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                    27
+                                               (a)M   ∞ = 2.72
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                               (b)M   ∞ = 3.28
+
+     Figure 15: Solution fields of two representative cases in the Diffraction dataset.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 16: Density and pressure fields of representative cases in the Diffraction dataset.
+
+                                                       28
+                                                    (a)M   ∞ = 1.40
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                    (b)M   ∞ = 1.71
+
+     Figure 17: Solution fields of two representative cases in the Supersonic Cylinder dataset.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 18: Density and pressure fields of representative cases in the Supersonic Cylinder dataset.
+                                                            29
+12.  Conclusion
+
+    We have presented an interpretable, structure-preserving graph neural solver de-
+signed for parametric hyperbolic conservation laws. At its core, this work bridges the
+robustness and interpretability of classical Godunov-type finite-volume schemes with the
+flexibility and expressive capacity of graph neural networks (GNNs).  We show that
+successive message-passing and aggregation in GNNs naturally emulate the one-sided
+biasing and wide stencils characteristic of high-order nonlinear reconstructions. Depart-
+ing from black-box neural surrogates, our framework treats the network as a learned
+reconstruction-and-flux operator—decoding interface states from edge representations,
+coupling them with a differentiable Riemann solver, and advancing the solution via a
+conservative flux-aggregation layer. This design enforces discrete local conservation and
+upwinding directly at the architectural level. To overcome the efficiency limitations im-
+posed by explicit CFL constraints, we further introduce an ADER-inspired formulation
+thatrecaststhemessage-passingGNNasahigh-orderspace-timepredictor. Theresulting
+implicit-like one-step update remains fully conservative and Riemann-solver compatible
+while operating stably with time steps far exceeding the explicit CFL limit. In addition,
+learned geometric weights allow the solver to operate directly on point-cloud simulation
+data, requiring only graph connectivity and nodal coordinates and eliminating the need
+for an explicit mesh during inference.
+    Through systematic validation on four challenging families of supersonic flow bench-
+marks spanning wide parametric variations, the proposed neural solver consistently out-
+performs strong baseline methods in both quantitative and qualitative assessments. It
+achieves markedly improved long-horizon rollout stability, reduces accumulated errors by
+up to 80%, and exhibits superior fidelity in capturing sharp shocks, contact discontinu-
+ities, and coupled shock–subsonic interactions. Compared to traditional discontinuous
+Galerkin spectral element (DGSEM) discretizations, the solver surpasses low-order vari-
+ants in accuracy while delivering runtime speedups of more than two orders of magnitude
+relative to high-resolution reference simulations. These results highlight a viable pathway
+toward scalable, structure-aware neural PDE solvers for general conservation laws, with
+promising implications for large-scale many-query workflows such as design optimization
+and real-time flow control.
+
+
+13.  Code Availability
+
+    The source code and datasets are publicly available at
+https://gitlab.com/jiaminjiang66/cpggnspdes.
+
+14.  Appendix A. Attention-based Graph Operators
+
+    We summarize two widely used attention-based graph operators. Both augment stan-
+dard message passing by introducing learnable attention weights that modulate the rel-
+ative contribution of each neighboring node during aggregation.
+    The Graph Attention (GAT) operator [84, 85] integrates self attention into graph
+representationlearning, allowingeachnodetoadaptivelyemphasizethemostinformative
+neighbors. For a node pair(i,j), an unnormalized attention score is computed as
+
+                              ξij =a ⊤LeakyReLU (W  1qi +W   2qj),                  (49)
+
+whereWare learnable weight matrices andais the shared attention vector.  The
+LeakyReLU nonlinearity uses a negative slope of 0.2.  These scores are then normal-
+ized over the (self-including) neighborhood of nodeiusing a softmax
+
+                          ψij = softmaxj(ξ ij) =            exp (ξ ij)P
+                                                         k∈N(i)∪{i}              exp (ξ ik).               (50)
+
+                                                    30
+    The updated embedding is obtained via an attention-weighted combination of trans-
+formed node features
+                                  q′i =ψ iiW1qi + X          ψijW2qj                     (51)
+                                                     j∈N(i)
+followed by layer normalization and a ReLU activation. Multi-head attention is realized
+by constructing multiple attention maps in parallel and then averaging the resulting
+head-wise outputs.
+    The Graph Transformer operator [86] instead employs the scaled dot-product atten-
+tion mechanism popularized by the Transformer architecture [87]. For each attention
+head, the neighborhood attention weights are defined by
+                                                 (W  3qi)⊤ (W  4qj)
+                               ψij = softmax               √ℏ             ,                  (52)
+
+whereℏdenotes the hidden dimension. Message aggregation takes the form
+
+                                   q′i =W   1qi + X       ψijW2qj.                      (53)
+                                                   j∈N(i)
+
+Note that, in the formulation above, the GT layer remains within the local message-
+passing setting: attention is restricted to one-hop neighbors, and the learned coefficients
+ψij act solely as adaptive importance weights for aggregating incoming messages.
+    All network variants follow the Encode-Process-Decode architecture (Section 5.4).
+The Processor contains 12 layers and alternates betweenEConvand attention-based op-
+erators (6EConv+ 6GAT/GT). TheEConvblocks propagate and update edge-centric
+messages, whereas the attention-based blocks refine node-to-node interactions through
+learned neighbor weights. We use two attention heads and set the hidden feature dimen-
+sion to 128.
+
+15.  Appendix B. Training Costs
+
+    Table 4 summarizes the wall-clock training costs (hrs) of the MGN surrogate and the
+graph neural solver for each dataset. For one-step training, CPGNet exhibits training
+times comparable to, and consistently slightly lower than, those of MGN, indicating
+no additional overhead from enforcing conservation and upwinding at the architectural
+level. The two-stage CPGNet strategy introduces a modest additional cost associated
+with multi-step autoregressive fine-tuning. This additional expense remains moderate
+relative to the overall training time and is justified by the gains in long-term stability
+and predictive accuracy.
+
+     Table 4: Training costs (hrs) of the MGN surrogate and the graph neural solver (CPGNet).
+
+                        Dataset              MGN                    CPGNet
+                                            one-step     one-step         two-stage
+                  Supersonic Bump             17.7          16.9       24.3 (16.9+7.4)
+                    Forward Step              20.7          20.1       28.8 (20.1+8.7)
+                  Shock Diffraction           21.2          20.6       29.5 (20.6+8.9)
+                Supersonic Cylinder           22.5          21.8       31.4 (21.8+9.6)
+
+
+
+Acknowledgements
+
+    This work is partially supported by the NSFC Major Research Plan - Interpretable
+andGeneralPurposeNext-generationArtificialIntelligence(Nos. 92570001and92370205),
+NSFC grant 12501604, NSFC grant 12425113, the Basic Research Program of Jiangsu
+
+                                                   31
+under Grant BK20253039 and Grant BK20250475, and Key Laboratory of the Ministry
+of Education for Mathematical Foundations and Applications of Digital Technology, Uni-
+versity of Science and Technology of China.
+
+
+References
+
+ [1]Z. Li, N. Kovachki, K. Azizzadenesheli, B. Liu, K. Bhattacharya, A. Stuart,
+     A. Anandkumar, Fourier neural operator for parametric partial differential equa-
+     tions, in: International Conference on Learning Representations, Vol. 9, 2021.
+
+ [2]L. Lu, P. Jin, G. Pang, Z. Zhang, G. E. Karniadakis, Learning nonlinear operators
+     via deeponet based on the universal approximation theorem of operators, Nature
+     Machine Intelligence 3 (3) (2021) 218–229.
+ [3]Q. Cao, S. Goswami, G. E. Karniadakis, Laplace neural operator for solving differ-
+     ential equations, Nature Machine Intelligence 6 (6) (2024) 631–640.
+
+ [4]M. Liu-Schiaffini, J. Berner, B. Bonev, T. Kurth, K. Azizzadenesheli, A. Anand-
+     kumar, Neural operators with localized integral and differential kernels (2024).
+     arXiv:2402.16845.
+ [5]E. Zappala, A. H. d. O. Fonseca, J. O. Caro, A. H. Moberly, M. J. Higley, J. Cardin,
+     D.v.Dijk, Learningintegraloperatorsvianeuralintegralequations, NatureMachine
+     Intelligence 6 (9) (2024) 1046–1062.
+
+ [6]A. Peyvan, V. Oommen, A. D. Jagtap, G. E. Karniadakis, Riemannonets: Inter-
+     pretable neural operators for riemann problems, Computer Methods in Applied Me-
+     chanics and Engineering 426 (2024) 116996.
+
+ [7]S. K. Godunov, I. Bohachevsky, Finite difference method for numerical computation
+     ofdiscontinuoussolutionsoftheequationsoffluiddynamics,MatematičeskijSbornik
+     47 (3) (1959) 271–306.
+
+ [8]E. F. Toro, Riemann solvers and numerical methods for fluid dynamics: a practical
+     introduction, Springer Science & Business Media, 2013.
+
+ [9]B. Van Leer, Towards the ultimate conservative difference scheme, Journal of Com-
+     putational Physics 135 (2) (1997) 229–248.
+
+[10]X.-D. Liu, S. Osher, T. Chan, Weighted essentially non-oscillatory schemes, Journal
+     of Computational Physics 115 (1) (1994) 200–212.
+
+[11]G.-S. Jiang, C.-W. Shu, Efficient implementation of weighted eno schemes, Journal
+     of Computational Physics 126 (1) (1996) 202–228.
+
+[12]C.-W. Shu, S. Osher, Efficient implementation of essentially non-oscillatory shock-
+     capturing schemes, Journal of Computational Physics 77 (2) (1988) 439–471.
+[13]S. Gottlieb, C.-W. Shu, E. Tadmor, Strong stability-preserving high-order time dis-
+     cretization methods, SIAM Review 43 (1) (2001) 89–112.
+
+[14]V. A. Titarev, E. F. Toro, Ader: Arbitrary high order godunov approach, Journal
+     of Scientific Computing 17 (1) (2002) 609–618.
+[15]Z. Sun, Convolution neural network shock detector for numerical solution of conser-
+     vation laws, Communications in Computational Physics 28 (5) (2020) 2075–2108.
+
+[16]Y. Feng, T. Liu, A characteristic-featured shock wave indicator on unstructured
+     grids based on training an artificial neuron, Journal of Computational Physics 443
+     (2021) 110446.
+
+                                                    32
+[17]T.Kossaczká, M.Ehrhardt, M.Günther, Enhancedfifthorderwenoshock-capturing
+     schemes with deep learning, Results in Applied Mathematics 12 (2021) 100201.
+
+[18]X. Nogueira, J. Fernández-Fidalgo, L. Ramos, I. Couceiro, L. Ramírez, Machine
+     learning-based weno5 scheme, Computers & Mathematics with Applications 168
+     (2024) 84–99.
+
+[19]D.A.Bezgin, S.J.Schmidt, N.A.Adams, Weno3-nn: Amaximum-orderthree-point
+     data-driven weighted essentially non-oscillatory scheme, Journal of Computational
+     Physics 452 (2022) 110920.
+
+[20]Z. Chen, A. Gelb, Y. Lee, Learning the dynamics for unknown hyperbolic conserva-
+     tion laws using deep neural networks, SIAM Journal on Scientific Computing 46 (2)
+     (2024) A825–A850.
+
+[21]V. Morand, N. Müller, R. Weightman, B. Piccoli, A. Keimer, A. M. Bayen, Deep
+     learning of first-ordernonlinear hyperbolic conservation law solvers, Journalof Com-
+     putational Physics 511 (2024) 113114.
+
+[22]M. Lino, S. Fotiadis, A. A. Bharath, C. D. Cantwell, Current and emerging deep-
+     learning methods for the simulation of fluid dynamics, Proceedings of the Royal
+     Society A: Mathematical, Physical and Engineering Sciences 479 (2023) 20230058.
+
+[23]V. Sekar, Q. Jiang, C. Shu, B. C. Khoo, Fast flow field prediction over airfoils using
+     deep learning approach, Physics of Fluids 31 (5) (2019) 057103.
+[24]S. Bhatnagar, Y. Afshar, S. Pan, K. Duraisamy, S. Kaushik, Prediction of aero-
+     dynamic flow fields using convolutional neural networks, Computational Mechanics
+     64 (2) (2019) 525–545.
+
+[25]N. Thuerey, K. Weißenow, L. Prantl, X. Hu, Deep learning methods for reynolds-
+     averaged navier–stokes simulations of airfoil flows, AIAA Journal 58 (1) (2020) 25–
+     36.
+
+[26]A. Sanchez-Gonzalez, J. Godwin, T. Pfaff, R. Ying, J. Leskovec, P. Battaglia, Learn-
+     ing to simulate complex physics with graph networks, in: International Conference
+     on Machine Learning, PMLR, 2020, pp. 8459–8468.
+
+[27]T. Pfaff, M. Fortunato, A. Sanchez-Gonzalez, P. Battaglia, Learning mesh-based
+     simulation with graph networks, in: International Conference on Learning Repre-
+     sentations, 2020.
+
+[28]J. Brandstetter, D. Worrall, M. Welling, Message passing neural pde solvers (2023).
+     arXiv:2202.03376.
+
+[29]N. Geneva, N. Zabaras, Transformers for modeling physical systems, Neural Net-
+     works 146 (2022) 272–289.
+
+[30]R. Lam, A. Sanchez-Gonzalez, M. Willson, P. Wirnsberger, M. Fortunato, F. Alet,
+     S. Ravuri, T. Ewalds, Z. Eaton-Rosen, W. Hu, et al., Learning skillful medium-range
+     global weather forecasting, Science 382 (2023) 1416–1421.
+
+[31]Z. Li, D. Shu, A. Barati Farimani, Scalable transformer for pde surrogate modeling,
+     Advances in Neural Information Processing Systems 36 (2023) 28010–28039.
+
+[32]H. Wu, H. Luo, H. Wang, J. Wang, M. Long, Transolver: A fast transformer solver
+     for pdes on general geometries (2024).arXiv:2402.02366.
+
+[33]J.Jiang,J.Chen,Z.Yang,Alocal-globalgraphtransformermodelforfluiddynamics
+     simulations, Journal of Computational Science (2025) 102773.
+
+
+                                                   33
+[34]P. Jin, S. Meng, L. Lu, Mionet: Learning multiple-input operators via tensor prod-
+     uct, SIAM Journal on Scientific Computing 44 (6) (2022) A3490–A3514.
+
+[35]M. Raissi, P. Perdikaris, G. E. Karniadakis, Physics-informed neural networks: A
+     deep learning framework for solving forward and inverse problems involving non-
+     linear partial differential equations, Journal of Computational Physics 378 (2019)
+     686–707.
+
+[36]Z. Mao, A. D. Jagtap, G. E. Karniadakis, Physics-informed neural networks for
+     high-speed flows, Computer Methods in Applied Mechanics and Engineering 360
+     (2020) 112789.
+
+[37]S. Wang, H. Wang, P. Perdikaris, Learning the solution operator of parametric
+     partial differential equations with physics-informed deeponets, Science Advances
+     7 (40) (2021) eabi8605.
+
+[38]E. J. R. Coutinho, M. Dall’Aqua, L. McClenny, M. Zhong, U. Braga-Neto, E. Gildin,
+     Physics-informed neural networks with adaptive localized artificial viscosity, Journal
+     of Computational Physics 489 (2023) 112265.
+
+[39]T.DeRyck, S.Mishra,R.Molinaro,wpinns: Weakphysicsinformedneuralnetworks
+     for approximating entropy solutions of hyperbolic conservation laws, SIAM Journal
+     on Numerical Analysis 62 (2) (2024) 811–841.
+
+[40]L. Liu, S. Liu, H. Xie, F. Xiong, T. Yu, M. Xiao, L. Liu, H. Yong, Discontinuity
+     computing using physics-informed neural networks, Journal of Scientific Computing
+     98 (1) (2024) 22.
+
+[41]R. Cassia, R. Kerswell, Godunov loss functions for modelling of hyperbolic conser-
+     vation laws, Computer Methods in Applied Mechanics and Engineering 437 (2025)
+     117782.
+
+[42]K. Lee, K. T. Carlberg, Deep conservation: A latent-dynamics model for exact
+     satisfaction of physical conservation laws, in: Proceedings of the AAAI Conference
+     on Artificial Intelligence, Vol. 35, 2021, pp. 277–285.
+
+[43]E. Cardoso-Bihlo, A. Bihlo, Exactly conservative physics-informed neural networks
+     and deep operator networks for dynamical systems, Neural Networks 181 (2025)
+     106826.
+
+[44]J. Richter-Powell, Y. Lipman, R. T. Chen, Neural conservation laws: A divergence-
+     free perspective, Advances in Neural Information Processing Systems 35 (2022)
+     38075–38088.
+
+[45]N.Liu, Y.Fan, X.Zeng, M.Klöwer, L.Zhang, Y.Yu, Harnessingthepowerofneural
+     operatorswithautomaticallyencodedconservationlaws(2024).arXiv:2312.11176.
+
+[46]E. H. Müller, Exact conservation laws for neural network integrators of dynamical
+     systems, Journal of Computational Physics 488 (2023) 112234.
+[47]M. Horie, N. Mitsume, Graph neural pde solvers with conservation and similarity-
+     equivariance (2024).arXiv:2405.16183.
+
+[48]B. Van Leer, Towards the ultimate conservative difference scheme. v. a second-order
+     sequel to godunov’s method, Journal of Computational Physics 32 (1) (1979) 101–
+     136.
+
+[49]T. Barth, D. Jespersen, The design and application of upwind schemes on unstruc-
+     tured meshes, in: 27th Aerospace Sciences Meeting, 1989, p. 366.
+
+
+                                                   34
+[50]V. Venkatakrishnan, Convergence to steady state solutions of the euler equations on
+     unstructured grids with limiters, Journal of Computational Physics 118 (1) (1995)
+     120–130.
+
+[51]J. S. Park, S.-H. Yoon, C. Kim, Multi-dimensional limiting process for hyperbolic
+     conservation laws on unstructured grids, Journal of Computational Physics 229 (3)
+     (2010) 788–812.
+
+[52]C. Hu, C.-W. Shu, Weighted essentially non-oscillatory schemes on triangular
+     meshes, Journal of Computational Physics 150 (1) (1999) 97–127.
+
+[53]Y. Zhao, H. Li, H. Zhou, H. R. Attar, T. Pfaff, N. Li, A review of graph neural
+     network applications in mechanics-related domains, Artificial Intelligence Review
+     57 (11) (2024) 315.
+
+[54]J. Gilmer, S. S. Schoenholz, P. F. Riley, O. Vinyals, G. E. Dahl, Neural message
+     passing for quantum chemistry, in: International Conference on Machine Learning,
+     Pmlr, 2017, pp. 1263–1272.
+
+[55]K. He, X. Zhang, S. Ren, J. Sun, Deep residual learning for image recognition, in:
+     Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition,
+     2016, pp. 770–778.
+
+[56]V. Rusanov, The calculation of the interaction of non-stationary shock waves and
+     obstacles, USSR Computational Mathematics and Mathematical Physics 1 (1962)
+     304–320.
+[57]A. Harten, P. D. Lax, B. v. Leer, On upstream differencing and godunov-type
+     schemes for hyperbolic conservation laws, SIAM Review 25 (1) (1983) 35–61.
+
+[58]E. F. Toro, M. Spruce, W. Speares, Restoration of the contact surface in the hll-
+     riemann solver, Shock Waves 4 (1) (1994) 25–34.
+
+[59]S. Osher, F. Solomon, Upwind difference schemes for hyperbolic systems of conser-
+     vation laws, Mathematics of Computation 38 (158) (1982) 339–374.
+
+[60]P. L. Roe, Approximate riemann solvers, parameter vectors, and difference schemes,
+     Journal of Computational Physics 43 (2) (1981) 357–372.
+
+[61]E. F. Toro, V. Titarev, Solution of the generalized riemann problem for advection–
+     reaction equations, Proceedings of the Royal Society of London. Series A: Mathe-
+     matical, Physical and Engineering Sciences 458 (2018) (2002) 271–281.
+
+[62]G. Montecinos, C. E. Castro, M. Dumbser, E. F. Toro, Comparison of solvers for
+     the generalized riemann problem for hyperbolic systems with source terms, Journal
+     of Computational Physics 231 (19) (2012) 6472–6494.
+
+[63]C. E. Castro, E. F. Toro, Solvers for the high-order riemann problem for hyperbolic
+     balance laws, Journal of Computational Physics 227 (4) (2008) 2481–2513.
+
+[64]J. L. Ba, J. R. Kiros, G. E. Hinton, Layer normalization (2016).arXiv:1607.06450.
+[65]Z.Long, Y.Lu, X.Ma, B.Dong, Pde-net: Learningpdesfromdata, in: International
+     Conference on Machine Learning, PMLR, 2018, pp. 3208–3216.
+
+[66]D. P. Kingma, J. Ba, Adam: A method for stochastic optimization (2017).arXiv:
+     1412.6980.
+
+
+
+
+
+                                                    35
+[67]A. Paszke, S. Gross, F. Massa, A. Lerer, J. Bradbury, G. Chanan, T. Killeen, Z. Lin,
+     N. Gimelshein, L. Antiga, et al., Pytorch: An imperative style, high-performance
+     deep learning library, in:  Advances in Neural Information Processing Systems,
+     Vol. 32, 2019.
+
+[68]M. Fey, J. E. Lenssen, Fast graph representation learning with pytorch geometric
+     (2019).arXiv:1903.02428.
+
+[69]H. Ranocha, M. Schlottke-Lakemper, A. R. Winters, E. Faulhaber, J. Chan, G. J.
+     Gassner, Adaptive numerical simulations with trixi.jl:  A case study of julia for
+     scientific computing, Proceedings of the JuliaCon Conferences 1 (1) (2022) 77.doi:
+     .10.21105/jcon.00077
+
+[70]M. Schlottke-Lakemper, A. R. Winters, H. Ranocha, G. J. Gassner, A purely hy-
+     perbolic discontinuous galerkin approach for self-gravitating gas dynamics, Journal
+     of Computational Physics 442 (2021) 110467.
+
+[71]C. Geuzaine, J.-F. Remacle, P. Dular, Gmsh: a three-dimensional finite element
+     mesh generator, International Journal for Numerical Methods in Engineering 79 (11)
+     (2009) 1309–1331.
+
+[72]D. A. Kopriva, G. Gassner, On the quadrature and weak form choices in collo-
+     cation type discontinuous galerkin spectral element methods, Journal of Scientific
+     Computing 44 (2) (2010) 136–155.
+
+[73]S. Hennemann, A. M. Rueda-Ramírez, F. J. Hindenlang, G. J. Gassner, A provably
+     entropy stable subcell shock capturing approach for high order split form dg for the
+     compressible euler equations, Journal of Computational Physics 426 (2021) 109935.
+
+[74]J. F. B. M. Kraaijevanger, Contractivity of runge-kutta methods, BIT Numerical
+     Mathematics 31 (3) (1991) 482–528.
+
+[75]H.Ranocha, L.Dalcin, M.Parsani, D.I.Ketcheson, Optimizedrunge-kuttamethods
+     with automatic step size control for compressible computational fluid dynamics,
+     CommunicationsonAppliedMathematicsandComputation4(4)(2022)1191–1228.
+
+[76]X. Zhang, C.-W. Shu, Maximum-principle-satisfying and positivity-preserving high-
+     order schemes for conservation laws: survey and new developments, Proceedings of
+     the Royal Society A: Mathematical, Physical and Engineering Sciences 467 (2134)
+     (2011) 2752–2776.
+
+[77]F. Moukalled, M. Darwish, A high-resolution pressure-based algorithm for fluid flow
+     at all speeds, Journal of Computational Physics 168 (1) (2001) 101–130.
+
+[78]P. Woodward, P. Colella, The numerical simulation of two-dimensional fluid flow
+     with strong shocks, Journal of Computational Physics 54 (1) (1984) 115–173.
+
+[79]B.Cockburn,C.-W.Shu,Therunge–kuttadiscontinuousgalerkinmethodforconser-
+     vation laws v: multidimensional systems, Journal of computational physics 141 (2)
+     (1998) 199–224.
+[80]M. Nazarov, A. Larcher, Numerical investigation of a viscous regularization of the
+     euler equations by entropy viscosity, Computer Methods in Applied Mechanics and
+     Engineering 317 (2017) 128–152.
+
+[81]J.-L. Guermond, M. Nazarov, B. Popov, I. Tomas, Second-order invariant domain
+     preservingapproximationoftheeulerequationsusingconvexlimiting, SIAMJournal
+     on Scientific Computing 40 (5) (2018) A3211–A3239.
+
+
+
+                                                   36
+[82]Z. Li, N. Kovachki, C. Choy, B. Li, J. Kossaifi, S. Otta, M. A. Nabian, M. Stadler,
+     C. Hundt, K. Azizzadenesheli, et al., Geometry-informed neural operator for large-
+     scale 3d pdes, Advances in Neural Information Processing Systems 36 (2023) 35836–
+     35854.
+
+[83]Z. Hao, Z. Wang, H. Su, C. Ying, Y. Dong, S. Liu, Z. Cheng, J. Song, J. Zhu,
+     Gnot: A general neural operator transformer for operator learning, in: International
+     Conference on Machine Learning, PMLR, 2023, pp. 12556–12569.
+
+[84]P. Veličković, G. Cucurull, A. Casanova, A. Romero, P. Liò, Y. Bengio, Graph
+     attention networks (2018).arXiv:1710.10903.
+
+[85]S. Brody, U. Alon, E. Yahav, How attentive are graph attention networks? (2022).
+     arXiv:2105.14491.
+
+[86]V. P. Dwivedi, X. Bresson, A generalization of transformer networks to graphs
+     (2021).arXiv:2012.09699.
+
+[87]A. Vaswani, N. Shazeer, N. Parmar, J. Uszkoreit, L. Jones, A. N. Gomez, Ł. Kaiser,
+     I. Polosukhin, Attention is all you need, in: Advances in Neural Information Pro-
+     cessing Systems, Vol. 30, 2017.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                    37

@@ -1,0 +1,663 @@
+  Neural Gabor Splatting: Enhanced Gaussian Splatting with Neural Gabor for
+                                      High-frequency Surface Reconstruction
+
+
+                                        Haato Watanabe                                         Nobuyuki Umetani
+                                  The University of Tokyo                                  The University of Tokyo
+                         heart.watanabe.research@gmail.com                                   n.umetani@gmail.com
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 1.   While 3D Gaussian splatting struggles to represent fine texture using single-colored primitives—leading to numerous needle-
+like, slender elements—our neural Gabor splatting more effectively captures detail by encoding stripe patterns within each primitive. The
+bottom-right images show the primitive shapes with randomized colors. Both methods use an equal number of primitives.
+
+                             Abstract                                          construction  of  challenging  high-frequency  surfaces.   We
+                                                                               demonstrate its effectiveness through extensive experiments
+   Recent years have witnessed the rapid emergence of 3D                       on both standard benchmarks, such as Mip-NeRF360 and
+Gaussian splatting (3DGS) as a powerful approach for 3D                        High-Frequency  datasets  (e.g.,  checkered  patterns),  sup-
+reconstruction  and  novel  view  synthesis.   Its  explicit  rep-             ported by comprehensive ablation studies.
+resentation with Gaussian primitives enables fast training,
+real-time  rendering,  and  convenient  post-processing  such                  1. Introduction
+as  editing  and  surface  reconstruction.    However,  3DGS
+suffers  from  a  critical  drawback:   the  number  of  primi-                Since    the    introduction    of    3D    Gaussian    splatting
+tives grows drastically for scenes with high-frequency ap-                     (3DGS)  [13],   Gaussian  splatting  and  its  variants  have
+pearance details, since each primitive can represent only a                    rapidly become popular methods for novel view synthesis
+single color, requiring multiple primitives for every sharp                    from  multi-view  photographs.    Compared  to  the  neural
+color  transition.    To  overcome  this  limitation,  we  pro-                radiance  fields  (NeRF)  [20],  which  represent  a  radiance
+pose neural Gabor splatting, which augments each Gaus-                         field  with  a  multi-layer  perceptron  (MLP)  and  require
+sian primitive with a lightweight multi-layer perceptron that                  costly  volumetric  ray  marching,  Gaussian  splatting  offers
+models  a  wide  range  of  color  variations  within  a  single               much  faster  training  and  rendering,   as  well  as  greater
+primitive.    To  further  control  primitive  numbers,  we  in-               editability due to its explicit point-based representation.
+troduce  a  frequency-aware  densification  strategy  that  se-                    Despite  these  advantages,   Gaussian  splatting  suffers
+lects  mismatch  primitives  for  pruning  and  cloning  based                 from  a  major  drawback:   its  high  data  volume.   A  scene
+on  frequency  energy.   Our  method  achieves  accurate  re-                  typically  requires  hundreds  of  thousands  to  millions  of
+
+                                                                           1
+Gaussian primitives,  often resulting in memory footprints                        (SfM) [1,4,25], reconstruct sparse point clouds by match-
+of  several  gigabytes.   Each  primitive  is  parameterized  by                  ing image features to estimate camera poses. More recently,
+its  position,  scale,  rotation,  opacity,  and  color,  and  when               neural methods have dramatically improved reconstruction
+scenes contain high-frequency details (e.g., sharp textures                       fidelity.  NeRF [20,27] models a continuous radiance field
+or  checkerboard  patterns),  the  number  of  required  primi-                   with an MLP and synthesizes images using ray marching,
+tives increases sharply [18].  This increase occurs because                       achieving impressive visual quality.  NeRF leverages posi-
+each Gaussian can encode only a single color for a given                          tional encoding to represent high-frequency details, but at
+view direction, and multiple primitives are needed to repre-                      the cost of expensive training and rendering.
+sent frequent color transitions.                                                      To reduce computational cost, deferred neural rendering
+   Several works have attempted to address this problem.                          (i.e., neural textures) [8,19,28] defines high-dimensional
+Compression-based  methods  reduce  storage  by  encoding                         feature  textures  on  geometry,  where  the  features  are  de-
+parameters  more  efficiently  [2].    Others  aim  to  enhance                   coded  into  RGB  colors  only  for  visible  regions  in  screen
+the expressiveness of individual primitives.   For example,                       space. This design enables real-time rendering with greater
+Watanabe et al. [33] replaced Gaussians with 3D Gabor ker-                        expressive power. Inspired by this approach, we equip each
+nels,  embedding multiple kernels per primitive to capture                        Gaussian primitive with a small MLP with its own weights.
+complex patterns. In contrast, Chao et al. [5] proposed tex-                      The MLP outputs RGB colors from the input local prim-
+tured Gaussians, attaching small learnable textures to each                       itive coordinates,  allowing each primitive to represent di-
+primitive to improve high-frequency fidelity.  While effec-                       verse color patterns.
+tive, these approaches remain limited by their formulations:
+3D Gabor splatting is constrained by the properties of Gabor                      2.2. Gaussian Splatting and The Derived Methods
+noise, and textured Gaussians are bounded by the predeter-                        3D Gaussian splatting (3DGS) [13,37] represents a scene
+mined texture resolution.                                                         with a set of Gaussian primitives and rasterizes them with
+   In  this  work,  we  introduce  a  new  approach  that  im-                    alpha  blending.   Compared  to  NeRF,  this  explicit  repre-
+proves the expressiveness of each primitive by embedding                          sentation enables fast training and real-time rendering, and
+a  lightweight  MLP  that  maps  local  primitive  coordinates                    it  naturally  supports  editing  and  downstream  applications
+and  view-direction  to  color.    This  design  enables  a  sin-                 such  as  surface  reconstruction  [10, 11],  dynamic  scene
+gle primitive to represent a wide variety of patterns with-                       modeling [35,36,39], sparse view reconstruction [6,7,17],
+out being restricted to predefined bases or texture resolu-                       and scene editing [9,15,21,32].  However, a typical scene
+tion.    For  efficient  primitive  number  control,  we  further                 may  require  hundreds  of  thousands  to  millions  of  primi-
+propose  a  frequency-aware  densification  strategy  that  uti-                  tives, leading to large memory footprints.  To mitigate this,
+lizes a decomposed frequency-energy map to clone prim-                            compression methods have been proposed [2,29,30].
+itives  within  a  specific  frequency  range.    Consequently,                       Another  line  of  work  improves  the  expressiveness  of
+our method achieves better reconstruction quality at high-                        primitives themselves.  For example, Huang et al. [11] pro-
+frequency texture pattern areas with the same data budget,                        posed 2D Gaussian splatting, where Gaussian disks better
+as shown in Fig.1.                                                                approximate  surfaces,  and  Li  et  al.  [16]  introduced  Half-
+   Our contributions can be summarized as follows:                                Gaussian  splatting  to  capture  sharp  edges.   Despite  these
+• We  present  a  simple  yet  effective  approach  to  augment                   advances,  data  size  remains  a  challenge  due  to  the  large
+  each Gaussian primitive with an MLP, significantly en-                          number of parameters per primitive.
+  hancing its expressiveness.
+• We introduce a frequency-aware error-based densification                        2.3. High-Frequency Detail for Gaussian Splatting
+  strategy  that  reduces  the  number  of  primitives  in  opti-                 A  key  limitation  of  3DGS  is  its  inefficiency  in  modeling
+  mization while preserving accuracy.                                             high-frequency details. Lu et al. [18] observed that the num-
+• We  compare  our  method  against  existing  approaches                         ber of primitives increases sharply for images with frequent
+  on  public  benchmarks  (e.g.,  MipNeRF360)  and  high-                         color  transitions,  since  each  primitive  can  encode  only  a
+  frequency surface scenes, demonstrating superior recon-                         single color.  Several approaches address this by allowing
+  struction quality under constrained storage budgets.                            primitives to carry richer appearance information.  3D Ga-
+                                                                                  bor Splatting [33] and 3DGabSplat [40] replace Gaussians
+2. Related work                                                                   with  augmented  Gabor  kernels,  enabling  direct  optimiza-
+2.1. Neural Representation for View Synthesis                                     tion of high-frequency patterns in 3D. There is another way
+                                                                                  to capture fine-scale details that embed small textures into
+Novel  view  synthesis  (NVS)  aims  to  generate  images  of                     primitives [5,22,26,34], jointly optimized with other pa-
+a scene from unseen viewpoints given a set of input pho-                          rameters.  There is an approach to express sharp edges that
+tographs. Early approaches, such as Structure from Motion                         tend to be erased because of the Gaussian’s shape.   Zhou
+
+                                                                              2
+et al. [41] proposed a method that expresses various types                         where the⃗µ∈R           3 is the center of the Gaussian primitive,
+of primitive’s shapes using a tiny MLP. Their method en-                           ⃗su and⃗s   v are the column vectors ofS∈R          3×2    , where the
+ables sharp edge switching in the reconstructed scene, while                       covariance is decomposed asΣ =SS  ⊤.  The intersection
+the primitive has only a single color. Recent works such as                        between a camera ray and this plane is computed analyti-
+neural texture splatting (NTS) [31] and neural shell texture                       cally, which enables precise and physically consistent eval-
+splatting (NEST) [38] encode spatially varying color within                        uation of the Gaussian strength along the ray. Given the in-
+each primitive, thereby enhancing expressiveness while re-                         tersection point’s local coordinate(u,v), the Gaussian ker-
+ducing the number of primitives.                                                   nel value is given as
+   While  existing  detail-augmented  primitive  approaches
+enhance visual fidelity,  they  remain inherently limited by                                         G(u,v) = exp           −u2 +v    2     .                 (3)
+their  underlying  formulations:    Gabor  splatting  is  con-                                                                     2
+strained by predefined noise functions, texturing-based ap-                            Each  Gaussian  primitive  has  spherical-harmonic  coef-
+proaches are bounded by fixed texture resolution and direc-                        ficientsθ     k  for  a  view-dependent  RGB  expression;  i.e.,  a
+tional dependence, and neural-texturing-based methods rely                         Gaussian has a single color given a ray direction ⃗d∈R     3.
+on  fixed-capacity  neural  embeddings  or  predefined  struc-                         The color of each pixel is determined by alpha-blending,
+tures, which can limit flexibility under strict memory bud-                        calculated  by  accumulating  2D  Gaussian  magnitude  and
+gets.   In  contrast,  we  embed  an  MLP  conditioned  on  lo-                    colors from front to back.  Gaussian strength is determined
+cal coordinates, enabling each primitive to flexibly model                         using local coordinates in each Gaussian as
+a  broader  range  of  color  variations  without  such  restric-
+tions. Furthermore, we specifically target scenes with high-                                                 k−1Y
+frequency (i.e., detailed) surfaces, where existing methods                                      Tk    =          {1−α   jGj(u,v)},                   (4)
+struggle to achieve sufficient reconstruction quality with a                                                 j=1
+limited number of primitives.                                                                                 KX
+                                                                                                  c  =            ck(θ k,⃗d)α  kGk(u,v)T  k,           (5)
+                                                                                                             k=1
+
+                                                                                   whereT     k∈Ris the transmittance (influence ofk-th kernel
+                                                                                   on the screen),α      k is the opacity of the primitive, andKis
+                                                                                   the total number of the primitive.
+
+                                                                                   4. Method
+Figure 2. Coordinate transformation in 2D Gaussian splatting [11]
+                                                                                   4.1. Neural Gabor Splatting
+                                                                                   An overview of the neural Gabor primitive is illustrated in
+3. Preliminaries: 2D Gaussian Splatting                                            Figure3.   To represent complex color  patterns and view-
+For self-consistency, this section briefly explains the exist-                     dependent appearance within a single primitive, we intro-
+ing 2D Gaussian splatting [11] on which our algorithm is                           duce a lightweight MLP that predicts RGB values from the
+based.  The original Gaussian splatting [13] approximates                          primitive’s local coordinates and view direction. Each prim-
+the scene using a set of 3D Gaussian primitives, where a 3D                        itive has its own MLP parametersΘ        k, enabling fine-grained
+                                                                                   modeling even with a compact memory capacity. We adopt
+Gaussian distribution of opacity represents each primitive.                        a single-hidden-layer SIREN [24] architecture with six hid-
+3D Gaussian distribution is formulated as                                          den neurons, where the sinusoidal activation implicitly per-
+                                                                                   forms positional encoding and allows high-frequency sig-
+       G(⃗x)    =    exp       −12(⃗x−⃗µ)    T Σ−1  (⃗x−⃗µ)        ,    (1)        nal representation without explicit encoding.  Because the
+                                                                                   MLP  jointly  processes  both  spatial  coordinates  and  view
+whereΣ∈R                 3×3      is the positive semi-definite covariance         direction  via  nonlinear  transformations,  it  can  inherently
+matrix. On the other hand, the 2D Gaussian splatting frame-                        learn view-dependent reflectance effects without requiring
+work represents each primitive as a planar (flat) Gaussian                         explicit spherical-harmonic (SH) bases.
+distribution (i.e.,Σis a rank-2 singular matrix).  As illus-                           Similar to 2DGS, the color of each pixel is computed as
+trated in Fig.2, a 3D point⃗p∈R                        3 on the plane is parame-   the weighted sum of analytically rasterized Gaussian prim-
+terized with the local 2D coordinate(u,v)∈R                            2 as        itives as
+                                                                                                           KX
+                     ⃗p(u,v) =⃗µ+u⃗s       u +v⃗s v,                     (2)                        c=         ˆck(Θk,u,v,⃗d)α  k ˆGkTk,               (6)
+                                                                                                            k
+
+                                                                               3
+Figure 3.Overview of the neural Gabor primitive.The output color is parameterized by local 2D coordinates obtained from the 2D
+Gaussian splatting primitive’s affine transformation from 3D space. Given the 2D local coordinates and view direction, a lightweight MLP
+outputs RGB color through a SIREN activation function. This design enables each primitive to model spatially varying and view-dependent
+appearance within a single primitive.
+
+
+where ˆck ∈R   3  denotes the color predicted by the neural                         based densification method [23].  Error-based densification
+Gabor,αk  the  opacity,  and  ˆGk  the  normalized  2D  Gaus-                       determines which primitives should be cloned or split by in-
+sian kernel. The color prediction ˆck is obtained from a per-                       versely projecting the rendering error between the rendered
+primitive MLP defined as                                                            image and the ground-truth image back into 3D space.  For
+   ˆck = Sigmoid ¯Wk sin{ω        0(W ky+b   k)}+    ¯bk,    (7)                  a given camera viewπ, the per-primitive errorE      πk  of each
+                                                                                    primitiveγ k is computed by accumulating the per-pixel er-
+wherey= (u,v,      ⃗d)∈R       5 is the concatenation of the local                  rorε  π(u)weighted by its contributionw       πk (u), as
+coordinates and view direction, andω       0∈Ris the frequency                                          Eπk  := X           επ(u)w   πk (u).                  (8)
+parameter, set to 30 in our implementation.  This formula-                                                        u∈Pixels
+tion enables the network to capture nonlinear interactions                              Instead  of  using  perceptual  metrics  such  as  SSIM,  we
+between local surface coordinates and viewing directions,                           defineε     π(u)in  the  frequency  domain.   Specifically,  fre-
+effectively  learning  complex  specular  and  anisotropic  ef-                     quency maps are computed from both the rendered image
+fects that are difficult to express with fixed SH bases.                            Iπ  and  the  ground-truth  imageGT     π  within  specified  fre-
+   Unlike  discrete  texel-based  textures,  our  neural  Gabor                     quency bands, and their difference reveals regions lacking
+splatting provides a continuous representation that is inde-                        frequency  components.   This  enables  selective  densifica-
+pendent of texture resolution.  Since each primitive main-                          tion in areas with insufficient high-frequency content.  We
+tains its own tiny MLP, the method achieves high represen-                          use  Fast  Fourier  Transform  (FFT)  and  its  inverse  (IFFT)
+tational power while significantly reducing the total number                        to extract band-limited frequency components via a crop-
+of primitives required.  Consequently, the overall data foot-                       ping  operator,  followed  by  a  local  mean  filtering  opera-
+print is compressed compared to using multiple single-color                         torAvgto  build  a  robust  error  metric  less  sensitive  to
+primitives in standard 2D or 3D Gaussian splatting.                                 directional  misalignment.   We  use  three  frequency  bands
+4.2. Frequency-aware Densification Strategy                                         {(0.01,0.10),(0.10,0.20),(0.20,0.40)}and  an  averaging
+The  superior  rendering  quality  of  3DGS  primarily  arises                      kernel size of17.  For cloned or split primitives, the MLP
+from its adaptive densification strategy,  which allocates a                        weight parameters are copied from their parent, and opacity
+higher  density  of  Gaussian  primitives  to  regions  exhibit-                    correction  follows  [23].   The  per-pixel  frequency-domain
+ing large reconstruction errors.  However, the conventional                         error for a given cameraπis defined as
+gradient-based  adaptive  densification  method  depends  on                                         Avg F−1  (Bandcrop(F(GT            π)))
+the gradient magnitude at the primitive center.   When di-                                   επ =
+rectly applied to our neural Gabor primitives—whose colors                                                                                                    (9)
+may change abruptly due to learned high-frequency appear-                                              −Avg  F−1  (Bandcrop(F(I            π)))1,
+ance—it tends to perform excessive densification, thereby
+increasing the number of primitives unnecessarily.                                  whereFandF      −1    denote the Fast Fourier Transform and its
+   To  address  this  issue,  we  introduce  afrequency-aware                       inverse,  respectively,  andAvgindicates local mean filter-
+densification  strategy(see  Fig.4),  inspired  by  the  error-                     ing.  This formulation provides a frequency-sensitive error
+
+                                                                                4
+measure  that  promotes  densification  in  under-represented                   datasets. In addition, to assess performance on scenes with
+frequency  regions  while  suppressing  redundant  growth  in                   high-frequency textures,  we conducted experiments using
+well-reconstructed areas.                                                       the High-Frequency dataset [33].
+   In practice, every 100 iterations, we randomly sample 20                     5.3. Experimental Setup
+training views and accumulate per-primitive errors across
+these views,  which are jointly processed as a single GPU                       For each method and dataset,  we set the initial and max-
+batch.    Densification  candidates  are  determined  using  a                  imum numbers of primitives.  The maximum number was
+threshold of 0.01.  The frequency-domain computation in-                        chosen to keep the total data size consistent across meth-
+troduces only a minor overhead,  as both the forward and                        ods.  Detailed parameters for each dataset and method are
+inverse Fourier transforms (FandF   −1   ) are highly paral-                    provided in the supplemental material.
+lelizable on modern GPUs. Moreover, since densification is                          Since our method aims to accurately reconstruct scenes
+performed only once every 100 iterations, the overall addi-                     with  high-frequency  appearance  using  a  small  number  of
+tional cost remains negligible relative to the main training                    primitives, it reaches the maximum primitive count with rel-
+loop.                                                                           atively few densification steps. Beyond a certain number of
+   We also replaced the hard opacity reset with the grad-                       iterations, the accuracy improvement saturates.  Therefore,
+ual opacity reset proposed by Bul`o et al. [23].   However,                     all experiments were performed with 20k training iterations.
+we did not adopt their alpha-compositing loss, as it notice-                        For 3DGS, 2DGS, 3D Gabor splatting, and our method,
+ably degraded the visual quality by introducing undesirable                     input  images  were  resized  to  1600×1066  pixels  for  both
+artifacts.                                                                      training and evaluation.  The initial points were randomly
+4.3. Optimization                                                               sampled from the structure-from-motion (SfM) point cloud
+                                                                                of  each  dataset.    In  3DGS  and  2DGS,  the  densification
+Following   the   original   3D   Gaussian   splatting   (3DGS)                 strategy prioritized primitives with larger position gradients,
+method [13], we optimized the model using a combination                         while ensuring that the total number of primitives did not
+of theL      1 loss and SSIM loss as                                            exceed the predefined limit.  The pruning strategy followed
+                  Loss=λL            1 + (1−λ)L               SSIM.                (10)the original implementation, resulting in a balance between
+                                                                                densification and pruning as the number of primitives ap-
+   Our proposed method represents multiple color patterns                       proached the maximum threshold.
+
+within a single primitive.  By initializing and training neu-                   5.4. Quantitative Results
+ral  texture  primitives  capable  of  expressing  such  patterns               Table1reports PSNR, SSIM, and LPIPS scores across all
+from the beginning, we prevent the primitives from collaps-                     datasets.  For the High-Frequency dataset, we set the max-
+ing into small, monochromatic regions during optimization.                      imum number of primitives to 20,000 and initialized 5,000
+The  MLP  weights  were  initialized  following  the  SIREN                     points.  For the DTU dataset, we used a maximum of 20k
+model [24] initialization scheme.                                               primitives  with  2k  initial  points.   For  the  Mip-NeRF360
+5. Result                                                                       dataset,  the  maximum  primitive  count  ranged  from  200k
+                                                                                to  3,000k,  depending  on  the  scene,  with  4k–600k  initial
+5.1. Implementation                                                             points.  The maximum number of primitives for 3DGS and
+Based on the published code of 2DGS [11], we implement                          2DGS  was  adjusted  such  that  all  methods  used  the  same
+our  neural  Gabor  splatting   1.    We  conducted  all  experi-               total data budget.  For 3D Gabor splatting, we introduced
+ments on GeForce RTX 3090 GPU. The runtime speed of                             our frequency-aware densification strategy and matched its
+our  method  is  30—500  frames  per  second  (FPS)  for  all                   maximum primitive count to ours. Additionally, to enable a
+scenes.   The  training  time  is  approximately  twice  that  of               reasonable comparison, we removed the view-direction in-
+2DGS, mainly due to the increased number of atomicAdd                           put and reduced the hidden dimensionality to three neurons,
+operations required for weight updates.                                         aligning the model capacity more closely with our setting.
+                                                                                    Despite  using  the  same  data  budget,  our  method  con-
+5.2. Datasets                                                                   sistently outperforms both 3DGS and 2DGS across almost
+To evaluate reconstruction accuracy on in-the-wild scenes,                      all  of  the  evaluation  metrics.   This  improvement  demon-
+we   used   all   seven   scenes   from   the   Mip-NeRF360                     strates  that  our  neural  texture  primitives  provide  signifi-
+dataset [3], four scenes from the DTU dataset [12] and two                      cantly higher expressive power than single-color primitives,
+scenes from Tanks and Temples dataset [14] as benchmark                         enabling  more  efficient  representation  of  high-frequency
+                                                                                appearance variations.
+
+   1Repository  for  our  published  code:https://github.com/                       The lower section of Table1compares our approach with
+haato-w/neural-gabor-splatting                                                  3D Gabor Splatting.  Although a SIREN-based representa-
+
+
+                                                                            5
+               Figure 4.Overview of the frequency-aware densification strategy. (a) Band-limited frequency components are extracted from both
+               the rendered image and the ground truth using FFT, band-pass filtering, and inverse FFT, followed by local averaging to obtain a robust
+               frequency-domain error map.  (b) The per-pixel frequency error is projected onto each Gaussian primitive based on its contribution, and
+               primitives with high errors are selected for cloning or splitting.  This process allocates more primitives to regions with insufficient high-
+               frequency representation while suppressing unnecessary growth.
+
+               Table 1.Quantitative comparison of novel view synthesis methods.Best results are highlighted (PSNR↑/ SSIM↑/ LPIPS↓).  The
+               maximum number of primitives for 3DGS and 2DGS is set to match the data size of our method.  The bottom rows compare 3D Gabor
+               Splatting and our method without view-dependent modeling. 3DGS* and 2DGS* denote models with limited primitive counts, 3D Gabor*
+               uses frequency-aware densification, and Ours* disables view-dependent components.
+
+
+
+
+
+
+
+
+
+
+
+
+               tion inherently subsumes Gabor kernels, the numerical dif-                         5.6. Comparisons with Neural Splatting Methods
+               ferences remain modest.  This is expected, as our method                           We  further  compare  our  method  against  NTS  [31]  and
+               integrates both pattern representation and view-dependent                          NEST  [38]  under  similar  data  budgets  across  four  mod-
+               effects  through  a  neural  network,  making  a  perfectly  fair                  els on the High-Frequency dataset and the BONSAIscene
+               comparison difficult.                                                              from  Mip-NeRF360.   We  follow  the  same  settings  as  the
+                                                                                                  budget-quality trade-off comparison in Sec.5.7.  For Mip-
+                                                                                                  NeRF360, we use the default NTS configuration and adjust
+                                                                                                  the primitive count to match the total data size.  Our prim-
+               5.5. Qualitative Results                                                           itive  counts  are  fixed  at  20k  (High-Frequency)  and  200k
+                                                                                                  (Mip-NeRF360),  consistent  with  the  settings  used  in  the
+               Figure5presents  qualitative  novel-view  synthesis  results                       main experiments.   As shown in Tab.6,  our method con-
+               on the High-Frequency, Mip-NeRF360, and DTU datasets.                              sistently outperforms NEST and NTS on High-Frequency
+               Despite using the same number of primitives, our method                            dataset.  Specifically, we observed that NTS often fails to
+               produces views that are noticeably sharper and clearer than                        resolve detail texture (see supplementary document).
+               those generated by 2DGS. In particular, our approach faith-                        5.7. Budget-quality Trade-off
+               fully  captures  fine-scale  structures  such  as  fur  and  rapid
+               high-frequency texture transitions. Moreover, the model ef-                        We conduct a budget-quality study of the BOOTSmodel on
+               fectively handles view-dependent effects,  including subtle                        the High-Frequency dataset by progressively reducing the
+               reflections, further demonstrating the expressive capacity of                      data budget (100%→1%), defined relative to the uncon-
+               our neural texture primitives. Please refer to the supplemen-                      strained 3DGS to show effectiveness of our method on strict
+               tal video for additional qualitative results.                                      memory budgets. For each method, the maximum primitive
+
+
+                                                                                             6
+Method            High-Frequency [33]          Mip-NeRF 360 [3]                   DTU [12]                Tanks and Temples [14]
+3DGS*           23.97 / 0.8335 / 0.276927.23/ 0.8005 / 0.2931     28.80 / 0.8467 / 0.4140      21.72 / 0.7673 / 0.3040
+2DGS*           23.91 / 0.8279 / 0.2855     26.47 / 0.7804 / 0.3197     28.98 / 0.8416 / 0.4171      21.12 / 0.7433 / 0.3375
+Ours              26.49/0.8808/0.211526.98 /0.810/0.2521      29.15/0.8519/0.3705      21.93/0.7755/0.2762
+3D Gabor*     25.28 / 0.8530 / 0.244926.76/0.8265/0.238828.91 /0.8573/ 0.3800      21.64 / 0.7757 / 0.2802
+Ours*          26.02/0.8776/0.216326.67 / 0.8172 / 0.243529.50/ 0.8570 /0.3701      21.80/0.7811/0.2651
+Figure 5.Qualitative NVS results of benchmark and High-Frequency datasets.Novel view rendering results of outside and inside
+scenes. Our method provides a clear, sharp visual of the fine details, despite the same amount of data.
+
+
+count is adjusted to match the target footprint.  For NEST                       NEST and NTS degrade rapidly under tight budgets due to
+and NTS, we reduce the capacity of their appearance rep-                         fixed appearance overhead, whereas our method is more ro-
+resentations to match the target memory footprint by lower-                      bust in the low-budget regime and consistently outperforms
+ing the resolution of the hash grid and tri-plane, respectively                  3DGS. We observe similar trends in SSIM. Qualitatively,
+(e.g., NEST: 4 levels with a dictionary size of 16; NTS: tri-                    aggressive  budget  reduction  causes  artifacts  or  structural
+plane resolution of 96 with 8 channels). As shown in Fig.6,                      collapse in baselines, whereas our method preserves coher-
+
+
+                                                                             7
+ent geometry and appearance.  Fig.6also shows the recon-                           Table 3.  Training time (minutes) on the BOOTSmodel under dif-
+structed result on a 5% data budget.                                               ferent data budget.
+
+5.8. Training Time Analysis                                                                    Data Budget      20%       5%        1%
+We report training time for the  BOOTSmodel under low-                                         3DGS                7.95       6.33       5.20
+data budgets where primitive counts differ across methods                                      NEST               73.92     42.20     31.68
+(Tab.3).  Compared with 3DGS, our method incurs addi-                                          NTS                 77.62     55.75     30.55
+tional  cost  due  to  per-primitive  MLP  evaluations.   How-                                 Ours                 58.53     47.13     42.18
+ever,  runtime  remains  practical  in  low-budget  settings  as
+frequency-aware densification suppresses excessive primi-                          Table 4.Ablation study of our frequency-aware densification
+tive growth. The computational cost is comparable to NEST                          strategy.  While achieving nearly identical image quality to the
+and NTS, indicating no significant overhead over prior neu-                        error-based strategy, our frequency-aware variant offers improved
+ral  splatting  methods.   Rendering  speed  comparisons  are                      controllability  by  selectively  allocating  densification  to  specific
+provided in the supplemental material.                                             frequency bands.
+5.9. Ablation Study                                                                          Method                      High-Frequency [33]
+We introduce a frequency-aware densification strategy de-                                    Frequency-aware     25.72 /0.8619/0.2352
+rived  from  the  error-based  formulation  by  replacing  the                               Error based     25.95/0.8619/ 0.2376
+per-pixel  error  term  with  band-limited  frequency  errors.                               Gradient based        25.56 / 0.8534 / 0.2464
+To  clarify  its  characteristics,  we  integrate  three  densifi-
+cation  strategies—our  frequency-aware  method,  an  error-
+based  method  [23],  and  a  gradient-based  method  used  in                     cific frequency bands, it enables explicit prioritization when
+3DGS [13]—into our neural Gabor primitive and train them                           the number of densifiable primitives is limited.  This prop-
+on the High-Frequency dataset.                                                     erty provides finer control over reconstruction quality,  al-
+   As  shown  in  Table4,  our  frequency-aware  strategy                          lowing  the  model  to  allocate  capacity  to  visually  critical
+reconstructs  scenes  with  accuracy  that  is  comparable  to                     high-frequency structures.
+the  error-based  strategy  and  consistently  outperforms  the
+gradient-based strategy.  More importantly, because it trig-                       6. Discussion
+gers densification only for primitives associated with spe-
+                                                                                   Limitations.While effective for high-frequency surface re-
+Table  2.Quantitative  comparison  under  the  same  memory                        construction, our method has several limitations.  It is not
+footprint.Results are reported as PSNR / SSIM / LPIPS. High-                       directly  applicable  to  volumetric  phenomena  and  extend-
+Frequency scores are averaged over four scenes (we use BONSAI                      ing it to dynamic scenes remains non-trivial.  Although our
+model for Mip-NeRF360*).                                                           approach reduces primitive counts, it introduces additional
+                                                                                   computational overhead due to per-primitive MLP evalua-
+Data             High-Frequency                Mip-NeRF360*                        tion.   Moreover,  for low-frequency scenes,  the expressive
+NEST     22.22 / 0.8588 / 0.2220     23.21 / 0.7889 / 0.3520                       capacity  of  the  MLP  may  be  underutilized.   Finally,  the
+NTS       23.48 / 0.8139 / 0.302629.49/ 0.9028 / 0.2544                            representation is still limited by the capacity of lightweight
+Ours      26.49/0.8808/0.211529.18 /0.9067/0.2412                                  MLPs, and further improvements such as parameter sharing
+                                                                                   or codebook-based compression are promising directions.
+                                                                                      Conclusion.We  introduced  neural  Gabor  splatting,  a
+                                                                                   new representation that equips each Gaussian primitive with
+                                                                                   a lightweight MLP, enabling a single primitive to capture
+                                                                                   complex local color patterns depending on the view direc-
+                                                                                   tion.  We further incorporated a frequency-aware densifica-
+                                                                                   tion  strategy,  which  selectively  allocates  primitives  based
+                                                                                   on frequency-band errors, allowing high-frequency surface
+                                                                                   regions to be reconstructed with far fewer primitives.
+                                                                                      Evaluations  on  standard  benchmarks  and  the  High-
+                                                                                   Frequency   dataset   show   that   our   method   outperforms
+                                                                                   3DGS,  2DGS,  and  3D  Gabor  splatting  under  compara-
+Figure 6.  Comparison under varying data budgets on the BOOTS                      ble data budgets, achieving higher accuracy with far fewer
+model in High-Frequency dataset.                                                   primitives.
+
+
+                                                                              8
+Acknowledgements                                                                             curate radiance fields. In   ACM     SIGGRAPH2024          conference
+                                                                                             papers, pages 1–11, 2024.2,3,5
+We thank the anonymous reviewers for their valuable feed-                             [12]Rasmus Jensen, Anders Dahl, George Vogiatzis, Engin Tola,
+back. We also thank Chang Luo for providing access to his                                    and Henrik Aanæs.  Large scale multi-view stereopsis eval-
+private GPU when conducting our experiments.                                                 uation.  In Proceedings     of the  IEEE   conference    on  computer
+                                                                                             vision  and  pattern  recognition, pages 406–413, 2014.5,6,
+References                                                                                   12
+ [1]Sameer Agarwal, Yasutaka Furukawa, Noah Snavely, Ian Si-                          [13]Bernhard  Kerbl,  Georgios  Kopanas,  Thomas  Leimk       ¨uhler,
+      mon, Brian Curless, Steven M Seitz, and Richard Szeliski.                              and  George  Drettakis.   3d  gaussian  splatting  for  real-time
+      Building rome in a day.        Communications        of the  ACM, 54                   radiance field rendering.     ACM    Transactions    on  Graphics, 42
+      (10):105–112, 2011.2                                                                   (4), 2023.1,2,3,5,8
+ [2]Milena  T  Bagdasarian,  Paul  Knoll,  Y  Li,  Florian  Barthel,                  [14]Arno  Knapitsch,  Jaesik  Park,  Qian-Yi  Zhou,  and  Vladlen
+      Anna  Hilsmann,  Peter  Eisert,  and  Wieland  Morgenstern.                            Koltun. Tanks and temples: Benchmarking large-scale scene
+      3dgs.  zip:  A  survey on  3d  gaussian splatting  compression                         reconstruction.     ACM    Transactions     on  Graphics    (ToG), 36
+      methods. In    Computer     Graphics   Forum, page e70078. Wiley                       (4):1–13, 2017.5,6,12
+      Online Library, 2025.2                                                          [15]Dong  In  Lee,  Hyeongcheol  Park,  Jiyoung  Seo,  Eunbyung
+ [3]Jonathan  T  Barron,  Ben  Mildenhall,  Dor  Verbin,  Pratul  P                          Park, Hyunje Park, Ha Dam Baek, Sangheon Shin, Sangmin
+      Srinivasan, and Peter Hedman.   Mip-nerf 360:  Unbounded                               Kim,  and  Sangpil  Kim.   Editsplat:  Multi-view  fusion  and
+      anti-aliased  neural  radiance  fields.      In      Proceedings      of               attention-guided optimization  for view-consistent  3d scene
+      the  IEEE/CVF      conference     on  computer    vision   and  pattern                editing  with  3d  gaussian  splatting.   In     Proceedings     of the
+      recognition, pages 5470–5479, 2022.5,6                                                 Computer    Vision   and  Pattern  Recognition    Conference, pages
+                                                                                             11135–11145, 2025.2
+ [4]Matthew Brown and David G Lowe.   Unsupervised 3d ob-                             [16]Haolin Li, Jinyang Liu, Mario Sznaier, and Octavia Camps.
+      ject recognition and reconstruction in unordered datasets. In                          3d-hgs:  3d  half-gaussian  splatting.   In      Proceedings     of the
+      Fifth  International   Conference     on  3-D   Digital  Imaging    and                Computer    Vision   and  Pattern  Recognition    Conference, pages
+      Modeling     (3DIM’05), pages 56–63. IEEE, 2005.2                                      10996–11005, 2025.2
+ [5]Brian  Chao,  Hung-Yu  Tseng,  Lorenzo  Porzi,  Chen  Gao,                        [17]Jiahe Li, Feiyu Wang, Xiaochao Qu, Chengjing Wu, Luoqi
+      Tuotuo Li, Qinbo Li, Ayush Saraf, Jia-Bin Huang, Johannes                              Liu, and Ting Liu. Evpgs: Enhanced view prior guidance for
+      Kopf, Gordon Wetzstein, et al.   Textured gaussians for en-                            splatting-based extrapolated view synthesis.  In         Proceedings
+      hanced 3d scene appearance modeling.   In             Proceedings     of               of the Computer     Vision  and  Pattern  Recognition    Conference,
+      the  Computer     Vision   and   Pattern  Recognition     Conference,                  pages 16398–16407, 2025.2
+      pages 8964–8974, 2025.2,11,12                                                   [18]Jiahao Lu, Yifan Zhang, Qiuhong Shen, Xinchao Wang, and
+ [6]David Charatan, Sizhe Lester Li, Andrea Tagliasacchi, and                                Shuicheng  YAN.    Poison-splat:   Computation  cost  attack
+      Vincent  Sitzmann.     pixelsplat:   3d  gaussian  splats  from                        on  3d  gaussian  splatting.   In    The   Thirteenth    International
+      image  pairs  for  scalable  generalizable  3d  reconstruction.                        Conference    on  Learning   Representations, 2025.2
+      In  Proceedings     of the  IEEE/CVF       conference    on  computer           [19]Abhimitra  Meka,  Rohit  Pandey,  Christian  Haene,  Sergio
+      vision  and  pattern  recognition, pages 19457–19467, 2024.2                           Orts-Escolano, Peter Barnum, Philip David-Son, Daniel Er-
+ [7]Yuedong Chen, Haofei Xu, Chuanxia Zheng, Bohan Zhuang,                                   ickson, Yinda Zhang, Jonathan Taylor, Sofien Bouaziz, et al.
+      Marc Pollefeys, Andreas Geiger, Tat-Jen Cham, and Jianfei                              Deep relightable textures:  volumetric performance capture
+      Cai.   Mvsplat:  Efficient 3d gaussian splatting from sparse                           with  neural  rendering.       ACM      Transactions    on   Graphics
+      multi-view images.   In      European     Conference    on  Computer                   (TOG), 39(6):1–21, 2020.2
+      Vision, pages 370–386. Springer, 2024.2                                         [20]Ben  Mildenhall,   Pratul  P.  Srinivasan,   Matthew  Tancik,
+ [8]Duan Gao, Guojun Chen, Yue Dong, Pieter Peers, Kun Xu,                                   Jonathan T. Barron, Ravi Ramamoorthi, and Ren Ng.  Nerf:
+      and Xin Tong.  Deferred neural lighting:  free-viewpoint re-                           Representing scenes as neural radiance fields for view syn-
+      lighting from unstructured photographs.           ACM    Transactions                  thesis.     In Proceedings     of  the  European      Conference     on
+      on  Graphics   (TOG), 39(6):1–15, 2020.2                                               Computer    Vision   (ECCV), 2020.1,2
+ [9]Lin Gao, Jie Yang, Bo-tao Zhang, Jia-mu Sun, Yu-jie Yuan,                         [21]Karran  Pandey,  Anita  Hu,  Clement  Fuji  Tsang,  Or  Perel,
+      Hongbo Fu, and Yu-kun Lai. Real-time large-scale deforma-                              Karan Singh, and Maria Shugrina.   Painting with 3d gaus-
+      tion of gaussian splatting.       ACM    Transactions     on  Graphics                 sian  splat  brushes.   In   Proceedings    of  the  Special   Interest
+      (TOG), 43(6):1–17, 2024.2                                                              Group    on  Computer     Graphics     and  Interactive   Techniques
+[10]Antoine  Gu       ´edon  and  Vincent  Lepetit.     Sugar:   Surface-                    Conference    Conference     Papers, pages 1–10, 2025.2
+      aligned gaussian splatting for efficient 3d mesh reconstruc-                    [22]Victor Rong, Jingxiang Chen, Sherwin Bahmani, Kiriakos N
+      tion  and  high-quality  mesh  rendering.    In       Proceedings     of               Kutulakos, and David B Lindell.  Gstex:  Per-primitive tex-
+      the  IEEE/CVF      conference     on  computer    vision   and  pattern                turing of 2d gaussian splatting for decoupled appearance and
+      recognition, pages 5354–5363, 2024.2                                                   geometry modeling.  In      2025   IEEE/CVF      Winter   Conference
+[11]Binbin Huang, Zehao Yu, Anpei Chen, Andreas Geiger, and                                  on Applications     of Computer     Vision  (WACV), pages 3508–
+      Shenghua Gao.  2D gaussian splatting for geometrically ac-                             3518. IEEE, 2025.2
+
+
+                                                                                 9
+[23]Samuel Rota Bul       `o, Lorenzo Porzi, and Peter Kontschieder.                          4d gaussian splatting for real-time dynamic scene rendering.
+      Revising  densification  in  gaussian  splatting.   In        European                  In  Proceedings     of the  IEEE/CVF       conference     on  computer
+      Conference     on  Computer     Vision, pages 347–362. Springer,                        vision  and  pattern  recognition, pages 20310–20320, 2024.2
+      2024.4,5,8                                                                       [36]Zeyu Yang, Hongye Yang, Zijie Pan, and Li Zhang.   Real-
+[24]Vincent Sitzmann, Julien Martel, Alexander Bergman, David                                 time photorealistic dynamic scene representation and render-
+      Lindell, and Gordon Wetzstein.  Implicit neural representa-                             ing with 4d gaussian splatting.  In        International   Conference
+      tions with periodic activation functions.         Advances     in neural                on  Learning   Representations      (ICLR), 2024.2
+      information    processing    systems, 33:7462–7473, 2020.3,5                     [37]Zehao  Yu,  Anpei  Chen,  Binbin  Huang,  Torsten  Sattler,
+[25]Noah Snavely, Steven M. Seitz, and Richard Szeliski. Photo                                and  Andreas  Geiger.    Mip-splatting:   Alias-free  3d  gaus-
+      tourism:   exploring  photo  collections  in  3d.         ACM     Trans.                sian splatting.    Conference     on Computer      Vision  and   Pattern
+      Graph., 25(3):835–846, 2006.2                                                           Recognition     (CVPR), 2024.2
+[26]David Svitov, Pietro Morerio, Lourdes Agapito, and Alessio                         [38]Xin Zhang, Anpei Chen, Jincheng Xiong, Pinxuan Dai, Yu-
+      Del Bue.   Billboard splatting (bbsplat):  Learnable textured                           jun  Shen,  and  Weiwei  Xu.   Neural  shell  texture  splatting:
+      primitives for novel view synthesis.   In         Proceedings     of  the               More  details  and  fewer  primitives.   In       Proceedings     of  the
+      IEEE/CVF       International    Conference     on  Computer      Vision,                IEEE/CVF       International   Conference      on  Computer      Vision,
+      pages 25029–25039, 2025.2                                                               pages 25229–25238, 2025.3,6,12
+[27]Matthew  Tancik,  Pratul  Srinivasan,  Ben  Mildenhall,  Sara                      [39]Xinjie  Zhang,  Zhening  Liu,  Yifan  Zhang,  Xingtong  Ge,
+      Fridovich-Keil, Nithin Raghavan, Utkarsh Singhal, Ravi Ra-                              Dailan He, Tongda Xu, Yan Wang, Zehong Lin, Shuicheng
+      mamoorthi, Jonathan Barron, and Ren Ng.  Fourier features                               Yan,  and  Jun  Zhang.    Mega:   Memory-efficient  4d  gaus-
+      let networks learn high frequency functions in low dimen-                               sian  splatting  for  dynamic  scenes.    In      Proceedings     of  the
+      sional domains.      Advances     in neural  information     processing                 IEEE/CVF       International   Conference      on  Computer      Vision,
+      systems, 33:7537–7547, 2020.2                                                           pages 27828–27838, 2025.2
+[28]Justus Thies, Michael Zollh       ¨ofer, and Matthias Nießner.  De-                [40]Junyu Zhou, Yuyang Huang, Wenrui Dai, Junni Zou, Ziyang
+      ferred neural rendering:  Image synthesis using neural tex-                             Zheng,  Nuowen  Kan,  Chenglin  Li,  and  Hongkai  Xiong.
+      tures.   Acm    Transactions     on  Graphics    (TOG),  38(4):1–12,                    3dgabsplat:   3d  gabor  splatting  for  frequency-adaptive  ra-
+      2019.2                                                                                  diance  field  rendering.    In    Proceedings     of  the  33rd  ACM
+[29]Nicol       ´as   Violante,   Andreas   Meuleman,   Alban   Gauthier,                     International   Conference     on  Multimedia, page 72–81, New
+      Fredo  Durand,  Thibault  Groueix,  and  George  Drettakis.                             York, NY, USA, 2025. Association for Computing Machin-
+      Splat and replace: 3d reconstruction with repetitive elements.                          ery.2
+      In  Proceedings     of the  Special   Interest  Group    on  Computer            [41]Xilong  Zhou,  Bao-Huy  Nguyen,  Lo       ¨ıc  Magne,  Vladislav
+      Graphics    and  Interactive  Techniques     Conference     Conference                  Golyanik,   Thomas  Leimk¨uhler,   and  Christian  Theobalt.
+      Papers, pages 1–12, 2025.2                                                              Splat the net:  Radiance fields with splattable neural prim-
+[30]Yufei Wang, Zhihao Li, Lanqing Guo, Wenhan Yang, Alex                                     itives.      In The   Fourteenth     International    Conference      on
+      Kot,  and  Bihan  Wen.     ContextGS  :  Compact  3d  gaus-                             Learning    Representations, 2026.3
+      sian  splatting  with  anchor  level  context  model.     In         The
+      Thirty-eighth     Annual     Conference     on   Neural    Information
+      Processing    Systems, 2024.2
+[31]Yiming Wang, Shaofei Wang, Marko Mihajlovic, and Siyu
+      Tang.     Neural  texture  splatting:   Expressive  3d  gaussian
+      splatting for view synthesis, geometry, and dynamic recon-
+      struction.    In   Proceedings     of  the  SIGGRAPH         Asia  2025
+      Conference     Papers, pages 1–12, 2025.3,6,12
+[32]Haato  Watanabe  and  Nobuyuki  Umetani.     Sketchrodgs:
+      Sketch-based  extraction  of  slender  geometries  for  animat-
+      ing  gaussian  splatting  scenes.    In     SIGGRAPH         Asia  2025
+      Technical    Communications       (SA   Technical    Communications
+      ’25), Hong Kong, Hong Kong, 2025. ACM.2
+[33]Haato Watanabe,  Kenji Tojo,  and Nobuyuki Umetani.   3D
+      Gabor Splatting: Reconstruction of High-frequency Surface
+      Texture using Gabor Noise.   In         Eurographics      2025   - Short
+      Papers. The Eurographics Association, 2025.2,5,6,8,11,
+      12
+[34]Sebastian  Weiss  and  Derek  Bradley.   Gaussian  billboards:
+      Expressive  2d  gaussian  splatting  with  textures.               arXiv
+      preprint   arXiv:2412.12734, 2024.2
+[35]Guanjun Wu, Taoran Yi, Jiemin Fang, Lingxi Xie, Xiaopeng
+      Zhang, Wei Wei, Wenyu Liu, Qi Tian, and Xinggang Wang.
+
+
+                                                                                  10
+Supplementary Material
+A. Experiment Details
+To ensure a fair comparison across different methods,  we
+constrained the number of primitives such that the total data
+size  remained  roughly  the  same.   To  make  the  data  size
+similar, we defined the initial number of primitives and the
+maximum allowable number of them for each dataset and
+method.  Tables5and6summarize these settings.  Across
+all  datasets,  the  number  of  primitives  after  training  stays
+within  100–200  of  the  designated  maximum.   This  small                    Figure 7.Visual comparison between Textured Gaussians and
+discrepancy arises from the interplay between densification                     our method on High-Frequency dataset.Our method expresses
+and pruning.                                                                    high-frequency  texture  successfully,  while  Textured  Gaussians
+                                                                                produces elongated monotonous color primitives due to the sep-
+Densification and Pruning.   Densification was performed                        aration of initial primitive shape training and subsequent texture
+every 100 iterations. For 3DGS and 2DGS, we adopt the de-                       training.
+fault densification thresholds from the original implementa-
+tions.   Densification continued until 15,000 iterations,  af-                  ble7reports the quantitative results on the High-Frequency
+ter which further accuracy gains saturated and the primitive                    dataset [33].
+count had nearly reached the predefined maximum.  Once                              Across  all  metrics,  our  method  outperforms  textured
+the predefined maximum was reached, new primitives were                         Gaussians  under  the  limited  primitive  budget.   Although
+added  only  from  those  having  the  largest  position  gradi-                textured  Gaussians  improves  appearance  quality  by  train-
+ents,  ensuring  that  the  primitive  number  does  not  exceed                ing textured primitives after a pre-trained Gaussian splatting
+the limit. The pruning follows the default strategy.                            stage, this two-stage pipeline implicitly requires a sufficient
+   For 3D Gabor splatting, achieving perfect fairness in data                   number of primitives to cover fine-scale structures.  When
+size is difficult because the method does not model view-                       the  primitive  count  is  constrained,  its  pre-training  stage
+dependent appearance.  Therefore, instead of matching the                       tends to overfit high-frequency regions with overspecialized
+total data size, we matched the        number    of  primitives to our          and elongated primitives, reducing the effective representa-
+method to ensure a balanced and interpretable comparison.                       tional capacity of the subsequent texture optimization.
+Densification and pruning followed the same scheduling as                           In contrast,  our method trains the neural Gabor primi-
+our method.                                                                     tives in an end-to-end manner,  enabling each primitive to
+                                                                                represent diverse color patterns and avoiding degenerate fit-
+Frequency-Aware    Densification.For    our    method,                          ting behaviors in high-frequency regions (Fig.7).  As a re-
+frequency-aware densification was applied for 19,000 out                        sult, our model preserves complex appearance details even
+of the 20,000 training iterations.  During each densification                   with substantially fewer primitives.
+step,  we  randomly  sampled  20  training  views,  processed                       To  ensure  a  fair  comparison  in  terms  of  data  size,  we
+them as a batch, and applied FFT and inverse FFT filtering.                     configured Textured Gaussians to use RGBA textures with
+The per-pixel frequency-domain error from each view was                         a resolution of4×4, and we set the number of primitives
+projected onto the corresponding primitives,  and for each                      to 10,200.  This setting matches the total data footprint of
+primitive, the maximum error over the 20 views was used                         our method while respecting the constraints of the original
+as the densification score.                                                     Textured Gaussians formulation.
+                                                                                    The quantitative results for our method in Table7match
+Datasets.For the DTU dataset, we used scenesscan83,                             those presented in the main paper.
+scan105,scan106, andscan114. For Tanks and Tem-
+ples, we evaluated thetrainandtruckscenes.  Across                              C. Additional Qualitative Results
+all datasets, we used a 1/8 split for testing, with the remain-                 We present additional qualitative novel-view synthesis re-
+ing images used for training.                                                   sults  on  the  High-Frequency  dataset,  the  Mip-NeRF  360
+B. Additional Quantitative Results                                              dataset,  and  the  DTU  dataset.   We  compare  our  method
+                                                                                with  2D  Gaussian  splatting  (2DGS)  and  3D  Gabor  splat-
+We  further  compare  our  method  with  Textured  Gaus-                        ting.   For  fairness,  we  augment  3D  Gabor  splatting  with
+sians [5], which achieves high-fidelity reconstruction by as-                   our frequency-aware densification strategy. For all meth-
+signing  an  individual  texture  map  to  each  primitive.   Ta-               ods, the maximum number of primitives is constrained
+
+
+                                                                           11
+Table 5.Initial and maximum primitive counts for each Mip-NeRF360 scene.Left value indicates the initial primitive count; right
+value indicates the maximum count.
+
+                  Mip-NeRF 360                                      3DGS               2DGS      Ours    3D Gabor
+                  Bicycle, Garden, Stump                   740k-3,700k     740k-3,700k     600k-3,000k     600k-3,000k
+                  Bonsai, Counter, Kitchen, Room       50k-243k          50k-243k          40k-200k          40k-200k
+
+Table 6.Initial and maximum primitive counts for High-Frequency [33], DTU [12], and Tanks and Temples (tandt) [14].Left value
+indicates the initial primitive count; right value indicates the maximum count.
+
+                                  Dataset                       3DGS             2DGS  Ours3D Gabor
+                                  High-Frequency        6k-24k            6k-24k          5k-20k         5k-20k
+                                  DTU                         2.5k-24k         2.5k-24k         2k-20k         2k-20k
+                                  train (tandt)            60k-356.3k     60k-356.3k     60k-300k     60k-300k
+                                  truck (tandt)           20k-118.8k     20k-118.8k     20k-100k     20k-100k
+
+
+Table 7.Additional quantitative comparison between Textured                        NeRF360, each with corresponding zoomed-in views.
+Gaussians [5] and our method on the High-Frequency dataset.                            We observe that NEST tends to exhibit noticeable visual
+Our method achieves consistently higher performance under the                      degradation under tight memory budgets, often leading to
+constrained primitive setting.                                                     structural inconsistencies or artifacts.   NTS is affected by
+                                 PSNR↑   SSIM↑   LPIPS↓                            suboptimal primitive configurations such as skinny Gaus-
+                                                                                   sians,  resulting  in  insufficient  fitting  that  cannot  be  fully
+    Textured Gaussians       23.57       0.7912       0.3203                       compensated for by its neural texture representation.
+    Ours                             26.49       0.8808       0.2115                   In contrast, our method maintains more stable geometry
+                                                                                   and appearance across both scenes, with fewer visible arti-
+                                                                                   facts under the same budget constraints.
+to match the same overall data size.
+   As shown in Fig.8,  our method produces sharper and                             E. Rendering Time
+more faithful reconstructions than both 2DGS and 3D Ga-                            We  report  rendering  speed  (FPS)  under  the  same  experi-
+bor Splatting on the Mip-NeRF 360 dataset.  In particular,                         mental  setup  as  Sec.  5.8  of  main  paper  (Tab. 8).   Due  to
+3D Gabor Splatting—while capable of representing high-                             per-primitive  MLP  evaluation,  our  method  is  slower  than
+frequency components—exhibits noticeable color artifacts                           3DGS. However, it achieves significantly higher rendering
+due to its lack of view-dependent modeling.                                        speed  than  NEST  and  NTS,  which  rely  on  additional  tri-
+   Additional  comparisons  on  the  High-Frequency  and                           plane  or  hash-grid  computations.   This  indicates  that  our
+DTU  datasets  are  presented  in  Fig.9.   Even  under  strict                    method introduces moderate overhead while remaining ef-
+limitations  on  the  number  of  primitives,  our  method  suc-                   ficient among neural splatting approaches.
+cessfully  preserves  fine-grained  patterns—such  as  intri-
+cate clothing textures and thin structures—while competing                         Table 8. Rendering time (FPS) on the BOOTSmodel under differ-
+methods suffer from blurring or loss of detail.                                    ent data budget.
+   Moreover, the supplemental novel-view synthesis videos
+further demonstrate that our method reconstructs 3D scenes                                      Data Budget      20%       5%        1%
+without structural collapse even under view-dependent ap-
+pearance changes, highlighting the stability of our represen-                                   3DGS               242.8     349.7     467.3
+tation across continuous camera movements.                                                      NEST               12.25     24.55     43.86
+                                                                                                NTS                 11.69     15.01     51.89
+D. Visual Comparisons with Neural Splatting                                                     Ours                 85.32     116.8     145.4
+      Methods
+We provide additional visual comparisons with NEST [38]
+and  NTS  [31]  under  the  same  experimental  settings  as
+Sec. 5.6. Fig.10shows results on the BOOTSscene from the
+High-Frequency dataset and theBONSAIscene from Mip-
+
+                                                                              12
+Figure 8.Additional qualitative comparisons on Mip-NeRF 360 with identical data size.Our method produces higher visual fidelity
+compared to 2DGS and 3D Gabor Splatting.  3D Gabor Splatting tends to generate color artifacts (circled) due to the absence of view-
+dependent modeling.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                               13
+Figure 9.Additional qualitative comparisons on the High-Frequency and DTU datasets under identical data size.Our method better
+preserves fine-grained patterns—such as intricate clothing textures and thin structures—especially when the primitive count is limited.
+
+
+
+
+
+
+
+
+                                                                                 14
+Figure 10.Visual comparisons with NEST and NTS under matched memory budgets.Results on the BOOTSscene from the High-
+Frequency dataset and the BONSAIscene from Mip-NeRF360 are shown. Each group includes the full image and a corresponding zoomed-
+in image highlighting fine-scale structures.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                              15

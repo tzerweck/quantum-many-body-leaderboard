@@ -1,0 +1,859 @@
+                                                                                                                                                            1
+  Accelerating physics-informed neural networks for
+                    full waveform inversion using a hybrid
+                quantum-classical finite-basis architecture
+
+                                       Hoang Anh Nguyen               , Divakar Vashisth, and Ali Tura
+
+
+
+
+   Abstract—Full  waveform  inversion  (FWI)  reconstructs  het-                inversion  to  reconstruct  tissue  properties  for  breast  cancer
+erogeneous material properties from receiver data but remains                   detection  and  characterization  [6],  [7],  and  in  photoacoustic
+computationally  demanding.  Physics-informed  neural  networks                 tomography, where wave-based inversion recovers optical ab-
+(PINNs)   and   their   domain-decomposed   variants   (FBPINNs)                sorption maps from acoustic measurements [8]. Non-destructive
+offer  a  mesh-free  alternative  but  face  convergence  challenges            evaluation  of  engineering  structures  similarly  leverages  full
+when  representing  complex  velocity  fields.  We  present  a  hybrid
+quantum-classical  FBPINN  for  acoustic  FWI,  bringing  together              waveform methods to detect defects and characterize material
+quantum computing and classical machine learning, in which the                  properties  [9].  Despite  its  versatility  across  these  domains,
+decomposed  wavefield network and  the global  velocity network                 FWI remains computationally demanding, requiring iterative
+are  implemented  as  classical-to-quantum  pipelines  terminating              solutions of the forward wave equation and the computation
+in   parameterized   quantum   circuits   (PQCs).   The   PQCs   are            of gradients through adjoint-state methods, often at substantial
+realized  as  differentiable  JAX  statevector  simulators,  enabling
+end-to-end automatic differentiation through the classical PINN,                cost for large-scale and high-frequency problems. These com-
+the   quantum   circuit,   and   the   physics-informed   loss.   On   a        putational demands have further motivated machine-learning
+geophysical  anomaly  benchmark,  the  quantum  hybrid  reaches                 surrogates for rapid waveform modeling and inversion [10].
+a  lower  L1  velocity  error  than  the  primary  classical  FBPINN               Physics-informed  neural  networks  (PINNs)  have  emerged
+baseline in approximately 8×    fewer training iterations, despite              as  a  mesh-free  alternative  for  solving  partial  differential
+using  approximately  33%  fewer  trainable  parameters,  and  it
+outperforms  all  15  classical  hyperparameter  variants  tested.  A           equations (PDEs) by minimizing PDE residuals at collocation
+second benchmark (checkerboard) demonstrates the generality                     points [11], approximating solutions without traditional numer-
+of  the  inversion  pipeline,  confirming  that  the  quantum  hybrid           ical discretization. This paradigm has been extended to inverse
+architecture  can  recover  structured  spatial  variations  beyond             problems,  where  unknown  model  parameters  are  optimized
+the  localized  anomaly  benchmark.  Our  framework  is  broadly                alongside the solution. Recent works have applied PINNs to
+applicable  to  wave-based  inverse  problems  beyond  geophysics,
+including  medical  ultrasound  tomography  and  non-destructive                wave-related  problems  [12]–[14],  offering  a  fundamentally
+evaluation.                                                                     different  approach  to  the  classical  adjoint-state  framework.
+   Index Terms—Quantum  Computing,  Full  Waveform  Inversion,                  In  particular,  Rasht-Beheshtet  al.[15]  demonstrated  the
+Wave Propagation, Parameterized Quantum Circuit, PINNs                          application  of  PINNs  to  FWI,  achieving  accurate  velocity
+                                                                                reconstruction  from  receiver  data  by  jointly  optimizing  the
+                          I.  INTRODUCTION                                      wavefield and velocity networks. Physics-informed formulations
+   Full waveform inversion (FWI) is a powerful technique for                    have  since  been  applied  to  seismic  inversion  through  the
+reconstructing  material  properties  from  recorded  waveform                  acoustic wave equation [16], while purely data-driven networks
+data by exploiting the full information content of wave signals,                instead learn a direct mapping from seismic data to subsurface
+including amplitude, phase, and frequency. Originally devel-                    velocity models [17], [18]. However, standard PINNs face well-
+oped in the context of exploration geophysics for subsurface                    documented  challenges  when  applied  to  problems  involving
+velocity imaging [1], FWI has since become central to a wide                    high-frequency  wave  propagation,  multi-scale  physics,  and
+range  of  disciplines.  In  global  seismology,  it  enables  high-            large  computational  domains.  The  spectral  bias  of  neural
+resolution  imaging  of  crustal  and  mantle  structures  [2],  [3];           networks, their tendency to learn low-frequency features before
+in hydrocarbon exploration and CO2  monitoring, it provides                     high-frequency ones, can severely limit convergence in wave
+detailed velocity models for reservoir characterization [4] and                 propagation problems. To address these limitations, finite-basis
+is  increasingly  applied  to  high-density  datasets  acquired  via            physics-informed neural networks (FBPINNs) were introduced
+distributed  acoustic  sensing  [5].  Beyond  geophysics,  FWI                  by  Moseleyet  al.[19],  employing  a  domain  decomposition
+principles have found growing applications in medical imaging,                  strategy in which the global solution is represented as a sum
+where  ultrasound  computed  tomography  employs  waveform                      of locally supported basis functions, each parameterized by an
+                                                                                independent neural network. This approach effectively mitigates
+  H. A. Nguyen is with the Department of Geophysics, Colorado School of         spectral  bias,  improves  parallel  scalability,  and  enables  the
+Mines, Golden, CO 80401 USA (e-mail: hoanganh       nguyen@mines.edu).          solution of problems that are intractable for standard PINNs. To
+  D.  Vashisth  is  with  the  Department  of  Energy  Science  and  Engineering,date, however, no work has applied the domain decomposition
+Stanford University, Stanford, CA 94305 USA.                                    advantages of FBPINNs to waveform inversion.
+  A. Tura is with the Department of Petroleum Engineering, Colorado School
+of Mines, Golden, CO 80401 USA.                                                    In  parallel  with  advances  in  classical  scientific  machine
+                                                                                                                                                              2
+
+
+learning, quantum computing has attracted growing interest for                   the first application of gate-based quantum computing to full
+its potential to accelerate computational tasks across diverse                   waveform inversion: a hybrid quantum-classical FBPINN for
+domains. Parameterized quantum circuits (PQCs), also known                       acoustic FWI. The framework represents both the decomposed
+as variational quantum circuits (VQCs), have emerged as a near-                  wavefield network and the global velocity network by classical-
+term approach to quantum machine learning, operating within                      to-quantum  pipelines:  classical  pre-networks  map  the  input
+the  constraints  of  current  noisy  intermediate-scale  quantum                coordinates into low-dimensional latent spaces matched to the
+(NISQ) devices [20]. PQCs encode classical data into quantum                     number  of  qubits,  the  PQCs  process  the  encoded  features
+states through feature maps, process the information through                     through  parameterized  rotations  and  entangling  gates,  and
+parameterized unitary operations, and extract classical outputs                  classical  output  layers  rescale  the  bounded  circuit  outputs
+via measurement. Several studies have explored the integration                   into  physical  units.  To  isolate  the  architectural  benefits  of
+of  quantum  circuits  with  neural  networks,  forming  hybrid                  the  quantum  integration  from  the  hardware  noise  of  current
+quantum-classical  architectures  that  leverage  the  expressive                near-term devices, the PQCs are implemented as JAX-native
+power  of  quantum  Hilbert  spaces  while  maintaining  the                     statevector  simulators.  This  approach  enables  exact,  end-to-
+trainability and flexibility of classical networks [21]–[23].                    end automatic differentiation through the classical PINN, the
+   The  intersection  of  quantum  computing  and  PINNs  has                    quantum circuit, and the physics-informed loss, avoiding the
+begun  to  receive  attention,  with  recent  works  investigating               prohibitive  computational  overhead  of  parameter-shift  rules
+quantum  physics-informed  neural  networks  (QPINNs)  for                       required  on  physical  hardware.  This  design  combines  the
+solving  differential  equations  [24].  Leonget  al.[25]  bench-                scalability advantages of FBPINN domain decomposition with
+marked  hybrid  quantum  physics-informed  neural  networks                      the  structured,  bounded  expressivity  of  PQC-based  parame-
+(HQPINNs) for high-speed flow problems, demonstrating that                       terizations. We evaluate the architecture on two geophysical
+these  architectures  offer  competitive  accuracy  and  stability               benchmarks and compare it against a purely classical FBPINN
+with a reduced parameter cost compared to classical PINNs.                       baseline as well as 15 classical hyperparameter variants. In the
+While they found that pure quantum models struggle with non-                     following sections, we present the comparative performance
+harmonic features like shocks, the hybrid approach successfully                  of  our  hybrid  architecture,  discuss  its  broader  implications
+mitigates these artifacts by leveraging classical sub-networks.                  for  scientific  machine  learning,  and  detail  the  underlying
+Similarly,  Bergeret  al.[26]  proposed  trainable  embedding                    mathematical and algorithmic methodology.
+quantum physics-informed neural networks (TE-QPINNs) for
+solving nonlinear PDEs, including the Navier-Stokes equations.                                             II.  METHODOLOGY
+Their approach achieved superior results compared to classical                   A.  Acoustic wave equation
+PINNs  while  maintaining  the  same  number  of  parameters,
+highlighting  the  potential  for  more  efficient  optimization  in                Two-dimensional acoustic wave propagation in a heteroge-
+high-dimensional parameter spaces. These studies suggest that                    neous  medium  with  spatially  varying  wave  speed α(x)        and
+quantum circuits can serve as powerful function approximators                    constant density is governed by the acoustic wave equation
+within the PINN framework, potentially offering advantages                                      ∂2ϕ(x,t)
+in  expressivity  and  parameter  efficiency  for  forward  PDE                                    ∂t2      =α   2(x)∇      2ϕ(x,t) +s(x,t),            (1)
+problems. Complementing these variational formulations, direct
+gate-based quantum algorithms have also been developed to                        where ϕ(x,t)         is the scalar displacement potential,∇2  is the
+solve  PDEs  without  a  learned  model,  with  explicit  circuit                spatial Laplacian, ands(x,t)         is the seismic source. The spatial
+constructions  for  the  acoustic  wave  equation  and  related                  gradient ofϕyields the physical displacement field.
+operators [27] and a demonstration of one-dimensional wave-                         In  the  context  of  FWI,  the  objective  is  to  reconstruct  the
+equation  simulation  on  near-term  quantum  hardware  [28].                    unknown wave speed α(x)        from surface observations. Within
+When  extending  quantum  methods  to  geophysical  inverse                      our PINN architecture, to avoid the numerical challenges of
+problems, research has thus far primarily relied on alternative                  explicitly modeling the source singularitys(x,t)       , the source is
+computing  paradigms.  For  instance,  quantum  annealing  has                   instead encoded through the initial conditions. This is achieved
+recently been applied to seismic traveltime tomography [29]                      by specifying the wavefield at two closely spaced early times,
+and to pre-stack and post-stack seismic inversion [30], with the                 derived from a spectral-element forward simulation [32]. The
+inverse problem cast as a least-squares objective, mapped to a                   top boundary of the domain acts as a free surface where the
+quadratic unconstrained binary optimization (QUBO) or Ising                      acoustic pressure vanishes, which is mathematically equivalent
+Hamiltonian formulation, and solved using a quantum annealer.                    to∇   2ϕ= 0in this displacement-potential formulation.
+More recently, hybrid quantum neural networks have also been                        Accordingly,  the  source-free  form  of  (1)  is  enforced  as  a
+explored for pre-stack and post-stack seismic inversion within                   PDE  residual  at  interior  collocation  points,  while  the  initial
+physics-informed encoder-decoder architectures [31]. However,                    states   and   free-surface   boundary   conditions   are   imposed
+the application of gate-based hybrid quantum-classical neural                    as  soft  constraints  within  the  training  loss.  The  measured
+architectures to highly nonlinear inverse problems like FWI,                     receiver data are incorporated as an additional data-misfit term,
+where both the wavefield and the velocity model are represented                  penalizing the discrepancy between the predicted wavefield at
+by learned networks and coupled through the acoustic wave                        receiver locations and the observed seismograms. The complete
+equation, remains largely unexplored.                                            composite loss function used to train the FBPINN is detailed
+   In  this  work,  we  present,  to  the  best  of  our  knowledge,             in the Hybrid architecture section.
+                                                                                                                                                                    3
+
+
+B.  Finite-basis physics-informed neural network                                    The parameterized single-qubit rotations used in this work are
+   PINNs  [11]  approximate  solutions  of  PDEs  by  a  neural                                     Rk(θ) =e  −iθσ   k/2 ,   k∈{x,y,z},              (6)
+network uθ(x)      and  train θ  to  minimize  the  PDE  residual  at
+a  set  of  collocation  points{x i}Ni=1   drawn  from  the  domain.                with explicit matrices
+Writing the governing PDE in residual formN[u](x) = 0            , the                                                 cos θ
+PDE loss is                                                                                            Rx(θ) =        −isin   θ2  −isin   θ2     ,
+                                     NX                                                                              cos θ     2      cos θ 2
+                     LPDE =  1N          |N[u   θ(x i)]|   2,                     (2)                  Ry(θ) =        sin θ2 −sin  θ2       ,                     (7)
+                                    i=1                                                                              e−iθ/2          02      cos θ2
+with spatial and temporal derivatives computed by automatic                                            Rz(θ) =           0  e iθ/2         .
+differentiation  of  the  network  with  respect  to  its  inputs.
+Boundary conditions, initial conditions, and observational data                     The composition Rz(θ  3)R y(θ  2)R x(θ  1) spans SU(2) and can
+are added as additional weighted loss terms (the full composite                     prepare any single-qubit pure state up to a physically irrelevant
+loss used for FWI is given in the Hybrid architecture subsection                    global  phase.  Entanglement  between  neighbouring  qubits  is
+below). Standard PINNs, however, are known to suffer from                           introduced by the controlled-NOT (CNOT) gate,
+spectral bias, a tendency to learn low-frequency features before                                                        1    0    0    0
+high-frequency ones, which severely limits their effectiveness                                                          0    1    0    0,                      (8)
+in  multi-scale  wave  problems  such  as  FWI,  where  both  the                                         CNOT =           0    0    0    1
+velocity field and the wavefield exhibit sharp transitions and                                                             0    0    1    0
+oscillatory structure.
+   To overcome this limitation, we adopt the FBPINN frame-                          which flips the target qubit if and only if the control qubit is
+work  of  Moseleyet  al.[19].  The  global  domain       Ω  is  parti-              in state|1⟩.
+tioned into K  overlapping rectangular subdomains{Ω k}, each                           A PQC [22] applies a trainable unitary U(θ  q) to the initial
+equipped  with  an  independent  neural  network uθk(x)    .  The                   state|0⟩ ⊗n    and returns a scalar expectation value of a Hermitian
+global solution is reconstructed as a partition-of-unity sum,                       observable, yielding a smooth, differentiable function of the
+                                  KX                                                circuit parametersθq. Its expressibility depends on the circuit
+                       u(x) =          wk(x)u   θk(x),                       (3)    depth, qubit connectivity, and gate set [33].
+                                 k=1                                                   The PQC employed in this work (Figure 1) operates on n
+where  the  window  functions wk  are  smooth  cosine  bumps                        qubits with L variational layers. In the data-embedding layer,
+supported  on  Ωk  with P                                                           starting from|0⟩ ⊗n   , each qubiti receives anRy(β izi) rotation
+                                  kwk(x) = 1      for  all x∈Ω     .  Each          that encodes the i-th component of the input vector z∈R  n  as
+local network only needs to represent the solution’s behavior                       a rotation angle (angle encoding [34]), scaled by a trainable
+on its own subdomain, with two consequences: (i) the local                          basis parameterβ        i:
+frequency  content  each  network  must  learn  is  bounded  by
+the subdomain size, alleviating spectral bias; and (ii) training                                                           n−1O
+is  embarrassingly  parallel  across  subdomains.  The  physics-                                       |ψ enc(z;β)⟩=             Ry(β izi)|0⟩.                  (9)
+informed loss is evaluated on the reconstructed global solution,                                                            i=0
+so gradients flow through the window-weighted sum back to                           This   is   followed   by L   variational   layers.   Each   layer
+the individual subdomain networks.                                                  l   =    1,...,L      applies   a   general   single-qubit   rotation
+   For  the  wavefield ϕ(x,z,t)       we  use  a  three-dimensional                 Rz(θ  (3)l,i )R y(θ  (2)l,i )R x(θ  (1)l,i )  to  every  qubit i,  introducing  3n
+subdomain decomposition (n x,nz,nt), 5×3×5           in the anomaly                 trainable parameters per layer, and then applies a linear CNOT
+baseline with subdomain overlap 0.35   . The velocity network                       ladder  CNOT(i,i+1)       for i= 0,...,n−2           to  entangle  neigh-
+α(x,z)       is not decomposed; it is a single global network, since                boring qubits. The total number of trainable gate parameters
+the  velocity  field  typically  varies  more  smoothly  than  the                  is 3nL  , plus n basis parameters from the embedding layer. In
+wavefield and does not require local representation.                                the measurement layer, the Pauli-Z  expectation values⟨Z i⟩ on
+                                                                                    each qubit are averaged to produce a single scalar output
+C.  Parameterized quantum circuits                                                                         n−1X
+   We first summarize the quantum-computing concepts used by                         f(z;β,θ     q) =  1n      ⟨ψ(z;β,θ      q)|Z i|ψ(z;β,θ      q)⟩ ∈[−1,1].
+the hybrid architecture. A single qubit is a two-level quantum                                             i=0                                                  (10)
+system with state                                                                      The three design choices of this output head, angle encoding
+           |ψ⟩=c         0|0⟩+c         1|1⟩,  |c        0|2 +|c     1|2 = 1,         (4)with  trainable  scales,  a  hardware-efficient  variational  block,
+                                                                                    and a local averaged read-out, are each motivated below; their
+where c0,c1 ∈C     are  probability  amplitudes.  An n-qubit                        representational consequences are taken up quantitatively in the
+register is represented by a normalized statevector inC   2n,                       Discussion and Appendix A. The encoding rotation Ry(β izi)
+                        2n−1X                2n−1X                                  rotates qubit i by an angle linear in the latent component zi,
+               |ψ⟩=           ck|k⟩,                |c k|2 = 1.              (5)    so each coordinate enters the state through a bounded, smooth
+                        k=0                   k=0                                   map whose dependence on zi  is periodic in the encoded angle.
+                                                                                                                                                                   4
+
+
+Making the per-qubit scale βi  a trainable parameter lets the                       parameter-shift rule [43], [44], which evaluates the circuit at
+circuit adapt the frequencies through which the latent variables                    two shifted parameter values per gate and therefore requires 2p
+are  read  out,  a  role  analogous  to  learned  input  scalings  in               circuit evaluations per gradient for a circuit with p parameters.
+classical coordinate networks [34]; for angle-encoded circuits                      In  classical  statevector  simulation,  each  gate  application  is
+this produces a finite-frequency (Fourier) structure in z whose                     already  a  standard  differentiable  operation,  so  embedding
+accessible frequencies are set byβ[35].                                             the  circuit  in  JAX  offers  two  concrete  advantages.  First,
+   Each  variational  layer  is  a  hardware-efficient  ansatz  [36],               jax.grad  and  jax.jvp  backpropagate  through  the  full
+[37]: a universal single-qubit rotationRzRyRx on every qubit,                       hybrid pipeline (classical PINN layers, quantum circuit, and
+which  spans  SU(2)  and  so  imposes  no  a  priori  restriction                   loss function) without parameter-shift rules or cross-framework
+on  the  local  state  (3n    angles  per  layer),  interleaved  with               bridging. Second, the entire training loop can be compiled into
+a   linear   nearest-neighbour   CNOT   ladder.   We   adopt   this                 a single optimized XLA program via jax.jit, eliminating
+structure  because  it  is  built  only  from  one-  and  two-qubit                 Python-level dispatch and framework-bridging overhead. The
+gates  on  adjacent  wires,  the  native  low-overhead  operations                  trade-off is the exponential cost of representing the quantum
+on  most  physical  architectures  [20],  [37],  and  because  the                  state explicitly: the simulator holds all 2n  complex amplitudes,
+expressibility and entangling capacity of this gate family have                     givingO(2  n)  memory,  and  appliesO(Ln)            gates  that  each
+been characterised at modest depth [22], [33]. The averagedP                        sweep the full state, givingO(Ln2   n) computation. This limits
+observable f=    1n        i⟨Z i⟩ is correspondingly a sum of single-               the  approach  to  moderate  qubit  counts;  for  the  circuit  sizes
+qubit (weight-one) Pauli terms rather than a global, high-weight                    used here (n≤8      ,L≤6      ), this cost is negligible compared with
+observable;  as  a  network  head  each⟨Z i⟩∈[−1,1]            yields  a            the classical network and loss evaluation. We verify numerical
+single scalar bounded in [−1,1]        that the subsequent affine layer             correctness by comparing parameter gradients ∂f/∂θ  q  against
+rescales to physical units. The compactness of this 3nL+n          -                PennyLane’s  default.qubit  backend  [41]  across  eight
+angle parameterization comes with a known trainability caveat:                      circuit configurations (2–8 qubits, 1–6 layers); the maximum
+deep  or  globally  measured  hardware-efficient  circuits  can                     absolute deviation is below 2×10  −7   , consistent with float32
+exhibit barren plateaus (vanishingly small gradients) [38], and                     machine precision (Fig. 2).
+the severity of this effect depends on the locality of the cost [39].
+The  small  width  (n= 4  ),  shallow  depth  (L= 2   ),  and  local
+read-out used here are the regime in which such gradients are                       E.  Hybrid quantum-classical architecture
+least suppressed, and the differentiable statevector simulation of                     The hybrid architecture (Figure 3) couples two neural net-
+backpropagates through the circuit directly, without parameter-                     works with physics-informed constraints: a wavefield network
+shift estimators.                                                                   ϕ(x,z,t)     ,  decomposed  across  subdomains,  and  a  velocity
+   These arguments concern inductive bias, parameter efficiency,                    network α(x,z)      ,  which  is  a  single  global  network.  In  the
+and trainability, not any computational speedup. The circuit is                     classical  baseline,  both  networks  are  fully-connected  tanh
+evaluated by exact JAX statevector simulation and, because its                      networks. In the quantum hybrid, both networks are classical-
+output is a finite-frequency function of z, the realized function                   to-quantum pipelines.
+class is in principle classically representable; we make no claim                      Defining the latent vector
+of  quantum  advantage.  We  further  note  that  capacity  is  not
+concentrated in one wide entangled register: the architecture                                                   z(x) =N(x;θ        c),                            (11)
+instantiates 76 independent four-qubit PQCs, one per wavefield
+subdomain (5×3×5          ) plus one for the global velocity network,               each classical-to-quantum pipeline has the form
+each carrying its own angles (β,θ   q), so the per-circuit width                                     g(x) =w             outQ(z(x);β,θ        q) +b    out,               (12)
+stays fixed at four qubits as the subdomain decomposition is
+refined.                                                                            whereN(x;θ    c) is a classical fully-connected tanh sub-network
+D.  JAX-based statevector simulator                                                 with  parameters θc,Q(·;β,θ     q)  is  the  PQC  with  encoding
+   We implement the PQC as a lightweight statevector simulator                      scales β  and  variational  circuit  parameters θq  (returning  a
+in JAX [40] rather than relying on an external framework such                       scalar in [−1,1]       ), and (w  out,bout) are learnable output weights.
+as  PennyLane  [41]  or  Qiskit  [42].  The  simulator  represents                  For the anomaly benchmark experiments we use n= 4    qubits
+the  quantum  state  as  a  2n-dimensional  complex  vector  and                    and L= 2    variational layers in both networks. The velocity
+applies  gate  operations  via  tensor  contractions:  single-qubit                 network output is further mapped to physical velocity units via
+rotation  gates  (Rx, Ry, Rz)  are  constructed  as 2×2       unitary                          α(x,z) =α             bg +Atanh   g(x,z)  ·m(x,z),       (13)
+matrices and applied with jnp.tensordot on the reshaped
+state  tensor,  and  CNOT  gates  are  realized  through  index                     with  background  velocity αbg  =  3.0    km/s,  amplitude A=
+permutation  and  conditional  flipping  on  the  control-target                    2.0    km/s,  and  a  smooth  spatial  mask m(x,z)∈[0,1]                 (the
+subspace. Expectation values are computed analytically from                         product  of  four  logistic  cutoffs)  that  confines  the  velocity
+the statevector amplitudes, without stochastic sampling, as in                      perturbation  to  the  interior  of  the  physical  domain.  This
+PennyLane’sdefault.qubitbackend.                                                    construction  hard-codes  physical  bounds  (|α−α          bg| ≤A   )
+   On near-term quantum hardware, gradients of PQC outputs                          and zero perturbation at the domain edges, acting as a mild
+with respect to gate parameters are typically computed via the                      regularization of the inverse problem.
+                                                                                                                                                                                            5
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+              Fig. 1.   Multilayer PQCQ. Each input feature zi  is angle-encoded via an Ry(β  izi) rotation (blue encoding layer), where βi  is a trainable scaling parameter.
+              Variational layers of single-qubit rotations Rx, Ry, Rz  followed by a linear CNOT ladder are repeated L times (orange block). Each qubit is measured in the
+              Pauli-Zbasis (green meters), and the outputs are averaged to yield a scalar in[−1,1].
+
+
+                                                                                                        scalings)  are  optimized  jointly  by  Adam  gradient  descent
+                                                                                                        through the full differentiable pipeline.
+
+                                                                                                        F.  Training setup
+                                                                                                           The  training  configuration  described  in  this  subsection  is
+                                                                                                        specific to the anomaly benchmark. All training uses the Adam
+                                                                                                        optimizer  at  learning  rate  10−4     (baseline;  see  Table  I  for
+                                                                                                        variants). Each training step uses a collocation batch of shape
+                                                                                                       (n x,nz,nt) = (40,40,25)             across the subdomains (40,000      PDE
+                                                                                                        collocation  points  in  total),  together  with  40×40  =  1,600
+                                                                                                        points per displacement snapshot for the two initial-condition
+                                                                                                        constraints,  approximately  1,000     receiver  observations  (20
+                                                                                                        receivers  subsampled  every  100  simulation  timesteps),  and
+                                                                                                        5,000    randomly sampled boundary-condition points on the top
+                                                                                                        surface.  The  composite  loss  uses  fixed  weights λPDE  = 0.1   ,
+                                                                                                        λIC = 1.0     (applied  equally  to  the  two  snapshot  constraints),
+                                                                                                        λdata = 1.0     (receiver data), and λBC = 0.1   ; the per-component
+                                                                                                        loss  decomposition  for  the  classical  baseline  over  training
+                                                                                                        is  shown  in  Fig.  4.  The  classical  baseline  is  trained  for
+                                                                                                        500,000         iterations; the quantum hybrid is trained for 65,000
+                                                                                                        iterations, at which point it has already surpassed the classical
+              Fig.  2.    Comparison  of  parameter  gradients ∂f/∂θ    q   computed  by  our           baseline’s 500,000       -step L1 velocity error. Recovering higher-
+              JAX statevector implementation and PennyLane’s default.qubit backend                      frequency velocity structure (as in the checkerboard benchmark
+              across eight circuit configurations (2–8 qubits, 1–6 layers). All values fall on
+              the  identity  line y=x       with  maximum  absolute  deviation ∆<2×10           −7   ,  of  Sec.  III-B,  which  is  driven  at  a  higher  source  frequency)
+              confirming numerical equivalence of the two implementations.                              generally requires a higher collocation-point density to sample
+                                                                                                        the shorter wavelengths, and may additionally call for a finer
+                 The full training objective is                                                         subdomain decomposition and larger subdomain networks.
+                                                                                                           Training uses JAX’s just-in-time compilation and vectorized
+                             Ltotal =λ    dataLdata(ϕ) +λ          PDELPDE(ϕ,α)                         batching  over  subdomains  to  compile  the  update  step  into
+                                         +λ    BCLBC(ϕ) +λ          ICLIC(ϕ),                      (14) a single XLA program. The complete update step (classical-
+                                                                                                        network forward/backward passes, PQC statevector evolution,
+              where Ldata  is  the  data  misfit  between  the  predicted  and                          Jacobian  computation  by  automatic  differentiation,  and  the
+              observed  displacement  fields  at  the  receiver  locations,LPDE                         composite  loss)  executes  as  a  single  GPU  kernel.  For  the
+              enforces the source-free form of the acoustic wave equation (1)                           quantum  hybrid,  the  statevector  footprint  is  negligible:  the
+              via  automatic differentiation,  andLIC,L  BC  are  the snapshot-                        4-qubit  PQC  requires  only  24  =  16  complex  amplitudes
+|q 1⟩         Ry(β  1z1)based  initial-condition  and  free-surface  boundary-conditionRx(θ  (1)Ry(θ  (2)Rz(θ  (3)per  forward  pass,  so  memory  cost  is  dominated  by  the
+              constraints.  All  parameters  (classical-network  weights θc,l,1  )l,1  )l,1  )          classical wavefield subdomain networks. Spatial coordinates
+              embedding scalesβ, variational circuit anglesθq, and output                              were  nondimensionalized  by  a  reference  length ℓ0  =  3 km,
+|q 2⟩         Ry(β  2z2)          Rx(θ  (1)l,2  )   Ry(θ  (2)l,2  )    Rz(θ  (3)l,2  )
+
+
+|q 3⟩         Ry(β  3z3)          Rx(θ  (1)l,3  )   Ry(θ  (2)l,3  )    Rz(θ  (3)l,3  )
+
+      ...           ...                ...                ...               ...          ...     ...    ...        ...        ...
+
+
+|qn⟩         Ry(β nzn)            Rx(θ  (1)l,n)     Ry(θ  (2)l,n)      Rz(θ  (3)l,n)
+
+              Encoding                                           RepeatLtimes
+                                                                                                                                                                             6
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      Fig. 3.   Schematic of the finite-basis classical-quantum hybrid architecture, combining classical neural networks and quantum circuits with physics-informed
+      constraints. Blue boxes denote classical networksN , orange boxes quantum circuitsQ, green circles the predicted fields ϕ and α, and purple nodes the
+      physics- and data-based residuals contributing toLtotal. The inset depicts the observed (solid purple) versus predicted (dashed orange) seismograms at the
+      receivers, whose misfit defines the data residualR            data.
+
+
+      applied  identically  to x  and z,  in  all  training  computations;                  the combined classical-to-quantum substitution rather than the
+      this  length  is  chosen  equal  to  the  background  wave  speed                     quantum circuit in isolation, and a parameter-matched classical
+      (in  km/s)  so  that  the  scaled  PDE  coefficient α2/ℓ20  isO(1)   ,                control  with  the  same  backbone  and  a  plain  output  head  is
+      balancing  the  spatial  and  temporal  derivative  terms  of  the                    not  included  here.  Schematic  representations  of  the  hybrid
+      residual. The reference length is a normalization constant rather                     framework  (Figure  3)  and  the  PQC  topology  (Figure  1)  are
+      than  the  domain  size:  the  physical  inversion  domain  is  still                 provided  alongside  a  summary  of  the  network  architectures
+      1.15×0.45km.                                                                          in  Table  I.  Methodological  details,  including  the  underlying
+                                                                                            acoustic wave equations and loss derivations, are detailed in
+      G.  Network architectures and experimental setup                                      the preceding subsections.
+
+         To establish a rigorous comparison, we evaluate two distinct                                                       III.  RESULTS
+      configurations applied to the identical FWI problem: a purely                            We evaluate the proposed hybrid architecture on two wave-
+      classical FBPINN baseline and our proposed hybrid quantum-                            propagation benchmarks. The primary benchmark reconstructs
+      classical   architecture.   In   the   classical   baseline,   both   theFinite-basis networka  localized  low-velocity  anomaly  from  recordings  acquired
+      decomposed wavefield network and the global velocity network                          by a one-sided receiver array, providing a direct quantitative
+x     are standard fully-connected networks with tanh activations. InData residual:R            data
+      the hybrid model, both are replaced by classical-to-quantum                           comparison between the quantum hybrid and a purely classical
+z                          Qϕ(N ϕ)                   ϕ                                      FBPINN baseline under matched FBPINN, loss, and optimizer
+t     pipelines that terminate in four-qubit parameterized quantum                          settings.  A  second  benchmark  tests  a  checkerboard  velocity
+      circuits (PQCs).                                                                      pattern using the exact same network configuration, with only
+Nϕ(x,z,t)Beyond  the  network  heads,  both  configurations  share  the                     the  collocation  point  density  increased,  to  assess  whether
+      same  FBPINN  subdomain  decomposition  strategy  (5×3×5                              the proposed inversion framework can recover more spatially
+      grid  with  a  0.35  overlap  for  the  wavefield),  the  same  usePDE residual:R            PDE(ϕ,α) =∂   ttϕ−α     2∇2ϕstructured velocity variations without additional architectural
+      of  a  single  global  velocity  network,  and  the  same  physics-BC residual:R            BC(ϕ,α)tuning.
+      informed  composite  loss  function  incorporating  the  PDEIC residual:R            IC(ϕ,α)                                  Ltotal
+x     residual, wavefield snapshot initial conditions (ICs), data misfit,
+z                          Qα(N α)                   α          Parameter constraints / bounds onα
+      and free-surface boundary constraints. Notably, the quantum                           A.  Anomaly benchmark
+      hybrid model achieves its expressivity using significantly fewer                         Our primary evaluation uses the velocity model established
+  Nα(x,z)trainable  parameters.  We  note  that  the  two  configurations                   by  Rasht-Beheshtet  al.[15],  which  defines  a  2D  acoustic
+      are  not  matched  parameter-for-parameter:  the  wavefield  and                      domain (1.15    km×0.45       km) featuring a localized low-velocity
+    Global velocity networkvelocity  pre-networks  differ  in  width  and  depth  in  additionanomaly  (approximately  2.5    km/s  embedded  within  an  ap-
+      to  the  quantum  head  (Table  I),  so  the  comparison  reflectsNoLtotal<ε0 ?       proximately  3.0    km/s  background;  Figure  5a).  Ground-truth
+
+
+                                                                    Yes                Done✓
+                                                                                                                                                                     7
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Fig. 4.   Training loss decomposition for the classical FBPINN baseline on the anomaly benchmark: total loss, PDE residual, displacement-snapshot initial
+conditions (two components), seismogram misfit, and free-surface boundary condition, plotted versus training iteration. Inset: early-iteration behaviour showing
+rapid initial loss reduction.
+
+
+receiver  data  are  generated  by  a  spectral-element  forward                     spanning the domain,
+simulation [45] driven by a Gaussian source at (0.35,0.19)              km                                       NX
+with dominant frequency f0 = 20 Hz. The inversion process                                           L1 =  1          α(x  i,zi)−α       true(x i,zi),           (15)
+is constrained by 500 ms of wavefield displacements recorded                                                N   i=1
+by  a  vertical  array  of  20  receivers  positioned  along  the
+right  boundary  (x=  1.15      km),  supplemented  by  two  early                   reported in km/s. Figure 5d tracks the L1 velocity error against
+displacement snapshots (t0 = 0.100    s and t1 = 0.115    s). This                   training iterations, revealing structurally different convergence
+transmission-dominated configuration, featuring a single source                      trajectories. The quantum hybrid model undergoes a rapid initial
+and a one-sided receiver array, represents a severely ill-posed                      descent, achieving an L1 error of 2.4×10   −2    in merely 65,000
+inverse problem. The limited angular illumination inherently                         iterations. By contrast, the classical baseline exhibits prolonged
+restricts the recovery of high-wavenumber spatial components,                        plateauing  behavior,  requiring  500,000         iterations  to  reach  a
+rigorously testing the regularizing capacity of the chosen neural                    comparable, albeit slightly higher, final error of 2.9×10   −2   . This
+architecture.                                                                        corresponds to an approximately 8×   reduction in the number of
+   Starting from a purely homogeneous initial guess (Figure 5b),                     optimization iterations required to reach comparable or lower
+both the classical and hybrid architectures successfully localize                    L1  velocity  error,  achieved  despite  the  hybrid  model  using
+the  low-velocity  anomaly  without  suffering  from  the  cycle-                    significantly fewer trainable parameters (101,812        vs. 151,836       ).
+skipping  artifacts  that  frequently  plague  classical  adjoint-                   We  emphasize  that  this  comparison  concerns  optimization
+state  FWI  under  poor  starting  models,  which  conventional                      iterations rather than wall-clock runtime, since the per-iteration
+FWI typically mitigates through multiscale or envelope-based                         cost differs between the classical and hybrid architectures. We
+strategies  [46].  As  illustrated  by  the  inverted  velocity  field               also  note  that  the  traces  in  Figure  5d  begin  at  different  L1
+of  the  quantum  hybrid  model  (Figure  5c),  the  recovered                       errors: each model’s velocity (α) network initializes to a slightly
+anomaly  closely  tracks  the  true  model’s  spatial  distribution                  different  field  about  the  homogeneous  background,  so  the
+and  peak  amplitude.  The  minor  lateral  smearing  observed                       starting error reflects the random initialization of the differing
+in the reconstruction is consistent with the theoretical limits                      α-network architectures rather than any quantum effect (one
+of  resolving  power  imposed  by  the  single-source  geometry,                     classical velocity-network variant initializes to essentially the
+confirming  that  the  network  has  extracted  the  maximum                         same  L1  as  the  quantum  hybrid).  The  comparison  should
+available information from the receiver data.                                        accordingly be read as the iteration count needed to reach a
+                                                                                     given error, not as progress from a shared starting point.
+   The clearest distinction between the classical and quantum                           To  test  whether  this  performance  gap  could  be  explained
+approaches emerges in their optimization dynamics. We quan-                          by  sub-optimal  classical  tuning,  we  conducted  a  systematic
+tify  inversion  accuracy  by  the  L1  velocity  error,  the  mean                  classical hyperparameter sweep comprising 15 distinct FBPINN
+absolute difference between the inverted velocity field α and                        variants. These baselines spanned a wide spectrum of configura-
+the  true  model αtrue  evaluated  over  an N=  40×40            grid                tions, including severely over-parameterized velocity networks
+                                                                                                                                                                           8
+
+
+                                                                                        the quantum hybrid within the tested training window (500,000
+                                                                                        iterations).
+
+                                                                                        B.  Checkerboard benchmark
+                                                                                           To  further  probe  the  resolution  limits  of  the  inversion
+                                                                                        pipeline, we test a checkerboard velocity model: a 3×3      grid of
+                                                                                        alternating±0.4       km/s perturbations on a 3.0    km/s background.
+                                                                                        The acquisition geometry is identical to the anomaly benchmark
+                                                                                        (same domain, source position, and receiver layout; Figure 5a),
+                                                                                        as is the homogeneous initial model (Figure 5b). The checker-
+                                                                                        board  forward  simulation,  however,  uses  a  higher  dominant
+                                                                                        source frequency,f 0 = 60Hz, compared withf            0 = 20Hz for
+                                                                                        the anomaly benchmark, so that the shorter wavelengths can
+                                                                                        resolve  the  finer  spatial  structure of  the 3×3       checkerboard.
+                                                                                        The  checkerboard  experiment  thus  tests  recovery  of  higher
+                                                                                        spatial-frequency  velocity  structure  under  the  same  limited
+                                                                                        acquisition geometry.
+                                                                                           Both  the  classical  and  quantum  hybrid  FBPINNs  are  run
+                                                                                        with the exact same network architectures and hyperparameters
+                                                                                        established for the anomaly benchmark (Table I). The training
+                                                                                        setup  differs  only  in  the  use  of  a  higher  collocation  point
+                                                                                        density,  required  to  adequately  constrain  the  smaller-scale
+                                                                                        spatial  structures  of  the  checkerboard  pattern.  Both  models
+                                                                                        successfully resolve the checkerboard (Figure 6b). As expected
+                                                                                        from the single-source, one-sided receiver geometry, structural
+                                                                                        resolution degrades for blocks situated further from the receiver
+                                                                                        array. The successful inversion under this otherwise unchanged
+                                                                                        configuration confirms that the hybrid architecture generalizes
+                                                                                        beyond the anomaly benchmark without additional tuning.
+
+                                                                                                                      IV.  DISCUSSION
+                                                                                           The  quantum  hybrid’s  central  result,  a  lower  final  L1
+                                                                                        velocity  error  in  approximately 8×    fewer  training  iterations
+                                                                                        with  approximately  33%  fewer  trainable  parameters,  raises
+                                                                                        the  question  of  what  in  the  architecture  produces  it.  We
+                                                                                        identify three contributing properties of the classical-to-PQC
+                                                                                        pipeline [36], while noting that our experiments do not isolate
+                                                                                        their individual effects.
+                                                                                           First,  the  PQC  is  a  parameter-efficient  nonlinear  map.  Its
+                                                                                        output  is  governed  by  only  3nL+n            trainable  parameters,
+Fig.  5.   Anomaly  benchmark  inversion  and  convergence.  (a)  True  velocity        yet  each  enters  through  the  joint  action  of  non-commuting
+model  used  for  the  spectral-element  forward  simulation,  with  source  (red       rotations  rather  than  as  an  independent  weight,  so  the  same
+star)  and  receiver  array  (green  triangles).  (b)  Initial  homogeneous  velocity   angles perform both feature mixing and output generation. This
+model.  (c)  Inverted  velocity  model  from  the  quantum  hybrid  FBPINN  at          shared  parameterization  is  consistent  with  the  hybrid  model
+65,000       training iterations. (d) L1 velocity error versus training iteration for   matching or exceeding the classical baseline while using fewer
+the classical FBPINN baseline (blue), the quantum hybrid (red markers labeled
+65k), and 14 of the 15 classical hyperparameter variants (thin colored lines).          parameters. We do not invoke the dimension of the underlying
+Traces begin at different initial L1 values because each velocity (α) network           Hilbert space as a source of advantage: the measured output is
+initializes  to  a  different  (nominally  homogeneous)  field;  this  initial  spread  a single bounded scalar, and for the circuits used here (n= 4  )
+reflects initialization rather than training.
+                                                                                        it  realizes  only  the  low-order  trigonometric  family  derived
+                                                                                        below.
+(up to 60×3         hidden layers), alternative subdomain partitions                       Second, angle encoding endows the PQC output with a finite-
+(3×2×3            and 8×4×8          ),  varying  learning  rates,  and  adjusted       frequency Fourier structure in the variables presented to the
+physical loss weightings (detailed comprehensively in Table I).                         encoder.  Because  the  PQC  acts  on  the  learned  latent  vector
+As  depicted  by  the  thin  colored  traces  in  Figure  5d,  simply                   z(x) =N(x)                  rather than on the spatial coordinates directly,
+increasing classical capacity or tuning hyperparameters failed to                       the relevant specialization of the result of Schuldet al.[35] is
+bridge the gap; none of the 15 classical configurations matched                                        f(x;β,θ     q) = X        cω(θ q)e iω·(β⊙z(x))      ,          (16)
+both the rapid early descent and the final L1 error achieved by                                                           ω∈Ω
+                                                                                                                                                                                                                                         9
+
+
+
+                                                                                                                       TABLE I
+                    NETWORK CONFIGURATIONS AND FULL HYPERPARAMETER SWEEP FOR THE ANOMALY BENCHMARK. THECLASSICALBASELINE(FIRST ROW)AND
+                      QUANTUMHYBRID(LAST ROW)ARE THE TWO COMPARED  CONFIGURATIONS;THE INTERVENING ROWS ARE THE15CLASSICAL HYPERPARAMETER
+                 VARIANTS. Q(n    ×n   Lq     ) DENOTES A PARAMETERIZED QUANTUM CIRCUIT WITHnq  QUBITS ANDnL  LAYERS. VALUES MARKED“–”ARE IDENTICAL TO THE
+                                                          CLASSICALBASELINE. SUBDOMAINS COLUMN SHOWSϕ(·)FOR WAVEFIELD DECOMPOSITION.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                 Fig. 6.  Checkerboard benchmark inversion. (a) True velocity model: a 3×3       checkerboard of alternating±0.4       km/s perturbations on a 3.0    km/s background, with
+                 source (red star) and receiver array (green triangles). (b) Inverted velocity model from the quantum hybrid FBPINN, using the identical network configuration
+                 from the anomaly benchmark with only the collocation point density increased.
+
+
+                 where the coefficientscω  are set by the trainable circuit angles                                              to a looser degree the nested sinusoidal activations of SIREN
+                 and the accessible index set Ω is fixed by the encoding. For                                                   networks [48], build the representation from a trigonometric
+Model                         ϕnetworkthe Ry(β izi) encoding used here, each coordinate contributesαnetwork                     basis and are an established remedy for the spectral bias of plain
+                 only the indices0,±1, so that for a single encoded variable(x,z,t)→ϕ(x,z)→α                       LR                  Subs             Overlapλ             PDE     λIC     λdata     λBC         #  Parstanh networks. Relative to a fixed Fourier-feature layer with
+classicalN:32                         ×2 →16    ×2  N:20    ×5              10−4     ϕ(5×3×5)      0.35            0.1         1.0         1.0         0.1        151,836prescribed frequencies [47], the PQC differs in two respects: the
+ϕ-network  size  variants              f(s) =A+Bcos(βs) +Csin(βs),             (17)                                             encoding scalesβ are trainable, so the physical frequency grid
+phi16x2N:16                    ×2                          –                                –                       –                       –                 –             –            –             –            25,836with  physical  frequencies  0,±β   i  that  the  trainable  scalesadapts rather than being fixed a priori (a property it shares with
+phi64x3N:64                    ×3                          –                                –                       –                       –                 –             –            –             –         649,836βi   adapt  during  optimization;  the  derivation  is  given  inSIREN, whose first-layer frequencies are likewise learned), and
+ϕsubdomain  decomposition  variantsAppendix A. This finite-frequency structure is not unique to                                 the entangling CNOT layers couple the per-coordinate features,
+sub3x2x3–                                     –                                –    ϕ(3×2×3)         –                 –             –            –             –            37,779quantum circuits: classical Fourier-feature mappings [47], andpopulating  cross-coordinate  terms  of Ω  that  an  axis-aligned
+sub8x4x8–                                     –                                –    ϕ(8×4×8)         –                 –             –            –             –         514,017
+α-network  size  variants
+alpha10x2–        N:10                           ×2                    –                       –                       –                 –             –            –             –         150,226
+alpha10x3–        N:10                           ×3                    –                       –                       –                 –             –            –             –         150,336
+alpha20x3–        N:20                           ×3                    –                       –                       –                 –             –            –             –         150,996
+alpha40x3–        N:40                           ×3                    –                       –                       –                 –             –            –             –         153,516
+alpha40x5–        N:40                           ×5                    –                       –                       –                 –             –            –             –         156,796
+alpha60x3–        N:60                           ×3                    –                       –                       –                 –             –            –             –         157,636
+Training  hyperparameter  variants
+lr5e4            –                                     –                   5×10                  −4                    –                       –                 –             –            –             –                     –
+lr5e5            –                                     –                   5×10                  −5                    –                       –                 –             –            –             –                     –
+overlap50–                                     –                                –                       –                    0.50              –             –            –             –                     –
+wpde01_wbc01–                                     –                                –                       –                       –              0.01          –            –          0.01                   –
+wpde1_wbc1–                                     –                                –                       –                       –               1.0           –            –           1.0                    –
+Quantum  hybrid
+quantumN:32                    ×2      N:20    ×3                    –                       –                       –                 –             –            –             –         101,812
+                                →Q:4    ×2     →Q:4    ×2
+                                                                                                                                                             10
+
+
+(additive) Fourier-feature layer does not produce on its own                     sions use a single source; production FWI pipelines incorporate
+(an isotropic random Fourier mapping with a dense frequency                      a  large  number  of  sources  with  different  illuminations,  and
+matrix mixes coordinates and would). Two caveats temper this                     PINN-based FWI in particular is known to be sensitive to loss-
+argument: the frequency bound applies to f  as a function of                     landscape pathologies under data sparsity [50], which learned
+the learned latent z and not of the spatial coordinates, and our                 generative priors have been proposed to regularize [51]. (iii)
+classical sweep contains only tanh architectures. A matched                      The  quantum  circuit  is  simulated  classically.  On  real  NISQ
+classical control with an explicit Fourier-feature or sinusoidal                 hardware, gradients would be computed via the parameter-shift
+embedding is therefore the most informative comparison still                     rule (two circuit evaluations per parameter), and device noise
+missing, and we flag it as a priority below.                                     could erode the iteration-level advantage observed here.
+   Third,  the  velocity  output  map  hard-codes  the  range  con-                 Looking forward, the small qubit counts used here (n= 4  ,
+straint|α−α          bg|≤A   . This bound is applied identically in both         L=  2   )  are  compatible  with  near-term  quantum  hardware,
+architectures, so it cannot by itself explain the gap; we note it                which  suggests  that  genuine  hardware  demonstrations  are
+only because, together with the bounded PQC output, it limits                    feasible  once  noise-mitigation  techniques  reach  sufficient
+the latent signal entering the final map and may reduce large                    maturity. Systematic studies at matched parameter counts across
+early-training  excursions.  Separately,  the  entangling  CNOT                  circuit depths and widths would clarify how the convergence
+layers provide a parameterization in which correlations among                    advantage  scales  with  quantum-circuit  capacity.  A  matched
+the latent variables are generated by the circuit dynamics rather                classical control with an explicit Fourier-feature or sinusoidal
+than by stacked affine-plus-nonlinearity layers. Whether this                    embedding,  added  to  the  hyperparameter  sweep,  would  in
+yields a more favorable optimization trajectory, rather than a                   particular isolate how much of the observed advantage reflects
+function class beyond the reach of a comparable MLP, is an                       the  finite-frequency  inductive  bias  rather  than  the  quantum
+empirical question we do not resolve here.                                       parameterization  itself.  Because  the  framework  targets  the
+   We stress that these properties bear mainly on representa-                    general  structure  of  physics-informed  wave  inversion  rather
+tional capacity and parameter efficiency; none of them, on its                   than any geophysics-specific feature, we expect it to transfer
+own, predicts a faster convergence rate, so the link between                     directly to the broader wave-based inverse problems, such as
+the  PQC  parameterization  and  the  observed  iteration-count                  medical ultrasound tomography, photoacoustic imaging, and
+reduction  remains  to  be  established.  The  consistency  of  the              non-destructive evaluation.
+improvement across the 15 classical hyperparameter variants
+(Figure  5d)  argues  against  the  result  being  solely  due  to  an                                       V.  CONCLUSION
+unlucky baseline, though the models also begin from different
+initial L1 errors set by their velocity-network initializations. We                 We  introduced  a  hybrid  quantum-classical  FBPINN  for
+emphasize, finally, that these gains are in optimization iterations              acoustic  FWI,  in  which  the  decomposed  wavefield  network
+on classically simulated circuits and do not constitute a quantum                and the global velocity network are represented by PQC-based
+computational advantage; the simulated PQC realizes a function                   classical-to-quantum pipelines within a domain-decomposed
+class that is, by construction, classically representable.                       physics-informed framework, implemented as an end-to-end
+   Our work complements recent hybrid quantum-PINN studies                       differentiable  JAX  program  that  avoids  parameter-shift-rule
+in  other  PDE-constrained  settings.  Leonget  al.[25]  bench-                  overhead and jointly optimizes the classical PINN parameters
+marked hybrid quantum PINNs for high-speed compressible                          and quantum circuit angles. On the anomaly benchmark, the
+flow, finding competitive accuracy at reduced parameter cost                     hybrid  model  reaches  a  comparable  or  lower  L1  velocity
+compared with classical PINNs. Bergeret al.[26] introduced                       error in approximately 8×   fewer training iterations than the
+trainable-embedding quantum PINNs for nonlinear PDEs in-                         primary  classical  FBPINN  baseline,  despite  using  approxi-
+cluding the Navier-Stokes equations, again observing efficiency                  mately 33% fewer trainable parameters, and it outperforms all
+gains at matched parameter count. The present work differs in                    15  classical  hyperparameter  variants  tested  within  the  same
+two ways. First, we target a coupled forward-inverse problem                     500,000       -iteration  window.  We  emphasize  that  these  gains
+(waveform  inversion)  rather  than  a  pure  forward  PDE;  the                 are  in  optimization  iteration  count  on  classically  simulated
+velocity field is learned jointly with the wavefield. Second, we                 circuits and do not constitute a claim of quantum computational
+integrate the PQC within a domain-decomposed FBPINN [19],                        advantage, and that the mechanism behind the iteration-count
+extending the PINN-based FWI formulation of Rasht-Behesht                        reduction remains to be established. Key limitations include
+et  al.[15]  to  handle  larger  and  higher-frequency  inversion                reliance on classical statevector simulation, a two-dimensional
+problems via overlapping subdomain networks.                                     acoustic setup, a single-source configuration, and a comparison
+   Several limitations should be noted: (i) The present exper-                   that  is  not  parameter-matched  and  spans  only  tanh  classical
+iments are two-dimensional acoustic and extending to three-                      architectures.  A  matched  classical  control  with  an  explicit
+dimensional elastic inversion, as pursued with classical physics-                Fourier-feature or sinusoidal embedding is the most informative
+guided  deep  networks  [49],  is  the  natural  next  step  but  is             experiment  still  needed.  It  would  isolate  how  much  of  the
+constrained by theO(2  n) memory cost of statevector simulation                  advantage reflects a finite-frequency inductive bias rather than
+as qubit counts grow. Scaling to larger circuits on real hardware                the  quantum  parameterization.  Extension  to  elastic,  three-
+further raises the concern of barren plateaus (vanishingly small                 dimensional, and multi-source inversion, and validation on near-
+gradients  in  high-depth  parameterized  circuits  [38]),  which                term quantum hardware, are the natural next steps. Because the
+would require careful initialization and ansatz choice. (ii) Inver-              framework  targets  the  general  structure  of  physics-informed
+                                                                                                                                                                                      11
+
+
+wave inversion rather than any geophysics-specific feature, we                                                                   REFERENCES
+expect  it  to  transfer  to  other  wave-based  inverse  problems,                             [1]  A.  Tarantola,  “Inversion  of  seismic  reflection  data  in  the  acoustic
+such as medical ultrasound tomography and non-destructive                                            approximation,”Geophysics,  vol.  49,  no.  8,  pp.  1259–1266,  08  1984.
+evaluation.                                                                                          [Online]. Available: https://doi.org/10.1190/1.1441754
+                                                                                                [2]  A. Fichtner, B. L. N. Kennett, H. Igel, and H.-P. Bunge, “Full seismic
+                    DATA ANDCODEAVAILABILITY                                                         waveform  tomography  for  upper-mantle  structure  in  the  australasian
+                                                                                                     region  using  adjoint  methods,” Geophysical  Journal  International,
+   The  data  and  code  that  support  the  findings  of  this  study                               vol.   179,   no.   3,   pp.   1703–1725,   12   2009.   [Online].   Available:
+are  available  in  the  project  repository  at  https://github.com/                                https://doi.org/10.1111/j.1365-246X.2009.04368.x
+                                                                                                [3]  E. Bozda˘g, J. Trampert, and J. Tromp, “Misfit functions for full waveform
+x-repos/quFWI.                                                                                       inversion  based  on  instantaneous  phase  and  envelope  measurements,”
+                                                                                                     Geophysical Journal International, vol. 185, no. 2, pp. 845–870, 05 2011.
+                                   APPENDIXA                                                         [Online]. Available: https://doi.org/10.1111/j.1365-246X.2011.04970.x
+    FOURIERSTRUCTURE OF THEANGLE-ENCODEDPQC                                                     [4]  J. Virieux and S. Operto, “An overview of full-waveform inversion in
+                                                                                                     exploration geophysics,”Geophysics, vol. 74, no. 6, pp. WCC1–WCC26,
+   This note derives the finite-frequency structure of the PQC                                       12 2009. [Online]. Available: https://doi.org/10.1190/1.3238367
+output used in the Discussion, specializing the general result                                  [5]  Z.  Zhan,  “Distributed  acoustic  sensing  turns  fiber-optic  cables  into
+                                                                                                     sensitive  seismic  antennas,”Seismological  Research  Letters,  vol.  91,
+of  Schuldet  al.[35]  to  the  angle  encoding  adopted  in  this                                   no. 1, pp. 1–15, 2020.
+work.                                                                                           [6]  J.  Wiskin,  D.  T.  Borup,  S.  A.  Johnson,  and  M.  Berggren,  “Non-
+   Consider  first  a  single  encoded  scalar s  with  Hermitian                                    linear  inverse  scattering:  High  resolution  quantitative  breast  tissue
+                                                                                                     tomography,” The   Journal   of   the   Acoustical   Society   of   America,
+generatorG and encoding unitaryUenc(s) =e  −iβsG   , acting on                                       vol.   131,   no.   5,   pp.   3802–3813,   05   2012.   [Online].   Available:
+the reference state|ψ 0⟩=|0⟩  ⊗n   . Because the variational block                                   https://doi.org/10.1121/1.3699240
+V(θ  q) is applied after the encoding, the averaged measurement                                 [7]  G.  Y.  Sandhu,  C.  Li,  O.  Roy,  S.  Schmidt,  and  N.  Duric,  “Frequency
+                           Pn−1                                                                      domain ultrasound waveform tomography: breast imaging using a ring
+observableO=     1n           i=0 Zi can be folded into the Heisenberg-                              transducer,”Physics in Medicine & Biology, vol. 60, no. 14, p. 5381, jun
+picture operator M(θ   q) =V(θ   q)†OV(θ  q), so the measured                                        2015. [Online]. Available: https://doi.org/10.1088/0031-9155/60/14/5381
+output is                                                                                       [8]  L. V. Wang and J. Yao, “A practical guide to photoacoustic tomography
+                                                                                                     in the life sciences,”Nature Methods, vol. 13, no. 8, pp. 627–638, 08
+              f(s) =⟨ψ           0|U enc(s) †M(θ   q)U  enc(s)|ψ       0⟩.         (18)              2016. [Online]. Available: https://doi.org/10.1038/nmeth.3925
+                                                                                                [9]  J. Rao, M. Ratassepp, and Z. Fan, “Guided wave tomography based on full
+Writing  the  spectral  decomposition G=  P                                                          waveform inversion,”IEEE Transactions on Ultrasonics, Ferroelectrics,
+                                                                      aλaΠa  gives                   and Frequency Control, vol. 63, no. 5, pp. 737–745, 2016.
+Uenc(s) = Pae−iβsλ   aΠa, and therefore                                                       [10]  Y. Yang, A. F. Gao, K. Azizzadenesheli, R. W. Clayton, and Z. E. Ross,
+                                                                                                    “Rapid seismic waveform modeling and inversion with neural operators,”
+        f(s) =  X        eiβs(λ   a−λ   b)⟨ψ  0|Π aM(θ   q)Πb|ψ 0⟩,        (19)                      IEEE Transactions on Geoscience and Remote Sensing, vol. 61, pp. 1–12,
+                    a,b                                                                              2023.
+                                                                                              [11]  M. Raissi, P. Perdikaris, and G. Karniadakis, “Physics-informed neural
+so the accessible frequency indices are the pairwise eigenvalue                                      networks: A deep learning framework for solving forward and inverse
+differences, Ω⊆{λ  a−λ b}.  For  the Ry(βs)     encoding  used                                       problems involving nonlinear partial differential equations,”Journal of
+here, G=Y/2          has  eigenvalues± 1                                                             Computational Physics, vol. 378, pp. 686–707, 2019. [Online]. Available:
+                                                     2,  so  the  differences  are                   https://www.sciencedirect.com/science/article/pii/S0021999118307125
+0,±1and                                                                                       [12]  C. Song, T. Alkhalifah, and U. B. Waheed, “Solving the frequency-domain
+                                                                                                     acoustic  vti  wave  equation  using  physics-informed  neural  networks,”
+                  f(s) =A+Bcos(βs) +Csin(βs).             (20)                                       Geophysical  Journal  International,  vol.  225,  no.  2,  pp.  846–859,  01
+                                                                                                     2021. [Online]. Available: https://doi.org/10.1093/gji/ggab010
+The  trainable  angles  change A, B,  and C  but  cannot  create                              [13]  U. bin Waheed, T. Alkhalifah, E. Haghighat, C. Song, and J. Virieux,
+frequencies  outside  this  set.  This  single-frequency  (degree-                                  “Pinntomo: Seismic tomography using physics-informed neural networks,”
+one)  spectrum  is  a  consequence  of  encoding  each  variable                                     2021. [Online]. Available: https://arxiv.org/abs/2104.01588
+                                                                                              [14]  X.  Liu  and  M.  Almekkawy,  “Full  wave  inversion  for  ultrasound
+exactly once: the L variational layers act through the trainable                                     tomography using physics based deep neural network,” in2023 IEEE
+parametersθq  and do not re-encode the data, so they enrich                                          20th International Symposium on Biomedical Imaging (ISBI), 2023, pp.
+the coefficients but not the frequency set. Repeated (“data re-                                      1–4.
+                                                                                              [15]  M.   Rasht-Behesht,   C.   Huber,   K.   Shukla,   and   G.   E.   Karniadakis,
+uploading”) encodings would extend the accessible spectrum                                          “Physics-informed   neural   networks   (pinns)   for   wave   propagation
+to higher harmonics, but are not used here.                                                          and   full   waveform   inversions,” Journal   of   Geophysical   Research:
+   For the full register, each coordinatezi is encoded on its own                                    Solid   Earth,   vol.   127,   no.   5,   2022.   [Online].   Available:   https:
+                                                                                                     //agupubs.onlinelibrary.wiley.com/doi/abs/10.1029/2021JB023120
+qubit  through Ry(β izi),  so  the  encoding  generators{Y i/2}                               [16]  Y. Zhang, X. Zhu, and J. Gao, “Seismic inversion based on acoustic wave
+act  on  disjoint  tensor  factors  and  mutually  commute.  The                                     equations using physics-informed neural network,”IEEE Transactions
+encoding  unitary  then  factorizes  as Q                                                            on Geoscience and Remote Sensing, vol. 61, pp. 1–11, 2023.
+                                                          ie−iβ   iziYi/2  ,  the  per-       [17]  S. Li, B. Liu, Y. Ren, Y. Chen, S. Yang, Y. Wang, and P. Jiang, “Deep-
+coordinate spectra combine additively, and the accessible index                                      learning inversion of seismic data,”IEEE Transactions on Geoscience
+set becomes Ω⊆{−1,0,1}        n, with physical frequenciesβ⊙ω      .                                 and Remote Sensing, vol. 58, no. 3, pp. 2135–2149, 2020.
+This is the multivariate Fourier form quoted in the Discussion.                               [18]  Z. Zhang and Y. Lin, “Data-driven seismic waveform inversion: A study
+                                                                                                     on the robustness and generalization,”IEEE Transactions on Geoscience
+The entangling CNOT layers and variational angles determine                                          and Remote Sensing, vol. 58, no. 10, pp. 6900–6913, 2020.
+which  coefficients cω  are  nonzero,  in  particular  populating                             [19]  B.   Moseley,   A.   Markham,   and   T.   Nissen-Meyer,   “Finite   basis
+cross-coordinate indices, but they do not enlargeΩ.                                                  physics-informed   neural   networks   (FBPINNs):   a   scalable   domain
+                                                                                                     decomposition approach for solving differential equations,”Advances in
+                                                                                                     Computational  Mathematics,  vol.  49,  no.  4,  p.  62,  07  2023.  [Online].
+                             ACKNOWLEDGMENT                                                          Available: https://doi.org/10.1007/s10444-023-10065-9
+   We  thank  the  Reservoir  Characterization  Project  (RCP),                               [20]  J.   Preskill,   “Quantum   Computing   in   the   NISQ   era   and   beyond,”
+                                                                                                     Quantum,   vol.   2,   p.   79,   Aug.   2018.   [Online].   Available:   https:
+Colorado School of Mines, for financial support.                                                     //doi.org/10.22331/q-2018-08-06-79
+                                                                                                                                                                                                     12
+
+
+
+[21]  M. Schuld, A. Bocharov, K. M. Svore, and N. Wiebe, “Circuit-centric                                    and  Q.  Zhang,  “JAX:  composable  transformations  of  Python+NumPy
+       quantum   classifiers,” Phys.   Rev.   A,   vol.   101,   p.   032308,   Mar                          programs,” 2018. [Online]. Available: http://github.com/jax-ml/jax
+       2020.  [Online].  Available:  https://link.aps.org/doi/10.1103/PhysRevA.                       [41]  V.  Bergholm,  J.  Izaac,  M.  Schuld,  C.  Gogolin,  S.  Ahmed,  V.  Ajith,
+      101.032308                                                                                             M.   S.   Alam,   G.   Alonso-Linaje,   B.   AkashNarayanan,   A.   Asadi,
+[22]  M.  Benedetti,  E.  Lloyd,  S.  Sack,  and  M.  Fiorentini,  “Parameterized                            J.  M.  Arrazola,  U.  Azad,  S.  Banning,  C.  Blank,  T.  R.  Bromley,
+       quantum circuits as machine learning models,”Quantum Science and                                      B.  A.  Cordier,  J.  Ceroni,  A.  Delgado,  O.  D.  Matteo,  A.  Dusko,
+      Technology,  vol.  4,  no.  4,  p.  043001,  nov  2019.  [Online].  Available:                         T.  Garg,  D.  Guala,  A.  Hayes,  R.  Hill,  A.  Ijaz,  T.  Isacsson,  D.  Ittah,
+       https://doi.org/10.1088/2058-9565/ab4eb5                                                              S.  Jahangiri,  P.  Jain,  E.  Jiang,  A.  Khandelwal,  K.  Kottmann,  R.  A.
+[23]  M. Ostaszewski, E. Grant, and M. Benedetti, “Structure optimization for                                Lang,  C.  Lee,  T.  Loke,  A.  Lowe,  K.  McKiernan,  J.  J.  Meyer,  J.  A.
+       parameterized  quantum  circuits,”Quantum,  vol.  5,  p.  391,  Jan.  2021.                           Monta˜nez-Barrera,  R.  Moyard,  Z.  Niu,  L.  J.  O’Riordan,  S.  Oud,
+       [Online]. Available: https://doi.org/10.22331/q-2021-01-28-391                                        A. Panigrahi, C.-Y. Park, D. Polatajko, N. Quesada, C. Roberts, N. S´a,
+[24]  A.  E.  Paine,  V.  E.  Elfving,  and  O.  Kyriienko,  “Quantum  quantile                              I.  Schoch,  B.  Shi,  S.  Shu,  S.  Sim,  A.  Singh,  I.  Strandberg,  J.  Soni,
+       mechanics:  Solving  stochastic  differential  equations  for  generating                             A. Sz´ava, S. Thabet, R. A. Vargas-Hern´andez, T. Vincent, N. Vitucci,
+       time-series,” Advanced   Quantum   Technologies,   vol.   6,   no.   10,   p.                         M.   Weber,   D.   Wierichs,   R.   Wiersema,   M.   Willmann,   V.   Wong,
+       2300065, 2023. [Online]. Available: https://advanced.onlinelibrary.wiley.                             S.  Zhang,  and  N.  Killoran,  “Pennylane:  Automatic  differentiation  of
+       com/doi/abs/10.1002/qute.202300065                                                                    hybrid  quantum-classical  computations,”  2022.  [Online].  Available:
+[25]  F.    Y.    Leong,    W.-B.    Ewe,    S.    B.    Q.    Tran,    Z.    Zhang,    and                  https://arxiv.org/abs/1811.04968
+       J.   Y.   Khoo,   “Hybrid   quantum   physics-informed   neural   network:                     [42]  A.  Javadi-Abhari,  M.  Treinish,  K.  Krsulich,  C.  J.  Wood,  J.  Lishman,
+       Towards   efficient   learning   of   high-speed   flows,” Computers   &                              J.  Gacon,  S.  Martiel,  P.  D.  Nation,  L.  S.  Bishop,  A.  W.  Cross,  B.  R.
+      Fluids,   vol.   301,   p.   106782,   2025.   [Online].   Available:   https:                         Johnson, and J. M. Gambetta, “Quantum computing with qiskit,” 2024.
+       //www.sciencedirect.com/science/article/pii/S0045793025002427                                         [Online]. Available: https://arxiv.org/abs/2405.08810
+[26]  S. Berger, N. Hosters, and M. M¨oller, “Trainable embedding quantum                             [43]  K. Mitarai, M. Negoro, M. Kitagawa, and K. Fujii, “Quantum circuit
+       physics informed neural networks for solving nonlinear PDEs,”Scientific                               learning,”Physical  Review  A,  vol.  98,  no.  3,  p.  032309,  Sep  2018.
+       Reports,   vol.   15,   no.   1,   p.   18823,   05   2025.   [Online].   Available:                  [Online]. Available: https://link.aps.org/doi/10.1103/PhysRevA.98.032309
+       https://doi.org/10.1038/s41598-025-02959-z                                                     [44]  M.  Schuld,  V.  Bergholm,  C.  Gogolin,  J.  Izaac,  and  N.  Killoran,
+[27]  M. Lubasch, Y. Kikuchi, L. Wright, and C. Mc Keever, “Quantum circuits                                 “Evaluating analytic gradients on quantum hardware,”Physical Review
+       for partial differential equations in Fourier space,”Phys. Rev. Res., vol. 7,                         A,   vol.   99,   no.   3,   p.   032331,   Mar   2019.   [Online].   Available:
+       no. 4, p. 043326, 2025.                                                                               https://link.aps.org/doi/10.1103/PhysRevA.99.032331
+[28]  L. Wright, C. Mc Keever, J. T. First, R. Johnston, J. Tillay, S. Chaney,                        [45]  D.   Komatitsch   and   J.-P.   Vilotte,   “The   spectral   element   method:
+       M.  Rosenkranz,  and  M.  Lubasch,  “Noisy  intermediate-scale  quantum                               An   efficient   tool   to   simulate   the   seismic   response   of   2d   and
+       simulation of the one-dimensional wave equation,”Phys. Rev. Res., vol. 6,                             3d  geological  structures,”Bulletin  of  the  Seismological  Society  of
+       no. 4, p. 043169, 2024.                                                                               America,  vol.  88,  no.  2,  pp.  368–392,  04  1998.  [Online].  Available:
+[29]  H. A. Nguyen and A. Tura, “Seismic traveltime inversion with quantum                                   https://doi.org/10.1785/BSSA0880020368
+       annealing,”Scientific Reports, vol. 15, no. 1, p. 17984, 2025. [Online].                       [46]  H. Quan, X. Liu, J. Lu, R. Zhang, Z. Yang, and Z. Cao, “Enhancing elastic
+       Available: https://doi.org/10.1038/s41598-025-01188-8                                                 full-waveform inversion with envelope cosine similarity: A multiscale
+[30]  D.  Vashisth,  R.  Lessard,  and  T.  Mukerji,  “Pre-stack  and  post-stack                            frequency  strategy  for  walkaway  VSP  data,”IEEE  Transactions  on
+       seismic  inversion  using  quantum  computing,”Geophysics,  04  2026.                                 Geoscience and Remote Sensing, vol. 64, pp. 1–14, 2026.
+       [Online]. Available: https://doi.org/10.1190/GEO-2025-0186                                     [47]  M. Tancik, P. P. Srinivasan, B. Mildenhall, S. Fridovich-Keil, N. Ragha-
+[31]  D. Vashisth, R. Sharma, T. G. Iyer, T. Mukerji, and M. K. Sen, “Seismic                                van,  U.  Singhal,  R.  Ramamoorthi,  J.  T.  Barron,  and  R.  Ng,  “Fourier
+       inversion  using  hybrid  quantum  neural  networks,”  2025.  [Online].                               features let networks learn high frequency functions in low dimensional
+       Available: https://arxiv.org/abs/2503.05009                                                           domains,” inAdvances in Neural Information Processing Systems, vol. 33,
+[32]  C. Song, T. Alkhalifah, U. bin Waheed, S. Wang, and C. Liu, “Physics-                                  2020, pp. 7537–7547.
+       constrained  deep-learning-based  full-waveform  inversion:  A  practical                      [48]  V.  Sitzmann,  J.  N.  P.  Martel,  A.  W.  Bergman,  D.  B.  Lindell,  and
+       source-independent  strategy  with  two  real  data  applications,”IEEE                               G. Wetzstein, “Implicit neural representations with periodic activation
+      Transactions  on  Geoscience  and  Remote  Sensing,  vol.  64,  pp.  1–13,                             functions,” inProceedings of the 34th International Conference on Neural
+       2026.                                                                                                 Information Processing Systems, ser. NIPS ’20.    Red Hook, NY, USA:
+[33]  S.   Sim,   P.   D.   Johnson,   and   A.   Aspuru-Guzik,   “Expressibility                            Curran Associates Inc., 2020.
+       and   entangling   capability   of   parameterized   quantum   circuits   for                  [49]  A.  Dhara  and  M.  K.  Sen,  “Elastic  full-waveform  inversion  using  a
+       hybrid quantum-classical algorithms,”Advanced Quantum Technologies,                                   physics-guided deep convolutional encoder–decoder,”IEEE Transactions
+       vol.   2,   no.   12,   p.   1900070,   2019.   [Online].   Available:   https:                       on Geoscience and Remote Sensing, vol. 61, pp. 1–18, 2023.
+       //advanced.onlinelibrary.wiley.com/doi/abs/10.1002/qute.201900070                              [50]  A.  S.  Krishnapriyan,  A.  Gholami,  S.  Zhe,  R.  M.  Kirby,  and  M.  W.
+[34]  M.   Schuld   and   F.   Petruccione,Machine   Learning   with   Quantum                               Mahoney, “Characterizing possible failure modes in physics-informed
+       Computers, 2nd ed., ser. Quantum Science and Technology.    Springer,                                 neural networks,” inProceedings of the 35th International Conference
+       2021.                                                                                                 on Neural Information Processing Systems, ser. NIPS ’21.    Red Hook,
+[35]  M.  Schuld,  R.  Sweke,  and  J.  J.  Meyer,  “Effect  of  data  encoding  on                          NY, USA: Curran Associates Inc., 2021.
+       the expressive power of variational quantum-machine-learning models,”                          [51]  F. Wang, X. Huang, and T. A. Alkhalifah, “A prior regularized full wave-
+       Phys.  Rev.  A,  vol.  103,  p.  032430,  Mar  2021.  [Online].  Available:                           form inversion using generative diffusion models,”IEEE Transactions
+       https://link.aps.org/doi/10.1103/PhysRevA.103.032430                                                  on Geoscience and Remote Sensing, vol. 61, pp. 1–11, 2023.
+
+[36]  M.  Cerezo,  A.  Arrasmith,  R.  Babbush,  S.  C.  Benjamin,  S.  Endo,
+       K.   Fujii,   J.   R.   McClean,   K.   Mitarai,   X.   Yuan,   L.   Cincio,   and
+       P.   J.   Coles,   “Variational   quantum   algorithms,” Nature   Reviews
+       Physics,   vol.   3,   no.   9,   pp.   625–644,   2021.   [Online].   Available:
+       https://doi.org/10.1038/s42254-021-00348-9
+[37]  A. Kandala, A. Mezzacapo, K. Temme, M. Takita, M. Brink, J. M. Chow,
+       and J. M. Gambetta, “Hardware-efficient variational quantum eigensolver
+       for small molecules and quantum magnets,”Nature, vol. 549, no. 7671,
+       pp. 242–246, 2017.
+[38]  J. R. McClean, S. Boixo, V. N. Smelyanskiy, R. Babbush, and H. Neven,
+      “Barren plateaus in quantum neural network training landscapes,”Nature
+       Communications,  vol.  9,  no.  1,  p.  4812,  2018.  [Online].  Available:
+       https://doi.org/10.1038/s41467-018-07090-4
+[39]  M. Cerezo, A. Sone, T. Volkoff, L. Cincio, and P. J. Coles, “Cost function
+       dependent  barren  plateaus  in  shallow  parametrized  quantum  circuits,”
+       Nature Communications, vol. 12, no. 1, p. 1791, 2021.
+[40]  J.   Bradbury,   R.   Frostig,   P.   Hawkins,   M.   J.   Johnson,   C.   Leary,
+       D. Maclaurin, G. Necula, A. Paszke, J. VanderPlas, S. Wanderman-Milne,

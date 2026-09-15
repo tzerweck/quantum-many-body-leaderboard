@@ -1,0 +1,1058 @@
+     Dual-Network PINNs for Optimal Control:  A Reproducible
+               Benchmark on the Mass–Spring–Damper System
+
+
+                                                Abdeladhim Tahimi
+           Centro de Engenharias e Ciˆencias Agr´arias, Universidade Federal de Alagoas, Brazil
+                                        abdeladhim.tahimi@ceca.ufal.br
+                                         Rinaldo Vieira da Silva Junior
+           Centro de Engenharias e Ciˆencias Agr´arias, Universidade Federal de Alagoas, Brazil
+                                           rinaldo.silva@ceca.ufal.br
+
+                                                    June 16, 2026
+
+
+
+                                                        Abstract
+
+           This  work  presents  a  transparent  and  reproducible  benchmark  study  of  a  direct  dual-
+       network  Physics-Informed  Neural  Network  (PINN)  formulation  for  the  optimal  control  of
+       a  mass–spring–damper  system.   The  classical  linear-quadratic  optimal  control  problem  is
+       solved by two independent classical methods – Pontryagin’s Minimum Principle with single
+       shooting,  and  direct  transcription  through  trapezoidal  collocation  –  and  recast  as  a  con-
+       strained optimization problem solved by two feedforward neural networks:  a state network
+       whose boundary conditions are enforced exactly through a composite cubic-and-mask ansatz,
+       and an unconstrained control network.  The composite loss combines the physics residual at
+       the collocation points with a trapezoidal approximation of the cost functional, weighted by
+       a  single  scalar  hyperparameter.   On  the  benchmark  considered,  the  PINN  reproduces  the
+       classical  optimal  cost  to  four  significant  digits,  satisfies  the  terminal  state  constraints  ex-
+       actly by construction, and produces pointwise state and control errors that fall within the
+       spread of the two classical references.  Training is approximately two orders of magnitude
+       slower than classical shooting on this benchmark, which is honestly reported.  The contri-
+       bution  is  methodological  clarity  rather  than  methodological  novelty:  the  formulation  and
+       the accompanying Google Colab implementation are intended to lower the barrier to entry
+       for  practitioners  exploring  PINN-based  optimal  control  without  prior  exposure  to  adjoint
+       methods or two-point boundary value problems.
+
+       Keywords:Physics-Informed  Neural  Networks;  optimal  control;  mass–spring–damper  sys-
+       tem; Pontryagin’s Minimum Principle; direct transcription; constrained optimization; scien-
+       tific machine learning.
+
+
+1    Introduction
+
+Optimal control problems play a central role in mathematics, physics, and engineering because
+many physical systems are governed by differential equations while simultaneously requiring the
+
+                                                             1
+optimization of constrained performance criteria.  Applications arise in areas such as aerospace
+engineering, robotics, structural dynamics, energy systems, and fluid mechanics, where one seeks
+to determine control strategies capable of steering the evolution of a dynamical system toward
+a desired objective while respecting physical and operational constraints [Bryson and Ho, 1975,
+Lions, 1971].  Classical benchmark systems remain particularly valuable in this context because
+they provide analytically interpretable environments in which optimization methodologies can be
+studied rigorously. Among these benchmark problems, the mass–spring–damper system occupies
+a distinguished position due to its simplicity, physical interpretability, and broad relevance in
+vibration analysis and control theory.
+
+Classical  optimal  control  theory  provides  mathematically  rigorous  frameworks  for  addressing
+such constrained dynamical problems [Bryson and Ho, 1975, Tr”oltzsch, 2010].  Direct meth-
+ods reformulate the control problem into finite-dimensional optimization problems through dis-
+cretization strategies, whereas indirect methods derive first-order optimality conditions based on
+variational principles and Pontryagin’s Minimum Principle (PMP). These approaches have led
+to powerful computational techniques including shooting methods, collocation methods, pseu-
+dospectral methods,  adjoint-based optimization,  and Riccati formulations for linear-quadratic
+systems [Rao, 2009].  Nevertheless,  despite their mathematical maturity and excellent perfor-
+mance  for  many  benchmark  problems,  classical  approaches  may  become  increasingly  difficult
+to implement in complex scenarios involving nonlinear dynamics, coupled multiphysics systems,
+inverse problems, sparse observations, or high-dimensional parameter spaces.  In particular, the
+derivation and implementation of adjoint systems and two-point boundary value problems often
+represent a significant conceptual and computational barrier for newcomers entering the field.
+
+In  recent  years,  Physics-Informed  Neural  Networks  (PINNs)  have  emerged  as  an  important
+framework  within  scientific  machine  learning  for  solving  differential-equation-based  problems
+through physics-informed optimization.  Introduced by Raissi et al. [2019], PINNs approximate
+the solution of differential equations using neural networks trained through composite loss func-
+tions that incorporate physical residuals,  boundary conditions,  and observational constraints.
+The use of automatic differentiation enables the computation of derivatives directly through the
+computational graph, thereby allowing the governing equations to be embedded into the opti-
+mization process itself.  Since their introduction, PINNs have been successfully applied to a wide
+variety of forward and inverse problems involving ordinary and partial differential equations, pa-
+rameter estimation, hidden-physics discovery, and scientific data assimilation [Karniadakis et al.,
+2021, Cuomo et al., 2022].  Recent review papers have further highlighted the growing role of
+PINNs within the broader context of physics-informed scientific machine learning [Farea et al.,
+2024, Luo et al., 2025, Ren et al., 2025].
+
+Beyond forward simulation problems, PINN methodologies are increasingly being extended to-
+ward optimal control and constrained optimization applications.  Recent works have investigated
+direct and indirect PINN formulations for optimal control [Zhang et al., 2026], differentiable op-
+timization frameworks [Khimin et al., 2024], Control PINNs [Barry-Straume et al., 2025], and
+physics-informed approaches for PDE-constrained optimization problems [Schiassi et al., 2024].
+These studies demonstrate that PINN formulations may naturally combine state approximation,
+
+
+
+                                                          2
+control optimization, parameter estimation, and physical constraints within a unified differen-
+tiable  optimization  framework.   Such  formulations  become  particularly  attractive  in  inverse
+problems  and  partially  observed  systems,  where  classical  optimization  pipelines  may  require
+repeated  solver  calls,  mesh  generation  procedures,  or  iterative  adjoint  computations.   More-
+over,  recent  literature  has  emphasized  the  growing  interaction  between  PINNs,  differentiable
+programming, scientific machine learning, and control-oriented neural modeling [Wang and Yu,
+2025, Wang et al., 2026, Legaard et al., 2023].
+
+Despite the rapid development of the field, the current literature has also become increasingly
+sophisticated from both mathematical and computational perspectives.  Many recent contribu-
+tions focus on high-dimensional PDE-constrained optimization, advanced neural architectures,
+operator-learning frameworks, Hamilton–Jacobi–Bellman formulations, or structure-preserving
+optimality systems [Barry-Straume et al., 2025, Zhang et al., 2026].  Although these develop-
+ments  are  scientifically  important,  they  may  also  create  a  substantial  accessibility  barrier  for
+readers without prior experience in optimal control theory, adjoint methods, scientific machine
+learning, or differentiable programming.  Recent educational and review-oriented contributions
+have attempted to improve the accessibility of PINN methodologies and automatic differenti-
+ation frameworks [Khimin et al., 2024, Lawal et al., 2022].  In particular, recent didactic work
+has emphasized the importance of exposing the internal mechanics of PINN training rather than
+treating automatic differentiation as a purely black-box procedure [Tahimi, 2026b,a].  Neverthe-
+less, transparent benchmark-oriented studies connecting classical optimal control formulations
+and direct PINN-based optimization strategies remain comparatively limited.
+From an applied mathematics perspective, minimal and analytically verifiable benchmark prob-
+lems remain essential for understanding the numerical and optimization behavior of emerging
+methodologies.  Simple benchmark systems provide controlled environments in which approxi-
+mation quality, optimization sensitivity, residual balancing, and training behavior can be studied
+transparently before extending the methodology toward more sophisticated applications.  In this
+work, the classical mass–spring–damper system is formulated as a constrained optimal control
+problem with a quadratic objective functional.  The benchmark is deliberately chosen because
+its  mathematical  structure  is  sufficiently  simple  to  admit  reliable  classical  reference  solutions
+while remaining rich enough to illustrate the essential ingredients of direct PINN-based optimal
+control.  The resulting framework allows a direct comparison between classical optimal-control
+formulations and a physics-informed optimization strategy employing separate neural represen-
+tations for the state and control variables.
+
+The objective of the present work is therefore not to propose a fundamentally new PINN ar-
+chitecture, nor to argue that PINNs outperform mature optimal-control solvers.  Instead, this
+paper  aims  to  provide  a  transparent,  reproducible,  and  pedagogically  structured  benchmark
+study illustrating how constrained optimal-control problems can be reformulated within a direct
+physics-informed learning framework.  More specifically, the work presents: (i) the mathematical
+formulation of a mass–spring–damper optimal control problem; (ii) its classical solution using
+standard optimal-control methodology; (iii) a direct dual-network PINN formulation employing
+independent neural representations for the state and control variables; (iv) a validation of the
+
+
+
+                                                          3
+neural approximation against classical reference solutions; and (v) a comparative discussion of
+the advantages, limitations, and future potential of PINN-based optimal control formulations.
+In  addition,  all  numerical  experiments  are  designed  to  be  reproducible  through  a  companion
+Google Colab implementation intended to facilitate further educational and research-oriented
+exploration.
+
+2    Problem Formulation
+
+
+The mass–spring–damper system is one of the most fundamental models in classical mechanics
+and vibration theory.  It describes the motion of a point massm>0 attached to a linear spring
+of stiffnessk >0 and subject to viscous damping with coefficientc >0,  under the action of
+an  external  forceu(t)  acting  as  the  control  input.   The  governing  equation  of  motion  is  the
+second-order linear ordinary differential equation
+
+                                   m¨x(t) +c˙x(t) +kx(t) =u(t),   t∈[0,T],                                   (1)
+
+wherex(t)∈Rdenotes the displacement of the mass from its equilibrium position,  and dots
+denote differentiation with respect to time.  The external forcing termu(t)∈Ris treated as a
+time-varying control function to be determined through optimization.
+
+The optimal control problem consists of finding a control functionu: [0,T]→Rthat minimizes
+a quadratic performance index measuring the integrated state deviation and control effort over
+the fixed time horizon [0,T].  Specifically, the objective functional is defined as
+                                                      Z  T  x(t)      2 +ru(t)          2dt,                                          (2)
+                                            J[u] =
+                                                        0
+
+wherer>0 is a scalar weighting parameter balancing the relative penalization of state deviation
+and control effort.  The control problem is subject to the dynamics (1), the initial conditions
+
+                                                x(0) =x      0,       ˙x(0) =v         0,                                                  (3)
+
+and the fixed terminal constraints
+
+                                                x(T) = 0,       ˙x(T) = 0,                                                  (4)
+
+requiring the system to reach a complete rest state at the final timeT.
+
+The complete optimal control problem is therefore stated as follows.
+
+       Problem (P).Find a control functionu∈L                                2([0,T])such that the functionalJ[u]
+       defined in(2)is minimized, subject to the dynamical constraint(1), the initial con-
+       ditions(3), and the terminal constraints(4).
+
+The numerical parameters adopted throughout this work are summarized in Table 1.  The mass,
+spring constant, and damping coefficient are chosen asm=k=c= 1 in consistent SI units,
+
+                                                                4
+yielding  a  damping  ratioζ=c/(2    √mk)  =  0.5,  which  places  the  uncontrolled  system  in  the
+underdamped regime.  The time horizon is set toT= 5 s, which is sufficiently long to observe
+both  the  natural  transient  response  and  the  effect  of  the  optimal  control  action.   The  initial
+conditions arex      0 = 1 m andv        0 = 0 m/s, representing an initial displacement from equilibrium
+with zero velocity.  The control weight is set tor= 0.1, which penalizes control effort lightly
+relative  to  state  deviation,  thereby  encouraging  active  intervention  by  the  optimizer.   These
+parameter  choices  result  in  a  well-posed  problem  admitting  a  unique  optimal  solution  that
+serves as the reference throughout this study.
+
+                      Table 1:  Numerical parameters of the optimal control problem.
+                               Parameter                       Symbol    Value    Unit
+                               Mass          m         1           kg
+                               Spring constant      k            1           N m −1
+                               Damping coefficient   c             1           N s m −1
+                               Time horizon   T           5           s
+                               Initial displacement   x  0            1           m
+                               Initial velocity      v   0             0           m s−1
+                               Terminal displacement x(T)        0           m
+                               Terminal velocity             ˙x(T)        0           m s  −1
+                               Control weight      r            0.1        —
+
+
+3    Classical Optimal Control Solution
+
+3.1    Optimality Conditions via Pontryagin’s Minimum Principle
+
+The application of Pontryagin’s Minimum Principle requires recasting the second-order equa-
+tion (1) as an equivalent first-order system [Bryson and Ho, 1975]. Introducing the state variables
+x1(t) =x(t) andx                     2(t) =  ˙x(t), the dynamics (1) withm=k=c= 1 become
+
+                                  ˙x 1(t) =x       2(t),       ˙x        2(t) =−x           1(t)−x         2(t) +u(t),                               (5)
+
+with initial conditionsx        1(0) = 1,x    2(0) = 0, and fixed terminal constraintsx    1(T) = 0,x        2(T) = 0.
+
+To apply the Pontryagin Minimum Principle, one associates a costate variableλ             i(t) with each
+state variablex             i(t).  The Hamiltonian of problem(P)is defined as
+
+                               H(x,u,λ) =x                    21 +ru    2 +λ    1x2 +λ    2 (−x      1−x    2 +u),                             (6)
+
+wherex= (x                 1,x2)⊤ andλ= (λ             1,λ2)⊤.
+
+
+Optimality condition.Since the Hamiltonian (6) is strictly convex inuand the control is
+unconstrained, the optimal controlu  ∗(t) is obtained by setting∂H/∂u= 0, which gives
+
+                                   2ru ∗(t) +λ       2(t) = 0     =⇒u   ∗(t) =−   λ2(t)2r  .                                  (7)
+
+
+                                                                   5
+Costate equations.The costate dynamics are governed by
+
+                 ˙λ1(t) =−   ∂H∂x1  =−2x          1(t) +λ       2(t),            ˙λ2(t) =−   ∂H∂x2  =−λ       1(t) +λ       2(t).              (8)
+
+
+Since the terminal state is fully fixed by (4), no transversality conditions are required and the
+terminal costate valuesλ          1(T) andλ            2(T) are left free.
+
+
+Two-point boundary value problem.Substituting the optimal control (7) into the state
+equations (5) and combining with the costate equations (8) yields the following two-point bound-
+ary value problem (TPBVP): findx(t) andλ(t) satisfying
+                                                                     x2         
+                                               x1 =                
+                                            d     x2           −x    1−x    2− λ22r    ,                                            (9)
+                                           dt     λ1              −2x      1 +λ    2
+                                                  λ2               −λ    1 +λ    2
+
+subject to the boundary conditions
+
+                              x1(0) = 1,  x  2(0) = 0,   x  1(T) = 0,  x       2(T) = 0.                           (10)
+
+The system (9)–(10) constitutes a four-dimensional autonomous ODE with split boundary con-
+ditions:  two conditions are prescribed att= 0 and two att=T.  The unknown initial costate
+valuesλ          1(0) andλ        2(0) are determined by enforcing the terminal conditions numerically.
+
+
+Numerical solution via shooting.The TPBVP is solved using a single shooting method
+[Rao, 2009].  Lets= (λ           1(0),λ      2(0))⊤ denote the unknown initial costate vector.  For a givens,
+the system (9) is integrated forward fromt= 0 tot=Tusing a standard ODE solver, producing
+terminal state valuesx          1(T;s) andx                2(T;s).  The shooting residual is defined as
+                                                                      !          !
+                                              R(s) =       x1(T;s)        −    0    ,                                             (11)
+                                                           x2(T;s)             0
+
+and the correct initial costate is found by solvingR(s) =0using a nonlinear root-finding algo-
+rithm.  The resulting trajectoriesx     ∗1(t),x  ∗2(t), andu   ∗(t) =−λ   ∗2(t)/(2r) constitute the classical
+PMP reference solution to problem(P).
+
+
+3.2    Direct Transcription via Trapezoidal Collocation
+
+Direct transcription methods reformulate the infinite-dimensional optimal control problem(P)
+as a finite-dimensional nonlinear programming problem (NLP) by simultaneously discretizing
+the state and control trajectories on a fixed time grid [Rao, 2009].  Unlike the indirect approach
+of  Section  3.1,  no  costate  variables  are  introduced  and  no  optimality  conditions  need  to  be
+derived analytically; instead, the physics constraints are enforced directly as algebraic equations
+
+
+                                                                 6
+at the collocation nodes.
+
+Let{t         i}Ni=0  denote a uniform partition of [0,T] with step sizeh=T/N.  Denote the discretized
+state and control values asx    i≈x(t        i),v   i≈˙x(t         i), andu       i≈u(t        i).  The state equations (5) are
+enforced at each interior interval [t i,ti+1 ] using the trapezoidal rule:
+
+                           xi+1 −x   i = h2 (v  i +v   i+1 ),                                                                       (12)
+
+                           vi+1 −v   i = h2 [(−x      i−v   i +u   i) + (−x     i+1 −v   i+1  +u   i+1 )],                       (13)
+
+fori= 0,...,N−1.  The objective functional (2) is approximated by the composite trapezoidal
+quadrature rule
+                                     " x20 +ru    20 + 2    N−1X   x2i +ru    2i + x2N +ru    2N#
+                          Jh = h2                                                                         .                       (14)
+                                                             i=1
+
+The  resulting  NLP  seeks  the  decision  vectorz=  (x               0,v0,...,xN,vN,u0,...,uN)⊤∈R   3(N+1)
+that minimizesJ                   h  subject to the collocation constraints (12)–(13), the initial conditionsx              0 =
+1,v    0  =  0,  and  the  terminal  constraintsx    N  =  0,v   N  =  0.   This  constrained  NLP  is  solved
+using a standard gradient-based optimizer, with the collocation constraints enforced as equality
+constraints.  The discrete trajectories{x     ∗i},{v  ∗i}, and{u   ∗i}obtained at the solution provide a
+second independent reference against which both the PMP solution and the PINN approximation
+are subsequently validated.
+
+4    PINN Formulation
+
+4.1    Dual-Network Architecture
+
+The PINN formulation of problem(P)employs two independent feedforward neural networks: a
+state networkN      x(t;θ     x) approximating the displacement trajectoryx(t), and a control network
+Nu(t;θ     u)  approximating  the  control  inputu(t).   The  use  of  separate  networks  for  state  and
+control variables is consistent with recent direct PINN formulations for optimal control [Barry-
+Straume et al., 2025, Zhang et al., 2026].  Both networks take the scalar time variablet∈[0,T]
+as their sole input and produce a scalar output.  Each network consists ofLhidden layers of
+widthW, with hyperbolic tangent activationsσ(·) = tanh(·) applied elementwise at each hidden
+layer.  The output layer is linear.  For a network withLhidden layers, the raw output is defined
+recursively as
+
+h(0) =t,  h       (ℓ)   =σ      W (ℓ) h(ℓ−1)     +b    (ℓ)  ,  ℓ= 1,...,L, F(t;θ) =W                        (L+1) h(L)    +b    (L+1) ,
+                                                                                                                                (15)
+whereθ={W                      (ℓ) ,b (ℓ) }collects all trainable weights and biases.  The hyperbolic tangent acti-
+vation is chosen because it is smooth, bounded, and admits derivatives of all orders, properties
+that are required for the automatic differentiation of the physics residual [Raissi et al., 2019].
+In the numerical experiments of Section 5, both networks are instantiated withL= 4 hidden
+
+                                                                  7
+layers and widthW= 32, a configuration that is deliberately modest in order to preserve the
+didactic character of the benchmark.
+
+
+4.2    Hard Enforcement of Boundary Conditions
+
+The  state  networkN      x  must  satisfy  four  boundary  conditions  exactly:   the  initial  conditions
+x(0) = 1 and  ˙x(0) = 0, and the terminal constraintsx(T) = 0 and  ˙x(T) = 0.  Hard enforcement
+is achieved by constructing a composite ansatz of the form
+
+                                              ˆx(t;θ         x) =ϕ(t) +ψ(t)F                     x(t;θ     x),                                           (16)
+
+whereϕ(t) is a fixed polynomial satisfying all four boundary conditions independently of the
+network output,ψ(t) is a fixed masking function that vanishes att= 0 andt=Tto first order,
+andF       x(t;θ     x) is the raw output of the state network as defined in (15).
+
+
+Construction ofϕ(t).  A cubic polynomialϕ(t) =a                                            0+a    1t+a     2t2+a    3t3 has four free coefficients,
+which are uniquely determined by imposing the four boundary conditionsϕ(0) = 1,ϕ        ′(0) = 0,
+ϕ(T) = 0,ϕ   ′(T) = 0.  Solving the resulting linear system yields
+
+
+                                                     ϕ(t) = 1−        3t  2T 2  + 2t  3T 3.                                                   (17)
+
+One may verify directly thatϕ(0) = 1,ϕ    ′(0) = 0,ϕ(T) = 0, andϕ     ′(T) = 0, confirming that (17)
+satisfies all required conditions exactly.
+
+
+Construction ofψ(t).  The masking  function must vanish at  both  endpoints to  first  order
+so that the composite ansatz (16) preserves the boundary conditions ofϕ(t) regardless of the
+network outputF             x.  The quadratic mask
+
+                                                     ψ(t) =t          2(T−t)          2/T 4                                                    (18)
+
+satisfiesψ(0) =ψ(T) = 0 andψ          ′(0) =ψ ′(T) = 0, and is strictly positive on the open interval
+(0,T), ensuring thatF               x retains full expressive freedom in the interior of the time domain.  The
+normalization factorT             4 keepsψ(t)≤1 uniformly.
+
+
+Verification.By construction, ˆx(0;θ                                 x) =ϕ(0) = 1 and ˆx(T;θ                x) =ϕ(T) = 0 for any value of
+θx.  Differentiating (16) and evaluating at the endpoints gives  ˙ˆx(0) =ϕ  ′(0) +ψ ′(0)F      x(0) = 0
+and  ˙ˆx(T) =ϕ    ′(T) +ψ  ′(T)F      x(T) = 0, confirming that all four boundary conditions are satisfied
+exactly and independently of the network parameters throughout training.
+
+The control ansatz requires no hard enforcement.  The control approximation is taken directly
+as the raw network output
+                                                      ˆu(t;θ         u) =F   u(t;θ     u),                                                    (19)
+
+
+
+
+                                                                   8
+which is unconstrained and enters the loss function solely through the physics residual and the
+discretized cost functional defined in the following section.
+
+
+4.3    Loss Function
+
+The PINN loss function is constructed from two terms.  The first term penalizes violation of the
+governing equation (1) at a set ofN    c collocation points{t      i}Nci=1  distributed uniformly on [0,T].
+Using the composite ansatz (16), the second-order derivative  ¨ˆx(t      i) is computed via automatic
+differentiation through the computational graph [Tahimi, 2026b].  The physics residual loss is
+
+                                              NcX h¨ˆx(t      i;θ x) + ˙ˆx(t      i;θ x) + ˆx(t      i;θ x)−ˆu(t            i;θ u)i2.              (20)
+                  Lphys(θ  x,θ u) =   1Nc
+                                             i=1
+
+The second term approximates the objective functional (2) using the composite trapezoidal rule
+on the same collocation grid:
+                            "             Nc−1X                     #
+    Lcost(θ  x,θ u) = h2      f(t    1) + 2      f(t    i) +f(t       Nc),   f(t    i) = ˆx(t      i;θ x)2 +rˆu(t            i;θ u)2,    (21)
+                                           i=2
+
+whereh=T/(N                     c−1).  The total loss is the weighted sum of both terms:
+
+                                 L(θ     x,θ u) =λ    physLphys(θ  x,θ u) +L    cost(θ  x,θ u),                               (22)
+
+whereλ            phys >0 is a fixed scalar weight applied to the physics residual term.  The introduction
+ofλ    phys  is  motivated  by  the  fundamentally  different  roles  of  the  two  loss  terms.   The  cost
+termL          cost  is  an  approximation  of  the  objective  functionalJ[u]  that  the  optimizer  seeks  to
+minimize,  while the physics residualL                phys  encodes the dynamical constraint (1) and must be
+driven essentially to zero for the resulting trajectory to be a feasible solution of problem(P).
+Without a sufficiently large weight on the residual term,  the optimizer is free to reduceL  cost
+by violating the dynamics, producing a non-physical solution whose reported cost is artificially
+lower than the true optimum.  The numerical valueλ         phys = 103 adopted in the present work is
+selected through a small number of preliminary training runs in which the relative magnitudes of
+λphysLphys andL        cost were monitored, and is held fixed for all experiments reported in Section 5.
+The  role  ofλ    phys  and  the  loss-balancing  sensitivity  that  more  generally  characterizes  PINN
+training are discussed further in Section 6.
+
+
+4.4    Training Procedure
+
+Training consists of minimizing the total loss (22) jointly with respect toθ    x andθ       u using a two-
+phase optimization strategy.  In the first phase, the Adam optimizer is run for a fixed number
+of epochs with a scheduled learning rate, providing robust initial convergence from a random
+parameter initialization. In the second phase, the L-BFGS optimizer is applied to the parameters
+delivered by Adam, exploiting second-order curvature information to refine the solution toward
+a  high-accuracy  local  minimum.   This  two-phase  strategy  is  standard  practice  in  the  PINN
+
+
+                                                                9
+literature  [Raissi  et  al.,  2019,  Cuomo  et  al.,  2022]  and  is  adopted  here  without  modification.
+The collocation grid usesN        c = 100 uniformly spaced points on [0,T].  All derivatives required
+for  (20)  are  computed  via  automatic  differentiation  using  PyTorch’sautogradengine,  with
+create    graph=Trueto enable higher-order differentiation through the ansatz.  Network weights
+are initialized using the Glorot uniform scheme.  The complete implementation is provided in
+the companion Colab notebook described in Section 5.
+
+5    Numerical Results and Validation
+
+
+This section validates the dual-network PINN formulation of Section 4 against the two indepen-
+dent classical references developed in Section 3.1 and Section 3.2.  All three methods solve the
+same optimal control problem (P) with the parameter values listed in Table 1.  To enable a uni-
+form comparison, the PMP shooting solution, the discrete collocation NLP solution (cubically
+interpolated from itsN= 100 NLP grid), and the trained PINN are all evaluated on a common
+dense reference grid of 501 uniformly spaced points on [0,T].  The composite trapezoidal rule on
+this dense grid is used to compute the cost functional and theL       2 error norms reported below.
+The full pipeline is implemented in a companion Google Colab notebook that mounts Google
+Drive,  writes  all  numerical  results  to  a  single  comma-separated  values  (CSV)  file,  and  saves
+every figure through an independent rendering cell that re-reads the CSV from disk.
+
+
+5.1    Reproducibility and reference grid
+
+A  single  global  random  seed  is  used  to  initialize  the  random  number  generators  of  Python,
+NumPy,  and  PyTorch  (including  the  CUDA  backend  when  available).   Network  weights  are
+initialized with the Glorot uniform scheme.  Both PINN sub-networks employ four hidden layers
+of  width  32  and  tanh  activations,  as  specified  in  Section  4.1.   The  training  collocation  grid
+usesN        c = 100 points on [0,T] and is held fixed throughout the optimization.  All figures and
+statistical quantities reported below are reproduced bit-identically by the companion notebook
+provided the seed is preserved.
+
+
+5.2    Validation of the classical references
+
+The two classical methods provide independent reference solutions and are first validated against
+each other.  The PMP shooting algorithm converges to terminal state residuals of order 10−15  ,
+and  the  collocation  NLP  enforces  the  terminal  state  as  a  hard  equality  constraint,  yielding
+residuals of order 10−20  .  The two methods agree on the optimal cost to within 1.3×10   −3    in
+relative terms, withJ   ∗PMP = 6.872264×10      −1    andJ  ∗NLP = 6.881065×10      −1  .  The pointwiseL  ∞
+error  between  the  two  reference  trajectories  is  1.10×10   −3    for  the  displacement,  2.54×10   −3
+for  the  velocity,  and  1.10×10   −1    for  the  control.   The  small  but  non-negligible  discrepancy
+reflects the trapezoidal discretization error of the NLP, which is of second order in the step size
+h=T/N;  the PMP solution,  integrated with a high-order adaptive Runge–Kutta scheme,  is
+therefore treated as the gold reference in the remainder of this section.
+
+
+                                                           10
+5.3    Training behaviour of the PINN
+
+The  PINN  is  trained  by  minimizing  the  composite  lossL=λ              physLphys +L    cost  withλ         phys  =
+103  following the discussion of Section 4.3.  A two-phase optimization strategy is used:  5,000
+Adam epochs with a constant learning rate of 10−3  , followed by L-BFGS with strong Wolfe line
+search.  The total training time on a standard Colab CPU runtime is approximately 125 seconds.
+Figure 1 shows the evolution of the three loss components.  The physics residualL                phys drops by
+roughly six orders of magnitude during Adam and continues to decrease through the L-BFGS
+phase,  reaching  a  final  value  of  6.17×10   −8  .   The  cost  termL          cost  converges  to  6.874×10    −1
+at the end of training,  in close agreement with the PMP reference value.  The total lossLis
+numerically indistinguishable fromL          cost  once the residual has reached its asymptotic plateau,
+which is expected:λ            physLphys≈6×10   −5    is several orders of magnitude smaller thanL          cost.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 1:  Training loss history of the dual-network PINN. The Adam phase occupies the first
+5,000 iterations; the L-BFGS refinement begins immediately afterwards.
+
+
+5.4    Trajectory comparison
+
+Figures 2, 3, and 4 compare the three solution methods for the displacement, velocity, and control
+trajectories, respectively.  The three curves are visually indistinguishable on the plotting scale
+of the state variables, and only the optimal control near the initial time exhibits a small visible
+discrepancy that is analysed in Section 5.5.  The optimal displacement decreases monotonically
+fromx          0 = 1 m, briefly undershoots the equilibrium by approximately 0.07 m neart= 2.5 s, and
+returns asymptotically to zero.  The optimal control begins at approximately−2.3 N, increases
+monotonically,  crosses zero neart= 1.1 s,  peaks near +0.4 N,  and decays to zero at the final
+time.  The PINN reproduces all of these qualitative features without any prior knowledge of the
+classical solutions.
+
+
+
+
+
+                                                             11
+Figure 2:  Optimal displacementx(t) obtained by the three methods.  The curves overlap on the
+plotting scale; the pointwise error is reported in Figure 5.
+
+5.5    Pointwise error analysis
+
+Figure 5 displays the absolute pointwise error of the PINN displacement against both classical
+references on a logarithmic vertical axis.  Two features of the figure deserve emphasis.  First,
+the interior error sits around 10−4  –10−3   m, which is comparable to the discrepancy between the
+two classical references themselves.  The PINN therefore falls within the spread of the classical
+baseline.  Second, the error collapses to machine precision at both endpoints.  This is the visual
+signature of hard boundary-condition enforcement: the composite ansatz ˆx(t) =ϕ(t)+ψ(t)F                             x(t)
+guarantees ˆx(0) = 1 and ˆx(T) = 0 identically, regardless of the network parameters.
+
+Figure 6 displays the corresponding error for the control.  The error magnitude is approximately
+one order of magnitude larger than for the state, and is concentrated at the initial time.  This
+behaviour has two contributing causes.  First, the control approximation ˆu(t) is the raw network
+output  and  is  not  constrained  at  the  endpoints,  in  contrast  to  ˆx.   Second,  the  magnitude  of
+the  optimal  control  is  largest  neart=  0,  so  a  fixed  relative  error  produces  a  larger  absolute
+error there.  Both effects are consistent with the hierarchy of approximation accuracy generally
+observed in PINN formulations, in which the directly approximated quantity is the most accu-
+rate, and quantities derived from it or independently approximated tend to exhibit progressively
+larger errors.
+
+
+5.6    Quantitative summary
+
+Table 2 reports the optimal cost achieved by each method and the terminal constraint residuals.
+The PINN agrees with the PMP reference to four significant digits in the cost functional, and
+reaches the terminal state exactly by construction.  Table 3 reports theL       2  andL  ∞  pointwise
+errors of all three pairwise comparisons.  The errors of PINN against either classical reference
+are of the same order of magnitude as the errors between the two classical references themselves,
+
+                                                            12
+   Figure 3:  Optimal velocity  ˙x(t) obtained by the three methods.  For the PINN, the velocity is
+   obtained by automatic differentiation of the composite state ansatz ˆx(t).
+
+
+   confirming that the PINN solution lies within the spread of the classical baseline.
+
+              Table 2:  Optimal cost and terminal constraint residuals for the three methods.
+                           Method       J[u  ∗]     |x(T)|    |˙x(T)|
+                           PMP              6.872264×10      −1      3.76×10   −15      9.09×10   −15
+                           Collocation    6.881065×10      −1      1.48×10   −21      8.47×10   −20
+                           PINN             6.871579×10      −1               0                      0
+
+
+   Wall-clock training time is reported for completeness.  On the Colab CPU runtime, PMP shoot-
+   ing  required  1.2 s,  the  SLSQP  collocation  NLP  required  10.4 s,  and  PINN  training  required
+   125.0 s  in  total  (79.2 s  for  the  Adam  phase  and  45.8 s  for  the  L-BFGS  phase).   The  PINN  is
+   therefore  not  competitive  with  the  classical  methods  in  training  time  on  this  benchmark,  a
+   point discussed further in Section 6.
+
+
+   5.7    Selected code excerpts
+
+   For pedagogical clarity, three minimal Python excerpts from the companion notebook are re-
+   produced here.  The complete implementation is available in the Colab notebook.
+
+   The composite ansatz of Section 4.2 is implemented in three lines:
+
+        Listing 1:  Hard enforcement of the four boundary conditions via the composite ansatz.
+
+1  def  phi_fn(t):
+
+2         return  1.0  -  3.0  *  (t  /  T)  **  2  +  2.0  *  (t  /  T)  **  3
+
+3
+
+4  def  psi_fn(t):
+
+5         return  (t  **  2)  *  (T  -  t)  **  2  /  (T  **  4)
+
+6
+
+                                                                 13
+   Figure 4:  Optimal controlu(t) obtained by the three methods.  A small visible discrepancy is
+   observed neart= 0 where the magnitude of the optimal control is largest.
+
+
+   Table 3:  PointwiseL         2 andL  ∞ errors of the three pairwise comparisons, computed on the dense
+   reference grid of 501 uniformly spaced points.
+                           Comparison                  Quantity  L   2 errorL   ∞ error
+                           PINN vs PMP  x(t)            1.14×10        −3      9.29×10   −4
+                                                            ˙x(t)            3.37×10     −3      3.70×10   −3
+                                                           u(t)            2.43×10     −2      1.13×10   −1
+                           PINN vs Collocationx(t)            1.36×10        −3      9.74×10   −4
+                                                            ˙x(t)            3.51×10     −3      3.23×10   −3
+                                                           u(t)            1.91×10     −2      4.15×10   −2
+                           Collocation vs PMPx(t)            9.88×10        −4      1.10×10   −3
+                                                            ˙x(t)            1.59×10     −3      2.54×10   −3
+                                                           u(t)            1.19×10     −2      1.10×10   −1
+
+
+
+
+
+7  def  x_hat(net_x,  t):
+
+8         return  phi_fn(t)  +  psi_fn(t)  *  net_x(t)
+
+   The composite loss combines the physics residual at the collocation points with the trapezoidal
+   quadrature of the cost functional.  The required derivatives of ˆx(t) are obtained by automatic dif-
+   ferentiation through the ansatz withcreate_graph=Trueto enable backpropagation of second-
+   order derivatives:
+
+           Listing 2:  Composite loss function combining physics residual and trapezoidal cost.
+
+1  def  losses():
+
+2         x_val  =  x_hat(net_x,  t_col_pinn)
+
+3         u_val  =  u_hat(net_u,  t_col_pinn)
+
+4         dx   =  torch.autograd.grad(x_val,  t_col_pinn,
+
+5                           torch.ones_like(x_val),  create_graph=True)[0]
+
+
+                                                                   14
+    Figure 5:  Absolute pointwise error of the PINN displacement,|ˆx(t)−x                   ref(t)|, against the PMP
+    and collocation references.  The collapse to machine precision att= 0 andt=Treflects the
+    exact enforcement of the boundary conditions by the state ansatz.
+
+
+
+
+ 6         ddx  =  torch.autograd.grad(dx,  t_col_pinn,
+
+ 7                           torch.ones_like(dx),  create_graph=True)[0]
+
+ 8         residual  =  ddx  +  dx  +  x_val  -  u_val
+
+ 9         L_phys  =  (residual  **  2).mean()
+
+10       f  =  x_val  **  2  +  r  *  u_val  **  2
+
+11       L_cost  =  0.5  *  h_pinn  *  (f[0]  +  2.0  *  f[1:-1].sum()  +  f[-1]).squeeze()
+
+12       return  L_phys,  L_cost
+
+    The optimization loop combines an Adam warm-up phase with an L-BFGS refinement phase,
+    following standard PINN practice:
+
+           Listing 3:  Two-phase optimization:  Adam warm-up followed by L-BFGS refinement.
+
+ 1  #Phase1:Adam
+
+ 2  for  epoch  in  range(ADAM_EPOCHS):
+
+ 3         opt_adam.zero_grad()
+
+ 4         L_phys,  L_cost  =  losses()
+
+ 5         L  =  LAMBDA_PHYS  *  L_phys  +  L_cost
+
+ 6         L.backward()
+
+ 7         opt_adam.step()
+
+ 8
+
+ 9  #Phase2:L-BFGS
+
+10def  closure():
+
+11       opt_lbfgs.zero_grad()
+
+12       L_phys,  L_cost  =  losses()
+
+13       L  =  LAMBDA_PHYS  *  L_phys  +  L_cost
+
+14       L.backward()
+
+15       return  L
+
+16opt_lbfgs.step(closure)
+
+
+                                                                   15
+Figure 6:  Absolute pointwise error of the PINN control,|ˆu(t)−u                        ref(t)|, against the PMP and
+collocation references.  The control approximation is not subject to hard endpoint enforcement,
+and the error attains its maximum neart= 0 where the magnitude of the optimal control is
+largest.
+
+6    Discussion
+
+The results of Section 5 establish that the dual-network PINN formulation reproduces the clas-
+sical  optimal  control  solution  of  problem(P)to  four  significant  digits  in  the  cost  functional
+and to three significant digits in the pointwise state trajectory, on a benchmark for which two
+independent classical references are available.  The purpose of the present section is to interpret
+these results in their proper methodological context, to acknowledge the limitations of the for-
+mulation studied here, and to identify the regimes in which a direct PINN approach to optimal
+control may become genuinely competitive with classical methodologies.
+
+
+6.1    Loss balancing and the role of the residual weight
+
+The introduction of the weighting parameterλ                     phys  in Equation (22) is the single most conse-
+quential design choice in the formulation.  Preliminary experiments without weighting confirmed
+the failure mode anticipated in Section 4.3:  the optimizer reduced the cost termL          cost to values
+substantially below the true optimumJ  ∗, at the price of a physics residualL                phys of order 10−3
+that produced a non-physical trajectory.  The resulting solution is inadmissible:  it minimizes
+a quadratic functional over a function space in which the dynamical constraint is only weakly
+satisfied.  The introduction of a fixed weightλ  phys = 103 restored the correct hierarchy between
+constraint satisfaction and objective minimization, driving the residual below 10−7   while leaving
+the cost term in close agreement with both classical references.
+
+This  behaviour  is  consistent  with  the  broader  experience  reported  in  the  PINN  literature,  in
+which loss-balancing has been identified as a recurrent source of training pathologies [Cuomo
+et al., 2022, Farea et al., 2024]. Several systematic approaches have been proposed in recent years,
+
+                                                            16
+including adaptive weighting strategies, neural tangent kernel diagnostics, and constraint-based
+reformulations  through  Lagrangian  or  penalty-method  updates  [Ren  et  al.,  2025,  Luo  et  al.,
+2025].  The present work deliberately employs the simplest possible weighting strategy – a single
+fixed  scalar  –  in  order  to  preserve  the  didactic  character  of  the  benchmark  and  to  make  the
+role of the residual weight transparent.  More sophisticated weighting schemes are likely to be
+necessary  in  extensions  to  nonlinear  dynamics  or  higher-dimensional  state  spaces,  where  the
+asymmetry between the two loss components may evolve substantially during training.
+
+
+6.2    Hard versus soft boundary condition enforcement
+
+The  composite  ansatz  ˆx(t)  =ϕ(t) +ψ(t)F                             x(t;θ     x)  enforces  all  four  boundary  conditions  of
+problem(P)exactly, independently of the network parameters.  The benefit of this construction
+is visible in Figure 5: the pointwise displacement error collapses to machine precision att= 0 and
+t=T, and the terminal constraints reported in Table 2 are satisfied identically.  In contrast, the
+control approximation ˆu(t) is the raw network output and is not constrained at the endpoints.
+The largest absolute error in the control accordingly occurs att= 0, where the magnitude of the
+optimal control is greatest and the approximation enjoys no structural support from the ansatz.
+
+This asymmetric design choice is intentional.  In the problem considered here, the state is sub-
+ject to explicit boundary conditions, whereas the control admits no natural endpoint constraint.
+Extending the hard-enforcement strategy to the control would require either the introduction
+of  artificial  endpoint  conditions  that  are  not  present  in  the  original  problem  formulation,  or
+the construction of problem-specific ansatz functions whose role and motivation are less easily
+generalized.  The trade-off between accuracy at the endpoints and faithfulness to the original
+problem formulation is itself a useful pedagogical observation, and extending the present frame-
+work  to  richer  classes  of  constraints  –  such  as  inequality  bounds  on  the  control,  or  terminal
+cost functionals with no terminal state constraint – remains an interesting direction for further
+investigation.
+
+
+6.3    Approximation hierarchy and the cost of derived quantities
+
+The  pointwise  errors  of  Table  3  exhibit  a  clear  hierarchy  in  which  the  directly  approximated
+displacement is the most accurate, the velocity obtained by automatic differentiation through
+the ansatz is approximately one order of magnitude less accurate, and the independently approx-
+imated control is yet another order of magnitude less accurate.  This hierarchy is a consequence
+of two distinct mechanisms.  First, derivatives of a neural approximation  ˆx(t) are typically less
+accurate than the approximation  ˆx(t) itself, since the training loss applies pressure on the ap-
+proximation but not directly on its derivatives.  Second, the control network operates without
+the structural support of the ansatz, and is therefore the least constrained of the two networks
+in problem(P).
+
+This  hierarchy  has  practical  implications  for  problem  formulations  in  which  the  quantities  of
+primary interest are not the directly approximated ones.  In tracking problems, for example, the
+cost functional may depend explicitly on derivatives of the state, in which case the formulation
+
+
+                                                           17
+studied here would impose an accuracy penalty on the most critical quantity.  Reformulations
+in  which  both  the  state  and  its  derivatives  are  independently  approximated  –  at  the  cost  of
+additional  networks  and  additional  loss  terms  –  have  been  investigated  in  the  recent  PINN
+literature and may be appropriate in such cases [Barry-Straume et al., 2025].
+
+
+6.4    Computational cost and the question of competitiveness
+
+The wall-clock training time reported in Section 5.6 indicates that the PINN is two orders of
+magnitude slower than PMP shooting and one order of magnitude slower than the trapezoidal
+collocation NLP on this benchmark.  This finding is not, on its own, an argument against PINN
+methods.   It  is  rather  an  acknowledgment  that  the  benchmark  is  a  setting  in  which  classical
+methods are already at their most efficient:  a linear-quadratic problem of low dimension and
+short horizon, with a smooth unique optimum and exactly two terminal constraints [Bryson and
+Ho, 1975, Rao, 2009].  Under such conditions, neither shooting nor collocation faces any of the
+difficulties for which PINN formulations were originally introduced.
+
+The genuine question is not whether PINNs outperform classical methods on problems for which
+classical  methods  are  already  optimal,  but  whether  they  remain  applicable  in  regimes  where
+classical  methods  become  difficult  or  impractical  to  deploy.   Several  such  regimes  have  been
+identified in the literature.  PINN formulations naturally accommodate sparse or noisy observa-
+tions through additional data-fidelity loss terms [Raissi et al., 2019, Karniadakis et al., 2021], do
+not require the derivation of adjoint equations for inverse or parameter-identification problems
+[Khimin et al., 2024], scale gracefully to high-dimensional state spaces in which traditional col-
+location becomes intractable, and integrate seamlessly with end-to-end differentiable pipelines
+[Wang and Yu, 2025, Wang et al., 2026].  None of these advantages is exercised by the benchmark
+of the present work,  which was selected to maximize interpretability rather than to showcase
+the strengths of the PINN paradigm.
+
+
+6.5    Limitations and scope of the present study
+
+Several  limitations  should  be  acknowledged.   The  benchmark  is  linear,  scalar,  finite-horizon,
+and admits a smooth and unique optimum; none of these properties holds in many applications
+of  practical  interest.   The  weighting  parameterλ                     phys  is  fixed  by  inspection  rather  than  cho-
+sen adaptively, and the training procedure relies on a standard two-phase Adam plus L-BFGS
+strategy without architectural innovations such as residual blocks, Fourier features, or domain
+decomposition.  A single random seed is used to produce the results reported here;  while the
+qualitative behaviour is robust across seeds, no systematic study of training variability is under-
+taken.  Finally, the collocation grid of the PINN, the collocation grid of the NLP, and the dense
+reference grid used for error evaluation are all uniform, and no investigation of non-uniform or
+adaptive grid placement is reported.  Each of these limitations defines a natural direction for
+further investigation.
+The contribution of this work is therefore best understood as a transparent and reproducible
+benchmark study rather than a methodological advance.  Its value lies in establishing a clear
+
+
+                                                          18
+bridge  between  the  classical  optimal  control  literature  and  the  rapidly  growing  literature  on
+direct PINN formulations for constrained optimization [Barry-Straume et al., 2025, Zhang et al.,
+2026, Schiassi et al., 2024], in a setting where every numerical claim can be independently verified
+against an analytically interpretable reference.  The companion Colab notebook is intended to
+lower  the  barrier  to  entry  for  practitioners  who  wish  to  explore  PINN-based  optimal  control
+without  first  mastering  the  full  machinery  of  adjoint  methods  and  two-point  boundary  value
+problems.
+
+
+7    Conclusion
+
+This  work  has  presented  a  transparent  and  reproducible  benchmark  study  of  a  direct  dual-
+network Physics-Informed Neural Network formulation for the optimal control of a mass–spring–
+damper system.  The classical optimal control problem was formulated explicitly, solved by two
+independent classical methods – Pontryagin’s Minimum Principle with single shooting, and di-
+rect transcription through trapezoidal collocation – and reformulated as a constrained optimiza-
+tion problem to be solved by a pair of feedforward neural networks.  Hard boundary condition
+enforcement on the state was achieved through a composite ansatz built from a cubic polynomial
+and a quadratic mask, while the control was approximated by an unconstrained network.  The
+composite loss combined a physics residual at the collocation points with a trapezoidal approx-
+imation  of  the  cost  functional,  weighted  by  a  single  scalar  hyperparameter  selected  by  direct
+inspection.
+
+On the benchmark studied here, the PINN approximation reproduces the classical optimal cost
+to  four  significant  digits,  satisfies  the  terminal  state  constraints  exactly  by  construction,  and
+produces pointwise state and control errors that fall within the spread of the two classical refer-
+ences.  Training time on a standard Colab CPU runtime is approximately two minutes and is two
+orders of magnitude larger than the cost of the classical methods on the same problem.  These
+findings establish that direct PINN formulations can reach classical-grade accuracy on a bench-
+mark optimal control problem without any modification of the basic physics-informed training
+framework, and without the explicit derivation of adjoint equations or two-point boundary value
+problems.
+
+The contribution of the present work is methodological clarity rather than methodological nov-
+elty.   The  benchmark  was  deliberately  selected  to  admit  verifiable  classical  references  and  to
+expose the essential ingredients of a direct PINN-based optimal control formulation in a setting
+where each design choice can be examined in isolation.  The companion Google Colab notebook,
+all numerical results, and all figures are made available to support reproduction, extension, and
+educational use of the framework.  Natural directions for further investigation include nonlinear
+and higher-dimensional dynamics, inequality constraints on the control, adaptive loss weighting
+and  collocation  strategies,  and  problem  formulations  in  which  the  classical  adjoint  approach
+becomes  genuinely  difficult  to  deploy.   In  such  regimes,  the  qualitative  advantages  of  direct
+PINN-based optimization – avoidance of adjoint derivations, natural handling of partial obser-
+vations, and seamless integration with differentiable pipelines – are expected to translate into
+
+
+                                                           19
+practical competitiveness with classical methodologies.
+
+
+Code and Data Availability
+
+
+This  work  does  not involve  experimental  or  observational  datasets.  All  results are  generated
+computationally  from  the  differential  equation  (1),  the  boundary  conditions  of  problem(P),
+and the parameter values of Table 1.  To guarantee full reproducibility, the following materials
+are provided.
+
+
+Source code.The complete Python/PyTorch implementation is provided as a single Jupyter
+notebook designed for Google Colab.  The notebook mounts Google Drive, creates the output
+folders, implements the three solution methods (PMP shooting, trapezoidal collocation, dual-
+network PINN), trains the PINN with a fixed random seed, evaluates all three methods on a
+common dense reference grid, and produces every figure and table appearing in Section 5.  Each
+figure cell is self-contained and reads the saved numerical results from disk, so any single figure
+can be regenerated without re-executing the training pipeline.
+
+
+Computational  artifacts.All  numerical  results  reported  in  Section  5  are  written  to  two
+comma-separated values (CSV) files:trajectories.csvcontains the state,  velocity,  control,
+and pairwise pointwise errors of the three methods on the dense reference grid of 501 uniformly
+spaced points; andloss        history.csvrecords the evolution of the three loss components during
+the  Adam  and  L-BFGS  training  phases.   Every  numerical  value  reported  in  the  manuscript
+tables can be reproduced from these two files alone.
+
+
+Archive. The complete codebase, including the notebook and all computational artifacts, is
+publicly archived with a permanent DOI via Zenodo [Tahimi, 2026c].
+
+Acknowledgments
+
+
+During  the  development  of  this  work,  the  authors  used  AI-based  language  models  (Claude,
+Anthropic, 2024–2026) as assistive tools for writing, code development, and computational ver-
+ification.  All conceptual and scientific decisions — including the choice of benchmark problem,
+the design of the dual-network PINN formulation, the selection of validation strategy against two
+independent classical references, and the critical discussion of the method’s scope and limitations
+— originated with the authors.  All mathematical derivations, numerical values, and computa-
+tional results were independently verified by the authors, who assume full responsibility for the
+integrity, accuracy, and originality of the submitted work.
+
+
+
+
+
+
+
+                                                         20
+References
+
+Jostein Barry-Straume, Arash Sarshar, Andrey A Popov, and Adrian Sandu.  Physics-informed
+  neural  networks  for  pde-constrained  optimization  and  control.Computational  Mechanics,
+  2025.
+
+Arthur  E  Bryson  and  Yu-Chi  Ho.Applied  Optimal  Control:   Optimization,  Estimation  and
+  Control.  Taylor & Francis, 1975.
+
+Salvatore Cuomo, Vincenzo Schiano Di Cola, Fabio Giampaolo, Gianluigi Rozza, Maziar Raissi,
+  and Francesco Piccialli. Scientific machine learning through physics–informed neural networks:
+  Where we are and what’s next.Journal of Scientific Computing, 92(3):88, 2022.
+
+Abdullah  Farea,  Olli  Yli-Harja,  and  Frank  Emmert-Streib.   Understanding  physics-informed
+  neural networks:  Techniques, applications, trends, and challenges.AI, 5(1):1–42, 2024.
+
+George Em Karniadakis, Ioannis G Kevrekidis, Lu Lu, Paris Perdikaris, Sifan Wang, and Liu
+  Yang.  Physics-informed machine learning.Nature Reviews Physics, 3(6):422–440, 2021.
+
+Denis Khimin, Julian Roth, Thomas Wick, and Alexander Henkes.  Optimal control of pdes in
+  pytorch using automatic differentiation and neural network surrogates.Archives  of  Compu-
+  tational Methods in Engineering, 2024.
+
+Zakariyah K Lawal, H Yassin, Daniel T C Lai, and A Che Idris. Physics-informed neural network
+  (pinn) evolution and beyond:  A systematic literature review and bibliometric analysis.Big
+  Data and Cognitive Computing, 6(4):140, 2022.
+
+Christian Legaard, Tobias Schranz, Gerald Schweiger, and Jozef Drgona.  Constructing neural
+  network  based  models  for  simulating  dynamical  systems.ACM  Computing  Surveys,  56(2),
+  2023.
+
+Jacques-Louis Lions.Optimal  Control  of  Systems  Governed  by  Partial  Differential  Equations.
+  Springer, 1971.
+
+Kai Luo, Jun Zhao, Yu Wang, Jun Li, Jia Wen, and Jie Liang. Physics-informed neural networks
+  for pde problems:  A comprehensive review.Artificial Intelligence Review, 2025.
+
+Maziar Raissi, Paris Perdikaris, and George Em Karniadakis. Physics-informed neural networks:
+  A deep learning framework for solving forward and inverse problems involving nonlinear partial
+  differential equations.Journal of Computational Physics, 378:686–707, 2019.
+
+Anil V Rao.  A survey of numerical methods for optimal control.Advances in the Astronautical
+  Sciences, 135(1):497–528, 2009.
+
+Zhikai Ren, Sheng Zhou, Dong Liu, and Qiang Liu. Physics-informed neural networks:  A review
+  of  methodological  evolution,  theoretical  foundations,  and  interdisciplinary  frontiers  toward
+  next-generation scientific machine learning.Applied Sciences, 15(3), 2025.
+
+
+
+
+                                                         21
+Eduardo Schiassi, Michele De Florio, Heidi Johnston, and Daniele Mortari.  Pontryagin neural
+  networks  for  the  class  of  optimal  control  problems  with  integral  quadratic  cost.Aerospace
+  Research Communications, 2(1), 2024.
+
+Abdeladhim Tahimi.  Automatic differentiation from scratch:  How pytorch computes gradients
+  in physics-informed neural networks.  Submitted to arXiv, 2026a.
+
+Abdeladhim Tahimi.  Physics-informed neural networks:  A didactic derivation of the complete
+  training cycle.arXiv preprint arXiv:2604.18481, 2026b.
+
+Abdeladhim  Tahimi.   Companion  Notebook  for  “Dual-Network  PINNs  for  Optimal  Control:
+  A Reproducible Benchmark on the Mass–Spring–Damper System”.  Zenodo, version v1.0.0,
+  2026c.  URLhttps://doi.org/10.5281/zenodo.20404730.
+
+Fredi Tr”oltzsch.Optimal Control of Partial Differential Equations:  Theory, Methods and Ap-
+  plications.  American Mathematical Society, 2010.
+
+Rui Wang and Rong Yu.  Physics-guided deep learning for dynamical systems:  A survey. ACM
+  Computing Surveys, 2025.
+
+Xiaolong  Wang,  Yang  Dou,  Xiaoyu  Yi,  Yang  Zhang,  Xiaoyu  Li,  and  Bin  Li.   When  optimal
+  control meets neural network:  A comprehensive survey. Archives of Computational Methods
+  in Engineering, 2026.
+
+Zhen  Zhang,  Shanqing  Liu,  Alessandro  Alla,  Jerome  Darbon,  and  George  Em  Karniadakis.
+  Pinns in pde constrained optimal control problems: Direct vs indirect methods.arXiv preprint
+  arXiv:2604.04920, 2026.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                        22

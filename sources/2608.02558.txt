@@ -1,0 +1,762 @@
+                      Benchmarking Sheaf Neural Networks for Inductive Tasks
+
+                                     StefanoFiorini1∗† ,EdoardoCoppola2∗† ,PietroLiò2
+                                                             1Independent Researcher
+                             2Department of Computer Science and Technology, University of Cambridge
+                                    S.fiorini1994@gmail.com, ec2013@cam.ac.uk, pl219@cam.ac.uk
+
+
+
+
+                              Abstract
+   Sheaf Neural Networks (SNNs) generalize message passing
+   by replacing scalar edge weights of standard Graph Neural
+   Networks(GNNs)withlearnable,edge-dependentrestriction
+   maps between node stalks. Despite their strong theoretical
+   foundations and promising transductive results, SNNs have
+   been evaluated almost exclusively on transductive node clas-
+   sification, leaving their behaviour under inductive protocols
+   unknown. We address this gap through the first systematic
+   benchmark of the sheaf design space, evaluating three dif-
+   fusion mechanisms (neural sheaf diffusion, sheaf attention,
+   and sheaf attention with Graph Attention Network v2), three
+   restriction-mapparameterizations,threestalkdimensions,and
+   sixmodernGNNarchitecturalcomponents,withinamessage-
+   passing reformulation that never assembles the heavy sheaf
+   Laplacian,makingthefulldesignspacetrainableundercross-
+   graph batching. Across1,890controlled experiments on 14
+   inductivedatasets,multipleinsightsemerge:restrictionmaps
+   are the dominant design choice and general maps are prefer-
+   able,largerstalksaddcapacitybutnotlong-rangereach,archi-
+   tecturalcomponentsexplainmoreperformancevariationthan
+   the entire sheaf-specific design space itself. Under a matched
+   protocol,SNNstransfertoinductivesettingsbutdonotreach                        Figure1:Benchmarkingworkflowoverview.(Top-left)sheaf
+   the strongest baselines, with gaps being dataset-dependent.                  designspacespanning3diffusionmechanisms,3restriction-
+   Practically,asinglesheafconfigurationcangeneralizeacross                     mapparameterizations,and6GNNcomponents;(top-right)
+   datasets,soeffortisbetterspenttuningthesurroundingarchi-                     our Laplacian-free inductive message passing; (bottom)
+   tectural recipe than the sheaf operator itself.                              evaluation benchmarks, datasets, and domain taxonomy.
+
+                       1  Introduction
+GraphNeuralNetworks(GNNs)havebecomethedominant                                  2020). This richer diffusion mechanism has been shown,
+paradigm for learning from graph-structured data, achiev-                       both theoretically and empirically, to improve robustness to
+ing remarkable success across a wide range of applications,                     heterophily and mitigate oversmoothing relative to standard
+including molecular prediction (Abramson et al. 2024), bi-                      message passing (Bodnar et al. 2022).
+ological networks (Traversa et al. 2023), and recommender
+systems(Wuetal.2022).Despitetheirsuccess,conventional                              However,despitearapidlygrowingbodyofworkonsheaf-
+message-passingGNNssufferfromfundamentallimitations,                            based graph learning (Barbero et al. 2022b,a; Duta et al.
+including oversmoothing, oversquashing, and reduced ex-                         2023; Fiorini et al. 2025), our empirical understanding of
+pressiveness on heterophilous graphs, motivating the devel-                     these models remains almost exclusively confined totrans-
+opment of increasingly expressive graph learning architec-                      ductivenodeclassification,wheretrainingandinferenceare
+tures(Li,Han,andWu2018;AlonandYahav2020).Among                                  performed on a single, fixed graph. While such benchmarks
+these, Sheaf Neural Networks (SNNs) represent one of the                        have historically been central to graph representation learn-
+mostprincipledextensionsofmessagepassing,replacingthe                           ing, they capture only a narrow slice of real-world applica-
+classical graph Laplacian with a learnable sheaf Laplacian                      tions: molecular learning, protein modelling, graph classi-
+andpropagatinginformationthroughedge-dependentrestric-                          fication, and dynamic networks all requireinductive gener-
+tion maps rather than scalar weights (Hansen and Gebhart                        alization, where models must operate on previously unseen
+   ∗These authors contributed equally.                                          graphs or unseen regions of a graph. Reflecting this, graph
+
+   †Corresponding author.
+learning research has progressively shifted its focus from                                                 2  Preliminaries
+transductive citation networks toward large-scale inductive                        Given an undirected graphG= (V,E)withn=|V|nodes
+benchmarks that better reflect realistic deployment scenar-                        andm=|E|edges, letN(i) ={j:{i,j}∈E}denote the
+ios, a shift that sheaf-based models have yet to follow.                           neighborhoodofnodei.WeuseI               k forthek×kidentity,⊗
+   This shift hasalso highlighted how sensitivearchitectural                       fortheKroneckerproduct,and⊙fortheHadamardproduct.
+comparisons are to the evaluation protocol. Once model se-
+lection,encoders,andtuningbudgetsarestandardized,much                              2.1  CellularSheavesandtheSheafLaplacian
+of the performance gap between classical GNNs and more                             Definition 1.A cellular sheaf(G,F)over an undirected
+sophisticated architectures disappears (Errica et al. 2019;                        graphGassociates a vector spaceF(i)(thenode stalk) to
+Dwivedi et al. 2023; Tönshoff et al. 2023). In particular,                         eachnodei∈V,avectorspaceF(e)(theedgestalk)toeach
+augmentingclassicalGNNswithmodernarchitecturalcom-                                 edgee∈E, and a linearrestriction mapF                          i⊴e     :F(i)→
+ponents enables them to match or even outperform substan-                          F(e)for each incident node–edge pairi⊴e.
+tially more expensive Graph Transformers (GTs) across 14                              FollowingBodnaretal.(2022),wetakeallstalksisomor-
+inductive benchmarks (Luo, Shi, and Wu 2025), establish-                           phic toR   d for a fixed stalk dimensiond, so each restriction
+ingstrongbaselinesforinductivegraphlearning.SNNshave                               map is ad×dmatrix. In the opinion-dynamics interpreta-
+remained largely absent from this re-evaluation, with prior                        tion(HansenandGebhart2020),nodestalksF(i)representa
+applications limited to narrow settings (Ribeiro et al. 2025).                     node’sprivatespace,andF      i⊴e xi describeshowthatprivate
+More broadly, it remains unclear whether restriction-map                           state is expressed in the shared edge spaceF(e). The space
+type,diffusionmechanism,ortheirinteractiondrivesinduc-                             of0-cochainsC                   0(G,F) =   L
+tive performance, and whether sheaf diffusion benefits from                                                             i∈V F(i)stacksthenode-stalk
+the modern architectural components that have proven de-                           vectors; the space of1-cochainsC                   1(G,F) =   Le∈E F(e)
+cisive for classic GNNs. Addressing these gaps requires a                          stacks the edge-stalk vectors. Fixing an arbitrary orien-
+systematic evaluation of SNNs under contemporary induc-                            tatione =i→jper edge, the coboundary operator
+tive protocols.                                                                    δ:C    0(G,F)→C                    1(G,F)is(δX)                  e =F   j⊴e xj−Fi⊴e xi,
+   This paper addresses this gap through the first systematic                      and the sheaf Laplacian isL F =δ ⊤δ.
+studyofSNNsunderamoderninductiveprotocol.Sinceex-                                  Definition 2.The sheaf Laplacian acts on a0-cochainX
+isting sheaf-diffusion implementations target a single fixed                       node-wise as
+graph and cannot operate on cross-graphs batches, we first                                  LF(X)     i = X       F⊤i⊴e    (F  i⊴e xi−Fj⊴e xj).   (1)
+reformulate sheaf diffusion as a Laplacian-free, edge-wise                                                  i,j⊴e
+message-passing operator trainable across batched graphs.                             As a matrix,L F is symmetric positive semi-definite with
+Wethensystematicallyevaluatethesheafdesignspaceacross                              diagonal blocksL    ii  = P
+threediffusionmechanisms,threerestriction-mapparameter-                                                               i⊴e F⊤i⊴e Fi⊴e   and off-diagonal
+izations,threestalkdimensions,andleave-one-outablations                            blocksL    ij =−F ⊤i⊴e Fj⊴e  . The normalized sheaf Laplacian
+of six modern GNN architectural components on 14 graph-                            is∆ F =D −1/2  LFD−1/2   ,withDtheblockdiagonalofL    F.
+and node-level datasets, confirming the selected configura-                        For the trivial sheaf,d= 1,∆     F reduces to the normalized
+tions at full budget. The resulting picture yields both mech-                      graph Laplacian, so the sheaf Laplacian strictly generalizes
+anistic insight into what drives inductive sheaf performance                       theoperatorunderlyinggraphconvolution(KipfandWelling
+and actionable guidance for where future effort should go.                         2017). Its kernelker(L   F) ={X:F          i⊴e xi =F   j⊴e xj∀e=
+   Our contributions are summarized as follows:                                    {i,j}}isthespaceofsignalsinagreementacrosseveryedge,
+ •An inductive, Laplacian-free, message-passing reformu-                           and the asymptotics of sheaf diffusion are governed by it.
+    lation of sheaf diffusion that enables the first systematic                    2.2  NeuralSheafDiffusion
+    characterizationandevaluationofSNNsunderamodern                                Bodnar et al. (2022) build Neural Sheaf Diffusion (NSD)
+    inductive protocol. The same reformulation introduces                          by discretizing the sheaf diffusion PDE  ˙X(t) =−∆    FX(t).
+    SANv2,anewsheaf-attentionlayerwithGraphAttention                               After lifting the input features intohchannels per stalk di-
+    (GAT) v2-style dynamic attention.                                              mension, an NSD layer applies
+ •A characterization of the sheaf design space over 1,890                                  Xt+1  =X   t−σ  ∆F(t)     (I  n⊗W    1,t  )X  tW2,t ,  (2)
+    controlled experiments, revealing, among others, that
+    restriction-map parameterization is the dominant sheaf-                        whereσis a point-wise nonlinearity andW                         1,t ∈R   d×d  ,
+    specific design choice, increased stalk dimension adds                         W2,t ∈R   f×f   mix the stalk and channel dimensions. Cru-
+    capacity rather than long-range reach, and the diffusion                       cially,thesheafF(t)isitselflearnedandevolveswithdepth:
+    mechanism has negligible aggregate effect.                                     eachrestrictionmapisproducedbyaparametricfunctionof
+ •Actionable design guidance for inductive SNNs: the sur-                          the incident node features,F             i⊴e:=(i,j)              =  Φ(x     i,x j), with
+    roundingGNN+architectureexplainsmoreperformance                                Φtypically an MLP on the concatenation, i.e.(x          i∥x  j).
+    variation than the entire sheaf design space and a single                      Bodnar et al. (2022) show that, in the infinite-depth limit,
+    sheafconfigurationgeneralizesacrossdatasets,sotuning                           sheaf diffusion with sufficiently rich restriction maps can
+    is better spent on the recipe than on the sheaf. We fur-                       linearly separate classes in heterophilic settings where stan-
+    therquantify,datasetbydataset,theremaininggaptothe                             dardgraphdiffusionprovablyoversmooths.Therelevantaxis
+    strongest baselines.                                                           is the structure imposed on the restriction maps.
+2.3  SheafAttention                                                           benchmarks and, notably, the reported best model family
+SheafAttentionNetworks(SAN)(Barberoetal.2022b)aug-                            is inconsistent across papers (O(d)maps for Bodnar et al.
+ment sheaf diffusion with input-dependent attention, gen-                     (2022),GENmaps for Braithwaite et al. (2024)), indicating
+eralizing the GAT architecture (Veličković et al. 2018)                       the optimal diffusion–map parameterization design is task-
+to SNNs. LetA  F denote the sheaf adjacency with self-                        dependentand,todate,uncharacterizedininductivesettings.
+loops, whose(i,j)-th block is given by the transport map                      GNN Benchmarking.A parallel literature has shown
+Pij =F ⊤i⊴e Fj⊴e  .AscalarattentionmatrixΛiscomputedas                        GNN gains are fragile to evaluation protocol: once model
+in GAT,Λ ij  =  softmaxj LeakyReLU(a       ⊤[Wx i∥Wx  j]),                   selectionandbudgetsarestandardized,muchofthereported
+andliftedtostalkdimensionas ˆΛ = Λ⊗1      d.TheSANlayer                       gap between classic GNNs and sophisticated architectures
+is defined as    ˆΛ(X    t)⊙A F                                               (e.g. GTs) disappears (Errica et al. 2019; Dwivedi et al.
+   Xt+1  =σ                         (I  n⊗W    1,t  )X  tW2,t  ,  (3)         2023;Tönshoffetal.2023).Mostrecently,Luo,Shi,andWu
+                                                                              (2025) pushed this further, showing component-augmented
+                                                                              classic GNNs (GCN, GIN, GatedGCN) match or surpass
+witharesidualvariant(Res-SAN)insertingan(    ˆΛ⊙A  F−I)                       state-of-the-art GTs across 14 inductive graph- and node-
+update around a skip connection. GAT is recovered when                        level datasets at a fraction of their cost, and establishing the
+d= 1and the restriction maps are equal to1. SinceP                   ij and   standard evaluation protocol and baselines we adopt.
+Λij arelearnedindependently,featuretransportisdecoupled
+from neighbor weighting. Barbero et al. (2022b) parame-                                   4  SheafModelsandInductive
+terizeO(d)maps and let attention coefficients determine                                                 Implementation
+neighbors relative contributions.
+2.4  RestrictionMapFamilies                                                   Throughout,disthestalkdimension,fthechannelsperstalk,
+The restriction mapsF         i⊴e ∈R   d×d   can be organized into a          c=dfthe per-node representation size. Node-level tasks
+hierarchyofincreasinglygeneralparameterizations(Bodnar                        feedthenode-stalkrepresentationstoaper-nodehead,while
+et al. 2022):                                                                 graph-leveltasksfirstpoolthemwithapermutation-invariant
+                                                                              readoutbeforethehead.Ourstudyisorganizedaroundatwo-
+Diagonal (Diag).F      i⊴e   is diagonal, scaling each stalk co-              dimensional design space: three diffusion mechanisms that
+   ordinate independently. This parametrization has fewest                    propagate information and three restriction-map parameter-
+   parametersandstalkdimensionsinteractonlythroughthe                         izations (and dimensions) that transport features between
+   left multiplication byW   1.                                               stalks. The two axes are orthogonal, so their combination
+Orthogonal (O(d)).F            i⊴e  ∈O(d), realizing adiscrete                formsa3×3grid,onerowofwhichisanewsheaf-attention
+   O(d)-bundle. Orthogonal maps mix stalk dimensions                          layer we introduce. We first define the grid, then propose a
+   whilepreservingnorms,regularizeviafewerfreeparam-                          Laplacian-freeimplementationforanydiffusionmechanism
+   eters(d(d−1)/2),andyieldLaplaciansthatarenumeri-                           thatmakesittrainableundercross-graphbatching,introduce
+   cally convenient to normalize.                                             ourdynamicsheaf-attentionmechanism,derivethecomplex-
+General (Gen).F           i⊴e  is an unconstrainedd×dmatrix en-               ity,anddefinehowmodernGNNcomponentsarecombined
+   suringmaximalflexibilityandmoreparametersatthecost                         with the inductive sheaf operator (Fig. 1-Top-left).
+   of greater overfitting risk and a Laplacian that is harder                 The Sheaf Design Space.The three diffusion mecha-
+   to normalize numerically (requiring SVD).                                  nisms analyzed in this study share the sheaf transport block
+                                                                              Pij  =F ⊤i⊴e Fj⊴e  , the mixing matricesW         1 ∈R   d×d   and
+                     3  RelatedWorks                                          W2∈R   f×f  ,theintrinsicnonlinearityσ,andaresidualcon-
+SheafNeuralNetworks.SNNsequipagraphwithacellu-                                nection.Theydifferinhowneighbormessagesareweighted.
+larsheaf,attachingvector-spacestalkstonodesandedgesand                        NSDpropagates through the learnable normalized sheaf
+linearrestrictionmapstoincidentpairs,therebygeneralizing                      Laplacian of Eq. (2), so every neighbor contributes through
+thegraphLaplaciantoasheafLaplacian(HansenandGhrist                            thetransportalone.SANandournewlyproposedSANv2in-
+2019).WhileHansenandGebhart(2020)introducedthefirst                           steadmodulatethetransportwithinput-dependentattention,
+sheaf network with a hand-crafted Laplacian, Bodnar et al.                    and differ from each other in how the attention scores are
+(2022) made the approach practical with Neural Sheaf Dif-                     computed: statically forSAN, dynamically forSANv2. Be-
+fusion (NSD), learning the restriction maps end-to-end and                    cause the restriction maps setP     ij while the attention coeffi-
+establishingthatsheafdiffusioncanlinearlyseparateclasses                      cientssettheweighting,howfeaturesaretransportedbetween
+in heterophilic regimes where graph diffusion oversmooths.                    stalksstaysdecoupledfromhowstronglyeachneighborcon-
+Subsequent work extended NSD along several axes: atten-                       tributes. Each mechanism is paired with one of the three
+tion (Barbero et al. 2022b), connection Laplacians obtained                   restriction-map families seen in Sec. 2 (Diag,O(d),Gen),
+viaRiemannianpreprocessing(Barberoetal.2022a),hyper-                          givingninemodels.Withallelsefixed,thisgridisolatestwo
+graphs(Dutaetal.2023),heterogeneousgraphs(Braithwaite                         questions prior work conflates: (1) whether restriction-map
+et al. 2024), and directionality (Fiorini et al. 2025; Ribeiro                typeordiffusionmechanismdominates,and(2)whetherthey
+et al. 2025). Across this line, evaluation is almost entirely                 interact,thatis,whetherthebestmapfamilydependsonthe
+transductivenodeclassificationonafixedsetofheterophilic                       mechanism and the reverse.
+Laplacian-Free Inductive Implementation.The refer-                                  gate,samehigh-passselfterm,andreplacesonlythescoring
+enceNSDimplementation (Bodnar et al. 2022) targets a                                with its dynamic counterpart,
+single fixed graph and cannot batch across graphs with-                                         αij =a ⊤LeakyReLU (W  lxi +W   rxj).    (10)
+out restructuring. We instead implement every grid cell
+as a message-passing operator that never materializes the                           By applying the nonlinearity after the combined projection
+heavynd×ndsheaf Laplacian and evaluates its action                                  andmovingtheattentionvectoroutsideit,GATv2reordering
+edge-wise, with the restriction mapsF         i⊴e   predicted from                  makes neighbor ranking query-dependent rather than fixed
+edge_indexand its (Fig. 1-Top-right). For each edge                                 (Brody, Alon, and Yahav 2021). The change is confined to
+{i,j}∈Ewithedgefeaturese                     ij,eachlayercomputesthree              how each edge is scored, so it leaves the sheaf geometry,
+steps:                                                                              the complexity, and the batching properties of the layer un-
+            (message)m   ij =ϕ(x       i,x j,e ij);         (4)                     touched,anditcomposeswithallthreerestriction-mapfam-
+                                                                                    ilies. To our knowledgeSANv2is the first sheaf-attention
+       (aggregation)a          i = M       mij = X           mij;  (5)              layer with dynamic attention. Scoring is multi-head withH
+                                   j∈N(i)            j∈N(i)                         heads (head-specific parameters in Eqs. (9)–(10)), giving
+              (update)x    ′i =γ(x       i,a i).               (6)                  per-headcoefficientsα                         (h)ij   = softmaxj(e  (h)ij  ).Bydefaultthe
+In every case the messageϕroutes the neighbor’s repre-                              headsarecombinedbyconcatenation:headhweightsitsown
+sentation through the per-edge transportP ij  =F ⊤i⊴e Fj⊴e  ,                       contiguousblockofthefchannels,soα           ij isblock-constant
+while an optional mechanism-specific edge gateΓ     ij and an                       across channels ([α   ij]c  =α   h(c)ij  for the headh(c)owning
+optional node-wise normalization determine the exact form                           channelc),whilethetransportP              ij staysasingled×dblock
+ofϕand of the updateγ.                                                              per edge.
+   NSDapplies no attention mechanism,Γ                     ij    =I   f,            Complexity.  Per layer per graph, restriction-map predic-
+and normalizes each stalk by its block degreeD     i   =                            tion dominates atO(md          3f)forO(d)/GenandO(md                                              2f)
+P
+   e∈E(i)  F⊤i⊴e Fi⊴e ,whereE(i)is the set of edges inci-                           forDiag; transport and aggregation addO(md                      2f); degree
+dent toi. Writingz            i  =D −1/2i  xi for the normalized rep-               blocksandtheirinversesquarerootsaddO((n+m)d                               3).In
+resentation, the aggregation of Eq. (5) becomes the trans-                          total,
+porteddifferencebetween a node and its neighbors,a                              i  =                Time:O   (n+m)d                 2f+md       3f
+Dizi−Pj∈N(i)    Pijzj,andtheupdatefunction,Eq.(6),is                                               Space:O    md2 + (n+m)df    ,         (11)
+defined as follows:                                                                 both linear innandm. No operator is assembled or fac-
+                γ(x    i,a i) =x   i−σ     D−1/2         .        (7)               torized, and the edge-wise pass composes withPyTorch
+                                              i  ai                                 Geometricbatching, so a batch of graphs is one disjoint
+For theGenparameterization we obtainD       −1/2                                    unionprocessedwithoutaper-graphloop.Thisiswhatmakes
+                                                        i    through a              our sheaf models trainable in the inductive, graph-batched
+batched, deterministic Newton–Schulz iteration rather than                          regime the reference implementation does not support.
+the reference’s random-noise regularization, which would
+otherwise be a source of numerical instability.                                     Composition with Modern GNN Components.Two
+   SANandSANv2use the mixed representation                      ˜x=                 placements are specific to the sheaf operator. The activation
+W1xW ⊤2  directly, without degree normalization, and set                            σis intrinsic to the sheaf operator (Eqs. (2) and (8)), so no
+Γij  =  diag(α  ij)with an attention gateα      ij ∈R   f, the                      post-convolutionactivationisapplied,andnormalizationand
+channel-wise counterpart of the scalar coefficientΛ                 ij of           dropout act on the convolution incrementbeforethe resid-
+Eq. (3):                                                                            ual add. WithNza normalization andDpa dropout (both
+                  ai = X          Pij ˜xj diag (α  ij),                             reduced to the identity when their component is switched
+                         j∈N(i)                                        (8)          off, i.e.g   norm=0org      drop=0),g  • ∈{0,1}the component
+                                                                                    selectors, and input encodings concatenated upstream when
+                  x′i =x   i +σ(a       i− ˜xi),                                    gpe=1, layerlmaps
+where ˜ximakesthebracketahigh-passsheafupdate(DiGio-
+vanni et al. 2022) distinct from the outer residual skipx       i.                            a(l)   = Convl      h(l) ,E,gedge·e ij     ,         (12)
+The weights are produced by multi-head attention over per-
+edgescoresα          ij.SANcomputesthemwiththestaticscoring                                    b(l)   = Dp    Nz    a(l)     ,                 (13)
+of GAT (Veličković et al. 2018),                                                               c(l)   =g  resh(l)   +b    (l) ,                   (14)
+          αij = LeakyReLU a⊤sWx    i +a ⊤dWx    j.    (9)
+                                                                                           h(l+1)   =g  ffn FFNl      c(l)   + (1−g     ffn)c  (l) ,    (15)
+This scoring isstatic: the ranking a node induces over its
+neighbors is fixed by the learned parameters and does not                           with the feed-forward block
+dependonthequerynode,alimitationthatBrody,Alon,and                                  FFNl(z) = Nz     2 Nz1 z) + Dp  Wff2 Dp σ(W   ff1 Nz1(z) 
+Yahav (2021) identified for GAT and resolved with GATv2.
+WethereforeintroduceSANv2,whichkeepsthesheafupdate                                  The residual in Eq. (15) is the simple additive skip used
+ofEq.(8)unchanged,sametransportP ij,samechannel-wise                                by GNN+. Edge features are integrated insideConv          l by
+conditioning the restriction maps rather than the messages                      an all-components-off baseline. Each component is evalu-
+orattentioncoefficients.Thesheaflearnerpredictseachmap                          ated across all restriction-map parameterizations and stalk
+from the concatenated endpoint representations, optionally                      dimensions, allowing conclusions to be drawn from aggre-
+augmented by an encoded edge feature,                                           gate trends over the full factorial design. For each diffusion
+                        h                                i                      mechanism and dataset, we select the best-performing con-
+         F (l)v⊴e     = Φl h(l)i ∥h   (l)j ∥g edge·W eeij    ,                  figuration.Inthefinalconfirmationstage,weevaluateNSD,
+                                                                                SAN, andSANv2, where the latter inherits the bestSAN
+whereΦ          l denotes the map-predicting linear projection fol-             configuration and is therefore not screened independently.
+lowed by the family-specific construction (DIAG,O(d), or                        Allselectedmodelsarethentrainedusingthefullepochand
+Gen), andW             e a learned edge encoder. Wheng       edge  =  1         budget of Luo et al.
+thetransportblocksF ⊤iFj andthedegreenormalizationare                           Baselines.Ourcomparisonsdifferbetweenthetwostages.
+thusconditionedone    ij.Wheng       edge = 0themapsdependon                    During screening, leave-one-out ablations are evaluated
+the node features alone as in the reference implementation.                     againstthecorrespondingall-offsheafbaselinetoisolatethe
+The selectorsg    • parametrize the component configurations                    contribution of each GNN+ component. During confirma-
+outlined in the following section.                                              tion, the selected sheaf models are compared against strong
+                 5  ExperimentalSetup                                           GNNsequippedwiththeGNN+recipe,GraphTransformers,
+                                                                                andpriorspecializedarchitectures,usingtheresultsreported
+Datasets and Tasks.                                                             in(Luo,Shi,andWu2025).Thebest,second-,andthird-best
+Datasets and Tasks.We evaluate sheaf-based models                               resultsarehighlighted.Wereportthemeanperformanceand
+on14inductive datasets spanning graph- and node-level                           standard deviation over five random seeds.
+classification and regression tasks (Fig. 1-Bottom). The                                                   6  Results
+evaluation includes five datasets from the GNN Bench-                           6.1  Screening:UnderstandingtheSheafDesign
+mark(Dwivedietal.2023)(ZINC,MNIST,CIFAR10,PAT-
+TERN, and CLUSTER), four from the Open Graph Bench-                                    Space
+mark (OGB) (Hu et al. 2020) (ogbg-molhiv, ogbg-molpcba,                         The screening stage explores the sheaf design space across
+ogbg-code2, and ogbg-ppa), and five from the Long-Range                         diffusion mechanisms, restriction-map parameterizations,
+GraphBenchmark(LRGB)(Dwivedietal.2022;Freitasand                                stalk dimensions, and GNN+ components to determine
+Dong2021)(Peptides-func,Peptides-struct,PascalVOC-SP,                           whichdesignchoicesconsistentlygoverntheperformanceof
+COCO-SP,andMalNet-Tiny).All14datasetsareusedinthe                               inductiveSNNs.Ofits14×6×3×8 = 2,016cells,108col-
+screening stage, while the confirmation stage covers 12 for                     lapseontothefullrecipebecausesixdatasetscarrynoposi-
+conciseness.Wereportthetworemainingdatasets,ogbg-ppa                            tionalencodingand18areinfeasibleattheparameterbudget,
+andCOCO-SP,intheSupplementaryMaterial.Wefollowthe                               leaving1,890runs.Becausethe14datasetscarrysixmetrics
+officialtrain/validation/testsplitsandevaluationprotocolsof                     withoppositeoptimizationdirections,per-cellvaluescannot
+each benchmark (Supplementary Material for details). We                         bepooleddirectly:wemapeachruntoawithin-datasetrank-
+follow the official train/validation/test splits and evaluation                 normalizedscorein[0,1](Fig.2)andtreatthedatasetasthe
+protocols of each benchmark (Supplementary Material for                         unit of analysis, assessing every axis by paired comparisons
+details).                                                                       acrossthe14datasetswithexactWilcoxonsigned-ranktests
+EvaluationProtocol.FollowingLuo,Shi,andWu(2025),                                (Table 1). Conclusions therefore hold across benchmarks
+weadopttheirstandardizedGNN+trainingpipeline1,includ-                           rather than within individual cells. Since ranking discards
+ing the same feature and positional/structural encoders, op-                    the size of the gaps it orders, we repeated every comparison
+timizer, learning-rate schedule, gradient clipping, and eval-                   under a metric-linear score that retains them:12of the13
+uation protocol (see Supplementary Material for details).                       are unchanged in direction and significance.
+We replace only the message-passing layer with the pro-                            Several insights are revealed.Restriction-map param-
+posed sheaf operator, ensuring that performance differences                     eterization is the dominant design choice, accounting for
+are attributable solely to the architecture. We further adopt                   12.2%ofthescorevarianceagainst0.2%forthechoiceofdif-
+a two-stagescreen-then-confirmprotocol. Candidate con-                          fusion mechanism, with the orderingGen>Diag>O(d)
+figurations are first screened using a single random seed                       holdinginallsixmechanism×dslices.TheGen–O(d)gap
+and a reduced training budget, with model capacity con-                         is0.242,0.244and0.224atd={2,3,4},henceindependent
+strained to the per-dataset parameter budget of Luo, Shi,                       of how many free parameters an orthogonal map is given.
+and Wu (2025). During the screening stage, we evaluate the                      This suggests thatorthogonal transport is limited by its
+two primary sheaf diffusion mechanisms,NSDandSAN,                               norm-preserving constraint rather than by its smaller
+across the full factorial of datasets, restriction-map param-                   parameterization,sincepreservingfeaturenormslimitsthe
+eterizations, and stalk dimensions (d∈{2,3,4}), together                        ability to adaptively attenuate neighboring messages. Con-
+with leave-one-out ablations of each GNN+ component and                         sistently,O(d) fares worst where edges are most numerous
+                                                                                (0.316onthefoursuperpixeldatasetsagainst0.395onOGB).
+   1GNN+ augments classic GNNs with normalization, residual                     Increasing the stalk dimension improves performance
+connections, dropout, feed-forward layers, edge features, and posi-             monotonically on13/14datasets, with every successive
+tional/structural encodings (Luo, Shi, and Wu 2025).                            step significant (except ogbg-ppa, discussed below). Setting
+                                                                                                                                            Table 2: Performance on GNN Benchmark datasets.
+
+
+
+
+
+
+
+
+
+                     Figure2:Screeningmarginaleffects.Eachpointisthemean
+                     within-dataset rank-normalized score (1 =best cell on that
+                     dataset) at one level of a screening axis, averaged over the                                                                     Table 3: Performance on LRGB datasets.
+                     datasets of a benchmark suite.A: restriction-map parame-
+                     terization.B:stalkdimension.C:GNN                                                + component,where
+                     each row removes one component from the full recipe. Di-
+                     rections are consistent across all three suites.
+
+
+
+
+
+
+
+
+
+
+                                                                                                                                                       Table 4: Performance on OGB datasets.
+
+
+                                                                                                                                      messagepassing.However,ifobservedgainscamefromthat
+                                                                                                                                      mechanism, they should be concentrated where information
+                                                                                                                                      must travel farthest, or where many neighbors compete for
+                                                                                                                                      the same channels, butwe observe no such concentration.
+                                                                                                                                      Over the13datasets on which the trend is monotone, the
+                                                                                                                                      d=4overd=2improvementisuncorrelatedwiththeaverage
+                                                                                                                                      numberofnodespergraph(Spearmanρ= +0.08)andwith
+                     Table1:Pairedcomparisonsover1,890completedscreening                                                              the average node degree (ρ=−0.15), and its mean over the
+                     runs.∆is the difference in within-dataset rank-normalized                                                        five LRGB datasets (+0.234), which are constructed to re-
+                     score, averaged over 12 datasets;pis an exact two-sided                                                          quire long-range dependencies, is close to its mean over the
+                     Wilcoxon signed-rank test on paired per-dataset differences.                                                     remaining eight (+0.218). Therefore,larger stalks behave
+                     η2 istheshareoftotalscorevarianceattributabletotheaxis.                                                          as a generic increase in model capacity rather than as a
+                     †Theonlyrowwhosesignificancedependsonnormalization:                                                              targeted remedy for long-range reach, although with13
+                     underascorelinearinthenativemetricitfallstop= 0.058,                                                             datasets only a strong association would be detectable.
+                     so we treat it as suggestive.                                                                                        Searching the sheaf design space per dataset recovers
+                                                                                                                                      almostnothingoncetheGNN+ recipeistuned.Selecting
+                                                                                                                                      the best of the18architectures separately on every dataset
+                                                                                                                                      attainsarank-normalizedscoreof1.0therebyconstruction,
+                     largerd, each node receives extra channel capacity to route                                                      yet fixing the architecture globally toNSD-Genatd=4and
+                     different neighbors’ contributions. Such added capacity is                                                       tuningonlytherecipeperdatasetstillaverages0.991,andis
+ Comparison    Meanwhat sheaf diffusion is argued to gain over scalar-weighted∆ Datasetsfavoring    p                                 thesinglebestcelloutrightonfiveofthe14datasets.Aper-
+ Restrictionmap(η          2 = 12.2%;Friedmanχ                         22 = 17.71,p<0.001)
+ Gen>O(d)       +0.237    13/14          0.0004
+ Diag>O(d)      +0.186    13/14          0.0002
+ Gen>Diag     +0.052    11/14          0.0052Peptides-func  Peptides-struct  PascalVOC-SP  MalNet-Tinyogbg-molhiv   ogbg-molpcba    ogbg-code2
+Metric                       ZINC    MNIST    CIFAR10   PATTERN   CLUSTERAUROC↑   Avg.Precision↑   F1score↑
+Param.budgetStalkdimension(η                    2 = 8.5%;Friedmanχ                       22 = 20.57,p<0.001)∼500K  ∼500K  ∼500K  ∼500K
+Param.budgetMetric       Avg.Precision↑   MAE↓    F1score↑   Accuracy↑∼500K ∼100K  ∼100K  ∼500K  ∼500K
+MetricSAT(2022)d=4>d=2        +0.204    13/14          0.0002MAE↓   Accuracy↑   Accuracy↑   Accuracy↑   Accuracy↑–          –     0.1937±0.0028
+EGT(2022)GraphGPS(2022)Specformer(2023)d=3>d=2        +0.132    13/14          0.00020.6534±0.0091 0.2509±0.00140.4440±0.00650.9350±0.00410.108±0.009 0.9817±0.0009 0.6870±0.0041 0.8682±0.00020.7923±0.00350.7889±0.01240.2972±0.0023  –
+GraphViT/MLP-Mixer(2023)Exphormer(2023)0.6258±0.0092 0.2512±0.0025 0.3446±0.00640.9402±0.0020.073±0.0010.9846±0.00090.7396±0.0033    –       –
+Subgraphormer(2024)            0.8038±0.0192  –          –
+GRIT(2023)GRED(2024)d=4>d=3        +0.071    13/14          0.00170.7133±0.00110.2455±0.0013     –        –0.059±0.0020.9811±0.00110.7647±0.00880.8720±0.00080.8003±0.0028
+GRED(2024)GECO(2024)      0.077±0.002 0.9838±0.00010.7685±0.00190.8676±0.0002 0.7850±0.00100.7980±0.02000.2961±0.00080.1915±0.0020
+GEAET(2024)Graph-Mamba(2024)0.6739±0.0087 0.2478±0.0016 0.4191±0.0126 0.9340±0.0027–   0.9851±0.00090.7663±0.0043 0.8699±0.0003    –
+GSSC(2024)                     0.8035±0.0142  –          –
+TIGT(2024)GSSC(2024)Diffusionmechanism(η               2 = 0.2%)0.7081±0.00620.2459±0.00200.4561±0.00390.9406±0.00640.057±0.0020.9823±0.0013 0.7396±0.0036 0.8668±0.0006 0.7802±0.0022
+GCN+(2025)                     0.8012±0.0124  0.2721±0.0046  0.1787±0.0026
+GMN(2024)GCN+(2025)NSDvsSAN  +0.023    8/14             0.5020.7261±0.00670.2421±0.00160.3357±0.0087 0.9354±0.0045–   0.9839±0.0018 0.7456±0.00380.8709±0.0126 –
+GIN+(2025)GIN+(2025)      0.065±0.0040.9829±0.0010 0.6959±0.0029 0.8684±0.0005 0.7479±0.00210.7928±0.0099  0.2703±0.0024  0.1803±0.0019
+GatedGCN+(2025)GIN+(2025)0.7059±0.00890.2429±0.00190.3189±0.0105 0.9325±0.00400.077±0.0050.9871±0.00140.7722±0.00380.8703±0.00040.7913±0.0024
+GatedGCN+(2025)          0.7006±0.00330.2431±0.00200.4263±0.00570.9460±0.0057
+NSDGatedGCN+(2025)GNN+component,removedvs.fullrecipe(η           2 = 26.7%)0.089±0.008 0.9751±0.0037 0.6661±0.0051 0.8674±0.0001 0.7836±0.00710.8040±0.01640.2981±0.00240.1896±0.0024
+SANNSD                   0.6374±0.0071 0.2577±0.0021 0.3317±0.0069 0.9300±0.00140.088±0.003 0.9753±0.0012 0.6636±0.0059 0.8677±0.0003 0.7666±0.0041
+NSD−dropout +0.211    14/14          0.00010.7606±0.0021  0.2333±0.0014  0.1559±0.0197
+SANv2SAN                 0.6376±0.0075 0.2583±0.0021 0.3251±0.0035 0.9235±0.00350.092±0.004 0.9742±0.0015 0.6750±0.0063 0.8684±0.0002 0.6805±0.0678          †
+SAN                             0.7563±0.0275  0.2349±0.0031  0.1592±0.0219
+SANv2−BatchNorm †    +0.124    12/14          0.00850.6228±0.0093 0.2546±0.0037 0.3052±0.0008 0.9275±0.0078
+SANv2−FFN  −0.045    5/14             0.2680.7241±0.0202  0.2362±0.0008  0.1594±0.0205
+ −PE   −0.109    2/8                0.148
+ −edgefeat. −0.087    2/14            0.0005
+ −residual−0.139    0/14            0.0001
+ allremoved  −0.294    1/14            0.0006
+datasettuningbudgetisthereforebetterspentontheGNN+                             nitude across the twelve datasets reported here, and it tracks
+components than on the sheaf architecture.                                     neither the benchmark suite nor the task level: the smallest
+  The surrounding GNN+ architecture explains more                              andlargestgapsbothoccurwithintheGNNBenchmarksuite,
+performance variation (26.7%) than the entire 18-cell                          and node- and graph-level datasets are interleaved through-
+sheafdesignspace(21.1%).Inparticular,residualconnec-                           out the ranking. The closest results are obtained on PAT-
+tions and edge features are essential, with only0/14and                        TERN, MNIST, MalNet-Tiny and CLUSTER, where sheaf
+2/14datasets improving when they are removed, whereas                          modelsaverage1.4%fromthebest-performingmethod,with
+dropout is detrimental on all14datasets. A plausible ex-                       NSDoutperforming TIGT and GIN           + on CLUSTER. The
+planation is that the learned restriction maps already act as                  largest gaps, averaging30%, are on ZINC, PascalVOC-SP,
+aper-edgebottleneck,providinganimplicitformofregular-                          ogbg-molpcbaandogbg-code2.Notably,thefourdatasetson
+ization that reduces the benefit of dropout.                                   which sheaf models come closest are also those on which
+  Finally,whileNSDandSANachievecomparableaverage                               the baselines themselves differ least, so near-parity there
+performance (p=  0.50), they exhibit different behaviors:                      suggests limited headroom rather than a property of sheaf
+SANis more robust to the removal of GNN        + compo-                        diffusion. Comparing the three mechanisms reveals com-
+nents,losing0.169scorepointsagainst0.422forNSDwhen                             plementary behavior rather than a universally superior ar-
+all are removed, and it leads on5/8graph-level datasets,                       chitecture.NSDattains the best sheaf result on two of the
+whereasNSDis ahead on all four node-level datasets                             three node-classification datasets, in line with transductive
+(mean+0.126).However,thetwomechanismsdonotmerely                               findings(Barberoetal.2022b;Bodnaretal.2021),whereas
+degrade at different rates:their ranking reverses with the                     theattention-basedmechanismstakesevenoftheninegraph-
+component stack. Under the full recipeNSDleads,0.564                           leveldatasets.AlthoughSANv2introducesdynamicGATv2-
+against0.515;witheverycomponentremovedSANleadsby                               styleattention,itdoesnotconsistentlyoutperformtheorigi-
+a wider margin,0.346against0.142. The aggregate parity                         nalSAN,suggestingthatattentiondesignaloneisnotthepri-
+reportedaboveisthusanaverageovertwooppositeregimes,                            mary bottleneck for inductive sheaf learning. Overall, these
+and a comparison between diffusion mechanisms is inter-                        observationscloselymirrortheconclusionsofthescreening
+pretable only with respect to the component stack in which                     study. Restriction-map parameterization and the surround-
+it was measured.                                                               ing GNN+ architecture account for substantially more per-
+  One dataset, ogbg-ppa, deviates from the overall trends.                     formance variation than the choice of diffusion mechanism,
+Under every recipe retainingBatchNorm, as prescribed                           whileNSDandSANexhibitcomplementaryinductivebiases
+by the evaluation protocol, the models fit the training set                    thatpersistunderfulltraining.Theseresultsindicatethatthe
+whilevalidationaccuracycollapsestoatmost11%.Remov-                             principallimitationsofcurrentSNNslielessinthediffusion
+ingBatchNormleaves training essentially unchanged but                          mechanismitselfthaninthearchitecturaldesignsurrounding
+restores validation performance (see Supplementary Mate-                       it,providingacleardirectionforfuturesheaf-basedmodels.
+rial), suggesting that estimated batch statistics do not trans-
+fer to evaluation. This sensitivity appears specific to sheaf                                          7  Conclusions
+diffusion rather than to the dataset itself, as GNN+ base-                     We explored the sheaf design space across diffusion mecha-
+lines achieve0.81–0.83under the same protocol. We there-                       nisms, restriction-map parameterizations, stalk dimensions,
+foreretainthereferencenormalizationforafaircomparison                          and modern GNN components on 14 inductive graph- and
+and simply note that default ranking compares near-chance                      node-leveldatasetsunderastandardizedprotocol,screening
+models. This also highlights a constraint of the inherited                     1,890configurationsandconfirmingthebestonesatfullbud-
+protocol thatprevents fromusing alternativenormalizations                      get.SNNscantransfertoinductivesettings,butdonotreach
+that behave identically during training and evaluation (e.g.                   the strongest published baselines on any dataset considered,
+LayerNorm). While we cannot relax it, we leave this ex-                        andthegapvariesbytwoordersofmagnitudeacrossdatasets
+ploration to future studies. Overall, these findings identify                  without tracking benchmark suite or task level. Screening
+expressive restriction maps, larger stalk dimensions, and a                    identifieswhereperformanceisdecided:restriction-mappa-
+carefully designed GNN+ architecture as the primary fac-                       rameterizations govern the sheaf operator, GENmaps are
+tors behind SNN’s inductive performance. Performance of                        preferable at every stalk dimension, larger stalks contribute
+individual cells is provided in the Supplementary Material.                    capacity rather than long-range reach, and the surrounding
+6.2  Confirmation:OverallPerformance                                           component recipe explains more variance than the entire
+                                                                               sheaf-specificdesign.Practically,asinglesheafarchitecture
+Followingthescreeningstage,Tables2–4reporttheselected                          can generalize across datasets while the component recipe
+NSD, SAN, andSANv2configurations alongside strong                              does not, so tuning is better directed at the latter. This sug-
+GNNs, GTs, and specialized baselines under the standard-                       gestswherefutureSNNsshouldinvest:expressivemapsand
+izedevaluationprotocolofLuo,Shi,andWu(2025).Perfor-                            componentrecipe.LimitationsandFutureWorks.Despite
+mance is reported as the mean and standard deviation over                      our extensive experiments, our factorial exploration is only
+fiverandomseeds.Onlytop-3entriesfromtheworkofLuo,                              near-complete,andadditionalinteractionsamongtheGNN+
+Shi, and Wu (2025) are reported for conciseness.                               componentsmayprovidefurtherinsights.Likewise,although
+  Overall,SNNscantransfertoinductivesettings,although                          we evaluate a broad collection of datasets, stronger corre-
+a gap with the strongest modern architectures remains. That                    lations may emerge only from a larger and more diverse
+gapishighlydatasetdependent,spanningtwoordersofmag-                            benchmark suite. We leave both directions for future work.
+                          References                                          Duta, I.; Cassarà, G.; Silvestri, F.; and Liò, P. 2023. Sheaf
+Abramson, J.; Adler, J.; Dunger, J.; Evans, R.; Green, T.;                    hypergraph networks.Advances in Neural Information Pro-
+Pritzel, A.; Ronneberger, O.; Willmore, L.; Ballard, A. J.;                   cessing Systems, 36: 12087–12099.
+Bambrick, J.; et al. 2024.  Accurate structure prediction                     Dwivedi,V.P.;Joshi,C.K.;Luu,A.T.;Laurent,T.;Bengio,
+of biomolecular interactions with AlphaFold 3.Nature,                         Y.; and Bresson, X. 2023.  Benchmarking Graph Neural
+630(8016): 493–500.                                                           Networks.Journal of Machine Learning Research, 24(43):
+Alon, U.; and Yahav, E. 2020. On the bottleneck of graph                      1–48.
+neuralnetworksanditspracticalimplications.arXivpreprint                       Dwivedi,V.P.;Rampášek,L.;Galkin,M.;Parviz,A.;Wolf,
+arXiv:2006.05205.                                                             G.; Luu, A. T.; and Beaini, D. 2022.  Long range graph
+Bar-Shalom, G.; Bevilacqua, B.; and Maron, H. 2024.                           benchmark.arXiv preprint arXiv:2206.08164.
+Subgraphormer: Unifying Subgraph GNNs and Graph                               Errica, F.; Podda, M.; Bacciu, D.; and Micheli, A. 2019. A
+Transformers  via  Graph  Products.arXiv  preprint                            fair comparison of graph neural networks for graph classifi-
+arXiv:2402.08450.                                                             cation.arXiv preprint arXiv:1912.09893.
+Barbero, F.; Bodnar, C.; de Ocáriz Borde, H. S.; Bronstein,                   Fiorini, S.; Aktas, H.; Duta, I.; Coniglio, S.; Morerio, P.;
+M.;Veličković,P.;andLiò,P.2022a. Sheafneuralnetworks                          Del Bue, A.; and Liò, P. 2025. Sheaves Reloaded: A Direc-
+with connection laplacians. InTopological, Algebraic and                      tional Awakening.arXiv preprint arXiv:2506.02842.
+Geometric Learning Workshops 2022, 28–36. PMLR.                               Freitas, S.; and Dong, Y. 2021. A Large-Scale Database for
+Barbero, F.; Bodnar, C.; de Ocáriz Borde, H. S.; and Lio, P.                  Graph Representation Learning.Advances in neural infor-
+2022b.Sheafattentionnetworks.InNeurIPS2022Workshop                            mation processing systems.
+on Symmetry and Geometry in Neural Representations.                           Hansen, J.; and Gebhart, T. 2020. Sheaf neural networks.
+Behrouz,A.;andHashemi,F.2024. Graphmamba:Towards                              arXiv preprint arXiv:2012.06333.
+learningongraphswithstatespacemodels.InProceedingsof                          Hansen, J.; and Ghrist, R. 2019. Toward a spectral theory
+the30thACMSIGKDDConferenceonKnowledgeDiscovery                                of cellular sheaves.Journal of Applied and Computational
+and Data Mining, 119–130.                                                     Topology, 3(4): 315–358.
+Bo, D.; Shi, C.; Wang, L.; and Liao, R. 2023. Specformer:                     He, X.; Hooi, B.; Laurent, T.; Perold, A.; LeCun, Y.; and
+Spectral graph neural networks meet transformers.arXiv                        Bresson, X. 2023.  A generalization of vit/mlp-mixer to
+preprint arXiv:2303.01028.                                                    graphs. InInternational conference on machine learning,
+Bodnar, C.; Di Giovanni, F.; Chamberlain, B.; Lio, P.; and                    12724–12745. PMLR.
+Bronstein, M. 2022.  Neural sheaf diffusion: A topologi-                      Hu, W.; Fey, M.; Zitnik, M.; Dong, Y.; Ren, H.; Liu, B.;
+cal perspective on heterophily and oversmoothing in gnns.                     Catasta,M.;andLeskovec,J.2020. Opengraphbenchmark:
+Advances in Neural Information Processing Systems, 35:                        Datasetsformachinelearningongraphs.Advancesinneural
+18527–18541.                                                                  information processing systems, 33: 22118–22133.
+Bodnar, C.; Frasca, F.; Wang, Y.; Otter, N.; Montufar, G. F.;                 Huang, Y.; Miao, S.; and Li, P. 2024. What Can We Learn
+Lio, P.; and Bronstein, M. 2021.  Weisfeiler and lehman                       from State Space Models for Machine Learning on Graphs?
+go topological: Message passing simplicial networks.  In                      arXiv preprint arXiv:2406.05815.
+InternationalConferenceonMachineLearning,1026–1037.                           Hussain, M. S.; Zaki, M. J.; and Subramanian, D. 2022.
+PMLR.                                                                         Globalself-attentionasareplacementforgraphconvolution.
+Braithwaite, L.; Borgi, A.; Onorato, G.; Tarantelli, K.;                      InProceedings of the 28th ACM SIGKDD Conference on
+Restuccia, F.; Silvestri, F.; and Liò, P. 2024. Heterogeneous                 Knowledge Discovery and Data Mining, 655–665.
+sheaf neural networks.arXiv preprint arXiv:2409.08036.                        Kipf,T.N.;andWelling,M.2017.Semi-SupervisedClassifi-
+Brody, S.; Alon, U.; and Yahav, E. 2021. How attentive are                    cationwithGraphConvolutionalNetworks. InInternational
+graphattentionnetworks?arXivpreprintarXiv:2105.14491.                         Conference on Learning Representations.
+Chen, D.; O’Bray, L.; and Borgwardt, K. 2022. Structure-                      Li, Q.; Han, Z.; and Wu, X.-M. 2018. Deeper insights into
+aware transformer for graph representation learning. InIn-                    graph convolutional networks for semi-supervised learning.
+ternational Conference on Machine Learning, 3469–3489.                        InProceedings of the AAAI conference on artificial intelli-
+PMLR.                                                                         gence, volume 32.
+Choi, Y. Y.; Park, S. W.; Lee, M.; and Woo, Y. 2024.                          Liang, J.; Chen, M.; and Liang, J. 2024.  Graph Ex-
+Topology-Informed Graph Transformer.  arXiv preprint                          ternal Attention Enhanced Transformer.  arXiv preprint
+arXiv:2402.02005.                                                             arXiv:2405.21061.
+Di Giovanni, F.; Rowbottom, J.; Chamberlain, B. P.;                           Luo, Y.; Shi, L.; and Wu, X.-M. 2025. Can classic gnns be
+Markovich, T.; and Bronstein, M. M. 2022.  Understand-                        strong baselines for graph-level tasks? simple architectures
+ing convolution on graphs via energies.arXiv preprint                         meet excellence.arXiv preprint arXiv:2502.09263.
+arXiv:2206.10991.                                                             Ma, L.; Lin, C.; Lim, D.; Romero-Soriano, A.; Dokania,
+Ding, Y.; Orvieto, A.; He, B.; and Hofmann, T. 2024. Re-                      P. K.; Coates, M.; Torr, P.; and Lim, S.-N. 2023.  Graph
+currentDistance-EncodingNeuralNetworksforGraphRep-                            Inductive Biases in Transformers without Message Passing.
+resentation Learning.                                                         arXiv preprint arXiv:2305.17589.
+Rampášek, L.; Galkin, M.; Dwivedi, V. P.; Luu, A. T.;
+Wolf, G.; and Beaini, D. 2022.  Recipe for a General,
+Powerful, Scalable Graph Transformer.  arXiv preprint
+arXiv:2205.12454.
+Ribeiro, A.; Tenório, A. L.; Belieni, J.; Souza, A. H.; and
+Mesquita, D. 2025.  Cooperative Sheaf Neural Networks.
+arXiv preprint arXiv:2507.00647.
+Sancak, K.; Hua, Z.; Fang, J.; Xie, Y.; Malevich, A.; Long,
+B.;Balin,M.F.;andÇatalyürek,Ü.V.2024. AScalableand
+EffectiveAlternativetoGraphTransformers.arXivpreprint
+arXiv:2406.12059.
+Shirzad, H.; Velingker, A.; Venkatachalam, B.; Sutherland,
+D.J.;andSinop,A.K.2023. Exphormer:Sparsetransform-
+ers for graphs.arXiv preprint arXiv:2303.06147.
+Tönshoff, J.; Ritzert, M.; Rosenbluth, E.; and Grohe, M.
+2023.  Where did the gap go? reassessing the long-range
+graph benchmark.arXiv preprint arXiv:2309.00367.
+Traversa,P.;FerrazdeArruda,G.;Vazquez,A.;andMoreno,
+Y.2023.Robustnessandcomplexityofdirectedandweighted
+metabolic hypergraphs.
+Veličković,P.;Cucurull,G.;Casanova,A.;Romero,A.;Liò,
+P.; and Bengio, Y. 2018.  Graph Attention Networks.  In
+International Conference on Learning Representations.
+Wang, C.; Tsepa, O.; Ma, J.; and Wang, B. 2024. Graph-
+mamba: Towards long-range graph sequence modeling with
+selective state spaces.arXiv preprint arXiv:2402.00789.
+Wu,S.;Sun,F.;Zhang,W.;Xie,X.;andCui,B.2022. Graph
+neural networks in recommender systems: a survey. ACM
+computing surveys, 55(5): 1–37.
+ 8  ExperimentalSetupandReproducibility                                     8.4  SeedingandDeterminism
+8.1  Code                                                                   Every run is seeded through a single entry point before
+                                                                            any model, data loader, or shuffling is constructed, using
+The code associated with this work will be released upon                    torch_geometric.seed_everything, which sets
+acceptanceforfosteringresearchonSheafNeuralNetworks.                        thePython,NumPy,andPyTorch(CPUandCUDA)genera-
+                                                                            tors.Arunwithindexiusesseeds              0+i,withs                0 = 0through-
+8.2  ComputingEnvironment                                                   out,sotheseedsofak-seedconfirmationare0,...,k−1and
+                                                                            areidenticalacrossarchitecturesanddatasets.Seedscontrol
+All experiments are run, one per GPU, on NVIDIA DGX                         weight initialization, data-loader shuffling, dropout masks,
+A100(with8GPUsof80GBmemory,optionallypartitioned                            andanystochasticcomponentoftherestriction-maplearner.
+inMIGinstancesof40GBforlighterexperiments),adouble                          Notably,screeningusesasingle-design(Section8.5),since
+64-core AMD EPYC 7742 and 2TB of RAM. The software                          its purpose is to identify aggregate trends and consistent
+environment is fully specified by theenvironment.yml                        ranking across many configurations rather than to support
+file shipped with the code and can be recreated with a sin-                 claims about individual cells. Nonetheless, the insights re-
+gleconda  env  createinvocation. The versions of the                        ported in the main paper are supported by solid statistical
+components that determine numerical behavior are listed in                  tests and analysis. Confirmation stage adopts 5 seeds, con-
+Table 5. We do not use mixed precision, and all reported                    sistently with prior literature.
+numbers are produced in float32.                                            8.5  Screen-then-ConfirmProtocol
+
+      Component         Version                                             The evaluation proceeds in two stages:
+                                                                             1.Screening.A near-complete factorial over diffusion
+      Python            3.10.20                                                 mechanism, restriction-map family, stalk dimension, and
+      PyTorch           2.2.0 (+cu118)                                          GNN+ component ablations is run with a single seed
+      CUDA toolkit       11.8                                                   andthereducedper-datasetepochbudgetofTable6.The
+      PyTorch Geometric  2.3.1                                                  purpose of this stage is to rank candidate configurations
+      pyg-lib 0.4.0                                                             consistently and aggregate trends rather than to estimate
+      torch-scatter2.1.2                                                        their final performance.
+      torch-sparse0.6.18                                                     2.Confirmation.Foreachdatasetandeachdiffusionmech-
+      torch-cluster1.6.3                                                        anism, the configuration with the best validation score is
+      torchmetrics1.9.0                                                         retrained from scratch at the full reference epoch bud-
+      GPU              NVIDIA A100 40–80GB                                      get and matched per-dataset parameter budget of Luo,
+                                                                                Shi, and Wu (2025), over five random seeds. SANv2 in-
+Table 5: Software and hardware environment. The com-                            herits the SAN configuration rather than being screened
+plete dependency set, including transitive pins, is given in                    independently, so that the comparison between the two
+environment.ymlin the released code.                                            isolates the attention mechanism.
+                                                                            Modelselection.Inbothstages,thereportedtestmetricis
+                                                                            theonerecordedattheepochofbestvalidationperformance
+8.3  WhatIsInheritedandWhatIsReplaced                                       (test-at-best-validation).Thetestsplitisneverusedformodel
+Our  implementation  reuses,  without  modification,  the                   selection or hyperparameter tuning.
+
+GraphGym-based training and evaluation pipeline released                    8.6  Fair-BenchmarkingChoices
+byLuo,Shi,andWu(2025).Onlythemessage-passingblock                           We list the decisions that most affect comparability, so that
+is replaced by the sheaf operator. Specifically, we inherit                 they can be audited rather than inferred.
+verbatim the per-dataset node and edge feature encoders,                      •Matched  pipeline.Every  component  outside  the
+Random-Walk Structural Encoding (RWSE) where applica-                           message-passing block is inherited from Luo, Shi, and
+ble,theAdamWoptimizer,thecosinelearning-rateschedule                            Wu (2025) and is identical across all architectures com-
+with warmup, gradient clipping, weight decay, batch sizes,                      pared, including the baselines whose numbers we quote.
+lossfunctions,metricimplementations,andthetrain/valida-                       •Matched parameter budget.Confirmation widths are
+tion/test splits. Any difference in performance is therefore                    chosen so that the parameter count matches as closely as
+attributable to the architecture rather than to the training                    possiblethevaluesreportedbyLuo,Shi,andWu(2025).
+recipe, so that the results we report are directly comparable                   This ensures the fairest comparison across architectures.
+to those of Luo, Shi, and Wu (2025).
+  We acknowledge that this inheritance may also represent                     •Official splits.All datasets use their prescribed train/-
+a constraint in some cases. For example, the normalization                      validation/test splits and evaluation metrics. No split is
+layer is exposed by the pipeline as a binary switch rather                      re-partitioned and no metric is redefined.
+than as a choice of scheme, which is why theBatchNorm                         •No test-set selection.Model selection is performed ex-
+behavior on ogbg-ppa discussed in the main paper could be                       clusivelyonthevalidationsetinbothscreeningandcon-
+diagnosed but not altered within the protocol.                                  firmation.
+                               Dataset        Screen epochs                                        andPeptides-structare atomic peptide graphs, with10-
+                               ZINC                  200                                           way multi-label graph classification and11-target struc-
+                               MNIST                  20                                           tural regression.PascalVOC-SPandCOCO-SPare su-
+                               CIFAR10                20                                           perpixel node-classification datasets derived from Pas-
+                               PATTERN               20                                            cal VOC and MS COCO.MalNet-Tinyis a subset of
+                               CLUSTER               10                                            function-callgraphsfromAndroidAPKs,withsoftware-
+                               Peptides-func             50                                        type classification from structure alone.
+                               Peptides-struct            30                                    •Open Graph Benchmark (OGB)(Hu et al. 2020).
+                               PascalVOC-SP            20                                          ogbg-molhivandogbg-molpcbaare molecular prop-
+                               COCO-SP                15                                           ertypredictiondatasets(binaryHIV-inhibitionclassifica-
+                               MalNet-Tiny              15                                         tion and a128-task bioassay panel).ogbg-ppaclassifies
+                               ogbg-molhiv              30                                         protein-association networks into37taxonomic groups,
+                               ogbg-molpcba            10                                          andogbg-code2predictsthefirstfivesubtokensofafunc-
+                               ogbg-ppa                10                                          tion’s name from its abstract syntax tree.
+                               ogbg-code2               5
+
+              Table6:Reducedper-datasetepochbudgetusedinthescreen-
+              ingstage.Theconfirmationstageusesthefullreferencebud-
+              get of Luo, Shi, and Wu (2025).
+
+
+                •Baselines are quoted, not re-run.All baseline numbers
+                  are taken from the original publications. Comparability
+                  rests on the shared evaluation pipeline and the matched
+                  parameter budget rather than on re-training.
+                •Negative and anomalous results are reported.For
+                  transparency, we report all completed experiments, in-                       Table 7: Statistics of the 14 inductive datasets used in this
+                  cluding unsuccessful configurations and anomalous be-                        paper.
+                  haviorssuchastheBatchNormsensitivityonogbg-ppa
+                  andtheinfeasibleSANconfigurationsonPascalVOC-SP
+                  (Figs 3-5).                                                                  9.3  LicensesandAvailability
+
+                                         9  Datasets                                           Table 8 lists the license of every dataset and code resource
+              9.1  SelectionRationale                                                          usedinthiswork.Alldatasetsarepubliclyavailableandare
+                                                                                               obtained through their official benchmark loaders, and each
+              We evaluate on the same 14 inductive benchmarks used by                          remainssubjecttothelicenseofitsoriginalprovider.Wedo
+              Luo,Shi,andWu(2025).Weadoptanexisting,widelyused                                 not redistribute any dataset as part of our code release.
+              suite in full and remove the possibility of favorable dataset                       Our implementation builds upon the GNN+ codebase of
+              selection.Thismakeseverynumberwereportdirectlycom-                               Luo, Shi, and Wu (2025), released under the MIT license
+              parabletoapublishedsetofstrongbaselinesevaluatedunder                            and based in turn on GraphGPS (Rampášek et al. 2022).
+              anidenticalpipeline.Thesuitespans:graph-andnode-level                            The released code contains only our own implementation
+              tasks, classification and regression, molecular, image, syn-                     andrequiresuserstodownloadalldatasetsfromtheirofficial
+              thetic,program,andbiologicalgraphs,andgraphsizesfrom                             sources.
+              23 to 1,410 nodes on average.
+              9.2  Descriptions                                                                       10  Sheaf-SpecificHyperparameters
+                •GNNBenchmark(Dwivedietal.2023).ZINCcontains                                   The  message-passing  block  is  the  sheaf  operator,
+                  molecular graphs (atom node features, bond edge fea-                         parametrized along three axes:i)the diffusion mechanism
+                  tures); the task is to regress the constrained solubility                    ∈ {NSD,SAN,SANv2};ii)the restriction-map family∈
+                  (logP).MNISTandCIFAR10are image-classification                               {Diag,O(d),Gen}, withO(d)maps produced by House-
+                  datasets recast as8-nearest-neighbor graphs of SLIC                          holderreflections;andiii)thestalkdimensiond∈{2,3,4}.
+                  superpixels, retaining the original10-class tasks.PAT-                       Thechannels-per-stalkfarechosensothattheper-noderep-
+                  TERNandCLUSTERare synthetic Stochastic Block                                 resentation sizec=dfdoes not exceed the reference width
+                  Model graphs for inductive node classification (pattern                      budget for each dataset. Following Bodnar et al. (2022), re-
+                  recognition and cluster-ID inference, respectively).                         strictionmapsarepredictedbyasmalllearnerwithabounded
+                                                                                               tanhactivation,andthediffusionnonlinearityisσ= elu.For
+                •Long-Range Graph Benchmark (LRGB)(Dwivedi                                     theGenparameterization,theblock-diagonalinversesquare
+                  et al. 2022; Freitas and Dong 2021).Peptides-func                            rootD  −1/2   iscomputedwithadeterministicNewton–Schulz
+
+
+
+
+Dataset     #graphs  Avg.#nodes  Avg.#edges  Tasktype    Metric
+ZINC       12,000      23.2      24.9  Graphregr.    MAE
+MNIST      70,000      70.6     564.5  Graphcls.   Accuracy
+CIFAR10     60,000     117.6     941.1  Graphcls.   Accuracy
+PATTERN    14,000     118.9    3,039.3  Nodecls.   Accuracy
+CLUSTER    12,000     117.2    2,150.9  Nodecls.   Accuracy
+Peptides-func   15,535     150.9     307.3  Graphcls.  Avg.Precision
+Peptides-struct   15,535     150.9     307.3  Graphregr.    MAE
+PascalVOC-SP  11,355     479.4    2,710.5  Nodecls.    F1score
+COCO-SP    123,286     476.9    2,693.7  Nodecls.    F1score
+MalNet-Tiny    5,000    1,410.3    2,859.9  Graphcls.   Accuracy
+ogbg-molhiv   41,127      25.5      27.5  Graphcls.   AUROC
+ogbg-molpcba  437,929      26.0      28.1  Graphcls.  Avg.Precision
+ogbg-ppa     158,100     243.4    2,266.1  Graphcls.   Accuracy
+ogbg-code2   452,741     125.2     124.2  Graphcls.   F1score
+                                                    Table 8: Licenses of the datasets and code used in this work.
+
+
+                                                                                           eter budget and are shaded separately. The two positional-
+                                                                                           encoding-freeablationsareunaffectedandthereforerunnor-
+                                                                                           mally.
+                                                                                              Reading the figures column-wise highlights the effect of
+                                                                                           the restriction-map parameterization: theO(d)columns are
+                                                                                           visibly darker than theDiagandGencolumns on nearly
+                                                                                           everydataset,andtheorderingisstableacrossbothdiffusion
+                                                                                           mechanisms and all three stalk dimensions.
+                                                                                              Reading the figures row-wise highlights the contribu-
+                                                                                           tion of the GNN+ components: the-dropoutrow is
+                                                                                           brighter than the full recipe almost everywhere, whereas
+                                                                                           -residualandall-removedare consistently among
+             Table 9: Confirmation results on COCO-SP and ogbg-ppa.                        theworst-performingconfigurations.ogbg-ppaistheonly
+             All results except the sheaf models are taken from Luo, Shi,                  datasetthatsystematicallydeviatesfromthesetrends,forthe
+             and Wu (2025)                                                                 reasons discussed in the main paper.
+                                                                                                  12  AdditionalConfirmationResults
+             iterationratherthanrandom-noiseregularizationtoimprove                        Themainpaperreports12ofthe14datasetsforconciseness.
+             numerical stability.                                                          Table9completesthepicturewithCOCO-SPandogbg-ppa.
+                SANandSANv2use multi-head attention (H= 8) com-                            Hyperparameter of confirmation sheaf models are reported
+             binedbychannel-wiseconcatenation.Thetwomodelsdiffer                           in Table 10.
+             only in the attention scoring function:SANv2replaces the                         Theseresultsconfirmwhatweobserveinthemainpaper,
+             static GAT scoring ofSANwith dynamic GATv2 scoring.                           with sheaf models unable to close the gap to the strongest
+             The GNN+ components toggled in the ablation are edge-                         baselines. On COCO-SP, a node-classification task, the gap
+             featureconditioning,batchnormalization,dropout,theresid-                      is narrower, with NSD0.10F1 points away from the best-
+             ualconnection,thepost-messageFFN(hiddenmultiplier2),                          performingmethodandleadingthethreemechanisms.Onthe
+             and RWSE positional encoding.                                                 graph-levelogbg-ppathegapwidenstoroughly15accuracy
+                                                                                           points.Onbothdatasets,dynamicattention(SANv2)brings
+                        11  CompleteScreeningResults                                       no visible benefit over static attention (SAN).
+
+             Figures 3, 4, 5 report the complete screening grid for all 14
+             datasets: for each dataset, the 8 GNN+ ablations are evalu-
+             atedacrossthe18architecturecells(diffusionmechanism×
+             restriction-mapparameterization×stalkdimension).Colors
+             indicate within-dataset rank-normalized performance, with
+             brighter colors corresponding to better-performing configu-
+             rationsregardlessoftheoptimizationdirection,andeachcell
+             is annotated with the corresponding test-at-best-validation
+             value. These figures report the 1,890 screening runs ana-
+             lyzed in the main paper.
+                On the six datasets that use no positional encoding, the
+             no_perow is empty, since it coincides with the full recipe,
+             and is marked=onrather than being run. The SAN cells at
+             d= 2onPascalVOC-SPareinfeasibleatthedataset’sparam-
+
+
+Resource             License              SourceCOCO-SP        ogbg-ppa
+Metric            F1 score↑      Accuracy↑
+GNNBenchmarksuite  MIT                github.com/graphdeeplearning/benchmarking-gnns
+Graph-Mamba0.3960±0.0175   -
+LRGBrelease         CCBY4.0           doi.org/10.5281/zenodo.6975830
+GraphGPS0.3884±0.0050   -PascalVOC-SP      Custom(FlickrToU)    PascalVOC2011
+GCN+         0.2733±0.00410.8077±0.0041COCO-SP          CCBY4.0           MSCOCO
+GIN+          0.2483±0.00460.8107±0.0053Peptides-func/struct   Public-domainsources  SATPdb
+GatedGCN+    0.3802±0.00150.8258±0.0055
+MalNet-Tiny          CCBY4.0           mal-net.org
+NSD      0.3004±0.0027  0.6752±0.0047
+OGBdatasets         MIT                ogb.stanford.edu
+SAN       0.2979±0.0034  0.6744±0.0374
+GNN+ codebase       MIT                github.com/LUOyk1999/GNNPlus
+SANv2   0.2971±0.0029  0.6535±0.0474
+            Table 10: Configurations promoted from screening to confirmation, selected per datasetandper diffusion mechanism on
+            validation performance. “Map” is the restriction-map parameterization,dthe stalk dimension, “GNN                   +” is the architectural
+            component removal that ranked best (−drop=dropout removed,−norm=BatchNorm removed,−res=residual removed,
+            −PE=positional encoding removed),Lthe number of message-passing layers, and “width” the hidden dimension.SANv2
+            inheritsSAN’s configuration rather than being screened independently.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                   NSD                                              SAN                                            SANv2
+Dataset        Mapd GNN             +  L width  Mapd GNN                +  L width  Mapd GNN                +  L width
+ZINC          diag  4 −drop    9     96  diag  4 −drop    9     60  diag  4 −drop    9     40
+MNIST         gen   4 −drop   10     40  diag  4 −drop   10     40  diag  4 −drop   10     32
+CIFAR10       gen   4 −drop   10     40  diag  4 −drop   10     40  diag  4 −drop   10     36
+PATTERN      gen   3 −drop   12     81  diag  4 −drop   12     48  diag  4 −drop   12     32
+CLUSTER      gen   4 −norm  16     68   gen   4 −drop   16     36   gen   4 −drop   16     24
+Peptides-func    gen   3 −drop    5    120  diag  4 −drop    5     88  diag  4 −drop    5     64
+Peptides-struct   gen   4 −drop    4    132   gen   4 −norm   4    100   gen   4 −norm   4     80
+PascalVOC-SP   gen   4 −drop   12     84  diag  4 −drop   12     52  diag  4 −drop   12     36
+COCO-SP      gen   4 −drop   20     60  diag  4 −drop   20     36  diag  4 −drop   20     20
+MalNet-Tiny     gen   4 −drop    6    120  diag  4 −drop    6     88  diag  4 −drop    6     64
+ogbg-molhiv    gen   3 −res    3    255   gen   2 −PE    3    256   gen   2 −PE    3    256
+ogbg-molpcba   gen   4 −drop   10    256   gen   4 −drop   10    256   gen   4 −drop   10    256
+ogbg-ppa       gen   4 −norm   4    512   gen   4 −norm   4    512   gen   4 −norm   4    512
+ogbg-code2     gen   4 −norm   5    512   gen   4 −norm   5    512   gen   4 −norm   5    512
+Figure 3: Complete screening grid, GNN Benchmark. Rows are GNN+ ablations, columns are the 18 architecture cells, color
+is within-dataset goodness (brighter is better, direction-aware), and the printed value is test-at-best-val.
+Figure 4: Complete screening grid, LRGB. Rows are GNN+ ablations, columns are the 18 architecture cells, color is within-
+dataset goodness (brighter is better, direction-aware), and the printed value is test-at-best-val. The shadedSANd=2cells on
+PascalVOC-SP are infeasible at the parameter budget, as also reported in the main paper.
+Figure 5: Complete screening grid, OGB. Rows are GNN+ ablations, columns are the 18 architecture cells, color is within-
+dataset goodness (brighter is better, direction-aware), and the printed value is test-at-best-val. ogbg-ppa is the one dataset that
+systematically deviates from the trends seen elsewhere. The cause is the evaluation-time behavior ofBatchNorm, discussed
+in the main paper.

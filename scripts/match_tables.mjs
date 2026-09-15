@@ -42,6 +42,23 @@ for (const r of tsv("sweep-candidates.tsv"))
 for (const r of tsv("sweep-cites.tsv").filter(r => r.arxiv))
   paperMeta[r.arxiv] ||= { pr: r.doi && !/^10\.48550\//i.test(r.doi) ? "yes" : "no", jr: r.venue || "", ti: r.title || "" };
 
+// Papers fetched as PDFs after the full-text scan have no entry in sweep-fulltext.tsv, and
+// the family check below rejects every cell of an untagged paper: 591 of the 604 papers
+// fetched on 2026-09-15 matched nothing for that reason alone. Tag them from their own
+// committed text with the scanner's patterns. A word counts when the title has it or the
+// text repeats it: one mention is usually a citation of someone else's model.
+const MODEL_WORDS = [["kagome", /kagome/gi], ["triangular", /triangular/gi], ["pyrochlore", /pyrochlore/gi],
+  ["J1J2", /J\s*_?1\s*[-–]\s*J\s*_?2/gi], ["Hubbard", /Hubbard/gi], ["shuriken", /shuriken/gi],
+  ["Shastry", /Shastry[- ]Sutherland/gi], ["tV", /spinless fermion|t-V model/gi],
+  ["TFIsing", /transverse[- ]field Ising/gi], ["square-Heis", /square[- ]lattice Heisenberg|Heisenberg/gi]];
+function tagFromText(id) {
+  const p = `sources/${id}.txt`;
+  if (!fs.existsSync(p)) return "";
+  const t = fs.readFileSync(p, "utf8"), ti = paperMeta[id]?.ti || "";
+  return MODEL_WORDS.filter(([, re]) => new RegExp(re.source, "i").test(ti) || (t.match(re) || []).length >= 3)
+    .map(([k]) => k).join("+");
+}
+
 // Which lattice/model words must appear for a cell to be about this instance.
 const LATTICE_WORD = {
   triangular: /triangular/i, kagome: /kagome/i, pyrochlore: /pyrochlore/i,
@@ -227,6 +244,7 @@ for (const inst of instances) {
   const latRe = Object.entries(LATTICE_WORD).find(([k]) => lat.includes(k))?.[1] ?? null;
 
   for (const c of cells) {
+    if (!(c.arxiv in paperModels)) paperModels[c.arxiv] = tagFromText(c.arxiv);   // once per paper
     const tags = (c.models || paperModels[c.arxiv] || "");
     const blob = `${c.caption} ${c.label} ${c.col} ${paperMeta[c.arxiv]?.ti || ""}`;
     // model family must match

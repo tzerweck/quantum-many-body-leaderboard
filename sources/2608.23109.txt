@@ -1,0 +1,757 @@
+     Physics-Guided Linear Mapper for Quantum
+                                Error Mitigation
+
+
+Tulsi Chaudhari1, Krishna Bhatia2, Shalini Devendrababu2, Srinjoy Ganguly3,
+                             and Luis Gerardo Ayala Bertel4
+
+                          1 Florida International University, USA
+                      2 Quantum AI Lab, Fractal AI Research, India
+                3 University College London, Gower Street, London, UK
+                    4 Cartagena University, Colombia, South America
+tchaudhari049@gmail.com krishna.bhatia@fractal.ai shalini.devendrababu@fractal.ai
+                                layalab@unicartagena.edu.co
+
+
+
+        Abstract.We introduce a novel physics-guided linear mapper (PGLM)
+        for quantum error mitigation that uses seven distinct interpretable fea-
+        tures derived from circuit complexity and device calibration data. The
+        goal is to provide a data-efficient, interpretable, and low-latency alterna-
+        tive to the black-box machine learning for quantum error mitigation in
+        noisy-intermediate scale quantum devices. Evaluated on 52 simulated
+        benchmark circuits (1–4 qubits), PGLM demonstrates strong perfor-
+        mance in noise-accumulation regimes: 50.1% RMSE reduction on 3-qubit
+        circuits and 32.3% on 4-qubit circuits, while single-qubit circuits show
+        degraded performance. A circuit-size-aware deployment policy achieves
+        32.6% aggregate improvement. Sub-millisecond inference enables inte-
+        gration into variational algorithms, and analysis of learned coefficients
+        reveals that circuit depth and CNOT count dominate error prediction,
+        consistent with decoherence mechanisms. Results are simulator-based
+        with idealized noise models; hardware validation remains essential fu-
+        ture work.
+
+
+Keywords:quantum error mitigation, physics-guided, ridge regression, NISQ,
+interpretable ML
+
+1   Introduction
+
+Quantum error mitigation (QEM) has emerged as a critical enabling technology
+for near-term quantum computing applications, offering a path to extract mean-
+ingful results from noisy intermediate-scale quantum (NISQ) devices without the
+overhead of full quantum error correction. While traditional QEM methods such
+as zero-noise extrapolation (ZNE) and probabilistic error cancellation (PEC)
+have demonstrated theoretical efficacy [17,10], their practical deployment is of-
+ten hindered by exponential sampling overheads that scale poorly with circuit
+complexity [14].
+   Recent advances in machine learning for quantum error mitigation (ML-
+QEM) [16,12] promise to address these scalability challenges by learning statisti-
+calrelationshipsbetweennoisyandidealquantumcomputationoutcomes.Recent
+advances in machine learning for quantum error mitigation (ML-QEM) [16,12]
+promise to address these scalability challenges by learning statistical relation-
+ships between noisy and ideal quantum computation outcomes. However, prior
+ML-QEM studies [16,12,1,3] say that existing approaches typically require ex-
+tensive training datasets that are expensive to generate on quantum hardware,
+and they rely on black-box models that provide little physical insight into the
+error mitigation process.
+   ThisworkintroducesthePhysics-GuidedLinearMapper(PGLM),anovelap-
+proach to ML-QEM that addresses both limitations through a carefully designed
+feature space incorporating physical characteristics of quantum noise accumula-
+tion. Rather than treating error mitigation as generic regression, PGLM lever-
+ages domain knowledge about how quantum errors scale with circuit properties
+such as gate count, depth, and device calibration parameters.
+   Our approach makes three key contributions:
+1.PGLM achieves effective error mitigation using only 50–200 training circuits,
+   representing an order-of-magnitude reduction compared to typical neural net-
+   workapproaches[12,1].Thisdataefficiencystemsfromphysics-informedbasis
+   functions encoding prior knowledge about noise behavior.
+
+2.Unlike black-box ML models [16,3], PGLM’s linear architecture with physics-
+   guidedfeaturesprovidesinterpretablecoefficientsrevealinghowdifferenterror
+   sources contribute to expectation value corrections, enabling both scientific
+   understanding and practical diagnostics.
+
+3.Throughsystematicevaluationacrosscircuitsizes,wedemonstratethatPGLM’s
+   effectiveness correlates with the physical regime where noise accumulation ef-
+   fects dominate, specifically multi-qubit circuits where our physics-guided ap-
+   proach achieves up to 50% RMSE reduction over raw noisy results.
+
+   In this paper, we address a practical gap in ML-QEM: methods that are both
+data-efficientandphysicallyinterpretablewhileincurringminimallatencyforon-
+line use. Concretely, we propose the Physics-Guided Linear Mapper (PGLM), a
+seven-feature ridge regressor designed to capture dominant noise-accumulation
+mechanisms with order-of-magnitude lower training data than neural baselines.
+The remainder of the paper is organised as follows. Section 2 reviews background
+and related work and highlights how PGLM differs from prior linear and physics-
+informed approaches. Section 3 presents the PGLM model and feature design.
+Section 4 describes experimental setup and noise models. Section 5 reports re-
+sults and ablations. Section 6 discusses practical deployment, limitations, and
+future directions. We conclude in Section 7.
+2   Background and Related Work
+
+Quantum circuits in NISQ devices suffer from several fundamental error mecha-
+nisms [17,11]: decoherence (coherence decay with time constantT  2), gate errors
+(imperfect unitary implementation with fidelities∼98-99.8%), measurement er-
+rors (readout bit-flips with probability∼1-3%), thermal relaxation (excited state
+decay with time constantT  1), and dephasing (phase randomization). These er-
+rors compound across circuit depth, motivating error mitigation strategies.
+
+2.1    Traditional Quantum Error Mitigation Methods
+
+Quantum error mitigation encompasses a family of techniques designed to sup-
+press the effects of noise in quantum computations without requiring the full
+overhead of quantum error correction. These methods sacrifice the guarantee of
+fault-tolerant computation in exchange for practical applicability to near-term
+quantum devices with limited coherence times and gate fidelities.
+
+Zero-Noise Extrapolation (ZNE):ZNE is based on artificially amplifying noise
+to extrapolate results to the zero-noise limit [17,7,8]. The method involves: (1)
+noise scaling (e.g., unitary foldingU→UU      †U); (2) execution at multiple noise
+levels; and (3) extrapolation of expectation values to zero noise via polynomial or
+exponentialfitting.Practicaldeploymentfacesmultiplicativesamplingoverheads
+(often 10–100×) [10] and increased depth that exacerbates decoherence.
+
+Probabilistic Error Cancellation (PEC):PEC decomposes the ideal channel as
+a linear combination of implementable noisy channels:E     −1    =PiαiFi [17,15].
+Quasi-probability sampling induces an exponential sampling overhead scaling as
+γG forGgates with normalizationγ >1, limiting practicality beyond modest
+circuit sizes.
+
+Clifford Data Regression (CDR):CDR trains on efficiently simulable Clifford
+circuits to predict ideal outcomes for non-Clifford circuits [5,6]. While often
+polynomial in overhead and effective when non-Clifford gates are sparse, it re-
+quires hundreds to thousands of training evaluations and depends on similarity
+between training and target circuits.
+
+Fundamental Limitations:No-goresultsshowsamplingcomplexityforϵ-accurate
+mitigation can scale exponentially with depth in the worst case [14], motivating
+targeted, structure-exploiting approaches.
+
+
+2.2    Recent ML-QEM Approaches and Data Requirements
+
+Neural models (e.g., random forests, MLPs, GNNs) can learn mappings from
+noisy to ideal expectation values [16,1,3], but generally need thousands of train-
+ingcircuitsandsubstantialclassicaltrainingtime.Adaptive/context-awaremeth-
+ods [9,12] achieve strong accuracies yet heighten data demands. Physics-inspired
+architectures [18,2] (e.g., neural noise-accumulation surrogates) reduce data by
+∼an order of magnitude but still lack direct interpretability and require sophisti-
+cated training. Overall, data hunger, training overhead, and black-box behavior
+hinder deployment.
+
+
+2.3    Physics-Informed Machine Learning in Quantum Computing
+
+Let a circuitCimplementE=N◦U. For observableO,
+
+                                 ⟨O⟩   noisy = Tr ON(U(ρ              0))                    (1)
+
+   Physics suggests error accumulation scales with structure [17]: for small gate
+errorp     gate,
+                             perror≈1−(1−p         gate)G≈Gp  gate                  (2)
+   Under depolarizing noise with parameterp,
+
+                        ⟨O⟩   noisy = (1−p)    ngates⟨O⟩   ideal + p2n Tr(O)             (3)
+
+   Hence multiplicative features such as⟨O⟩     noisy×f(circuit)are natural. Device
+parameters (e.g.,T          1,T2, readout error) can be encoded via physics-motivated
+basis functions [4,13], e.g.
+
+          ϕcoh =⟨O⟩     noisy exp   −TcircuitT2   ,  ϕro =⟨O⟩     noisy (1−2p     readout)    (4)
+
+   In linear models
+                                           ˆy=  X    wiϕi                           (5)
+                                                  i
+, weights map to mechanisms, enabling interpretability and principled transfer.
+   As summarised in Table 1, current methods trade off interpretability, data
+efficiency, and deployability. Neural models may outperform traditional QEM
+but lack transparency and require10              3−10    4 circuits. Practical workflows also
+impose latency constraints (T mitigation +T  classical < Tcoherence−T  execution). A
+missing paradigm is one that is data-efficient (N train≪10     3), interpretable, fast
+at inference, transferable across devices, and theoretically grounded—motivating
+physics-guided approaches like PGLM.
+
+Distinguishing PGLM from prior linear/feature-driven QEM
+
+Distinguishing PGLM from prior linear/feature-driven QEMSeveralpriorworks
+have explored simple regression or physics-inspired neural networks for QEM.
+PGLM differs on three axes:
+1.Feature  set.We use a minimal, physically motivated 7-dimensional basis
+   that mixes multiplicative and additive terms (e.g.,y     noisy×n  cx,y noisy×d)
+   selected to reflect gate-dominated versus decoherence-dominated error chan-
+   nels.
+  Table 1: Comparison of quantum error mitigation (QEM) and ML-QEM methods.
+Approach         Core idea                  Quantum           Train data        Interpre-     Key limits
+                                            overhead                            tability
+ZNE [17,10]      Scale  noise,  extrapo-    10–100×runs       none              High          Deeper circuits, unsta-
+                 late to zero-noise                                                           ble fits
+PEC [17,15]      Quasi-probability          Exponential in    none              Medium        Exponential  sampling
+                 inversion   of   noisy     gates                                             overhead
+                 channels
+CDR [5,6]        Train   on   Clifford      Polynomial        102–10  3         Medium        Large  training  need;
+                 circuits,  predict  non-                                                     limited transfer
+                 Clifford
+NN-              Black-box   regressors     Low               103–10  4         Low           Data hungry; opaque
+ML [16,12]       (MLP, RF, GNN)
+Phys.-insp.      Encode noise physics       Low               102–10  3         Low–Med.      Training heavy; less in-
+NN [18,2]        in NN                                                                        terpretable
+PGLM             Physics-guided  linear     Low               50–200            High          Linear limits; weak in
+(ours)           features                                                                     1-qubit regime
+2.Deployment  focus.We optimise for sub-millisecond inference and sub-
+   second training suitable for on-device classical controllers, so the model can
+   be used in real-time workflows.
+3.Interpretability.By using ridge regression with fixed standardisation and a
+   stability-oriented regularisation (α= 1), the learned coefficients map directly
+   to physical mechanisms, enabling principled device transfer and simple adap-
+   tive scaling. We include detailed ablations (Sec. 5) that isolate the benefits of
+   each design choice and compare against representative baselines.
+
+3   Methodology
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Fig.1: PGLM workflow: random circuit generation, noisy/ideal simulation, physics-
+guided feature construction, ridge training, prediction, and evaluation.
+
+3.1    Problem Setup and Physics-Guided Feature Engineering
+The overall PGLM workflow is illustrated in Fig. 1. We observe a noisy ex-
+pectationy         noisy = Tr(ON(U(ρ                 0)))and seek an estimatorˆyof the idealy                     ideal =
+Tr(OU(ρ            0)), whereNrepresents the noise channel,Uthe ideal circuit evolution,
+andOthe measured observable.
+   The feature design stems from established quantum noise theory. Under de-
+polarizing noise with parameterp[17], the noisy expectation value relates to the
+ideal as in Eq. (3). For smallpand circuits where Tr(O)≈0(typical for Pauli-Z
+measurements), this simplifies to the linearised form
+
+                               ⟨O⟩   noisy≈(1−p·n        gates)⟨O⟩    ideal                  (6)
+
+motivating correction terms proportional toy noisy×n  gates. Since CNOT gates
+dominate error accumulation withp     2q≫p   1q, we usen    cx as the primary com-
+plexity measure.
+   Decoherence effects motivate depth-dependent corrections. For circuits with
+execution timeT=d×T            gate, decoherence introduces multiplicative attenuation:
+ρfinal≈e −T/T    2ρideal + (1−e  −T/T    2) I2n. For smallT/T           2, this yields corrections
+proportional toy  noisy×d. Measurement errors with probabilitiesp                               0|1 ,p1|0  modify
+expectation values as
+
+                  ⟨O⟩   measured = (1−p        0|1 −p    1|0   )⟨O⟩    ideal + (p  0|1 −p    1|0   )         (7)
+
+motivating they    noisy×ϵ  ro term whereϵ      ro = (p  0|1   +p    1|0   )/2.
+   Combining these physical insights, we construct the 7-dimensional basis:
+
+                 ϕ= 1, y noisy, ynoisyncx, ynoisyd, ynoisyϵro, ncx, d⊤         (8)
+
+   Each term has clear physical interpretation: the constant term captures global
+systematic bias,y     noisy provides primary scaling, the multiplicative termsy      noisy×
+{n cx,d,ϵro}correctforcomplexity-dependentattenuation,andtheadditiveterms
+{n cx,d}address structure-dependent biases independent of expectation magni-
+tude.
+
+
+Feature selection rationaleOur seven features balance interpretability, par-
+simony, and robustness. We omitted quadratic CNOT terms (y noisyn2cx), explicit
+nqubits features, andT       1-T  2 interactions due to collinearity with existing features
+and to maintain sub-millisecond inference.
+
+
+3.2    Model Training and Validation Protocol
+PGLM employs ridge regression to learn the mapping
+
+                                               ˆy=w  ⊤ ˜ϕ                           (9)
+
+where  ˜ϕis the standardized feature vector. We minimize the ridge objective
+
+                                 L(w) =∥y−               ˜Φw∥       22 +α∥w∥             22                   (10)
+
+with closed-form solution
+
+                                    w∗ = ( ˜Φ⊤ ˜Φ+αI)  −1   ˜Φ⊤y.                    (11)
+   L2 regularisation serves dual purposes: numerical stability for small training
+sets where  ˜Φ⊤ ˜Φmay be ill-conditioned, and physical constraint enforcement by
+penalising coefficients implying unrealistic error magnitudes.
+   Feature standardisation ensures numerical stability and interpretable coeffi-
+cient magnitudes. For each feature dimensionj, we compute
+
+                                                      nX
+                                          µj =  1n       Φij                         (12)
+                                                    i=1
+and                                 vuut                                   
+                                             1     nX
+                       σj = max          n−1         (Φ ij−µ j)2,10−8      ,            (13)
+
+                                                  i=1
+then standardize as  ˜Φ:,j  = (Φ  :,j−µ j)/σ j. The small constant prevents numerical
+issues when features have zero variance. We selectα= 1.0based on empirical
+validation, which maintains condition numberκ(      ˜Φ⊤ ˜Φ)<10        3 and provides stable
+performance across multiple training set initialisations with coefficient standard
+deviation<0.05for all features.
+   Our experimental protocol stratifies training by qubit count: 100 circuits with
+n∈{1,2,3,4}balanced across sizes, tested on 42 circuits (40 random + 2 appli-
+cation circuits). Random seeds are fixed for circuit generation, transpilation, and
+simulator shots to ensure reproducibility. The noise model uses Qiskit Aer with
+single-qubit depolarizingp                 1 = 0.002, two-qubitp                         2 = 0.02, and symmetric read-
+out errorsp            0|1    =p    1|0    = 0.02, representing realistic NISQ device characteristics.
+All circuits execute with 1024 shots and optimization_level=1 transpilation.
+   To ensure reproducibility, we fix random seeds for circuit generation, tran-
+spilation, and simulator execution. Coefficient values may vary slightly across
+independent runs due to random circuit generation, but relative magnitudes
+and signs remain consistent, indicating stable feature importance rankings. The
+computational complexity isO(d        3 +nd    2)whered= 7andnis training size, re-
+ducingtoO(49n)fortypicalcaseswhered≪n.Unlikeneuralnetworksrequiring
+iterative optimization with careful initialization, learning rate scheduling, and
+early stopping, PGLM’s closed-form solution eliminates convergence concerns
+and hyperparameter sensitivity, enabling reliable deployment without extensive
+validation procedures.
+
+
+3.3    Implementation and Evaluation Framework
+
+Algorithm 1 summarizes the complete training procedure: feature extraction via
+robust circuit analysis, standardization using training statistics, and closed-form
+ridge solution. The computational complexity isO(d         3 +nd    2)whered= 7andn
+is training size, reducing toO(49n)for typical cases whered≪n.
+   Algorithm1incorporatesthecircuit-size-awarefallbackstrategythatemerged
+fromourempiricalanalysis:userawmeasurementsforsingle-qubitcircuitswhere
+Algorithm 1PGLM Training and Inference
+Require:Training set{(y                                   (i)noisy,y(i)ideal,n(i)cx,d(i) ,ϵ(i)ro )}  ni=1 , regularizationα
+ 1:Extract featuresϕ                       (i)  from circuit metadata and measurement results
+ 2:Compute standardization parametersµ                           j,σj and standardize to  ˜ϕ(i)
+ 3:Solvew= (        ˜Φ⊤ ˜Φ+αI)   −1   ˜Φ⊤y
+ 4:Inference:For new measurement, check ifn                                 qubits  =  1(return raw), else return
+    w⊤ ˜ϕ
+
+PGLM systematically fails, and apply linear correction otherwise. This hybrid
+approach eliminates the failure mode while preserving benefits in the noise-
+accumulation regime.
+   Performanceevaluationusesstandardregressionmetrics—RootMeanSquared
+Error (RMSE), Mean Absolute Error (MAE), and per-circuit squared-error re-
+duction∆      i—defined in Eqs. (14)–(16):
+                                            s1    X
+                               RMSE=           n      (ˆy  (i) −y    (i)ideal)2                  (14)
+                                                   i
+                                                Xˆy  (i) −y    (i)                    (15)
+                                  MAE=          1n             ideal
+                                                  i
+                          ∆i = (y  (i)noisy−y    (i)ideal)2−(ˆy      (i) −y    (i)ideal)2              (16)
+tracking individual improvements. Bootstrap confidence intervals (500 resam-
+ples) provide statistical validation, while ablation studies over training sizes
+characterize data efficiency. All timing benchmarks use Intel i7/16GB hardware
+with Python 3.12, scikit-learn 1.3, and Qiskit 2.2.
+
+Hyperparameter sensitivity and deployment rulesWe set the ridge reg-
+ulariserα= 1.0based on validation experiments. In practice PGLM is robust
+forαin the interval[0.1,10]: values below 0.1 increase variance of coefficient
+estimates on small training sets, and values above 10 bias coefficients toward
+zero harming corrective power. Training-size sensitivity is modest beyond 50
+circuits; ablation in Sec. 5 shows performance stabilises near 100 circuits. For
+deployment we adopt a simple circuit-size-aware fallback: ifn  qubits  = 1or the
+measured raw RMSE estimate on a small validation set is below 0.05, we return
+the raw measurement to avoid overcorrection in the high-fidelity regime.
+
+4   Experimental Setup
+
+We evaluate PGLM on a comprehensive suite of quantum circuits designed to
+test performance across different complexity regimes and application domains.
+Our experimental design balances statistical rigor with computational feasibil-
+ity, focusing on the 1-4 qubit range where detailed analysis and validation are
+tractable while covering the parameter space relevant to near-term quantum
+algorithms.
+   We evaluate on 52 circuits: 50 random parameterized circuits (n∈{1,2,3,4}
+qubits, depthsd∈{3,...,8}, alternatingU3layers and CNOTs with 60% prob-
+ability) plus two application-specific circuits (2-qubit H2 VQE, 4-qubit QAOA
+p=1). Training: 100 circuits balanced by qubit count; testing: 42 circuits.
+   To validate performance on structured quantum algorithms, we include repre-
+sentativeapplicationcircuits:a2-qubitH2-likeVQEcircuitmimickingmolecular
+simulation (H(0)→CNOT(0,1)→RZ(0.3,0)→RX(1.0,1)→RY(0.5,0)→mea-
+sure) and a 4-qubit QAOA p=1 circuit for ring topology optimization (H⊗4  →
+RZZ gates for ring→RX   ⊗4  →measure). These structured circuits test whether
+PGLM corrections learned on random circuits transfer effectively to realistic
+quantum algorithms with specific optimization objectives.
+   Our noise modeling employs Qiskit Aer 0.17.2 with AerSimulator backend,
+providing exact statevector simulation for ideal results and realistic noise simula-
+tion using composite models. We construct noise models combining dominant er-
+rorsourcesinNISQdevices:depolarizingnoiseappliedtoallquantumoperations
+with single-qubit error probabilityp   1 = 0.002(0.2%) and two-qubit error prob-
+abilityp  2 = 0.02(2.0%), asymmetric readout noise withP(0|1) =P(1|0) = 0.02
+for all qubits, and optional T1/T2 parameters from Qiskit fake backends when
+available. This composite model approximates common superconducting-qubit
+error budgets (e.g., nominal 1-qubit error  0.2%, 2-qubit error  2%) [11]. All
+results reported here are simulator-based using representative noise parameters
+rather than experiments on hardware. Device calibration parameters are ex-
+tracted from noise model specifications:T1/T2 ratios computed from fake back-
+end properties when available (otherwise defaulted to typical values T1=100µs,
+T2=80µs)
+   Each circuit evaluation follows a standardized protocol ensuring reproducible
+results. Circuits are transpiled using Qiskit’s optimization_level=1 for realistic
+gate decomposition and routing, then executed on both noisy and ideal simula-
+tors with 1024 shots using deterministic seeding. Measurement counts are con-
+verted to Pauli-Z expectation values using parity calculation, with the 1024-shot
+count balancing statistical accuracy (∼3% uncertainty for expectation values
+near±1) with computational efficiency. Performance metrics include RMSE and
+MAE computed against ideal expectation values, with bootstrap confidence in-
+tervals (500 resamples) providing statistical validation and per-circuit analysis
+tracking individual improvement patterns.
+   All computational benchmarks use a standard development environment (In-
+tel i7 processor, 16GB RAM, Python 3.12, scikit-learn 1.3, Qiskit 2.2) with wall-
+clock timing averaged over multiple runs. This experimental framework provides
+realistic performance estimates for practical deployment scenarios while enabling
+systematic analysis of PGLM’s effectiveness across the complexity regimes most
+relevant to near-term quantum computing applications.
+5   Results and Analysis
+
+5.1    Overall Performance and Statistical Analysis
+
+Aggregate performance across all 52 test circuits shows PGLM reducing RMSE
+from 0.0775 (raw) to 0.0662, a 14.5% improvement. However, bootstrap analysis
+with 500 resamples yields a 95% confidence interval of[−0.01185,0.03166]that
+spans zero, indicating the aggregate improvement is not statistically significant
+at theα= 0.05level. This result initially appears to contradict PGLM’s value,
+but circuit-size stratification (Table 3) reveals the underlying cause: strong per-
+formanceonmulti-qubitcircuitsismaskedbycatastrophicfailureonsingle-qubit
+systems.
+   The median improvement of 0.01095 and 55.8% per-circuit improvement rate
+demonstrate genuine effectiveness for the majority of test cases, with per-circuit
+squared-error reductions ranging from10   −5  to10 −2  for 29 of 52 circuits. Using
+Cohen’s conventions,the standardized effectsize ofd= 0.31indicatesa small-to-
+medium practical effect when PGLM succeeds. The critical question is therefore
+not whether PGLM works, butwhenit works—a question we address through
+systematic circuit-complexity analysis.
+   Recognizing that PGLM’s physics-guided features are mismatched to the
+high-fidelitysingle-qubitregime(Section5.2),weimplementasimpleconditional
+policy: use raw measurements forn   qubits = 1, apply PGLM correction otherwise.
+This hybrid approach yields RMSE of 0.0522, representing 32.6% improvement
+over raw results (0.0775) and 21.2% improvement over naive PGLM application
+(0.0662). The strategy adds negligible overhead—a single conditional check per
+circuit—while eliminating the primary failure mode. All subsequent results use
+this deployment policy unless otherwise specified.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                   Fig.2: RMSE on the test set: raw noisy vs. PGLM.
+  Fig.3: Scatter of raw (blue) and PGLM (orange) against the ideal (y=xdashed).
+
+   Bootstrap analysis with 500 resamples yields a 95% confidence interval for
+RMSEimprovementof[−0.01185,0.03166]withmedianimprovementof0.01095.
+Although the confidence interval spans zero, indicating statistical uncertainty in
+the aggregate benefit, the positive median and 55.8% per-circuit improvement
+rate demonstrate genuine effectiveness for the majority of test cases. Using Co-
+hen’s conventions, the standardized effect size ofd= 0.31indicates a small-to-
+medium practical effect. The cumulative distribution of absolute errors shifts
+favorably under PGLM correction, with the 75th percentile reducing from 0.089
+(raw) to 0.071 (PGLM), and per-circuit squared-error reduction showing posi-
+tive values for 29 of 52 circuits with improvement magnitudes ranging from10   −5
+to10 −2 .
+
+                          Table 2: Performance vs training set size
+                Training Size   Test RMSE     vs Raw   Training Time    Stability
+                       10           0.1630    -123.0%         0.8s       Unstable
+                       25           0.1060     -44.8%         1.2s         Poor
+                       50           0.0853     -10.1%         1.8s      Moderate
+                      100           0.0608    +21.3%          3.4s         Good
+                      200           0.0605    +21.7%          6.8s       Excellent
+
+
+5.2    High-Fidelity Regime Breakdown
+
+Table 3 reveals PGLM’s most significant limitation: single-qubit circuits show
+severe performance degradation (-127.3% RMSE change, from 0.0360 to 0.0818).
+This represents a fundamental mismatch between PGLM’s design assumptions
+and the high-fidelity operating regime.
+   Single-qubitcircuitsviolatetwocriticalassumptions:First,circuitswithn     cx =
+0nullify multiplicative CNOT-dependent correction terms, reducing effective
+dimensionality from 7 to 5 features. Second, single-qubit measurements already
+achieve high fidelity (raw RMSE = 0.036), placing them in a regime where
+shot noise dominates rather than systematic gate-level error accumulation [17].
+Linear corrections trained predominantly on noisier multi-qubit data introduce
+systematic bias exceeding the original error magnitude.
+   PGLM’s multiplicative features are derived from the assumption that errors
+accumulate proportionally to circuit complexity [17,11]. For single-qubit gates
+withp         1  =  0.002, expected error magnitude is∼0.01per circuit, but PGLM
+appliescorrectionsscaledtothe∼0.10errorstypicalofmulti-qubitcircuits.This
+order-of-magnitude mismatch causes overcorrection. Similar limitations affect
+other ML-QEM approaches when training distributions mismatch deployment
+scenarios [12,6]. Based on our empirical analysis, PGLM should only be deployed
+when gate-level noise accumulation dominates, specifically when raw RMSE>
+0.05.
+
+5.3    Circuit-Size Dependency and Physical Insights
+Having identified the high-fidelity breakdown (Section 5.2), we now examine
+PGLM’s strong performance in the noise-accumulation regime. The most sig-
+nificant finding reveals PGLM’s effectiveness correlates with circuit complexity,
+exposing distinct physical regimes where linear correction succeeds systemati-
+cally. Table 3 shows dramatic performance variation: single-qubit circuits suffer
+severe degradation (-127.3% RMSE change), while multi-qubit circuits achieve
+substantial improvements (17.8% for 2-qubits, 50.1% for 3-qubits, 32.3% for 4-
+qubits).
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ Fig.4: Ablation: RMSE vs. training set size. Knee near 50–100 circuits; best at 100.
+                    Table 3: Detailed per-qubit performance breakdown
+        Qubits  Raw RMSE       PGLM RMSE         ∆RMSE       Rel. Change    Std. Dev.   Count
+           1        0.0360          0.0818         -0.0458      -127.3%       0.0234       16
+           2        0.0759          0.0624        +0.0135       +17.8%        0.0156       13
+           3        0.0930          0.0464        +0.0466       +50.1%        0.0298       16
+           4        0.1056          0.0715        +0.0340       +32.3%        0.0187       7
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Fig.5: RMSE by qubit count. PGLM improves 2–4 qubit circuits but degrades 1-qubit.
+
+   The single-qubit failure mode arises for two complementary reasons. First,
+whenn      cx = 0the multiplicative correction features (y  noisy×n  cx, etc.) are iden-
+tically zero, reducing effective feature diversity and making reliable coefficient
+estimation difficult on small training sets. Second, single-qubit expectation val-
+ues in our noise model are already relatively high fidelity (small RMSE), so even
+smallsystematicbiasesintroducedbyamodeltrainedprimarilyonnoisiermulti-
+qubit data can increase error. In other words, PGLM is intrinsically targeted at
+the noise-accumulation regime; in the high-fidelity regime statistical shot noise
+and small biases dominate, and linear corrections trained on heterogeneous data
+may harm rather than help. This motivates the practical circuit-size-aware fall-
+back (use raw measurements for 1-qubit circuits) that we adopt.
+   Conversely,strongperformanceon3-qubitcircuits(50.1%improvement)demon-
+strates PGLM’s effectiveness when noise accumulation dominates. Multi-qubit
+circuits exhibit non-zero CNOT counts and meaningful depth variations, en-
+abling all basis functions to contribute meaningfully. As circuit complexity in-
+creases, gate-level error accumulation becomes the primary error source, per-
+fectly aligning with PGLM’s multiplicative correction design derived from depo-
+larizing noise theory.
+   The learned ridge coefficients provide direct insight into error mechanisms:
+w1 =−0.022(global bias),w                             2 = 0.569(identity scaling),w                   3 =−0.028(CNOT
+correction),w                       4  =  0.068(depth correction),w                                  5  =  0.011(readout correction),
+w6  =−0.003(CNOT additive),w                       7  = 0.002(depth additive). The identity co-
+               Fig.6: Example circuit: ideal vs. noisy vs. PGLM estimate.
+
+efficientw  2 = 0.569significantly below 1.0 indicates systematic overestimation
+in raw measurements, contradicting simple depolarizing noise theory and reveal-
+ing complex bias patterns in our composite noise model. The negative CNOT
+coefficientw  3  =−0.028confirms that each CNOT gate reduces expectation
+magnitude beyond base scaling, consistent with the 10×higher error rate of
+two-qubit gates (2% vs 0.2%). Feature contribution analysis reveals the identity
+term dominates (73.2% of correction magnitude), with depth-dependent cor-
+rections providing the most significant secondary contribution (14.6%), while
+CNOT terms contribute 6.7% and other terms remain below 5%.
+
+
+5.4    Ablation Studies and Model Diagnostics
+
+Training size ablation reveals a clear performance threshold around 50-100 cir-
+cuits. Table 2 demonstrates that performance degrades severely below 50 circuits
+due to insufficient feature space coverage, while gains beyond 100 circuits show
+diminishing returns, suggesting adequate characterization of the 7-dimensional
+feature space. Training with 10 circuits yields catastrophic failure (-123.0% vs
+raw), improving through 25 circuits (-44.8%) and 50 circuits (-10.1%) before
+achieving positive results at 100 circuits (+21.3%). The training time scales lin-
+early from 0.8s to 6.8s, maintaining the computational efficiency advantage.
+   Regularization analysis shows thatα=  1.0provides a good balance be-
+tween fitting and stability. Our implementation uses this fixed value, though the
+method shows robust behavior in the rangeα∈[0.1,10.0]. The optimal value
+provides stable performance without requiring precise hyperparameter tuning.
+Fig.7: Residual histograms: (left) noisy−ideal, (right) PGLM−ideal; medians closer to
+0 and tighter spread after PGLM.
+
+   Model diagnostics reveal encouraging patterns in error correlation and resid-
+ual structure. PGLM improvement correlates moderately with circuit complex-
+ity measures: CNOT count correlationr= 0.34, depth correlationr= 0.28, and
+combined complexityr= 0.41, confirming that benefits align with noise accu-
+mulation physics. Post-correction residuals show reduced systematic bias with
+mean residuals closer to zero, tighter distributions with 15% reduced standard
+deviation, and no obvious patterns versus circuit features, suggesting the linear
+model captures dominant error relationships without missing obvious nonlinear
+terms.
+
+5.5    Circuit-Size-Aware Deployment and Computational Analysis
+
+The systematic single-qubit failure motivates a practical deployment strategy:
+use raw measurements for single-qubit circuits and apply PGLM correction for
+multi-qubit circuits. This circuit-size-aware fallback yields RMSE of 0.0522, rep-
+resenting32.6%improvementoverrawresultsand21.2%improvementovernaive
+PGLM application. The strategy adds negligible computational overhead—a sin-
+gle conditional check per circuit—while eliminating the primary failure mode.
+   PGLM’s computational efficiency provides significant advantages over neural
+network alternatives. Training scales linearly with dataset size: 100 circuits train
+in 2.5 seconds with 5.6 KB memory usage, while inference requires 0.06 millisec-
+onds per circuit with 56-byte memory footprint. Compared to representative
+baselines, PGLM achieves 18-170×faster training, 13-250×faster inference, and
+150-2100×smaller memory requirements. The fixed 7-dimensional feature space
+ensures inference complexity remainsO(1)regardless of circuit size, enabling de-
+ployment in resource-constrained environments where quantum control systems
+have limited classical computational capacity.
+   Data requirements scale approximately asN  train≈50 log(n   qubits) log(d  max),
+suggesting continued data efficiency as circuit complexity increases. The inter-
+pretable linear coefficients enable principled device transfer through calibra-
+tion parameter scaling—for example, adapting readout error corrections via
+w′5  =w    5·ϵ′ro/ϵro when moving between quantum devices with different mea-
+surement fidelities.
+6   Discussion
+
+PGLM is a pragmatic balance between expressivity and deployability. Its main
+virtues are data efficiency and interpretability: the seven coefficients provide a
+compact summary of how device calibration and circuit complexity interact to
+bias expectation values. Practically, PGLM is best applied where gate-level error
+accumulation dominates (multi-qubit circuits with non-zero CNOT count). For
+high-fidelity single-qubit circuits shot noise and readout stochasticity dominate;
+in that regime our linear corrections can overfit and introduce bias, hence the
+recommended fallback described in Sec. 3.
+   Two deployment considerations deserve emphasis. First, device drift: PGLM
+coefficients can be updated with few-shot adaptation (e.g., tens of calibration
+circuits) to track slow drift; this is left to future work. Second, composability
+with traditional QEM: PGLM can be used as a low-cost pre-correction prior to
+more expensive methods like ZNE or PEC, reducing their sample complexity.
+   Limitations include inability to capture strongly nonlinear correlated error
+channels and the fact that our present validation is simulator-based. Hardware
+experiments and extension to correlated-noise-aware features are important next
+steps.
+
+7   Conclusion
+
+PGLM demonstrates that physics-informed feature engineering can produce a
+practical, interpretable ML-based quantum error mitigation method. A seven-
+dimensional linear mapper trained on 100–200 circuits trains in seconds (vs.
+hours for neural networks) and yields transparent coefficients revealing which
+error mechanisms matter most. Using a circuit-size-aware deployment strategy,
+PGLM achieves 32.6% RMSE reduction versus raw noisy measurements on sim-
+ulated 1–4 qubit circuits, with particularly strong performance where noise ac-
+cumulation dominates (50.1% improvement on 3-qubit circuits).
+   However, the approach has fundamental limitations. The linear model can-
+not capture complex nonlinear error interactions or correlated noise, shows sys-
+tematic underperformance on single-qubit high-fidelity regimes, and evaluation
+remains simulator-based with idealized noise models. Hardware validation and
+robustness to device drift are essential next steps.
+   Several extensions would broaden PGLM’s reach: interpretable nonlinear lifts
+(kernelized or polynomial features) for higher-order interactions; device-transfer
+protocolsusingcalibrationpriorsforcross-platformscaling;onlinefew-shotadap-
+tation to track drift; Bayesian extensions for uncertainty quantification; and hy-
+brid pipelines combining PGLM with traditional QEM for reduced sampling
+overhead in VQE/QAOA workflows [10,11]. Scaling beyond four qubits and en-
+riching features for multi-qubit correlations will test the method’s ultimate lim-
+its.
+   In summary, PGLM establishes a deployment-friendly foundation for physics-
+guidedML-QEM:data-efficient,fast,andinterpretable,whileremainingcompet-
+itive in noise-accumulation regimes most relevant to near-term quantum hard-
+ware.
+
+References
+
+ 1.Adeniyi, T.B., Kumar, S.A.P.: Adaptive neural network for quantum error mitiga-
+    tion. Quantum Machine Intelligence7, 13 (2025)
+ 2.Babukhin, D.V.: Echo-evolution data generation for quantum error mitigation via
+    neural networks. arXiv:2311.00487 (2023)
+ 3.Bao, T., Ye, X., Ruan, H., Liu, C., et al.: Beyond circuit connections: A non-
+    message passing graph transformer approach for quantum error mitigation. In:
+    ICLR (2025)
+ 4.Bravyi, S., Kitaev, A., Gambetta, J.M., et al.: Mitigating measurement errors in
+    multiqubit experiments. Phys. Rev. A103, 042605 (2021).https://doi.org/10.
+    1103/PhysRevA.103.042605
+ 5.Czarnik, P., Arrasmith, A., Coles, P.J., Cincio, L.: Error mitigation with Clif-
+    ford quantum-circuit data. Quantum5, 592 (2021).https://doi.org/10.22331/
+    q-2021-11-26-592
+ 6.Czarnik, P., McKerns, M., Sornborger, A.T., Cincio, L.: Improving the efficiency
+    of learning-based error mitigation. Quantum9,  1727 (2025).https://doi.org/
+    10.22331/q-2025-05-05-1727
+ 7.Giurgica-Tiron, T., Hindy, Y., LaRose, R., Mari, A., Zeng, W.J.: Digital zero-noise
+    extrapolation for quantum error mitigation. arXiv:2005.10921 (2020)
+ 8.He, A.: Zero-noise extrapolation for quantum-gate error mitigation. Phys. Rev. A
+    102, 012426 (2020).https://doi.org/10.1103/PhysRevA.102.012426
+ 9.Jiang, T.: Error mitigation in variational quantum eigensolvers using tailored
+    probabilistic machine learning. Phys. Rev. Research6, 033069 (2024).https:
+    //doi.org/10.1103/PhysRevResearch.6.033069
+10.Kandala, A., Temme, K., Córcoles, A.D., Mezzacapo, A., Chow, J.M., Gambetta,
+    J.M.: Error mitigation extends the computational reach of a noisy quantum proces-
+    sor. Nature567, 491–495 (2019).https://doi.org/10.1038/s41586-019-1040-7
+11.Kim, Y., Eddins, A., Anand, S., Wei, K.X., van den Berg, E., Rosenblatt, S.,
+    Nayfeh, H., Wu, Y., Zaletel, M., Temme, K., Kandala, A.: Evidence for the utility
+    of quantum computing before fault tolerance. Nature618, 500–505 (2023).https:
+    //doi.org/10.1038/s41586-023-06096-3
+12.Liao,H., Wang,D.S.,Sitdikov, I.,Salcedo, C.,Seif, A.,Minev, Z.K.,et al.:Machine
+    learning for practical quantum error mitigation. arXiv:2309.17368 (2023)
+13.Nguyen, H.C.: Information-theoretic approach to readout-error mitigation for
+    quantum computers. Phys. Rev. A108, 052419 (2023).https://doi.org/10.
+    1103/PhysRevA.108.052419
+14.Qin, D., Chen, Y., Li, Y.: Error statistics and scalability of quantum error miti-
+    gation formulas. npj Quantum Information9,  35 (2023).https://doi.org/10.
+    1038/s41534-023-00707-7
+15.Song, C., Cui, J., Wang, H., Hao, J., Feng, H., Li, Y.: Quantum computation with
+    universal error mitigation on a superconducting quantum processor. Sci. Adv.5,
+    eaaw5686 (2019).https://doi.org/10.1126/sciadv.aaw5686
+16.Strikis, A., Qin, D., Chen, Y., Benjamin, S.C., Li, Y.: Learning-based quantum
+    error mitigation. PRX Quantum2, 040330 (2021).https://doi.org/10.1103/
+    PRXQuantum.2.040330
+17.Temme, K., Bravyi, S., Gambetta, J.M.: Error mitigation for short-depth quan-
+     tum circuits. Phys. Rev. Lett.119, 180509 (2017).https://doi.org/10.1103/
+     PhysRevLett.119.180509
+18.Xu, X.Y., Xue, X., Chen, T., Ding, C., Li, T., Zhou, H., Huang, H.L., Bao, W.S.:
+     Physics-inspired machine learning for quantum error mitigation. arXiv:2501.04558
+     (2025)

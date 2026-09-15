@@ -1,0 +1,1911 @@
+ SciPost Physics Codebases                                                                Submission
+
+leveraging automated diﬀerentiation and GPU accelerationjVMC: Versatile and performant variational Monte Carlo
+
+
+                                Markus Schmitt1* and Moritz Reh2
+
+          1 Institut f¨ur Theoretische Physik, Universit¨at zu K¨oln, K¨oln, Germany
+       2 Kirchhoﬀ-Institut f¨ur Physik, Universit¨at Heidelberg, Heidelberg, Germany
+                                   * markus.schmitt@uni-koeln.de
+
+                                          December 15, 2021
+
+Abstract
+
+The introduction of Neural Quantum States (NQS) has recently given a new
+twist to variational Monte Carlo (VMC). The ability to systematically reduce
+the bias of the wave function ansatz renders the approach widely applicable.
+However, performant implementations are crucial to reach the numerical state
+of the art.  Here, we present a Python codebase that supports arbitrary NQS
+architectures and model Hamiltonians.  Additionally leveraging automatic dif-
+ferentiation, just-in-time compilation to accelerators, and distributed comput-
+ing, it is designed to facilitate the composition of eﬃcient NQS algorithms.
+
+
+
+Contents
+
+1   Introduction                                                                                                1
+
+2   Variational Monte Carlo algorithms                                                           2
+
+3   Design choices                                                                                           11
+
+4   Performance                                                                                              21
+
+5   Examples                                                                                                   23
+
+6   Conclusion                                                                                                 25
+
+A  The underlying JAX library in a nutshell                                                 26
+
+References                                                                                                      29
+
+
+1  Introduction
+
+The numerical simulation of strongly correlated quantum many-body systems constitutes
+a major challenge in computational physics.  Even when fully exploiting modern super-
+computers, direct solutions that involve the complete state vector are restricted to a few
+dozen degrees of freedom,  because the dimension of the underlying Hilbert space grows
+
+
+                                                     1
+ SciPost Physics Codebases                                                                  Submission
+
+
+exponentially with system size [1].  Therefore, suited approximate methods are required in
+order to address large or inﬁnite system sizes, which are typically of interest when study-
+ing universal behavior.  Particularly desirable are controlled methods, which can become
+numerically exact by tuning a control parameter.
+    During the past decades the development of a number of powerful numerical methods
+enabled substantial advances of our understanding of quantum many-body systems in and
+out  of  equilibrium.   Prime  examples  are  tensor  network  algorithms  for  low-dimensional
+systems [2–4], dynamical mean ﬁeld theory in high dimensions [5–8], and quantum Monte
+Carlo [9] for equilibrium properties in the absence of a sign problem.  However,  despite
+the  broad  applicability  of  these  methods,  various  physical  problems  remain  elusive  for
+state of the art numerical approaches, among which, e.g., systems in two or three spatial
+dimensions,  long  time  dynamics,  and  frustrated  systems.   Since  the  limitations  of  the
+established methods in these regards are well understood, novel paths need to be explored
+to address the existing challenges.
+    The recent proposal of neural quantum states (NQS) as a new ansatz class for varia-
+tional quantum Monte Carlo opened new perspectives and holds the potential to overcome
+existing limitations [10].  With their expressive power and their applicability independent
+of  speciﬁc  spatial  structures  NQS  are  a  suited  basis  to  devise  a  new  family  of  broadly
+applicable algorithms.  Their utility has been outlined in a number of fundamental works.
+It has been shown that NQS can be used to describe ground states of critical systems in
+two dimensions [11] or states with (chiral) topological order [12–14] and their suitability
+to study frustrated magnets is under investigation [15–19].  Moreover, various approaches
+have been developed for the simulation of non-equilibrium dynamics in closed [10,20–26]
+and open quantum systems [27–29].  Other directions include the incorporation of NQS
+in  quantum  chemical  simulations  [30–32],  quantum  state  tomography  [33, 34],  and  the
+simulation of quantum computation [35].
+    A key practical aspect that NQS algorithms have in common with many other deep
+learning applications is the possibility to harness cutting edge supercomputing resources at
+large scales; in fact, exploiting the intrinsic parallelism is crucial to achieve state-of-the-art
+results.  In this paper we introduce the jVMC Python codebase that provides eﬃcient im-
+plementations of the typical tasks that will be at the core of any algorithm involving NQS,
+namely composing and evaluating arbitrary network architectures, sampling, and evalu-
+ating quantum operators.  The implementations and the interfaces are designed to enable
+the straightforward composition of custom algorithms and the utilization of distributed
+compute clusters,  ideally with GPU or TPU accelerators.  For this purpose the code is
+based  on  the  JAX  library  [36],  that  provides  functionality  for  automatic  diﬀerentiation
+and optimized just-in-time compilation targeted at the available compute resources.  Dis-
+tributed computing across multiple nodes is enabled by incorporating the Message Passing
+Interface (MPI) through the mpi4py library [37,38].
+    The  repository  containing  the  jVMC  source  code  and  a  detailed  documentation  are
+available online [39,40].  The codebase and all dependencies can be installed as a Python
+package via
+
+>>>  pip  install  jVMC
+
+
+2  Variational Monte Carlo algorithms
+
+In this section we outline common Variational Monte Carlo (VMC) algorithms in order
+to  highlight  what  are  the  core  building  blocks  for  which  the  jVMC  codebase  provides
+
+
+                                                      2
+ SciPost Physics Codebases                                                                  Submission
+
+
+solutions.  For this  purpose  we  discuss  how  to  ﬁnd  ground  states  and  low-lying  excited
+states and how to simulate real time dynamics of isolated or open systems using a time-
+dependent variational principle (TDVP).
+    For simplicity we will consider spin-1/2 degrees of freedom and corresponding compu-
+tational basis conﬁgurations s = (s1,...,sN)  with si =↑,↓.  The generalization to higher-
+dimensional local Hilbert spaces is straightforward.
+
+2.1Quantum expectation values
+The starting point of variational Monte Carlo is a variational ansatz for the coeﬃcients
+ψθ(s) with variational parametersθ = (θ1,...,θK), such that without further assumptions
+the generally unnormalized wave function reads
+
+                                          /divides.alt0ψ(θ)/uni27E9= /summation.disps/uni27E9.                                                 (1)
+                                                     s ψθ(s)/divides.alt0
+In the following we assume thatθk ∈R.  Given a wave function in this form the expectation
+value of any quantum operator  ˆO can be rewritten as
+       /uni27E8ψ(θ)/divides.alt0ˆO/divides.alt0ψ(θ)/uni27E9ψθ(s)∗ψθ(s′)ˆO/divides.alt0/divides.alt0ψθ(s)/divides.alt02ˆO/divides.alt0
+         /uni27E8ψ(θ)/divides.alt0ψ(θ)/uni27E9= /summation.disp/uni27E8ψ(θ)/divides.alt0ψ(θ)/uni27E9/uni27E8s/divides.alt0s′/uni27E9= /summation.disp/uni27E8ψ(θ)/divides.alt0ψ(θ)/uni27E9/summation.disps/divides.alt0s′/uni27E9ψθ(s′)ψθ(s) .     (2)
+                            s,s′                              s                  s′/uni27E8
+Since pθ(s) ≡/divides.alt0ψθ(s)/divides.alt02/slash.left/uni27E8ψ(θ)/divides.alt0ψ(θ)/uni27E9constitutes a probability distribution on the computa-
+tional basis conﬁgurations, we can write
+                             /uni27E8ψ(θ)/divides.alt0ˆO/divides.alt0ψ(θ)/uni27E9
+                               /uni27E8ψ(θ)/divides.alt0ψ(θ)/uni27E9= /summation.dispθ                                 (3)
+                                                   s pθ(s)Oθloc(s) ≡/uni27EAOθloc/uni27EB
+where we introduced the local estimator
+
+                                      Oθloc(s) = /summation.disps/divides.alt0ˆO/divides.alt0s′/uni27E9ψθ(s′)ψθ(s)                                              (4)
+                                                   s′/uni27E8
+and the notation /uni27EA⋅/uni27EBθ for an expectation value with respect topθ(s). Since typical quantum
+operators are sparse in the computational basis, the sum ∑s′ in Eq. (4) can be evaluated
+eﬃciently.
+    By contrast, the sum over all basis states, ∑s, in Eq. (3) becomes unfeasible for large
+system sizesN, because the Hilbert space dimension grows exponentially with N.  There-
+fore, one has to resort to Monte Carlo (MC) sampling ofpθ(s) to eﬃciently estimate these
+expectation values; for this purpose, only the functional form of ψθ(s) must allow for ef-
+ﬁcient evaluation [41].  Then samples {s(1),...,s(NMC)}s∼pθ(s) can be obtained using, e.g.,
+the Metropolis-Hastings algorithm, and the expectation value can be approximated by the
+empirical mean
+
+                                                       NMC
+                                    /uni27EA.alt1Oθloc/uni27EB.alt1θ ≈  1NMC/summation.disp
+                                                        n=1 Oθloc(s(n)) .                                         (5)
+
+2.2Finding low-energy states
+
+Given  a  variational  ansatz ψθ(s)  the  ground  state  of  a  many-body  Hamiltonian   ˆH  can
+be approximated variationally using gradient-based optimization.  The goal is to ﬁnd the
+minimal energy expectation value
+                                         E(θ) = /uni27E8ψ(θ)/divides.alt0ˆH/divides.alt0ψ(θ)/uni27E9
+                                                    /uni27E8ψ(θ)/divides.alt0ψ(θ)/uni27E9                                       (6)
+
+                                                      3
+ SciPost Physics Codebases                                                                    Submission
+
+
+that  is  permitted  by  the  chosen  ansatz.   The  gradient  with  respect  to  the  variational
+parameters θk takes the form
+
+        ∂θkE(θ) = 2Re/parenleft.alt4/summation.dispOθk(s)/bracketright.alt∗Eθloc(s)−/summation.dispOθk(s)/bracketright.alt∗/summation.disp
+
+                              s pθ(s)/bracketleft.alt1         s pθ(s)/bracketleft.alt1s pθ(s)Eθloc(s)/parenright.alt4
+                   = 2Re/parenleft.alt4/uni27EA.alt1/parenleft.alt1Oθk/parenright.alt1∗Eθloc/uni27EB.alt1Oθk/parenright.alt1∗/uni27EB.alt1Eθloc/uni27EB.alt1≡2Re/parenleft.alt2/uni27EA.alt1/parenleft.alt1Oθk/parenright.alt1∗Eθloc/uni27EB.alt1c(7)
+                                            θ−/uni27EA.alt1/parenleft.alt1θ/uni27EA.alt1θ/parenright.alt4θ/parenright.alt2
+
+Here,Eθloc(s) = ∑s′/uni27E8s/divides.alt0ˆH/divides.alt0s′/uni27E9ψθ(s′)
+                                   ψθ(s)  as in Eq. (4) is the local energy.  Moreover, we introduced
+the logarithmic derivatives
+
+                                           Oθk(s) =∂θk logψθ(s) ,                                                (8)
+
+which appear due to a multiplication by a unity ψθ(s)/slash.leftψθ(s) in order to obtain factors of
+/divides.alt0ψθ(s)/divides.alt02 analogous to Eq. (4).  Finally, we use the notation /uni27EAAB/uni27EBc ≡/uni27EAAB/uni27EB−/uni27EAA/uni27EB/uni27EAB/uni27EBfor
+connected correlation functions.
+    The  energy  gradient  (7)  is  again  an  expectation  value  with  respect  to pθ(s),  which
+we  can  estimate  by  MC  sampling.   Therefore,  we  can  set  up  an  iterative  procedure  to
+minimize  the  energy  by  updating  the  variational  parameters  according  to  the  gradient
+descent prescription
+
+                                      θ(n+1)k    =θ(n)k  −τ∂θkE(θ)/divides.alt1θ=θ(n)                                           (9)
+
+using a small learning rate τ.
+    However, the energy landscape E(θ)  is typically not convex, meaning that the plain
+gradient descent optimization is prone to getting stuck in saddle points or local minima.
+Among other choices of advanced optimizers, the convergence can be accelerated by em-
+ploying  the  Stochastic  Reconﬁguration  (SR)  method  [42],  where  the  update  step  (9)  is
+altered to
+
+                                  θ(n+1)k    =θ(n)k  −τS−1k,k′∂θk′E(θ)/divides.alt1θ=θ(n) .                                    (10)
+
+In this expression Sk,k′= Re/parenleft.alt1Sk,k′/parenright.alt1is the real part of the quantum Fisher matrix
+                                           Sk,k′= /uni27EA.alt1/parenleft.alt1Oθk/parenright.alt1∗Oθk′/uni27EB.alt1c
+                                                                   θ .                                               (11)
+The  quantum  Fisher  matrix  is  the  metric  tensor  of  the  Fubini-Study  metric  –  a  natu-
+ral metric on the projective Hilbert space [43].  It provides information about the local
+geometry  of the  variational manifold,  which is  exploited by  adjusting the  gradient step
+accordingly in Eq. (10).  However, this approach requires the inversion of the S-matrix,
+which  imposes  constraints  on  the  feasible  number  of  variational  parameters  that  deter-
+mines  the  matrix  dimension.   Moreover,  the  quantum  Fisher  matrix  is  often  (approxi-
+mately) rank-deﬁcient, which means that changing the parameters along some directions
+in  the  variational  manifold  leaves  the  physical  state  invariant.   This  ill-conditionedness
+demands careful regularization when inverting S  for the SR update step in Eq. (10), see
+Section 2.5 for details.
+    Besides ground states, it is also possible to address low-lying excited states with VMC
+techniques.  In the method introduced in Ref. [44] the ﬁrst step is to perform a ground
+state  search  resulting  in  a  set  of  optimal  parameters θ∗and  a  variational  ground  state
+/divides.alt0ϕ(θ∗)/uni27E9.   Subsequently,  the  ansatz  for  the  excited  state  is  projected  onto  the  subspace
+orthogonal to the ground state by deﬁning
+
+                                      /divides.alt0Ψexc.(θ)/uni27E9≡/divides.alt0ψ(θ)/uni27E9−λ/divides.alt0ϕ(θ∗)/uni27E9                             (12)
+
+
+                                                        4
+ SciPost Physics Codebases                                                                     Submission
+
+
+with
+                                   ψ(θ)/uni27E9      /divides.alt0ϕθ∗(s)/divides.alt02ψθ(s)ψθ
+                    λ= /uni27E8ϕ(θ∗)/divides.alt0/uni27E8ϕ(θ∗)/divides.alt0ϕ(θ∗)/uni27E9= /summation.disp/uni27E8ϕ(θ∗)/divides.alt0ϕ(θ∗)/uni27E9ϕθ∗(s) = /uni27EA.alt4ϕθ∗/uni27EB.alt4.                   (13)
+                                               s                                         θ∗
+
+The excited state search is then performed with alternating steps, ﬁrst computing λ and
+then performing one SR step with the ansatz (12).
+
+2.3Unitary dynamics
+For  the  simulation  of  real  time  dynamics  the  goal  is  to  obtain  equations  of  motion  for
+the time-dependent variational parameters θ(t) that yield an approximate solution of the
+Schr¨odinger equation
+
+                                       iddt /divides.alt0ψ(θ(t))/uni27E9=  ˆH /divides.alt0ψ(θ(t))/uni27E9,                                          (14)
+
+where  ˆH  denotes the system Hamiltonian.  While alternative approaches have been ex-
+plored  recently  [22],  there  are  two  long  established  ways  to  formulate  a  TDVP  for  the
+Schr¨odinger equation – (i) based on the principle of least action [45,46], and (ii) based on
+the maximization of overlaps or similar measures of proximity in the underlying Hilbert
+space  [10, 46, 47].   These  two  derivations  yield  the  identical  result  in  the  special  case,
+where the parametrized wave function ψθ(s) ≡ψϑ(s) is holomorphic, i.e., fulﬁlls Cauchy-
+Riemann equations as function of complex variational parameters ϑl =θ2l+iθ2l+1 ∈C [46].
+The corresponding TDVP equation is a ﬁrst order diﬀerential equation for the variational
+parameters:
+
+                                                Sl,l′˙ϑl′=−iFl                                                      (15)
+
+Here, the force vector is deﬁned as
+                                            Fl = /uni27EA.alt1Eϑloc/parenleft.alt1Oϑl /parenright.alt1∗/uni27EB.alt1c
+                                                                  ϑ ,                                                (16)
+and Sl,l′ is the quantum Fisher matrix as in Eq. (11).  In this case Oϑl (s) =∂ϑl logψϑ(s)
+denotes the complex derivative of the logarithmic wave function coeﬃcients.
+    The TDVP equation (15) deﬁnes a Hamiltonian dynamics of the variational parame-
+ters, which conserves the quantum expectation value of energy [45].  Notice, however, that
+other constants of motion of the quantum dynamics are in general not conserved under
+this TDVP.
+    When releasing the requirement of a holomorphic ansatz, the diﬀerent approaches to
+the TDVP yield closely related,  but diﬀerent results.  The principle of least action,  (i),
+results in
+                                        Im/bracketleft.alt1Sk,k′/bracketright.alt˙θk′= Im/bracketleft.alt1−iFk/bracketright.alt,                                            (17)
+
+while the minimization of some distance measure, (ii), gives
+                                        Re/bracketleft.alt1Sk,k′/bracketright.alt˙θk′= Re/bracketleft.alt1−iFk/bracketright.alt.                                            (18)
+
+While both equations correspond to a valid TDVP, only Eq. (17) preserves the symplectic
+structure of the variational manifold and thereby the conservation of energy under time
+evolution; by contrast, following Eq. (18), energy is not necessarily conserved.  Moreover,
+solving Eq. (15) for complex parameters ϑl =θ2l+iθ2l+1 is equivalent to solving Eq. (17)
+for the corresponding real parameters θk.
+
+                                                        5
+ SciPost Physics Codebases                                                                Submission
+
+
+    For a uniﬁed notation we can write
+
+                                        [[Sk,k′]]˙θk′=−[[iFk]],                                              (19)
+
+where [[⋅]]denotes the identity, Re[⋅]or Im[⋅], depending on which version of the TDVP is
+used.  Accordingly, inverting [[S]]yields an ordinary diﬀerential equation in the standard
+form, which can be integrated in order to obtain the time-evolved wave function.  Again,
+[[S]]is typically ill-conditioned, meaning that a suited regularization has to be applied
+in order to obtain a stable solution, see Section 2.5.
+    As  an  aside,  notice  that  for  the  purpose  of  VMC  we  consider  wave  functions ψθ(s)
+with no further constraints on θ.  Therefore, the solution of Eq. (19) is always part of the
+variational manifold we consider.  A prominent example of an ansatz class with additional
+constraints on the variational parameters θ  are the matrix product states.  In that case
+an  explicit  projection  onto  the  variational  manifold  has  to  be  included  as  part  of  the
+TDVP [47,48].
+    Stochastic Reconﬁguration for ground state search and the TDVP for unitary time evo-
+lution are closely related:  Since ∂θkE(θ) = 2Re[Fk], the SR update step (10) corresponds
+to an imaginary time step according to the TDVP equation.  Therefore, the computational
+steps required for both are very similar and they are summarized in the pseudocode of
+Algorithm 1.  We will see in the following section that also variational simulation of the dy-
+namics of an open quantum system shares the same building blocks.  The jVMC codebase
+provides eﬃcient implementations of these fundamental ingredients for NQS algorithms.
+
+Algorithm 1 Single SR or TDVP time step
+ 1:  procedure timeStep(psi, H, n           Samples)
+ 2:       conﬁgs←psi.sample(n        Samples)                       ▷obtain samples
+ 3:       amp  Conﬁgs←psi.evaluate(conﬁgs)             ▷obtain sample amplitudes
+ 4:       gradients←psi.gradients(conﬁgs)   ▷obtain gradients of the sample amplitudes
+ 5:
+ 6:       oﬀdConﬁgs, oﬀdElements←H.get             oﬀdConﬁgs(conﬁgs)  ▷obtain coupled conﬁgs
+ 7:       amp  oﬀdConﬁgs←psi.evaluate(oﬀdConﬁgs)    ▷evaluation on coupled conﬁgs
+ 8:   Eloc←H.get         O  loc(amp    Conﬁgs, amp      oﬀdConﬁgs)    ▷compute local energies
+ 9:
+10:   S, F ←get        TDVP     equation(gradients, Eloc)
+11:        ˙θ←solve  TDVP     equation(S, F )                  ▷solve TDVP equation
+12:
+13:      return  ˙θ
+
+
+2.4Markovian dissipative dynamics
+When taking into account the coupling to an environment, quantum states become mixed
+and one has to resort to the density matrix formalism for a theoretical description.  As-
+suming a Markovian environment, the time evolution of the density matrix is given by the
+Lindbladian extension of the von-Neumann equation
+
+                            d                       ˆLiˆρˆLi†−1    ˆLi† ˆLi, ˆρ/braceright.alt2/bracketright.alt4.                             (20)
+                           dt ˆρ=−i[ ˆH, ˆρ]+/summation.dispi /bracketleft.alt42 /braceleft.alt2
+
+Here, [⋅,⋅] and {⋅,⋅}denote the commutator and the anti-commutator, respectively.  More-
+over the operators  ˆLi  are the so-called jump operators,  which incorporate the action of
+the environment and drive the system towards a steady-state.
+
+                                                     6
+ SciPost Physics Codebases                                                                     Submission
+
+
+    The TDVP for unitary dynamics can be generalized to variational approaches to solve
+the Lindblad equation.  One possibility is based on representing the density matrix in a
+puriﬁed form [27].  While implementing the puriﬁcation approach is also within the scope
+of the jVMC codebase, we focus in the following on an alternative method that relies on
+the  Positive  Operator  Valued  Measurements  (POVM)-formalism  [28, 29, 34, 49, 50]  for  a
+purely probabilistic formulation of quantum mechanics.
+    A POVM is a set of positive semi-deﬁnite operators { ˆMa}such that ∑a  ˆMa = 1.  Given
+a POVM { ˆMa} for the local Hilbert space, a many-body POVM can be constructed as
+ ˆM a =   ˆMa1 ⊗...⊗ ˆMaN  [34]  and  the  outcome  a = (a1,...,aN)  is  associated  with  the
+probability
+                                               P a = tr/parenleft.alt1ˆρ ˆM a/parenright.alt1.                                                   (21)
+A POVM is called minimal and informationally complete if the number of POVM elements
+equals the number of free parameters of the density matrix.  In that case the POVM forms
+an operator basis on the considered Hilbert space and the relation in Eq. (21) is invertible
+such that
+                                            ˆρ= /summation.dispˆM a/parenleft.alt1T−1/parenright.alt1abP b                                               (22)
+
+                                                a,b
+
+with the overlap matrix T ab = tr/parenleft.alt1ˆM a  ˆM b/parenright.alt1.  Hence,  a minimal informationally complete
+POVM  yields  an  equivalent  purely  probabilistic  formulation  of  quantum  mechanics  in
+which the dissipative dynamics is governed by a Master equation for the probability dis-
+tribution P a,                                        ˙P a = LabP b .                                                     (23)
+
+
+In this expression, the linear operator Lab contains the physical information equivalent to
+the Lindblad equation (20), see Ref. [29] for details.
+    For  the  variational  approach,  an  ansatz P aθ   is  chosen  in  order  to  ﬁnd  an  eﬃcient
+representation  of  the  POVM  distribution,  and  a  TDVP  yields  a  ﬁrst-order  diﬀerential
+equation for the variational parameters θ,
+
+                                                Sk,k′˙θk′=Fk ,                                                     (24)
+see   Ref.   [29].       Here, S   denotes   the   Fisher   matrix Sk,k′ =  /uni27EAOakOak′/uni27EBca∼P ,   and
+Fk = /uni27EA.alt1OakLabP bc
+                 P a/uni27EB.alt1a∼P , where the repeated indices b inside the brackets are summed over.c = /uni27EAAB/uni27EB−/uni27EAA/uni27EB/uni27EA
+The double brackets denote connected correlation functions /uni27EAAB/uni27EB                              B/uni27EBof
+expectation values with respect to the POVM-distribution P  and Oak =∂θk logP a.
+
+2.5Regularization to invert the (quantum) Fisher matrix
+In  many  cases  the  (quantum)  Fisher  matrix  turns  out  the  be  ill-conditioned  with  an
+eigenvalue  spectrum  that  spans  all  numerical  orders  of  magnitude.   Therefore,  ground
+state search with SR and time evolution via TDVP require suited regularization schemes
+when inverting the Fisher matrix.  Three possible approaches are outlined below.  While
+either the diagonal shift (Section 2.5.1) or the pseudo-inverse regularization (Section 2.5.2)
+should typically be used for SR, the eﬀective regularization for real time evolution, e.g.,
+targeted elimination of noisy contributions (Section 2.5.3), is under ongoing investigation
+and there are no generally established procedures to date [24,51].
+
+
+
+
+
+
+                                                        7
+ SciPost Physics Codebases                                                                    Submission
+
+
+2.5.1Diagonal shift
+An eﬀective regularization for SR is to introduce a diagonal shift, i.e., to replace the Fisher
+matrix Sk,k′ by
+                                          ˜Sk,k′= /parenleft.alt11+νδk,k′/parenright.alt1Sk,k′.                                             (25)
+
+Artiﬁcially amplifying the diagonal elements of theS-matrix mitigates the rank-deﬁciency
+and renders the matrix invertible.  The shift parameter ν  is typically reduced during the
+optimization according to a suited schedule [10].
+    The regularization via diagonal shift is not applicable for time evolution, because the
+TDVP  relies  on an  accurate  solution  of the  actual  TDVP  equation  at each time  point;
+by contrast, the ground state search is more forgiving in this regard because one is only
+interested in the ﬁnal solution and typically not in the trajectory during the optimization.
+Moreover, other than the regularization schemes discussed below, the diagonal shift regu-
+larization can be combined with iterative solvers for the linear equationSk,k′˙θk′=Fk, such
+as conjugate gradient [10].
+
+2.5.2Pseudo-inverse
+The Moore-Penrose pseudo-inverse generalizes matrix inversion to rank-deﬁcient matrices.
+The pseudo-inverse S+ of a hermitian/symmetric matrix S  with eigendecomposition S =
+VDV †,  where D = diag(λ1,...,λK),  can  be  constructed  as S+ = V diag(λ+1,...,λ+K)V †,
+where
+                                                  /uni23A7
+                                                  /uni23AA0       if λj = 0
+                                                  /uni23AA
+                                            λ+j = /uni23A8
+                                                  /uni23AAλ−1j      if λj ≠0                                                (26)
+                                                  /uni23AA
+                                                  /uni23A9
+For the case of ill-conditioned matrices with small but non-vanishing eigenvalues this can
+be generalized to an approximate pseudo-inverse with
+                                             /uni23A7
+                                             /uni23AA0       if /divides.alt0λj/slash.leftλ1/divides.alt0<ϵpinv
+                                             /uni23AA
+                                       λ+j = /uni23A8
+                                             /uni23AAλ−1j      if /divides.alt0λj/slash.leftλ1/divides.alt0≥ϵpinv                                           (27)
+                                             /uni23AA
+                                             /uni23A9
+where  we  introduced  the  cutoﬀ  parameter ϵpinv  and  assumed  ordered  eigenvalues /divides.alt0λ1/divides.alt0≥
+...≥/divides.alt0λK/divides.alt0.
+    For real time evolution it can be beneﬁcial to choose a soft cutoﬀ instead of Eq. (27),
+because eigenvalues that cross the cutoﬀ can otherwise introduce spurious discontinuities
+in the dynamics.  One possibility is
+                                                          ϵpinv    6/parenright.alt4/bracketright.alt4−1
+                                      λ+j = /bracketleft.alt4λj/parenleft.alt41+/parenleft.alt2/divides.alt0λj/slash.leftλ1/divides.alt0/parenright.alt2.                                         (28)
+
+    The  regularization  with  approximate  pseudo-inverses  requires  diagonalization  of  the
+(quantum) Fisher matrix.  Since the size of the Fisher matrix is determined by the number
+of variational parameters, this imposes immediate restrictions on the size of the variational
+ansatz.
+
+2.5.3Eliminating noisy contributions
+Monte Carlo ﬂuctuations that are blown up by the inversion of small eigenvalues of the
+Fisher matrix constitute a major source of instabilities when simulating real time evolution
+[24,51].  A mitigation strategy introduced in Ref. [24] takes the signal-to-noise ratio (SNR)
+
+                                                        8
+ SciPost Physics Codebases                                                                    Submission
+
+
+of the MC estimates in the TDVP equation into account for the regularization.  Denoting
+the force vector Fk  transformed to the eigenbasis of S as ρk =V †k,k′Fk′, its signal-to-noise
+ratio SNR(ρk) can be estimated using the available MC data.  Then, a regularization that
+ignores exceedingly noisy components of the TDVP equation can be deﬁned in analogy to
+the pseudo-inverse with
+                                                         ϵSNR       6   −1
+                                    λ+j = /bracketleft.alt4λj/parenleft.alt41+/parenleft.alt4SNR(ρk)/parenright.alt4/parenright.alt4/bracketright.alt4.                                       (29)
+
+The cutoﬀ parameter deﬁnes a lower bound for theϵSNR that is tolerated and the number of
+discarded components can be tuned systematically by varying the number of MC samples,
+and thereby the SNR.
+    This  SNR-based  regularization  can  be  combined  with  the  pseudo-inverse  approach
+discussed above.
+
+2.6Neural quantum states
+In the discussion of the previous sections we made no reference to any speciﬁc choice of
+the variational ansatz ψθ(s) (or P aθ ).  While these variational approaches are formulated
+for arbitrary wave function ansatzes, the particular choice will in general introduce a bias
+to the obtained results.  Numerically exact simulations, however, require the possibility to
+systematically reduce this bias.
+    Artiﬁcial neural networks (ANNs) have been proven to be universal function approx-
+imators  in  the  limit  of  large  network  sizes  [52–56].   Hence,  by  choosing  ANNs  as  the
+variational  ansatz  for  the  wave  function  the  inductive  bias  of  the  NQS  can  be  reduced
+systematically by increasing the network size.  Thereby, the network size plays a similar
+role for NQS as the bond dimension in the established tensor network techniques [2–4].
+    In its most basic form, the ANN is a function that is composed from an alternating
+sequence of aﬃne-linear and non-linear transformations.  Each aﬃne-linear transformation
+maps a vector of activations a(l−1) to a new vector of pre-activations
+
+                                        z(l)i  = /summation.dispij a(l−1)j   +b(l)i  ,                                            (30)
+                                                j W (l)
+
+from  which  the  new  activations  are  obtained  by  applying  a  non-linear  function σ(⋅)
+element-wise,
+
+                                               a(l)i  =σ/parenleft.alt1z(l)i  /parenright.alt1.                                                     (31)
+
+This  iterative  prescription  is  initialized  by  identifying a(0) with  the  input  of  the  ANN.
+The set of weights W (l)ij   and biases b(l)i    constitutes the variational parameters, which we
+will in the following summarize in the variable θ.
+    For our purposes, we assume that the ANN encodes the logarithm of the wave function
+coeﬃcients, i.e.,
+
+                                              logψθ(s) ≡fθ(s)                                                   (32)
+
+where fθ(s) represents the ANN. In the following two subsections we discuss two further
+central design choices, namely holomorphic vs.  non-holomorphic ANNs and the possibility
+to equip the NQS with an autoregressive structure to enable direct sampling. On this basis,
+arbitrary  ANN  architectures  can  be  incorporated  in  the  NQS,  for  example,  Restricted
+Boltzmann Machines [10], convolutional [15], recurrent [57], sparse [58], or graph neural
+networks [59].
+
+                                                        9
+ SciPost Physics Codebases                                                                 Submission
+
+
+2.6.1(Non-)holomorphic neural quantum states
+The wave function coeﬃcients ψθ(s)  are in general complex numbers, which can be ob-
+tained in diﬀerent ways from an ANN. Three possible options are:
+
+   1.Single holomorphic network:  Allow the weights and biases to be complex numbers,
+       ϑ∈C, and choose holomorphic activation functionsσ. Thenfϑ itself is a holomorphic
+       function of the variational parameters ϑ.
+
+   2.Single non-holomorphic network:  Construct an ANN with real parameters,  θ ∈R,
+       with two real outputs, fθ(s) = /parenleft.alt1f (1)θ  (s),f (2)θ  (s)/parenright.alt1∈R2.  This yields a complex wave
+       function coeﬃcient through
+
+                                        logψθ(s) =f (1)θ  (s)+if (2)θ  (s) .                                    (33)
+
+   3.Two real (non-holomorphic) networks:  Use two separate ANNs  fθ(f)  and gθ(g)  for
+       real and imaginary part
+
+                                       logψθ(s) =fθ(f)(s)+igθ(g)(s) .                                   (34)
+
+       In this case, independent variational parameters are used for the real and the imag-
+       inary part, θ = /parenleft.alt1θ(f),θ(g)/parenright.alt1.
+
+2.6.2Autoregressive neural quantum states
+Any joint probability distribution p(s) =p(s1,...,sN) can be factorized and written as a
+product of conditional probabilities:
+
+             p(s1,...,sN) =p1(s1)p2(s2/divides.alt0s1)p3(s3/divides.alt0s1,s2)...pN(sN/divides.alt0s1,...,sN−1) .           (35)
+
+If the random variables si have few discrete outcomes, this property can be exploited to
+eﬃciently generate uncorrelated samples s∼p without resorting to Markov Chain Monte
+Carlo. Instead, the individual realizations ofsi are sampled directly in a sequential manner.
+Since the si have only few outcomes, it is straightforward to draw a sample outcome for
+s1 from p1.  Subsequently, the same is true for sj  with j > 1, because pj(sj/divides.alt0s1,...,sj−1) is
+again a distribution with few outcomes for the given s1,...,sj−1.
+    ANNs, which incorporate this factorization into conditionals are called autoregressive
+models.  There are diﬀerent architectures with this property, such as Neural Autoregressive
+Density Estimators [11,60] or recurrent neural networks [57].  Utilizing direct sampling can
+be advantageous in cases where Markov Chain Monte Carlo (MCMC) becomes ineﬃcient
+due to exceedingly long autocorrelation times [11].  In fact, direct sampling is also more
+eﬃcient than MCMC when autocorrelation times are short. In MCMC consecutive samples
+are collected after performing one update sweep that typically consists of one Monte Carlo
+step per degree of freedom.  Hence, generating one sample with MCMC comes at the cost
+of O(N)  network evaluations, where N  is the system size.  By contrast, generating one
+sample costs just one network evaluation when exploiting the autoregressive property.
+    However, the autoregressive property imposes speciﬁc constraints on the network ar-
+chitecture.  Therefore, the advantage of more eﬃcient sampling has to be weighed against
+inductive biases of the architecture.
+
+
+
+
+
+
+                                                     10
+ SciPost Physics Codebases                                                                   Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure  1:   Schematic  depiction  of  the  parallelization  scheme.   Each  of  the  blue  boxes
+represents the task to evaluate the NQS on an individual basis conﬁguration.  These tasks
+are  evenly  distributed  across  the  available  compute  nodes  and  separated  into  batches,
+which can be executed concurrently by vectorized operations on the local accelerators.
+
+3  Design choices
+
+The jVMC codebase is devised as a transparent implementation of the core computational
+tasks required when dealing with NQS, which simultaneously provides eﬃciency and large
+ﬂexibility.  The primary purpose is to equip the user with these building blocks that enable
+the composition of a large variety of algorithms.
+    The  code  is  designed  to  fully  exploit  the  algorithms’  typical  amenability  to  hybrid
+parallelization,  combining distributed single program multiple data (SPMD) computing
+with vectorization that can beneﬁt substantially from the availability of accelerators like
+GPUs.   Automatic  diﬀerentiation  is  used  to  enable  the  composition  of  arbitrary  ansatz
+functions for the variational quantum states. The code relies on the JAX library [36], which
+provides the functionality for automatic diﬀerentiation as well as vectorization and just-
+in-time compilation; see Appendix A for basic examples illustrating JAX’s functionality.
+    In this section we ﬁrst explain how diﬀerent levels of parallelism are exploited and how
+this is reﬂected in the API before describing the core modules of the package.
+
+3.1Parallelism
+The computationally intense part of NQS-based algorithms is typically the evaluation of
+the  ANN  on  large  numbers  of  computational  basis  states.   Since  each  individual  ANN
+evaluation  is  independent  of  the  others  and  largely  consists  of  vectorizable  operations,
+these algorithms are well suited to exploit the resources of distributed compute clusters
+with accelerators.  The parallelization scheme that is supported by the jVMC codebase is
+depicted in Fig. 1.  In the depiction the small blue boxes represent the task to evaluate
+the ANN on an individual computational basis conﬁguration.  The total set of input con-
+ﬁgurations is distributed across the available compute nodes, where, in turn, the assigned
+conﬁgurations are split up among the locally available accelerators.  The accelerators work
+
+
+                                                      11
+ SciPost Physics Codebases                                                                 Submission
+
+
+most eﬃciently when evaluating the ANN on large batches of input conﬁgurations simul-
+taneously, see Section 3.1.2 below.
+    This parallelization scheme applies straightforwardly to the computation of observables
+following Eq. (4) when a large number of sample conﬁgurations s is given and it is appli-
+cable in a similar fashion to MC sampling.  To achieve optimal performance in MCMC, it
+is beneﬁcial to assign multiple independent Monte Carlo chains to each accelerator.  The
+MCMC  steps  of  all  chains  on  one  device  can  be  performed  in  sync,  again  allowing  for
+vectorized ANN evaluation on mutliple input conﬁgurations.
+    The code was designed with this hybrid parallelization scheme as a guiding principle.
+An important manifestation are the required array dimensions when interfacing jVMC: All
+data that is related to network evaluations will have two leading dimensions, namely the
+device dimension  and the batch dimension.  These are indicated by the stacks, which are
+assigned to individual nodes in Fig. 1.  The corresponding layers of parallelism, multiple
+accelerators  per  node  and  vectorization,  are  explained  in  more  detail  in  the  following
+subsections.
+
+3.1.1Multiple accelerators per node
+The jVMC codebase supports two possibilities to deal with compute clusters where mul-
+tiple accelerators are attached to each node, namely,
+
+   1.Launch one MPI process per accelerator.
+
+   2.Distribute  computation  across  the  available  devices,  while  working  with  a  single
+       process.
+
+While  the  former is  straightforward using  the  mpi4py  package,  the  latter  is  enabled by
+automatic parallelization across devices using the pmap functionality of the JAX library.
+The jVMC.set      pmap   devices() function enables the user at the beginning of a program
+to choose for each MPI process which subset of the available devices to work with.  For a
+homogeneous treatment of both options, all data arrays that are passed through the jVMC
+API have an additional leading device  dimension  to account for potential parallelization
+across devices.  The size of this dimension corresponds to the number of devices used by
+the process and any computation will be distributed among the devices.
+    It is important to realize and keep in mind that when working with multiple devices
+the device dimension is also physically distributed across the diﬀerent devices.  Hence, any
+computation on data with device dimension larger than one should be performed on the
+respective devices to avoid memory transfer overheads.
+    The default behavior of the JAX library is to allocate all available GPU memory at the
+beginning of a program.  This can lead to conﬂicts if multiple processes can access the same
+GPU devices.  This issue can be avoided by setting the XLA                PYTHON    CLIENT    PREALLOCATE
+environment variable prior to running the program as
+
+>>>exportXLA_PYTHON_CLIENT_PREALLOCATE=false
+
+
+3.1.2Batching for vectorization
+The  computationally  intense  operation  during  network  evaluations  is  the  matrix-vector
+product of the aﬃne-linear transformation in Eq. (30), which can be turned into a matrix-
+matrix product when evaluating the ANN simultaneously on a batch of input conﬁgura-
+tions.  The arithmetic intensity of multiplying am×n-matrix with an×k-matrix, i.e., the
+
+
+
+                                                     12
+ SciPost Physics Codebases                                                                 Submission
+
+
+number of arithmetic operations per memory access, is
+
+                                     I(m,n,k) =    mnkmn+nk+mk .                                          (36)
+
+This contains the arithmetic intensity of a matrix-vector product as the special case with
+k = 1, which is bounded from above irrespective of the values of m and n:
+
+                              I(m,n, 1) =   mnmn+n+m =        11+ n         < 1                                (37)
+                                                                   m + mn
+By  contrast, I(m,n,k)  grows  with  increasing k  (linearly  for k /uni226Amin(m,n)),  meaning
+for the typical aﬃne-linear transformation of ANNs that a suited batching of computa-
+tional tasks can substantially enhance the arithmetic intensity.  Therefore, any operation
+implemented in jVMC is performed on a batch of input data.  This means that following
+the leading device dimension, all data arrays have an additional  batch  dimension, which
+should always be chosen as large as possible given the available memory in order to keep
+the arithmetic units of the GPU busy.
+
+3.2Core modules
+In the following we describe the main functionality of the core modules of the codebase.
+A detailed documentation is available online [40].
+    Fig. 2 provides an overview of the main modules.  The core functionality is contained
+in  jVMC.vqs,  jVMC.sampler,  and  jVMC.operator.   These  implement  the  central  oper-
+ations  of  typical  NQS  algorithms  in  an  eﬃcient  and  ﬂexible  manner.   The  jVMC.util
+and the  jVMC.mpi      wrapper modules provide higher-level functionality useful for typical
+NQS algorithms and functionality for the evaluation of distributed Monte Carlo samples,
+respectively.  The main features of these ﬁve modules are described in the following.
+    A recurring pattern is the possibility to create custom objects, e.g., network architec-
+tures or quantum operators.  Their behavior has to be deﬁned in the form of functions
+acting on a computational basis conﬁguration.  As a consistent design choice, these func-
+tions  are  always  deﬁned  acting  on  a  single  input  conﬁguration.   The  vectorization  for
+batched  evaluations  is  then  taken  care  of  automatically  within  the  respective  classes  of
+the jVMC codebase.
+
+3.2.1Variational wave functions
+A  core  part  of  the  jVMC  codebase  is  the  NQS  class  provided  in  the  jVMC.vqs  module
+– a wrapper class for variational wave functions, which provides an interface that other
+parts  of  the  code  rely  on.   The  NQS  class  is  used  to  wrap  ANNs  that  are  deﬁned  using
+the Flax module system Linen [61].  In this framework ANNs are deﬁned in a very similar
+manner  as  in  the  popular  Pytorch  or  Keras  packages  as  classes  that  are  derived  from
+the  flax.linen.Module  base  class.   The  minimal  requirement  for  this  new  class  is  the
+implementation of a        call      member function, which evaluates the neural network on a
+single input conﬁguration.  For example,  a Restricted Boltzmann Machine (RBM) with
+complex parameters, for which
+
+                                       N         Nh                N
+                        logψθ(s) =    /summation.disp/summation.dispcosh/parenleft.alt2/summation.disp(38)
+                                      i=1aisi+   i=1 log/parenleft.alt4j=1Wijsj+bj/parenright.alt2/parenright.alt4
+
+with Nh the number of hidden units, can be deﬁned as follows:
+
+
+                                                     13
+ SciPost Physics Codebases                                                                 Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure  2:  Overview  of  the  jVMC  codebase.   The  core  modules  (colored)  implement  the
+central operations of typical NQS algorithms in an eﬃcient and ﬂexible manner.
+
+
+classMyRBM(flax.linen.Module):
+    numHidden:int=  2#numberofhiddenunits
+
+    @flax.linen.compact
+    def__call__(self,  s):
+
+         s  =  2  *  s  -  1#Gofrom0/1representationto1/-1
+
+         #Applydenselayer
+         h  =  flax.linen.Dense(features=self.numHidden,
+                                   dtype=jVMC.global_defs.tCpx)(s)
+
+         #Applyactivationfunction
+         h  =  jax.numpy.log(jax.numpy.cosh(h))
+
+         #Visiblebias
+         vbias  =  self.param("vbias",  jax.nn.initializers.zeros,  s.shape)
+
+         returnjax.numpy.sum(h)  +  jax.numpy.dot(vbias,  s)
+
+Notice in this example code that the flax.linen package provides basic modules like, e.g.,
+dense layers (flax.linen.Dense), that implement the aﬃne transformation in Eq. (38).
+Moreover, the flax.linen.compact decorator enables the inlined deﬁnition of such sub-
+modules, which otherwise have to be deﬁned in a separate  setup member function (see
+Flax documentation for details [61]).
+    In  order  to  work  with  autoregressive  NQS  (see  Section  2.6.2),  a  member  function
+called  sample  has  to  be  implemented  as  part  of  the  corresponding  Flax  Linen  mod-
+ule.   This  sample  member  function  has  to  take  the  desired  number  of  samples  and  a
+jax.random.PRNGKey  as  input  arguments  and  it  should  return  the  resulting  conﬁgura-
+tions.
+    The jVMC.nets module contains a number of pre-deﬁned common network architec-
+tures,  including  Restricted  Boltzmann  Machines,  Convolutional  Neural  Networks,  and
+
+
+                                                     14
+ SciPost Physics Codebases                                                                   Submission
+
+
+Recurrent Neural Networks.  Notice, however, that these classes of architectures delineate
+general design principles, but leave a lot of freedom regarding the details of the implemen-
+tation.  The jVMC codebase is intended to encourage the exploration of new architectures,
+for which the provided examples should be regarded as possible starting points.
+    Once  the  network  architecture  is  deﬁned  in  the  form  of  a  flax.linen.Module,  an
+instance  of  it  can  be  initialized.   Continuing  the  example  from  above,  an  RBM  can  be
+obtained as follows:
+
+>>>  net  =  MyRBM(numHidden=7)#InitializecustomANN
+
+    The  NQS  class  supports  the  three  types  of  NQS  introduced  in  Section  2.6.1,  i.e.,  a
+single holomorphic or non-holomorphic ANN or two separate ANNs encoding logarithmic
+amplitude and phase, respectively.  The corresponding ANNs in the form of Linen modules
+are passed to the NQS class at instantiation.  In our example, we deﬁne a holomorphic RBM
+NQS with the following line:
+
+>>>  psi  =  jVMC.vqs.NQS(net)#InitializeanNQSobject
+
+In  order  to  use  two  separate  networks  for  phase  and  amplitude,  the  two  networks  are
+passed  as  a  tuple.   In  addition  to  this,  the  constructor  takes  as  optional  arguments  a
+batchSize (the meaning of which is explained below) and a seed for the initialization of
+the network parameters.
+    The  main  purpose  of  the  NQS  class  is  to  provide  an  interface  for  computing  wave
+function  coeﬃcients  as  well  as  gradients  of  the  variational  ansatz.   For  a  given  sample
+of input conﬁgurations s the           call     method yields the logarithmic wave function coef-
+ﬁcients logψθ(s)  and the  gradients method returns the logarithmic gradients Oθk(s) =
+∂θk logψθ(s).  These methods automatically vectorize the evaluation, meaning that the in-
+put requires the additional device and batch dimension as explained in Section 3.1 above.
+Since  the  batch-vectorization  is  limited  by  the  available  memory,  the  batch  is  prior  to
+evaluation split into mini-batches of size batchSize, which are evaluated simultaneously.
+The batchSize used by the NQS class is ﬁxed at instantiation (see above) and it should
+be  chosen  as  large  as  possible  with  the  given  memory  resources  in  order  to  render  the
+network evaluation compute-bound, see Section 3.1.2.
+    Finally, the  NQS class provides member functions  get               parameters,  set       parameters,
+and  update    parameters to manipulate the network parameters;  see the documentation
+for details [39].
+
+3.2.2Operators
+The jVMC.operator module implements the evaluation of the action of operators on com-
+putational basis conﬁgurations.  In terms of an operator  ˆO acting on the Hilbert space this
+corresponds to “on-the-ﬂy” generation of matrix elements.  Generally, this amounts to a
+mapping
+
+                                            ˆO∶s/uni21A6{s′j},{Oss′j}                                                (39)
+
+Here, s denotes the input basis conﬁguration and the s′j  are the basis conﬁgurations for
+which the matrix elements are non-zero, Oss′j = /uni27E8s/divides.alt0ˆO/divides.alt0s′j/uni27E9≠0.
+    The abstract Operator class deﬁnes an interface for the implementation of mappings
+given in Eq. (39).  Any speciﬁc operator can be implemented as a child of Operator, which
+has to implement a compile() member function.  Such an implementation should return
+a JAX-jit-able  function (see Appendix A.1) that returns for a given basis conﬁguration s
+
+
+                                                      15
+ SciPost Physics Codebases                                                                 Submission
+
+
+a tuple of two arrays, one containing the conﬁgurations s′j  – the other the corresponding
+matrix elements Oss′j.
+    The following example code shows the implementation of a  ˆσxl  operator acting on a
+chain of spin-1/2 degrees of freedom, i.e., s∈{0, 1}N:
+
+classSxOperator(jVMC.operator.Operator):
+    """Definea‘\hat\sigma_l^x‘operator."""
+
+    def__init__(self,  siteIdx):
+
+         self.siteIdx  =  siteIdx
+
+         super().__init__()#ConstructorofbaseclassOperatorhastobecalled!
+
+    defcompile(self):
+
+         defget_s_primes(s,  idx):
+
+              #Createcopyofinput
+              sp  =  s.copy()
+
+              #Definematrixelement
+              matEl  =  jax.numpy.array([1.,  ],  dtype=global_defs.tCpx)
+              #DefinemappingofSx:0->1,1->0
+              sMap  =  jax.numpy.array([1,  0])
+              #Performmapping
+              sp  =  jax.ops.index_update(sp,  jax.ops.index[idx],  sMap[s[idx]])
+
+              returnsp,  matEl
+
+         #Createapurefunctionthattakesonlyabasisconfigurationasargument
+         map_function  =  functools.partial(get_s_primes,  idx=self.siteIdx)
+
+         returnmap_function
+
+As  mentioned  above,  the  new  SxOperator  class  inherits  from  the  abstract  Operator
+class.  Crucially, the parent constructor has to be called at the end of the constructor of
+the new class, i.e., super().       init    () has to be included.  The compile member function
+constructs and returns a function that deﬁnes the operator’s action.  In our example we
+can test its behavior as follows:
+
+>>>  mySx  =  SxOperator(siteIdx=1)#Initializeoperator
+>>>  testFunction  =  mySx.compile()#Getoperatorevaluationfunction
+>>>  testConfig  =  jax.numpy.array([0,  0,  0,  0],  dtype=np.int32)#Test
+     configuration
+>>>  sp,  matEl  =  testFunction(testConfig)#Evaluateoperatorontest
+     configuration
+>>>print(sp)
+[0  1  0  0]
+>>>print(matEl)
+[1.+0.j]
+
+Any child of the abstract Operator class inherits the following member functions, which
+employ the operator action deﬁned by the speciﬁc compile function:
+
+    • get   s  primes(s):  Returns s′j  and Oss′j  for a batch of input states s.  In accordance
+       with  Section 3.1  the  input dimension  is D×B×(spatial dimensions),  where D  is
+
+                                                     16
+ SciPost Physics Codebases                                                                Submission
+
+
+       the device dimension and B  is the batch size.  The output is a tuple of two arrays
+       of shape D×M ×(spatial dimensions) and D×M, where M  is the total number of
+       non-zero matrix elements across the whole batch.
+
+    • get   O  loc(logPsiS,  logPsiSP): Assuming that get                s  primes(s) has been called
+       before on a batch of input states s, this function computes the correspondingOθloc(s)
+       for each element of the batch.  As input it requires the logarithmic wave function
+       coeﬃcients  logψθ(s)  (argument  logPsiS)  and  logψθ(s′)  (argument  logPsiSP).  It
+       returns an array of size D×B with the complex-valued Oθloc(s).
+
+Thereby, children of the Operator class provide comprehensive functionality to evaluate
+Oθloc(s)  for arbitrary operators  ˆO  in an automatically vectorized manner.  Consider,  for
+example, that H is an operator object implementing the action of a Hamiltonian  ˆH, psi is
+the variational wave function, i.e., an instance of the NQS class, and sampleConfigs is a
+batch of basis conﬁgurations.  Then, evaluating Eθloc(s) is achieved by the following lines
+of code:
+
+sampleOffdConfigs,  matEls  =  H.get_s_primes(sampleConfigs)
+sampleLogPsi  =  psi(sampleConfigs)
+sampleLogPsiOffd  =  psi(sampleOffdConfigs)
+Eloc  =  H.get_O_loc(sampleLogPsi,  sampleLogPsiOffd)
+
+    Besides  the  abstract  Operator  class  that  serves  as  a  basis  to  implement  arbitrary
+operators, the jVMC codebase provides two derived classes for typical applications:
+
+    • BranchFreeOperator:  This class provides functionality to compose many-body op-
+       erators as tensor products of branch-free operators acting on local Hilbert spaces.
+       The term “branch-free” means that the local operators contain only a single non-
+       zero  entry  in  each  row/column.   An  example  are  the  Pauli  operators,  which  are
+       pre-deﬁned as part of the module.
+
+    • POVMOperator: The POVMOperator class comprises utility to construct time-evolution
+       operators in the POVM-formalism.  Note that the computation of observables diﬀers
+       in this formalism, such that the returned operator may only be interpreted as the
+       object generating the real time-evolution.
+
+The documentation [39] explains the corresponding API in detail.
+
+3.2.3Sampler
+The purpose of the  sampler module is to handle all sampling-related tasks in a uniﬁed
+manner.  The module provides two classes, the  ExactSampler and the  MCSampler.  The
+ExactSampler evaluates the network on all the (exponentially many) basis conﬁgurations.
+Obviously, there is no associated computational speedup with this method and its main
+purpose is to make troubleshooting easier when testing new functionalities.  In contrast,
+the MCSampler may be used to generate MC samples from the Born distribution of ψθ(s)
+either by direct sampling from an autoregressive NQS or by Metropolis-Hastings MCMC.
+    The  common  interface  of  both  sampler  classes  is  a  sample  member  function,  which
+generates a sample in the respective manner and returns a tuple of the generated basis
+conﬁgurations, the corresponding coeﬃcients logψθ(s), and the probabilities /divides.alt0ψθ(s)/divides.alt02 in the
+case of the ExactSampler or None in the case of the MCSampler.  Hence, after instantiating
+a sampler object called mySampler, generating a set of samples amounts to the line
+
+sampleConfigs,  sampleLogPsi,  sampleProb  =  mySampler.sample()
+
+
+                                                     17
+ SciPost Physics Codebases                                                                 Submission
+
+
+At instantiation both sampler types need to be passed the variational wave function and
+the sample shape.  The ExactSampler furthermore requires the local Hilbert space dimen-
+sion lDim.
+    For the initialization of a MCSampler a jVMC.random.PRNGKey is an additional neces-
+sary argument.  An updateProposer function needs to be provided for MCMC sampling.
+The expected signature is  updateProposer(key,  config,  **kwargs) and the function
+is  supposed  to  return  an  updated  basis  conﬁguration  that  is  used  as  proposed  move  in
+the MCMC algorithm.  If the optional argument  updateProposerArg is given when in-
+stantiating  a  MCSampler,  its  value  is  passed  to  the  updateProposer  as  kwargs.   Fur-
+ther initialization arguments are the number of samples to generate numSamples, and for
+MCMC sampling the number of update proposals per sweep sweepSteps and the number
+of sweeps used for initial thermalization (“burn-in”) thermalizationSweeps.  The argu-
+ment numChains deﬁnes the number of MCMC chains that are run in a vectorized manner
+in order to enhance the computational eﬃciency.
+    If the NQS which was given during the initialization of the  MCSampler is an autore-
+gressive model, i.e., if a sample member function exists in the respective Linen module,
+direct sampling is automatically used instead of MCMC sampling.
+    In both the ExactSampler and the MCSampler the generation of samples is automati-
+cally distributed across MPI processes and locally available devices.  This means for MC
+sampling that when running NP  MPI processes and calling the sample member function
+to obtain NMC samples, each of the processes will produce NMC/slash.leftNP  samples.  Due to the
+internal vectorization the total number of samples produced by the MCSampler can slightly
+exceed the number of samples asked for in order to match array dimensions.
+
+3.2.4MPI wrapper
+It’s  amenability  to  parallelization  across  distributed  compute  clusters  is  a  key  feature
+of  VMC  algorithms,  see  Section  3.1.   After  generating  samples  locally  on  the  diﬀerent
+nodes, the results have to be collected in order to compute the quantities of interest.  The
+mpi  wrapper module provides a system for the distributed sampling and the subsequent
+reduction tasks.  For this purpose, it wraps the required MPI communications, for which
+the mpi4py package [37,38] is used.
+    The  function  jVMC.mpi        wrapper.distribute          sampling  distributes  sampling  tasks
+across  the  available  processes  and  devices.   For  a  desired  total  number  of  samples  this
+function  determines  how  many  samples  should  be  generated  by  each  sampling  process.
+The  ExactSampler  or  MCSampler  class  invoke  this  function  to  automatically  distribute
+the sampling tasks.
+    Assume that mySampler is an instance of a sampler class, psi is a variational quantum
+state, and op is an instance of a class derived from the Operator class, associated with a
+quantum operator  ˆO.  Then we can get samples and the corresponding Oθloc(s) via
+
+>>>  s,  logPsi,  _  =  mySampler.sample()
+>>>  sPrime,  _  =  op.get_s_primes(sampleConfigs)
+>>>  logPsiOffd  =  psi(sPrime)
+>>>  Oloc  =  op.get_O_loc(logPsi,  logPsiOffd)
+
+Now, on each MPI process Oloc is a two-dimensional array of size (number of devices) ×
+(number of samples per device).  On this basis, the mpi             wrapper module contains diﬀerent
+functions to evaluate the distributed data.  To get, for example, the Monte Carlo estimate
+of  the  expectation  value  of   ˆO  as  deﬁned  in  Eq.  (5),  we  can  use  the  get       global    mean
+function
+
+
+
+                                                     18
+ SciPost Physics Codebases                                                                  Submission
+
+
+
+>>>  Omean  =  jVMC.mpi_wrapper.get_global_mean(Oloc)
+
+Further options are get      global    variance, get       global    covariance, and get        global    sum
+to compute the variance, co-variance matrix, and the sum of all elements, respectively.
+
+3.2.5Utilities
+The jVMC.util module comprises higher-level code which is not at the heart of the jVMC
+codebase.  The code in this module
+    • either contains functionality to combine the workings of the codebase on an inter-
+       mediate (e.g., jVMC.util.tdvp, jVMC.util.stepper) or higher (e.g., ground state
+       search or network initialization in jVMC.util.util) level,
+    • or solves tasks that are not immediately related to the core functionality (e.g.  IO-
+       tasks     in     jVMC.util.output        manager     or     symmetry     transformations     in
+       jVMC.util.symmetries).
+
+TDVP    The jVMC.util.tdvp module is centered around solving the equation
+                                        [[Sk,k′]]˙θk′=−[[γFk]],                                              (40)
+whereγ ∈{1,i}is either the real or the imaginary unit.  The module comprises a TDVP class
+with a    call     member function that returns a (regularized) solution  ˙θ of Eq. (40), which
+corresponds to an SR step,  Eq. (10),  for γ = 1 or a real time step following the TDVP
+equation (19) for γ =i.  The signature of the            call     method matches the standard right
+hand side required by ordinary diﬀerential equation solvers of the  scipy library [62] or
+those  provided  as  part  of  the  jVMC  codebase  in  the  jVMC.util.stepper  module  (see
+below).  Hence,  an instance of the  TDVP class can be passed as right hand side to these
+integrators.  Invoking the        call     member function of a TDVP object, essentially amounts
+to carrying out the steps of Algorithm 1.
+    For solving Eq. (40) the TDVP class oﬀers a number of options, of which we highlight a
+few, while referring to the detailed documentation [40] for a complete list:
+    • Choose γ by setting the rhsPrefactor at initialization.
+    • Choose [[⋅]] to  be  Re(⋅)  or  Im(⋅)  by  passing  "real"  or  "imag"  for  the  argument
+       makeReal at initialization.
+    • Set the regularization parameters ν, ϵpinv, and ϵSNR  described in Section 2.5.  The
+       respective regularization scheme is not eﬀective if the corresponding parameter is set
+       to zero.
+    • The hamiltonian argument may be an Operator object or a function that takes a
+       real number as argument and returns an Operator object.  The latter can be used
+       to solve the TDVP equation with time-dependent Hamiltonians.
+    • We observed that the CUDA implementation of the diagonalization can be unstable
+       if  the  (quantum)  Fisher  matrix S  is  ill-conditioned.   To  circumvent  this  issue,  we
+       introduced the diagonalizeOnDevice initializer argument, which allows to choose
+       where to perform the diagonalization of the matrix.
+    • If  the    call      function  receives  the  optional  intStep  keyword  argument,  and  if
+       intStep==0,  various  quantities  like  energy  mean  and  variance, S  and F ,  as  well
+       as residuals and the TDVP error of the solution are stored.  These quantities can
+       subsequently be retrieved via the corresponding get              * member functions of the TDVP
+       class.
+
+                                                      19
+ SciPost Physics Codebases                                                                  Submission
+
+
+Stepper    The  stepper  module  comprises  two  classes  for  the  integration  of  ordinary
+diﬀerential equations:  A simple Euler integrator and an AdaptiveHeun integrator.  Both
+classes contain a step member function as common interface.  Assuming that the ODE is
+given in the standard form  ˙y(t) =f(y(t),t,p), the step function takes tn, f, y(tn), and
+optional  additional  parameters p  as  argument  and  returns yn+1 ≡y(tn+1)  following  the
+respective integration scheme.
+    The AdaptiveHeun stepper is a second-order consistent adaptive integrator that adjusts
+the integration step sizeτ to achieve a given accuracyϵstep.  For this purpose, it computes
+solutions y(τ)              2)
+             n+1 and y(τ/slash.leftn+1   using a Runge-Kutta scheme with two diﬀerent step sizes τ  and2)
+τ/slash.left2.  Based on the diﬀerence of the solutions δ = /parallel.alt3y(τ)n+1−y(τ/slash.leftn+1 /parallel.alt3the time step is adjusted
+according to τ←τ(ϵstep/slash.leftδ)1/slash.left3 in order to guarantee the desired accuracy.
+    One  important  point  to  observe  is  that  the  choice  of  the  normalization  measure,
+which  is  in  principle  arbitrary,  can  have  a  severe  impact  on  the  performance  (i.e.,  the
+resulting step size).  The norm can be chosen by passing a function that computes it as
+normFunction argument to the step function.  A natural choice is to be sensitive only to
+deviations which correspond to actual changes in the wave-function.  This is given, when/radical.alt1
+using the (quantum) Fisher norm /divides.alt0/divides.alt0v/divides.alt0/divides.alt0S =   1Np∑k,k′v∗kSkk′vk′, where Np is the number of
+components of v [24].
+
+Output Manager    The output manager handles all IO-related tasks in a uniﬁed fashion.
+For  output  to  a  ﬁle  it  relies  on  the  hdf5  data-format  which  is  handled  using  the  h5py
+library [63].  During evolution, three diﬀerent types of data are typically stored:
+
+    • physical observables, corresponding to the write               observables function expecting a
+       timestamp and a dictionary of to-be-written observables,
+
+    • metadata,  corresponding  to  the  write           metadata  function  expecting  a  timestamp
+       and a dictionary of metadata to be written,
+
+    • network  checkpoints,  corresponding  to  the  write             network     checkpoints  function
+       expecting a timestamp and the set of network parameters at that time step.  This
+       allows to restart the simulation at arbitrary times or to sample observables which
+       have  not  been  stored  during  the  initial  run,  using  the  get          network    checkpoint
+       function to set desired network parameters for all MPI-processes.
+
+Moreover, the OutputManager class provides a print function for printing to the standard
+output,  which  blocks  all  MPI  processes  except  for  the  root  process  to  avoid  repeated
+output.
+
+Symmetries    Incorporating  symmetries  in  the  NQS  turned  out  essential  for  high  ac-
+curacy in various applications.  For the symmetrization a typical task is to produce the
+symmetry-transformed input conﬁgurations sω(l) for all transformations ω ∈Ω; see, e.g.,
+Section 5.1 or Refs. [10,17].
+    The jVMC.util.symmetries module contains functions that return the complete sets
+of symmetry transformations Ω for simple lattices in the form of permutation matrices.
+These  can  be  used  in  deﬁnitions  of  NQS  architectures  to  produce  all  symmetry-related
+conﬁgurations by simple dot-products, see the code of symmetrized architectures in the
+jVMC.nets module for examples.
+
+
+
+
+
+                                                      20
+ SciPost Physics Codebases                                                                Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 3:  (a) Scaling of the computational runtime with the number of compute nodes.
+Here, each node is equipped with NVIDIA  A100 GPUs.  (b) Execution times of the diﬀerent
+tasks  in  a  single  step  in  case  of  a  single  node.   The  benchmark  script  is  available  at
+vmc  jax/examples/ex4         benchmarking.py.   (c)  Speedup  gained  by  increased  arithmetic
+intensity via batching.  (d) Eﬀect of multiple parallel MCMC-chains on the runtime.
+
+4  Performance
+
+One of the key features of the jVMC codebase is the eﬃcient exploitation of large scale su-
+percomputing resources for NQS simulations.  Ideally, many accelerators (GPUs or TPUs)
+are available to share the independent workload for each batch of samples as described in
+Section 3.1.
+    Fig. 3a demonstrates close to ideal speedup achieved by the MPI parallelization of the
+code.  As a benchmark we consider an SR step for a 50-site transverse-ﬁeld Ising chain with
+periodic boundary conditions.  The NQS architecture is a symmetrized RNN with 1510
+variational parameters and the expectation values are estimated usingNMC = 3×105 Monte
+Carlo samples.  The displayed timings were taken on the JUWELS  Booster module at the
+J¨ulich Supercomputing Centre [64], where each node is equipped with four NVIDIA  A100
+GPUs.  Using the single-node performance as baseline, we observe almost ideal speedup
+for up to 16 nodes or 64 GPUs.  The breakdown of compute times on a single node in
+Fig.  3b  shows  that  network  evaluations  account  for  the  majority  of  the  computational
+cost, which explains the eﬃciency of the parallelization.  Notice the negligible contribution
+of the sample generation, which is due to direct sampling from the autoregressive NQS.
+    Additionally, we benchmark the performance gain obtained when increasing the batch
+size and, thereby, the arithmetic intensity of the network evaluation tasks.  As discussed
+in Section 3.1.2, the batch size should ideally be chosen to saturate the GPU’s memory
+capacity.  To illustrate the signiﬁcance of suited batching, we again time one SR update
+step, for this purpose considering a 30-site spin chain and an RNN without symmetries.
+ForNMC = 104, the speedup gained by increasing the batch size is shown in Fig. 3(c).  The
+
+
+                                                     21
+ SciPost Physics Codebases                                                                  Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 4:  Performance comparison between (a) the jVMC codebase and b) the NetKet
+library [65].  The timings were performed on a Intel  Xeon  Gold  6240  2.6GHz CPU with
+an attached NVIDIA  Tesla  V100 GPU.
+
+
+acceleration of the forward pass by more than a factor of 100 compared to the baseline
+with batch size 16 underlines the importance of batching for optimal performance.
+    The  performance  gain  by  batching  is  also  the  reason  why  running  multiple  parallel
+Monte Carlo chains can enhance the performance.  However, there exists a sweet spot in
+the  number  of  chains  as  shown  in  Fig.  3(d).   For  very  few  MC-chains  the  GPU  is  not
+used to its full capacity as the network is evaluated on too small batches.  In the opposite
+limit,  we  attribute  the  deteriorating  performance  to  a  saturation  of  the  occupation  of
+the Streaming Multiprocessors such that computations start to be performed sequentially.
+This leads to eﬀective idle times of the individual chains and therefore to degraded overall
+performance.   Fig.  3(d)  shows  optimum  performance  with  of  the  order  of  100  parallel
+Monte Carlo chains, which we found to be a good number in various simulations;  here,
+we used a one-dimensional complex Convolutional Neural Network with an input size of
+N = 80  and  four  subsequent  layers  of  sizes  10, 8, 6, 4  with  a  ﬁlter  diameter  of  20  (6536
+variational parameters).  The sample size was NMC = 104 and the MCMC was performed
+with sweep size N  and 20 initial thermalization sweeps.  These simulation parameters are
+again used for the following test case.
+    Finally, we include a direct comparison to the NetKet library [65]; notice that NetKet
+version 3.2, which we are using for this comparison, relies mostly on JAX for the compu-
+tationally intense parts of the code – this recent development is not described in Ref. [65].
+As a benchmark problem we choose the evaluation of an operator expectation value, i.e.,
+the evaluation of Eq. (5), whose cost is comparable to the computation of the energy gra-
+dient∂θkE(θ).  As operator we use the transverse-ﬁeld Ising Hamiltonian with system size
+N = 80.  The NQS architecture is the same as in Fig. 3(d) and the sample of sizeNMC = 104
+is generated using the approximately optimal number of 350 parallel MCMC chains.  We
+separate the timing into three contributions, (i) the sampling, (ii) the computation of the
+matrix elements,  and (iii) the ﬁnal evaluation of Eq. (5),  which includes the evaluation
+of ψ(/uni20D7s)  on  the  involved  conﬁgurations s  and s′.   The  resulting  runtimes  are  shown  in
+Fig. 4(a) for jVMC and in Fig. 4(b) for NetKet.  For the given task jVMC is in total about
+10% faster than NetKet.  The diﬀerence between both codes lies in the computation of
+matrix elements and the ﬁnal evaluation.  To our understanding the diﬀerence in runtimes
+originates  in  the  fact  that  in  jVMC  all  computational  operations  are  performed  on  the
+GPU,  while  NetKet  performs  the  computation  of  matrix  elements  on  the  CPU.  Hence,
+the parallelism of this task is not fully exploited in NetKet and additional overheads are
+created due to data transfer between CPU and GPU.
+
+
+                                                      22
+ SciPost Physics Codebases                                                               Submission
+
+
+5  Examples
+
+5.1Ground state search
+For the exemplary ground state search we consider the one-dimensional transverse-ﬁeld
+Ising model
+
+                                       ˆH =−/summation.dispˆZl ˆZl+1−g/summation.dispˆXl                                             (41)
+                                               l               l
+
+with Pauli operators  ˆXl and  ˆZl acting on lattice site l and periodic boundary conditions.
+Fermionization of the Hamiltonian results in a single particle problem, which can be solved
+eﬃciently for large ﬁnite systems [66].  In the following, this is our reference for the exact
+ground state energy.
+    The un-normalized wave function ansatz is a fully connected single-layer CNN with real
+parameters, meaning that the NQS automatically incorporates the translational symmetry
+of the Hamiltonian:
+
+                                             α
+                               logψθ(/uni20D7s) =/summation.dispWalsω(l)+ba/parenright.alt1          (42)
+                                            a=1 /summation.dispω∈T fELU/parenleft.alt1
+Here, T  is the set of translations and fELU(x) denotes the ELU activation function
+                                                 /uni23A7
+                                                 /uni23AA
+                                                 /uni23AAx          if x> 0
+                                    fELU(x) =    /uni23A8
+                                                 /uni23AAex−1    if x≤0 .                                         (43)
+                                                 /uni23AA
+                                                 /uni23A9
+    The ground state search is performed by Stochastic Reconﬁguration, see Section 2.2,
+using the learning rateτ = 10−2,NMC = 4×104 MC samples, an initial regularization with
+diagonal shift ν0 = 10 that decays with increasing step number n as ν = 0.95nν0,  and a
+pseudo-inverse cutoﬀ parameter ϵpinv = 10−8 (see Section 2.5).
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure  5:  Example  ground  state  search  for  the  transverse-ﬁeld  Ising  model  using  NQS
+and Stochastic Reconﬁguration for diﬀerent network sizes α and system sizes L.  The top
+row shows the deviation from the exact reference energy E0.  The bottom row shows the
+corresponding energy variance, which vanishes in an exact eigenstate.
+
+
+                                                    23
+ SciPost Physics Codebases                                                                 Submission
+
+
+    Fig. 5 shows the evolution of energy and energy variance during the optimization for
+diﬀerent system sizes L= 10, 20, 100 andg = 0.7.  The parameterα controls the size of the
+NQS (see Eq. (42)) and thereby the quality of the result.
+    This   basic   ground   state   search   is   implemented   in   the   example   notebook
+examples/ex0      ground     state   search.ipynb,  which  is  contained  as  an  example  in  the
+codebase repository and reproducing them is feasible on a single GPU.
+
+5.2Real time dynamics
+
+5.2.1Unitary dynamics of pure states
+As  an  example  of  unitary  dynamics  we  simulate  a  quench  in  the  transverse-ﬁeld  Ising
+model on a square lattice
+
+                                        ˆH =−J /summation.dispˆZi ˆZj−g/summation.dispˆXj                                            (44)
+                                                 /uni27E8i,j/uni27E9j
+
+where  ˆXj  and  ˆZj  are Pauli operators and /uni27E8i,j/uni27E9denotes pairs of nearest neighbors on the
+lattice.  The initial state /divides.alt0ψ0/uni27E9is the paramagnetic ground state at J = 0,  which we ﬁnd
+by an initial ground state search.  Subsequently, the system evolves with the Hamiltonian
+parametersJ = 1g = 1.5gc, wheregc = 3.04438J [67] is the critical transverse ﬁeld strength
+at which the model exhibits a phase transition.  We consider open boundary conditions,
+meaning that the physical setting is a variant of the situation addressed in [24].
+    The network architecture of the NQS is a single-layer fully connected complex CNN
+with suited zero-padding of the computational basis conﬁguration to account for the open
+boundary conditions.  The activation function is the Taylor series of log cosh(x) truncated
+at sixth order.  For a system of 8×8 lattice sites we show in Fig. 6a) the time evolution ofˆXL/slash.left
+the transverse magnetization at a central site, /uni27E82,L/slash.left2/uni27E9, obtained with diﬀerent network
+sizes to demonstrate convergence, namely 8, 16, 24, and 32 channels in the CNN. Fig. 6b)
+displays the spatio-temporal spreading of correlations based on the correlation function
+/uni27E8ˆZL/slash.left2,L/slash.left2 ˆZi,j/uni27E9.
+    This result was obtained using NMC = 106 Monte Carlo samples.  The TDVP equation
+was  solved  using  cutoﬀ  parameters ϵpinv =  10−8  and ϵSNR =  2.   The  tolerance  for  the
+adaptive time step of the integrator was ϵstep = 10−6.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 6:  Quench dynamics in a two-dimensional quantum Ising model of size 8×8.  (a)
+Time evolution of the transverse magnetization at the center of the lattice.  (b) Spatio-
+temporal spreading of correlations.
+
+
+
+
+                                                     24
+ SciPost Physics Codebases                                                                  Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure  7:  (a)  Mean  magnetizations  in  a  spin  chain  of  length N =  32  with  the  quench
+parameters hx/slash.leftJz = 0.25, hz/slash.leftJz = 0.05  and  the  dissipation  channel  ˆL =  ˆZ  with  relative
+strength γ/slash.leftJz = 0.25 compared to MCWF-data for N = 16 spins starting in the product
+state /uni27E8ˆZ/uni27E9= 1.  (b) Spreading of correlations in the spin chain.  Top:  Dissipative system
+with γ = 0.25,  Bottom:  MPS simulation of the unitary system where γ = 0.0.  After an
+initial linear light-cone spreading,  the nature of the dissipative propagation grows more
+diﬀusive,  before  all  correlations  eventually  vanish.   Notice  that  the  slight  deviations  in
+panel (a) coincide with the time at which the dissipative correlations cross the MCWF
+system size boundary.  Data taken from Ref. [29].
+
+
+5.2.2Dissipative dynamics
+Diﬀerent paths to variational approximations of ˆρ for open system dynamics using neural
+networks have been explored [27–29], which were brieﬂy introduced in Section 2.4.  Here,
+we showcase results that were obtained in Ref. [29] employing the probability based POVM
+approach in conjunction with the jVMC codebase.  We study a quench of a z-polarized
+state  in  a  one-dimensional  quantum  Ising  model  with  transverse  and  longitudinal  ﬁeld;
+the  openness  consists  of  dephasing  with  relative  strength γ/slash.leftJ = 0.25,  which  eventually
+drives the system to the featureless steady state  ˆρSS ∝1.  The system’s Hamiltonian is
+accordingly given by           ˆH = /summation.disp
+                                           Jz ˆZi ˆZj+/summation.disphz ˆZi+hx ˆXi/parenright.alt1.                                    (45)
+                                       /uni27E8ij/uni27E9i /parenleft.alt1
+and  is  of  interest  as  it  exhibits  conﬁnement  eﬀects  which  may  be  regulated  by  tuning
+hz  [68].   Non-zero  values  of hz  break  the Z2  symmetry  of  the  TFIM-Hamiltonian  and
+function as an energy penalty for domains that point in opposite direction fromhz, thereby
+suppressing the spreading of correlations.  The obtained results are shown in Fig. 7.
+    Here, an RNN with 5 layers was used where in each layer, latent information is carried
+in the form of a hidden state of length 12. The corresponding transformations are described
+by 1456 variational parameters, which are updated using NMC = 1.6×105 samples in each
+time step with a prescribed integration tolerance ϵstep = 10−3 and ϵpinv = 10−8.  The SNR
+regularization scheme was not used and translational invariance was enforced as described
+in Sec. 3.2.5.
+
+6  Conclusion
+
+The jVMC codebase provides a basic and ﬂexible framework for the composition of NQS
+algorithms.  The typical building blocks – on-the-ﬂy computation of operator matrix ele-
+ments, sampling from the Born distribution, and evaluating the wave function ansatz and
+its gradients – are implemented in an eﬃcient manner.  While designed to fully exploit the
+
+                                                      25
+ SciPost Physics Codebases                                                               Submission
+
+
+resources of distributed compute clusters, the underlying just-in-time compilation allows
+the  user  to  run  the  identical  Python  code  just  as  well  on  a  desktop  computer  without
+accelerators.
+    Compared to the existing NetKet library [65], the jVMC codebase was devised follow-
+ing a diﬀerent philosophy.  While NetKet provides implementations of many diﬀerent NQS
+algorithms, network architectures, and physical models on top of the core building blocks,
+the jVMC codebase focuses on exposing a minimal system of eﬃciently implemented mod-
+ules that facilitates the custom composition of such algorithms.  This bottom-up ansatz
+is intended to free future method development from the necessity of ﬁrst having to create
+parallelized and performant implementations of the core tasks; at the same time we aimed
+to impose only minimal bias with respect to the details of resulting algorithms.
+    The presented codebase has already been used in research applications to compute the
+energy gap of a two-dimensional quantum Ising model and its unitary dynamics across a
+quantum phase transition [25], and also for the simulation of open quantum spin systems
+in one and two dimensions [29].  We expect that it will serve as a useful basis for further
+method  development  and  applications  in  these  and  other  directions,  where  VMC  with
+NQS can potentially push our classical simulation capabilities.
+
+Acknowledgements
+
+Funding  information    MR  was  supported  by  the  Deutsche  Forschungsgemeinschaft
+(DFG, German Research Foundation) under Germany’s Excellence Strategy EXC2181/1-
+390900948 (the Heidelberg STRUCTURES Excellence Cluster) and within the Collabora-
+tive Research Center SFB1225 (ISOQUANT); moreover, MR was partially supported by
+the Baden-W¨urttemberg Stiftung gGmbH. The authors gratefully acknowledge the Gauss
+Centre for Supercomputing e.V. (www.gauss-centre.eu) for funding this project by pro-
+viding computing time through the John von Neumann Institute for Computing (NIC)
+on the GCS Supercomputer JUWELS at J¨ulich Supercomputing Centre (JSC) [64].  Fur-
+thermore, the authors acknowledge support by the state of Baden-W¨urttemberg through
+bwHPC and the German Research Foundation (DFG) through grant no INST 40/575-1
+FUGG (JUSTUS 2 cluster).
+
+A The underlying JAX library in a nutshell
+
+The  jVMC  codebase  is  built  on  the  JAX  library,  which  provides  automatic  diﬀerentia-
+tion, vectorization, and just-in-time compilation to accelerators in order to enable “high-
+performance numerical computing and machine learning research” [36].  JAX can automat-
+ically diﬀerentiate and vectorize functions that are written in Python and it can compile
+the Python code for eﬃcient execution on the CPU or on GPUs/TPUs if available.  As
+a  basis  the  JAX  library  contains  an  own  implementation  of  (most  of)  the  NumPy  [69]
+functionality in the jax.numpy submodule.  In the following we sketch the main compo-
+nents of a system of composable function transformations, namely just-in-time compilation
+with jax.jit, automatic diﬀerentiation with jax.grad, vectorization with jax.vmap, and
+parallelization across multiple accelerators with jax.pmap.
+    Importantly,  the  ability  to  perform  the  various  function  transformations  imposes  a
+number of constraints on how those functions are written.  Here, we highlight the following:
+    • Pure functions:  All input data have to be passed to the function as arguments and
+      all results given as return values.  Global variables and side eﬀects lead to unexpected
+
+                                                    26
+ SciPost Physics Codebases                                                                 Submission
+
+
+       behavior of JAX-transformed functions.  Some workarounds are needed to reconcile
+       JAX with object-oriented code.
+
+    • Control  ﬂow  needs  some  care.   Replace  Python  for-loops  or  if-branching  with
+       primitives from the jax.lax sub-module, see the JAX documentation for details.
+
+    • JAX arrays are immutable in order to enable function tracing.  However, when
+       attempting to change the content of a JAX array,  the thrown error gives hints to
+       the correct pure analog of this operation.
+
+       >>>  jax_array  =  jax.numpy.ones((3,  3),  dtype=jax.numpy.float32)
+       >>>  jax_array[1,  :]  =  2.0
+       TypeError:’<class’jaxlib.xla_extension.DeviceArray’>’objectdoesnot
+            support  item  assignment.  JAX  arrays  are  immutable;  perhaps  you  want
+            jax.ops.index_updateorjax.ops.index_add  instead?
+
+       One additional option besides the suggestions to resolve the issue is
+
+       >>>  jax_array.at[1,  :].set(2.0)
+
+For a comprehensive list, we refer the reader to the section about “the sharp bits” of the
+JAX documentation [70].  The example codes below are variations of examples shown in
+the JAX documentation.
+
+A.1Just-in-time compilation
+jax.jit returns a compiled version of the function that is given as the argument.  Impor-
+tantly, the function will be recompiled whenever the input data type or shape is changed.
+
+defselu(x,  alpha=1.67,  lmbda=1.05):
+    returnlmbda  *  jax.numpy.where(x>0,  x,  alpha  *  jax.numpy.exp(x)-alpha)
+
+selu_jitd  =  jax.jit(selu)
+
+x  =  jax.numpy.arange(-2,2,1)
+print(selu_jitd(x))#[-1.5161895-1.10842340.1.05]
+
+When running this piece of code,  the function will ﬁrst be compiled when the last line
+is executed and then the compiled function will be called.  In this example,  calling the
+jitted  function  instead  of  the  original  Python  function  will  not  exhibit  any  signiﬁcant
+diﬀerences (besides a compilation overhead when calling the jitted function for the ﬁrst
+time).  Compiling functions that execute considerable computational workload,  instead,
+can yield signiﬁcant gains in performance.
+    jax.jit  can  be  used  to  showcase  an  example  of  unexpected  behavior  when  global
+variables are involved in JAX-transformed functions:
+
+>>>globalg
+>>>  g  =  3
+>>>deff(x):
+...  returnx  +  g
+>>>  f_jit  =  jax.jit(f)
+>>>  f_jit(0)
+DeviceArray(3,  dtype=int32)
+>>>  g  =  4
+>>>  f_jit(0)
+DeviceArray(3,  dtype=int32)
+
+                                                     27
+ SciPost Physics Codebases                                                                  Submission
+
+
+
+>>>  f_jit(0.)
+DeviceArray(4.,  dtype=float32)
+
+As mentioned above, a jitted function is recompiled if invoked with new data types, which
+is the reason for the output of the last line.
+
+A.2Automatic diﬀerentiation
+The restriction to pure functions is the basis for an easily accessible implementation of au-
+tomatic diﬀerentiation in JAX. The derivative of arbitrary pure functions can be computed
+with jax.grad. Moreover, the function returned by jax.grad can be used in further trans-
+formations, for example to compute the second derivative in the code below.  If derivatives
+for more than the ﬁrst argument are required, the keyword-argument  argnums needs to
+be speciﬁed.
+
+#Defineafunction
+deff(x):
+    returnx**2
+
+df  =  jax.grad(f)#Getthegradientofthefunction
+ddf  =  jax.grad(df)#Getthesecondgradientofthefunction
+
+x_list  =  jax.numpy.arange(0,1,.2)
+print(jax.numpy.array([df(x)forxinx_list]))#[0.0.40.81.21.6]
+print(jax.numpy.array([ddf(x)forxinx_list]))#[2.2.2.2.2.]
+
+
+A.3Vectorization
+To accelerate typically slow Python for-loops and in order to enable the full exploitation
+of accelerators, JAX comprises can transform a single-instruction single-data  (SISD) op-
+eration  (like  the  function  f  deﬁned  above)  into  a  function  that  works  on  multiple  data
+(single-instruction  multiple-data, SIMD). For a given function that operates on some in-
+put data, jax.vmap returns a vectorized version of that function, that applies the original
+function element-wise to vectors of input data.
+    As mentioned above, all JAX function transformation are composable, meaning that
+one can arbitrarily combine  jax.jit,  jax.grad,  and  jax.vmap as demonstrated in the
+following example:
+
+#Defineafunction
+deff(x):
+    returnx**2
+
+df  =  jax.vmap(jax.grad(f))#Getthevectorizedgradientofthefunction
+
+x_list  =  jax.numpy.arange(0,1,.2)
+print(df(x_list))#[0.0.40.81.21.6]
+
+
+A.4Parallelization across multiple accelerators
+When multiple accelerators are available, jax.pmap can map a function to these devices,
+such that the function is executed in parallel with the elements along one axis of the input
+data  as  arguments.   Thereby,  jax.pmap  is  superﬁcially  very  similar  to  jax.vmap.   But,
+in fact,  the eﬀect of both transformations is quite diﬀerent:  While  jax.vmap vectorizes
+
+
+                                                      28
+ SciPost Physics Codebases                                                                    Submission
+
+
+a function,  jax.pmap creates copies of the function which are then carried out on each
+device individually.  This means, for example, that the data that is passed to a pmapped
+function has to be physically scattered across diﬀerent devices.
+    There are some pitfalls that one needs to be aware of; one example is that the leading
+axis  dimension  of  inputs  must  not  be  greater  than  the  number  of  devices.   A  practical
+way of circumventing such issues and to obtain good parallelization results is to reshape
+the  leading  axis  of  datasets  into  the  number  of  devices,  which  can  be  obtained  using
+jax.local     device     count().  In the example below we assume that two GPUs are avail-
+able.
+
+#Defineafunction
+deff(x):
+     returnx**2
+
+df  =  jax.pmap(jax.grad(f))#Getthevectorizedgradientofthefunction
+
+x_list  =  jax.numpy.arange(0,1.2,.2).reshape((jax.local_device_count(),  -1))
+print(df(x_list))#[[0.0.40.8],[1.21.62.0]]
+
+
+References
+
+ [1]H.   De   Raedt,    F.   Jin,    D.   Willsch,    M.   Willsch,    N.   Yoshioka,    N.   Ito,
+     S.   Yuan   and   K.   Michielsen,       Massively   parallel   quantum   computer   simula-
+     tor,   eleven   years   later,      Computer  Physics  Communications  237,   47  (2019),
+     doi:https://doi.org/10.1016/j.cpc.2018.11.005.
+ [2]U. Schollw¨ock,     The density-matrix renormalization group in the age of matrix product
+     states,  Annals of Physics 326(1), 96–192 (2011),  doi:10.1016/j.aop.2010.09.012.
+ [3]R.  Or´us,          A   practical   introduction   to   tensor   networks:    Matrix   product   states
+     and   projected   entangled   pair   states,     Annals  of  Physics  349,   117–158  (2014),
+     doi:10.1016/j.aop.2014.06.013.
+ [4]S. Paeckel,  T. K¨ohler,  A. Swoboda,  S. R. Manmana,  U. Schollw¨ock and C. Hubig,
+     Time-evolution  methods  for  matrix-product  states,   Annals  of  Physics 411,  167998
+     (2019),  doi:https://doi.org/10.1016/j.aop.2019.167998.
+ [5]A. Georges, G. Kotliar, W. Krauth and M. J. Rozenberg,     Dynamical mean-ﬁeld theory
+     of strongly correlated fermion systems and the limit of inﬁnite dimensions, Rev. Mod.
+     Phys. 68, 13 (1996),  doi:10.1103/RevModPhys.68.13.
+ [6]G.  Kotliar,  S.  Y.  Savrasov,  K.  Haule,  V.  S.  Oudovenko,  O.  Parcollet  and  C.  A.
+     Marianetti,  Electronic structure calculations with dynamical mean-ﬁeld theory,  Rev.
+     Mod. Phys. 78, 865 (2006),  doi:10.1103/RevModPhys.78.865.
+ [7]W. Metzner and D. Vollhardt,      Correlated lattice fermions ind=∞dimensions, Phys.
+     Rev. Lett. 62, 324 (1989),  doi:10.1103/PhysRevLett.62.324.
+ [8]A. Georges and G. Kotliar,      Hubbard model in inﬁnite dimensions,  Phys. Rev. B 45,
+     6479 (1992),  doi:10.1103/PhysRevB.45.6479.
+ [9]J. Gubernatis, N. Kawashima and P. Werner,      Quantum  Monte  Carlo  Methods:  Al-
+     gorithms  for  Lattice  Models,   Cambridge  University  Press,   ISBN  9781316483121,
+     doi:10.1088/1742-6596/1036/1/012020 (2016).
+
+                                                       29
+ SciPost Physics Codebases                                                                      Submission
+
+
+[10]G.  Carleo  and  M.  Troyer,         Solving  the  quantum  many-body  problem  with  artiﬁcial
+      neural networks,  Science 355(6325), 602 (2017),  doi:10.1126/science.aag2302.
+
+[11]O. Sharir, Y. Levine, N. Wies, G. Carleo and A. Shashua,        Deep autoregressive models
+      for  the  eﬃcient  variational  simulation  of  many-body  quantum  systems,  Phys. Rev.
+      Lett. 124, 020503 (2020),  doi:10.1103/PhysRevLett.124.020503.
+
+[12]Y.  Huang  and  J.  E.  Moore,         Neural  network  representation  of  tensor  network  and
+      chiral states,  arXiv:1701.06246 (2017).
+
+[13]I. Glasser, N. Pancotti, M. August, I. D. Rodriguez and J. I. Cirac,        Neural-network
+      quantum  states,  string-bond  states,  and  chiral  topological  states,   Phys.  Rev.  X 8,
+      011006 (2018),  doi:10.1103/PhysRevX.8.011006.
+
+[14]R. Kaubruegger, L. Pastori and J. C. Budich,        Chiral topological phases from artiﬁcial
+      neural networks,  Phys. Rev. B 97, 195136 (2018),  doi:10.1103/PhysRevB.97.195136.
+
+[15]K.  Choo,  T.  Neupert  and  G.  Carleo,           Two-dimensional  frustrated J1−J2  model
+      studied  with  neural  network  quantum  states,    Phys.  Rev.  B  100,  125124  (2019),
+      doi:10.1103/PhysRevB.100.125124.
+
+[16]T.  Westerhout,  N.  Astrakhantsev,  K.  S.  Tikhonov,  M.  I.  Katsnelson  and  A.  A.
+      Bagrov,    Generalization  properties  of  neural  network  approximations  to  frustrated
+      magnet  ground  states,   Nature  Communications 11(1)  (2020),   doi:10.1038/s41467-
+      020-15402-w.
+
+[17]Y. Nomura,       Helping restricted boltzmann machines with quantum-state representation
+      by restoring symmetry, Journal of Physics: Condensed Matter 33(17), 174003 (2021),
+      doi:10.1088/1361-648x/abe268.
+
+[18]N.  Astrakhantsev,  T.  Westerhout,  A.  Tiwari,  K.  Choo,  A.  Chen,  M.  H.  Fis-
+      cher,   G.   Carleo   and   T.   Neupert,        Broken-symmetry   ground   states   of   the
+      heisenberg  model  on  the  pyrochlore  lattice,     Phys.  Rev.  X  11,   041021  (2021),
+      doi:10.1103/PhysRevX.11.041021.
+
+[19]M. Bukov, M. Schmitt and M. Dupont,        Learning the ground state of a non-stoquastic
+      quantum  Hamiltonian  in  a  rugged  neural  network  landscape,  SciPost Phys. 10, 147
+      (2021),  doi:10.21468/SciPostPhys.10.6.147.
+
+[20]S. Czischek, M. Gaerttner and T. Gasenzer,        Quenches  near  ising  quantum  critical-
+      ity  as  a  challenge  for  artiﬁcial  neural  networks,   Phys.  Rev.  B 98,  024311  (2018),
+      doi:10.1103/PhysRevB.98.024311.
+
+[21]G. Fabiani and J. Mentink,        Investigating ultrafast quantum magnetism with machine
+      learning,  SciPost Physics 7(1) (2019),  doi:10.21468/scipostphys.7.1.004.
+
+[22]I. L. Guti´errez and C. B. Mendl,        Real  time  evolution  with  neural-network  quantum
+      states,  arXiv:1912.08831 (2019).
+
+[23]Y.  Wu,  L.-M.  Duan  and  D.-L.  Deng,           Artiﬁcial  neural  network  based  compu-
+      tation   for   out-of-time-ordered   correlators,     Phys.  Rev.  B  101,   214308  (2020),
+      doi:10.1103/PhysRevB.101.214308.
+
+[24]M.   Schmitt   and   M.   Heyl,              Quantum   many-body   dynamics   in   two   dimen-
+      sions   with   artiﬁcial   neural   networks,      Phys.  Rev.  Lett.  125,   100503  (2020),
+      doi:10.1103/PhysRevLett.125.100503.
+
+                                                        30
+ SciPost Physics Codebases                                                                     Submission
+
+
+[25]M.  Schmitt,  M.  M.  Rams,  J.  Dziarmaga,  M.  Heyl  and  W.  H.  Zurek,           Quan-
+      tum  phase  transition  dynamics  in  the  two-dimensional  transverse-ﬁeld  ising  model,
+      arXiv:2106.09046 (2021).
+
+[26]H.  Burau  and  M.  Heyl,          Unitary  long-time  evolution  with  quantum  renormaliza-
+      tion  groups  and  artiﬁcial  neural  networks,   Phys.  Rev.  Lett.  127,  050601  (2021),
+      doi:10.1103/PhysRevLett.127.050601.
+
+[27]M.   J.   Hartmann   and   G.   Carleo,                Neural-network    approach    to    dissipa-
+      tive   quantum   many-body   dynamics,       Phys.   Rev.   Lett.  122,   250502   (2019),
+      doi:10.1103/PhysRevLett.122.250502.
+
+[28]D. Luo, Z. Chen, J. Carrasquilla and B. K. Clark,        Autoregressive neural network for
+      simulating  open  quantum  systems  via  a  probabilistic  formulation,  arXiv:2009.05580
+      (2020).
+
+[29]M. Reh, M. Schmitt and M. G¨arttner,        Time-dependent variational principle for open
+      quantum systems with artiﬁcial neural networks, Phys. Rev. Lett. 127, 230501 (2021),
+      doi:10.1103/PhysRevLett.127.230501.
+
+[30]K. Choo, A. Mezzacapo and G. Carleo,        Fermionic neural-network states for ab-initio
+      electronic  structure,  Nature Communications 11, 2368 (2020),  doi:10.1038/s41467-
+      020-15724-9.
+
+[31]D.  Pfau,  J.  S.  Spencer,  A.  G.  D.  G.  Matthews  and  W.  M.  C.  Foulkes,         Ab  initio
+      solution of the many-electron schr¨odinger equation with deep neural networks,  Phys.
+      Rev. Research 2, 033429 (2020),  doi:10.1103/PhysRevResearch.2.033429.
+
+[32]J. Hermann, Z. Sch¨atzle and F. No´e,        Deep-neural-network solution of the electronic
+      schr¨odinger equation, Nature Chemistry 12(10), 891 (2020), doi:10.1038/s41557-020-
+      0544-y.
+
+[33]G.  Torlai,   G.  Mazzola,   J.  Carrasquilla,   M.  Troyer,   R.  Melko  and  G.  Carleo,
+      Neural-network  quantum  state  tomography,     Nature  Physics  14(5),  447  (2018),
+      doi:https://doi.org/10.1038/s41567-018-0048-5.
+
+[34]J.  Carrasquilla,  G.  Torlai,  R.  G.  Melko  and  L.  Aolita,          Reconstructing  quantum
+      states  with  generative  models,   Nature  Machine  Intelligence  1(3),  155–161  (2019),
+      doi:10.1038/s42256-019-0028-1.
+
+[35]B. J´onsson, B. Bauer and G. Carleo,       Neural-network states for the classical simulation
+      of quantum computing,  arXiv:1808.05232 (2018).
+
+[36]J. Bradbury, R. Frostig, P. Hawkins, M. J. Johnson, C. Leary, D. Maclaurin, G. Nec-
+      ula, A. Paszke, J. VanderPlas, S. Wanderman-Milne and Q. Zhang,   JAX:  compos-
+      able transformations of Python+NumPy programs, http://github.com/google/jax
+      (2018).
+
+[37]L. Dalc´ın, R. Paz and M. Storti,        Mpi for python, Journal of Parallel and Distributed
+      Computing 65(9), 1108 (2005),  doi:https://doi.org/10.1016/j.jpdc.2005.03.010.
+
+[38]L.   D.   Dalcin,   R.   R.   Paz,   P.   A.   Kler   and   A.   Cosimo,             Parallel   distributed
+      computing   using   python,      Advances   in   Water   Resources  34(9),   1124   (2011),
+      doi:https://doi.org/10.1016/j.advwatres.2011.04.013,   New  Computational  Methods
+      and Software Tools.
+
+                                                        31
+ SciPost Physics Codebases                                                                     Submission
+
+
+[39]jVMC:  Versatile  and  performant  variational  Monte  Carlo  leveraging  automated
+      diﬀerentiation  and  GPU  acceleration  (Python  codebase),   https://github.com/
+      markusschmitt/vmc_jax.
+
+[40]jVMC online documentation,       https://jvmc.readthedocs.io.
+
+[41]M. Van Den Nest,        Simulating quantum computers with probabilistic methods,  Quan-
+      tum Info. Comput. 11(9–10), 784–812 (2011).
+
+[42]S. Sorella and L. Capriotti,        Green  function  monte  carlo  with  stochastic  reconﬁgura-
+      tion:  An eﬀective remedy for the sign problem,  Physical Review B 61(4), 2599–2612
+      (2000),  doi:10.1103/physrevb.61.2599.
+
+[43]C.-Y. Park and M. J. Kastoryano,        Geometry of learning neural quantum states, Phys.
+      Rev. Research 2, 023232 (2020),  doi:10.1103/PhysRevResearch.2.023232.
+
+[44]K. Choo, G. Carleo, N. Regnault and T. Neupert,        Symmetries and many-body exci-
+      tations with neural-network quantum states, Physical Review Letters 121(16) (2018),
+      doi:10.1103/physrevlett.121.167204.
+
+[45]P.   Kramer   and   M.   Saraceno,             Geometry   of   the   Time-Dependent   Variational
+      Principle   in   Quantum   Mechanics,        Springer,    Berlin,    Heidelberg,    1   edn.,
+      doi:https://doi.org/10.1007/3-540-10579-4 (1981).
+
+[46]J. Broeckhove, L. Lathouwers, E. Kesteloot and P. Van Leuven,        On the equivalence of
+      time-dependent variational principles,  Chemical Physics Letters 149(5), 547 (1988),
+      doi:https://doi.org/10.1016/0009-2614(88)80380-4.
+
+[47]J. Haegeman, J. I. Cirac, T. J. Osborne, I. Piˇzorn, H. Verschelde and F. Verstraete,
+      Time-dependent  variational  principle  for  quantum  lattices,  Physical Review Letters
+      107(7) (2011),  doi:10.1103/physrevlett.107.070601.
+
+[48]L.  Hackl,  T.  Guaita,  T.  Shi,  J.  Haegeman,  E.  Demler  and  J.  I.  Cirac,         Geometry
+      of  variational  methods:  dynamics  of  closed  quantum  systems,   SciPost  Phys. 9,  48
+      (2020),  doi:10.21468/SciPostPhys.9.4.048.
+
+[49]A.  Peres,         Quantum  Theory:   Concepts  and  Methods,   Springer,  Dordrecht,   ISBN
+      0-792-33632-1,  doi:10.1007/0-306-47120-5 (2002).
+
+[50]J. Carrasquilla, D. Luo, F. P´erez, A. Milsted, B. K. Clark, M. Volkovs and L. Aolita,
+      Probabilistic  simulation  of  quantum  circuits  with  the  transformer,  arXiv:1912.11052
+      (2019).
+
+[51]D. Hofmann, G. Fabiani, J. H. Mentink, G. Carleo and M. A. Sentef,       Role of stochastic
+      noise  and  generalization  error  in  the  time  propagation  of  neural-network  quantum
+      states,  arXiv:2105.01054 (2021).
+
+[52]G.    Cybenko,                  Approximation    by    superpositions    of    a    sigmoidal    func-
+      tion,        Mathematics   of   Control,    Signals,    and   Systems   2(4),    303   (1989),
+      doi:https://doi.org/10.1007/BF02551274.
+
+[53]K.  Hornik,         Approximation  capabilities  of  multilayer  feedforward  networks,   Neural
+      Networks 4(2), 251 (1991),  doi:https://doi.org/10.1016/0893-6080(91)90009-T.
+
+[54]T. Kim and T. Adalı,        Approximation by fully complex multilayer perceptrons, Neural
+      Computation 15(7), 1641 (2003),  doi:10.1162/089976603321891846.
+
+                                                        32
+ SciPost Physics Codebases                                                                    Submission
+
+
+[55]N.  Le  Roux  and  Y.  Bengio,            Representational   power   of   restricted   boltzmann
+      machines   and   deep   belief   networks,     Neural  Computation  20(6),   1631  (2008),
+      doi:10.1162/neco.2008.04-07-510.
+
+[56]F. Voigtlaender,        The universal approximation theorem for complex-valued neural net-
+      works,  arXiv:2012.03351 (2020).
+
+[57]M. Hibat-Allah, M. Ganahl, L. E. Hayward, R. G. Melko and J. Carrasquilla,         Re-
+      current  neural  network  wave  functions,    Phys.  Rev.  Research  2,  023358  (2020),
+      doi:10.1103/PhysRevResearch.2.023358.
+
+[58]S.  Pilati  and  P.  Pieri,           Simulating  disordered  quantum  Ising  chains  via  dense
+      and  sparse  restricted  Boltzmann  machines,    Phys.  Rev.  E  101,  063308  (2020),
+      doi:10.1103/PhysRevE.101.063308.
+
+[59]L. Yang, W. Hu and L. Li,        Scalable variational monte carlo with graph neural ansatz,
+      arXiv:2011.12453 (2020).
+
+[60]B. Uria, M.-A. Cˆot´e, K. Gregor, I. Murray and H. Larochelle,        Neural autoregressive
+      distribution estimation,  arXiv:1605.02226 (2016).
+
+[61]J. Heek, A. Levskaya, A. Oliver, M. Ritter, B. Rondepierre, A. Steiner and M. van
+      Zee,  Flax:  A  neural  network  library  and  ecosystem  for  JAX,  http://github.com/
+      google/flax (2020).
+
+[62]Scipy library,       https://scipy.org.
+
+[63]A. Collette,        Python and HDF5,  O’Reilly (2013).
+
+[64]J¨ulich Supercomputing Centre,         JUWELS:  Modular  Tier-0/1  Supercomputer  at  the
+      J¨ulich  Supercomputing  Centre,    Journal  of  large-scale  research  facilities  5(A135)
+      (2019),  doi:10.17815/jlsrf-5-171.
+
+[65]G. Carleo, K. Choo, D. Hofmann, J. E. Smith, T. Westerhout, F. Alet, E. J. Davis,
+      S.  Efthymiou,  I.  Glasser,  S.-H.  Lin,  M.  Mauri,  G.  Mazzola  et  al.,   Netket:   A  ma-
+      chine learning toolkit for many-body quantum systems, SoftwareX 10, 100311 (2019),
+      doi:https://doi.org/10.1016/j.softx.2019.100311.
+
+[66]P. Pfeuty,        The one-dimensional ising model with a transverse ﬁeld, Annals of Physics
+      57(1), 79 (1970),  doi:https://doi.org/10.1016/0003-4916(70)90270-8.
+
+[67]H. W. J. Bl¨ote and Y. Deng,        Cluster monte carlo simulation of the transverse ising
+      model,  Phys. Rev. E 66, 066110 (2002),  doi:10.1103/PhysRevE.66.066110.
+
+[68]M. Kormos, M. Collura, G. Tak´acs and P. Calabrese,        Real-time conﬁnement following
+      a quantum quench to a non-integrable model,  Nature Physics 13(3), 246–249 (2016),
+      doi:10.1038/nphys3934.
+
+[69]C. R. Harris, K. J. Millman, S. J. van der Walt, R. Gommers, P. Virtanen, D. Cour-
+      napeau, E. Wieser, J. Taylor, S. Berg, N. J. Smith, R. Kern, M. Picus  et al.,  Array
+      programming  with  NumPy,  Nature 585(7825), 357 (2020),  doi:10.1038/s41586-020-
+      2649-2.
+
+[70]JAX online documentation,       https://jax.readthedocs.io.
+
+
+
+                                                       33

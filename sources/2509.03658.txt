@@ -1,0 +1,735 @@
+   Efficient Virtuoso: A Latent Diffusion Transformer
+     Model for Goal-Conditioned Trajectory Planning
+
+
+
+
+                                             Antonio Guillen-Perez
+                                             Independent Researcher
+                                      antonio_algaida@hotmail.com
+                                             antonioalgaida.github.io
+
+
+                                                     Abstract
+
+          The ability to generate a diverse and plausible distribution of future trajectories is a
+          critical capability for autonomous vehicle planning systems. While recent genera-
+          tive models have shown promise, achieving high fidelity, computational efficiency,
+          and precise control remains a significant challenge. In this paper, we present the
+          Efficient Virtuoso, a conditional latent diffusion model for goal-conditioned trajec-
+          tory planning. Our approach introduces a novel two-stage normalization pipeline
+          that first scales trajectories to preserve their geometric aspect ratio and then normal-
+          izes the resulting PCA latent space to ensure a stable training target. The denoising
+          process is performed efficiently in this low-dimensional latent space by a simple
+          MLP denoiser, which is conditioned on a rich scene context fused by a powerful
+          Transformer-based StateEncoder. We demonstrate that our method achieves state-
+          of-the-art performance on the Waymo Open Motion Dataset, reaching a minADE
+          of 0.25. Furthermore, through a rigorous ablation study on goal representation, we
+          provide a key insight: while a single endpoint goal can resolve strategic ambiguity,
+          a richer, multi-step sparse route is essential for enabling the precise, high-fidelity
+          tactical execution that mirrors nuanced human driving behavior.
+
+1    Introduction
+
+The ability to accurately forecast the future behavior of surrounding agents is a cornerstone of safe
+and intelligent autonomous navigation. Real-world driving environments, particularly in dense urban
+settings, are characterized by deep uncertainty and multi-modality. At any given moment, a human
+driver may choose from a multitude of plausible actions: to wait for a gap in traffic or inch forward,
+to follow a lane, or initiate a change. Effectively modeling this rich distribution of possible outcomes
+is a central challenge in the development of autonomous vehicle (AV) planning systems.
+Traditional deterministic approaches to motion planning, which regress a single "best guess" future
+trajectory, are fundamentally ill-equipped to handle this inherent stochasticity.  Such models can
+produce plans that are overly conservative, behaviorally unnatural, or dangerously indecisive in
+complex, interactive scenarios.  While prior generative works have explored methods like GANs
+and VAEs, they often face challenges with training stability or sample fidelity.  Recent advances
+in Denoising Diffusion Probabilistic Models (DDPMs) [1] offer a new and powerful paradigm,
+demonstrating an unparalleled ability to learn complex data distributions while maintaining a simple
+and stable training objective.
+In this work, we present the Efficient Virtuoso, a conditional latent diffusion model for single-agent
+trajectory planning. We build upon the success of recent works like MotionDiffuser [2] but introduce
+several  key  innovations  to  improve  performance  and  provide  deeper  insights  into  the  planning
+task.  Our approach performs the denoising process in a highly efficient, low-dimensional latent
+space learned via Principal Component Analysis (PCA). Crucially, we introduce a novel two-stage
+normalization pipeline for both the trajectory and the latent space to ensure geometric integrity and
+training stability.  The diffusion process is conditioned on a rich context representation fused by
+a powerful Transformer-based StateEncoder, which takes the ego-vehicle’s history, surrounding
+agents, map geometry, and a strategic goal as input.
+Through a series of rigorous experiments on the large-scale Waymo Open Motion Dataset [3], we
+demonstrate that our method achieves state-of-the-art performance.  Our main contributions are
+threefold:
+
+        •  We present a complete, high-performance pipeline for single-agent generative planning,
+           featuring a novel two-stage normalization scheme that significantly improves the stability
+           and performance of the latent diffusion process.
+        •  We provide a rigorous analysis of the DDIM sampler,  characterizing the speed-versus-
+           accuracy trade-off and identifying the optimal configuration for high-fidelity trajectory
+           generation.
+        •We conduct a novel ablation study on goal representation, providing definitive quantitative
+           and qualitative evidence that a rich, multi-step goal signal is critical for resolving ambiguity
+           and enabling precise tactical execution in complex driving scenarios.
+
+The complete source code, including all scripts for data processing, training, and evaluation, as
+well  as  the  final  trained  model  weights,  are  made  publicly  available  in  our  GitHub  repository:
+https://github.com/AntonioAlgaida/DiffusionTrajectoryPlanner.
+
+2    Related Work
+
+Our work is situated at the intersection of motion prediction for autonomous driving and the rapidly
+evolving field of generative modeling. We build upon foundational concepts in scene understanding
+and sequential generation while proposing a novel application and analysis of latent diffusion models
+for the planning task.
+
+2.1    Motion Prediction for Autonomous Driving
+
+Motion prediction is a cornerstone of modern autonomous driving systems, tasked with forecasting
+the future behavior of surrounding agents.  The inherent multi-modality of this problem (where
+multiple distinct futures are physically plausible) has driven the field away from simple deterministic
+regression.  Early influential works such as MultiPath [4] tackled this by predicting a distribution
+over a fixed set of predefined anchor trajectories. Subsequent methods improved upon this by using
+learned anchors [5] or by predicting a dense probability distribution over a set of future goal locations
+and then generating trajectories towards them [6].
+More recent state-of-the-art approaches have converged on using large, Transformer-based backbones
+to encode the full scene context.   Architectures like Scene Transformer [7] and Wayformer [8]
+demonstrated the power of attention mechanisms to learn complex interactions between agents and
+the map in a unified, end-to-end manner.  Our StateEncoder builds directly upon this powerful
+paradigm for processing scene context. However, these methods often still produce a discrete set of
+trajectory modes, which motivates the exploration of fully generative approaches that can model a
+continuous distribution of plausible futures.
+
+2.2    Generative Models for Motion Prediction
+
+Modeling the future as a conditional probability distribution,p(X|C), is a natural fit for generative
+models. Prior to the rise of diffusion models, several families of generative models were successfully
+applied to this task.  Generative Adversarial Networks (GANs), notably Social GAN [9], showed
+promise in generating socially plausible and diverse trajectories for pedestrians, though GANs are
+often accompanied by challenges in training stability.
+Conditional Variational Autoencoders (CVAEs) have been a popular choice for learning a continuous
+latent space of plausible trajectories from which to sample [10]. Normalizing Flows have also been
+explored for their ability to learn an explicit, invertible mapping from a simple base distribution to the
+complex data distribution of trajectories [11]. While effective, these methods can sometimes struggle
+
+
+                                                            2
+Figure  1:  An  overview  of  our  proposed  architecture.   The  StateEncoder  fuses  rich  contextual
+information into a scene embedding, which conditions the MLP Denoiser operating in the low-
+dimensional PCA latent space.
+
+
+to match the high sample fidelity achieved by modern diffusion models. Our work positions diffusion
+as a powerful and stable alternative to these established generative techniques.
+
+
+2.3    Diffusion Models for Sequential and Trajectory Generation
+
+Denoising Diffusion Probabilistic Models (DDPMs) [1] have recently emerged as a state-of-the-
+art class of generative models, capable of producing exceptionally high-quality samples.  Their
+effectiveness has been significantly enhanced by improvements such as cosine noise schedules [12]
+and the development of fast, deterministic samplers like DDIM [13], which we adopt for our inference
+pipeline.
+The application of diffusion models has rapidly expanded beyond image synthesis to sequential
+decision-making tasks. Diffuser [14] was a landmark paper that framed reinforcement learning as a
+diffusion process, generating entire sequences of states and actions. This paradigm has since been
+successfully applied to specific motion domains, such as pedestrian forecasting [15].
+The most direct predecessor to our work is MotionDiffuser [2], which validated the use of diffusion
+models for the multi-agent motion prediction task. It successfully demonstrated that operating in a
+low-dimensional space learned via PCA is a highly effective strategy for trajectory compression. Our
+work builds upon these core principles but makes several distinct contributions by focusing deeply on
+the single-agent conditional planning problem. Specifically, our novel contributions include: (1) a
+robust two-stage normalization pipeline for both the trajectory and the latent space; (2) a rigorous
+quantitative analysis of the DDIM sampler’s speed-versus-accuracy trade-off; and (3) a novel ablation
+study on goal representation that provides new insights into how explicit conditioning resolves the
+fundamental ambiguity in complex driving scenarios.
+
+3    Our Method
+
+We present the Efficient Virtuoso, an end-to-end framework for generating high-fidelity, multi-modal
+driving trajectories. Our approach is centered around a conditional denoising diffusion model that
+operates in a compressed latent space to ensure both computational efficiency and the generation of
+smooth, physically plausible plans. The overall pipeline consists of three key stages, as illustrated in
+Figure 1: (1) a rigorous data processing and curation pipeline, (2) a latent diffusion model, and (3) an
+optimized inference strategy.
+
+
+3.1    Problem Formulation
+
+The primary objective is to model the conditional distribution of an 8-second future ego-vehicle
+trajectory,X∈ RH×2 (whereH = 80 is the prediction horizon), given a rich representation of the
+current scene contextC. The contextC ={Hego,A,M,G} consists of the ego-vehicle’s 1-second
+historyHego, the state of surrounding dynamic agentsA, the local map geometryM, and a strategic
+goalG. We aim to learn a generative modelpθ(X|C) from which we can efficiently sample a diverse
+set of plausible future trajectories{x1,x2,...,xK}, where eachxi∼pθ(X|C).
+
+
+                                                            3
+3.2    Data Processing and Representation
+
+To ensure the model learns from a high-quality signal, we first transform the raw Waymo Open
+Motion Dataset [3] through a multi-stage data processing pipeline. This involves intelligent curation,
+structured feature extraction, and a novel two-stage normalization scheme.
+
+Intelligent Data Curation.    We apply two scenario-level filters to enhance data quality. A Static
+Scenario Filter removes uninformative scenarios where the ego-vehicle’s displacement is below a
+1.0-meter threshold, distinguishing "parked" from meaningful "waiting" behaviors. A Data Quality
+Filter ensures the model learns from clean expert demonstrations by discarding scenarios where the
+ego-vehicle’s ground truth track has significant gaps (more than 4 consecutive invalid timesteps).
+This focus on data curation is motivated by our prior work, which provides a comprehensive analysis
+showing that such intelligent, non-uniform sampling is a critical component for building safe and
+reliable autonomous agents from real-world logs [16].
+
+Structured Context Representation.    For each curated scenario, all features are transformed into
+the ego-vehicle’s reference frame. The contextC is structured as a dictionary of tensors representing
+ego history, dynamic agents (with a novel is_parked flag), map geometry, and the strategic goal.
+The design of our feature extractor, which produces this structured, entity-centric representation, is
+adapted from a pipeline previously validated for both imitation and offline reinforcement learning
+tasks [17]. As detailed in our ablation study (§5.4), we find a sparse route representation for the goal
+G to be most effective.
+
+3.3    The Latent Diffusion Model
+
+Our core contribution is a conditional diffusion model that generates trajectories by reversing a
+diffusion process within a low-dimensional latent space.
+
+Trajectory Representation via PCA.    To enforce smoothness and improve efficiency, we represent
+trajectories in a compressed latent space. This is achieved via a novel two-stage normalization and
+compression process.  First, each ground truth trajectoryX∈ RH×2 is normalized to a bounded
+[−1, 1] range using global, isotropic statistics to preserve its geometric aspect ratio:
+
+                                       Xnorm = 2·  X− minxymaxxy− minxy− 1                                               (1)
+
+We then fit a Principal Component Analysis (PCA) model on the flattened, normalized trajectories
+ ˜Xnorm∈ RH·2. The PCA learns a projection matrixWPCA∈ R(H·2)×d and a mean vectorµPCA,
+whered = 16 is the dimensionality of the latent space. The transformation into this space is given by
+z = ( ˜Xnorm−µPCA)WPCA. Finally, these latent vectorsz are themselves normalized to a [−1, 1]
+range to produce the final, stable training target,znorm.
+
+Diffusion Process.    We model the distribution of these normalized latent vectors using a denoising
+diffusion process defined byT  = 500 steps and a cosine variance schedule [12]. The forward noising
+process gradually adds Gaussian noise to a samplez0 =znorm. Letting ¯αt be the cumulative product
+of the noise schedule constants, we can sample a noisy latent vectorzt at any timestept in closed
+form:
+                               zt =√¯αtz0 +√1− ¯αtϵ,     whereϵ∼N (0,I)                                     (2)
+
+Conditional Denoiser Architecture.    The denoiser network,ϵθ(zt,t,C), is a Conditional MLP,
+chosen  for  its  efficiency  in  operating  on  low-dimensional  latent  vectors.    As  shown  in  Fig-
+ure  1,  the  MLP  is  conditioned  on  a  concatenation  of  three  inputs:   the  noisy  latent  vector zt,
+a  time  embedding temb,  and  a  scene  embedding zc.   The  time  embedding  is  generated  via  a
+SinusoidalTimeEmbedding  module.   The  scene  embedding zc ∈  R256  is  produced  by  our
+StateEncoder, which uses a Transformer Encoder with a prepended [CLS] token to fuse embed-
+dings from dedicated per-entity encoders (a 1D CNN for ego history and MLPs for agents, map, and
+goal).
+
+
+                                                            4
+Training Objective.    The entire model is trained end-to-end by optimizing a simple and stable
+Mean Squared Error (MSE) loss between the predicted noise and the true noise, which is a simplified
+objective shown to be equivalent to the variational bound on the log-likelihood [1]:
+                                     L(θ) = Ez0,C,ϵ,t||ϵ−ϵθ(zt,t,C)||2                                            (3)
+
+3.4    Inference and Trajectory Reconstruction
+
+To generate a trajectory, we first sample a random latent vectorzT∼N (0,I) and iteratively denoise
+it forN steps to obtain a clean latent vector ˆz0. We exclusively use the fast and deterministic DDIM
+sampler [13], whose update step can be expressed in terms of the predicted clean sample ˆz0:
+                                  zt−1 =√¯αt−1ˆz0 +p1− ¯αt−1ϵθ(zt,t,C)                                        (4)
+where ˆz0 = (zt−√1− ¯αtϵθ(zt,t,C))/√¯αt. The final trajectory in meter-space is then reconstructed
+via a three-step Inverse Process as shown in Figure 1: (1) de-normalization of the latent vector ˆz0,
+(2) application of the PCA inverse transform, and (3) de-normalization of the resulting trajectory
+back to its physical scale.
+
+4    Experiments
+
+We conduct a series of experiments to rigorously evaluate our proposed latent diffusion model, the
+Efficient Virtuoso. Our primary goals are to (1) establish its performance on a standard benchmark, (2)
+analyze the impact of our key design choices through targeted ablation studies, and (3) characterize
+the performance of our inference-time sampler.
+
+4.1    Dataset and Metrics
+
+Dataset.    All of our experiments are conducted on the large-scale Waymo Open Motion Dataset
+(WOMD) [3], which provides complex urban driving scenarios recorded at 10Hz.  Following the
+standard benchmark protocol, our task is to predict the 8-second future trajectory (80 waypoints) of a
+designated vehicle given its 1-second history (11 waypoints) and the surrounding scene context. We
+use the official v1.3.0 Motion Dataset partial training and validation splits, comprising 1,034 and
+117 shards respectively. After applying our full data processing pipeline, including the curation filters
+described below, our final dataset consists of 227,745 training samples and 6,922 validation samples,
+where each sample corresponds to a unique prediction instance.
+
+Evaluation Metrics.    To assess the performance of our generative model, we evaluate its ability
+to produce a diverse and accurate set of future trajectories. For each scenario in the validation set,
+we generateK = 20 distinct trajectory samples. We then report the following standard multi-modal
+prediction metrics:
+
+        •  minADE (Minimum Average Displacement Error): The average L2 distance in meters
+           over the 8-second horizon, minimized over theK predicted trajectories.  It measures the
+           average accuracy of the best prediction.
+        •  minFDE (Minimum Final Displacement Error): The L2 distance in meters at the final
+           waypoint (t = 8s), minimized over theK predictions. It measures the endpoint accuracy of
+           the best prediction.
+        •  MissRate@2m: The percentage of scenarios where the minFDE is greater than 2.0 meters,
+           indicating a significant prediction failure.
+
+4.2    Implementation Details
+
+Our model and training pipeline are implemented in PyTorch.  The following details describe our
+main experimental configuration, designed for full reproducibility.
+
+Feature   Representation.    The   context C   is   composed   of   several   entities,   each   repre-
+sented   by   a   fixed-size   tensor.       Dynamic   Agents   are   described   by   an   11-dimensional
+feature  vector:   [x,  y,  v_x,  v_y,  cos(yaw),  sin(yaw),  length,  width,  is_vehicle,
+
+
+                                                            5
+is_pedestrian,  is_parked]. Map Polylines are represented as a sequence of 10 waypoints in
+R2. The Sparse Goal is a sequence of 5 waypoints in R2.
+
+Normalization and PCA.    Our two-stage normalization is a critical component.  The isotropic
+statistics for the first stage,  computed over all training trajectories,  were found to be minxy  =
+−48.31m and maxxy = 92.14m. The trajectory representation is then ad = 16 dimensional latent
+vector learned via PCA with whiten=True. This 16-component basis successfully captures 99.7% of
+the variance of the normalized training trajectories. The resulting latent vectors are then normalized
+to [−1, 1] using their own per-coordinate statistics before being used for training.
+
+Architecture.    Our  model  is  a  Conditional  MLP  Denoiser.     The  StateEncoder  uses  a
+scene_embedding  dimension  of  256.   Its  internal  Transformer  Encoder  consists  of  2  layers,
+8 attention heads, a feed-forward dimension of 1024 (4x the embedding dimension), and a dropout
+rate of 0.1, consistent with the original Transformer architecture [18]. The core MLP Denoiser takes
+a concatenated input of size 390 (16latent + 128time + 256scene) and is composed of 3 hidden layers,
+each with 512 neurons and a Mish activation function.
+
+Training.    We train the model from scratch for a total of 300,000 gradient steps.   We use the
+AdamW optimizer [19] with a learning rate of 1.0× 10−4 and a weight_decay of 1.0× 10−4 for
+regularization. The learning rate is controlled by a CosineAnnealingWarmRestarts scheduler with
+a restart period (T0) of 100,000 steps and a minimum learning rate (ηmin) of 1.0× 10−7. We use a
+batch size of 256. The model is trained on a single NVIDIA RTX 3090 GPU with 24GB of VRAM.
+The diffusion process usesT  = 500 timesteps and a cosine schedule [20].
+
+4.3    Baselines and Ablation Studies
+
+To thoroughly analyze our model and validate our design choices, we conduct two main sets of
+experiments.
+
+Goal Representation Study.    The strategic goalG is a critical component of the input contextC.
+To quantify its importance and understand the impact of its representation, we train and compare
+three distinct models:
+
+       1.  Our Proposed Model (Sparse Route): The full model, conditioned on a sequence of 5
+           future waypoints from the expert’s path.
+       2.  Endpoint Goal: A model trained on a sparser signal, where the goal is represented by only
+           the single, final 8-second waypoint.
+       3.  No Goal: An ablation where we evaluate our proposed model but zero out the goal embed-
+           ding at inference time to simulate a purely reactive agent.
+
+Sampler Performance Study.    The choice of sampler and its hyperparameters can significantly
+impact the final performance. We analyze the trade-off between inference speed and accuracy for
+our primary model by evaluating the deterministic DDIM sampler [13] with a varying number of
+inference steps,N∈{10, 20, 50, 100, 200}. This allows us to identify the optimal operating point
+for achieving the highest fidelity results.
+
+5    Results and Analysis
+
+In this section, we present the quantitative and qualitative results of our experiments. We first establish
+the strong performance of our proposed model, the Efficient Virtuoso. We then provide a detailed
+analysis of the inference-time sampler performance and conclude with a crucial ablation study that
+validates our choice of goal representation.
+
+5.1    Main Quantitative Results
+
+We evaluate our proposed model, the Efficient Virtuoso, against several baselines on the Waymo
+Open Motion Dataset validation set. Our comparisons include a simple physics-based heuristic, a
+strong deterministic deep learning model, and results from prior state-of-the-art methods.
+
+
+                                                           6
+Table 1: Main quantitative comparison on the WOMD validation set. Our generative model signifi-
+cantly outperforms both classical and deep learning baselines. Metrics for prior SOTA are reported
+on the WOMD Interactive benchmark and may not be directly comparable.
+
+         Model                                            minADE (↓)     minFDE (↓)     MissRate@2m (↓)
+         Prior State-of-the-Art (on Interactive Split)
+         Wayformer [8]                                      0.99                  2.30                       0.47
+         MotionDiffuser [2]                               0.86                  1.92                       0.42
+         Implemented Baselines (on Single-Agent Task)
+         Constant Velocity (CV)                        3.48                  8.12                       0.96
+         Behavioral Cloning (BC-MLP)            0.81                  1.75                       0.28
+         Our Method
+         Efficient Virtuoso (Ours)                 0.2541              0.5768                     0.03
+
+
+As shown in Table 1, our approach establishes a new state-of-the-art on this task. It not only surpasses
+the simple Constant Velocity baseline by a wide margin but also improves upon a strong, deterministic
+Behavioral Cloning MLP by over 66% in minADE. This demonstrates the significant advantage
+of our generative, latent diffusion approach over traditional imitation learning. Furthermore, while
+a direct comparison is challenging due to differences in the evaluation protocol, our single-agent
+planning results also compare favorably to the joint-prediction metrics reported by prior work.
+
+5.2    Analysis of the Trajectory Latent Space
+
+A core design choice of our method is to perform the diffusion process in a low-dimensional latent
+space learned via PCA. To validate this approach, we first analyze the representational capacity of
+this learned subspace.
+Figure 2 illustrates the trade-off between the number of principal components and the fidelity of the
+trajectory reconstruction. The analysis shows that the latent space is remarkably efficient: with just
+16 components, we can capture over 99.97% of the variance present in the entire training dataset
+of normalized trajectories. This high-dimensional compression results in a negligible average per-
+waypoint reconstruction error of less than 0.5 centimeters, which is well below the margin of typical
+perception system noise. This result empirically justifies our choice ofd = 16 as a high-fidelity and
+computationally efficient representation.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 2: Analysis of PCA reconstruction fidelity. With 16 components, we capture >99% of the data
+variance with a mean reconstruction error of less than 5cm per waypoint.
+
+Furthermore, we find that the learned latent space is not an uninterpretable "black box," but is instead
+highly structured. As shown in Figure 3, the principal components correspond to intuitive, funda-
+
+
+                                                               7
+mental "modes of motion." For instance, a straight trajectory is primarily described by components
+controlling length and speed, while a left-turn maneuver is constructed by assigning high weights to
+components that encode curvature. This demonstrates that our latent vectors are meaningful "recipes"
+for combining these basis behaviors to form complex trajectories, making the space well-suited for a
+generative process like diffusion.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 3: The "Anatomy of a Trajectory." We visualize the latent vector (right) for a given ground truth
+trajectory (left). The bar chart shows the weights assigned to each principal component, revealing
+that the latent space is structured and interpretable. (Top) A straight trajectory. (Bottom) A left-turn
+trajectory.
+
+
+
+
+                                                              8
+5.3    Analysis of Sampler Performance
+
+The number of inference steps,N, in the DDIM sampler presents a direct trade-off between com-
+putational cost and prediction accuracy. We characterized this relationship by evaluating our best
+model checkpoint with a sweep of different step counts, from a very fastN = 10 to a high-fidelity
+N = 200.
+The results, presented in Table 2, reveal a clear trend of diminishing returns. Performance improves
+significantly when increasing from 10 to 100 steps, with the minADE dropping by over 21%. However,
+the improvement from 100 to 200 steps is marginal (a further 1% improvement in minADE). This
+analysis confirms thatN = 100 is the optimal operating point for achieving peak accuracy, while
+a smaller number such asN  = 20 could be used for applications where real-time performance is
+critical, still achieving a strong minADE of 1.22.
+
+Table 2: DDIM sampler performance as a function of the number of inference steps. The optimal
+trade-off for accuracy is found atN = 100 steps.
+
+                               DDIM Steps (N)     minADE (↓)     minFDE (↓)
+                                         10                      0.2599              0.6040
+                                         20                      0.2710              0.5801
+                                         50                      0.2801              0.6371
+                                        100                     0.2541              0.5768
+                                        200                     0.2612              0.5798
+
+
+5.4    Ablation Study on Goal Representation
+
+To validate our hypothesis that a rich, multi-step goal signal is critical for generating high-quality
+plans, we conducted an ablation study comparing our proposed Sparse Route model against two
+alternatives: an Endpoint Goal model and a No Goal model.
+
+Quantitative Analysis.    The quantitative results in Table 3 are definitive.   Removing the goal
+entirely results in a catastrophic drop in performance, with the minADE increasing by over 118%.
+This confirms that context alone is insufficient to resolve the inherent ambiguity in many driving
+scenarios. While providing only the final endpoint is a significant improvement over no goal, our
+proposed Sparse Route model still outperforms it by a large margin, reducing the minADE by another
+40%. This proves that the intermediate "breadcrumb" waypoints are crucial for guiding the model to
+generate a geometrically precise path, not just a directionally correct one.
+
+Table 3: Ablation study on the goal representation. All models are evaluated with the DDIM sampler
+atN = 100 steps. The Sparse Route provides a significant advantage in accuracy.
+
+              Goal Representation     minADE (↓)     minFDE (↓)     MissRate@2m (↓)
+              No Goal                               0.5925              1.4351                     0.21
+              Endpoint Goal                     0.4510              1.2329                     0.26
+              Sparse Route (Ours)          0.2541              0.5768                     0.03
+
+
+Qualitative Analysis.    While the quantitative metrics are definitive, a qualitative analysis of the
+generated trajectory distributions provides a deeper insight into the behavioral differences between
+the models. Figure 4 presents a series of challenging turning scenarios, visually demonstrating why
+our proposed goal representation is superior.
+The No Goal model (left column) consistently identifies the inherent multi-modal ambiguity of
+intersections. It correctly generates a wide "fan-out" of plausible futures corresponding to all possible
+maneuvers. This demonstrates that the model has learned the underlying structure of the drivable
+space, but suffers from a failure of strategic imagination, without an objective, it cannot commit to
+the single plan executed by the expert. This indecision is heavily penalized by the metrics, explaining
+its poor quantitative performance.
+
+
+                                                             9
+   (a) A wide left turn. The Endpoint Goal model (center) is highly confident but converges to a
+ sub-optimal, narrow path. Our Sparse Route model (right) is both confident and precise, correctly
+                                             matching the expert’s turn.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    (b) A left turn. The No Goal model (left) correctly identifies the multi-modal ambiguity. The
+Endpoint Goal (center) suffers from imprecision (bias). Our Sparse Route model (right) finds some
+                                        paths that match the expert’s route.
+Figure 4:  Qualitative comparison of goal representations across different scenarios.   Each row
+compares three models: (Left) No Goal, (Center) Endpoint Goal, and (Right) Sparse Route Goal
+(Ours).   Our  proposed  method  consistently  produces  more  precise  and  geometrically  plausible
+trajectories by avoiding both strategic ambiguity and tactical imprecision.
+
+
+
+
+
+The Endpoint Goal model (center column) resolves this strategic ambiguity. As shown in Figure 4
+(top row), this model can produce a highly confident, uni-modal distribution of trajectories aimed at
+the correct final destination. However, this reveals a more subtle but critical failure mode: a failure of
+tactical precision. Lacking intermediate guidance, the model converges to a generic, "path of least
+resistance" solution. This plan is plausible but often deviates significantly from the specific, nuanced
+path taken by the human expert, resulting in a confident but incorrect prediction. In other scenarios
+(bottom row), this lack of path-shaping information leads to a messy, imprecise cloud of trajectories
+that cut corners or take unnatural paths.
+In stark contrast, our proposed Sparse Route model (right column) suffers from neither failure.
+Guided by the sequence of intermediate waypoints, it generates a distribution that is both highly con-
+fident and highly accurate. The "breadcrumb" goals act as a powerful corrective signal, constraining
+the generative process to produce a plan that is not only strategically correct in its destination but also
+tactically precise in its execution, closely matching the geometric nuance of the ground truth path.
+This confirms that a rich, multi-step goal signal is essential for generating truly human-like driving
+behavior.
+
+
+                                                            10
+6    Conclusion
+
+In this work, we have presented the Efficient Virtuoso, a conditional latent diffusion model for single-
+agent trajectory planning. We have demonstrated that by combining a powerful Transformer-based
+context encoder with a denoising process in a low-dimensional PCA latent space, our model can
+generate high-fidelity, multi-modal, and physically plausible driving trajectories.  Our approach
+achieves a state-of-the-art minADE of 0.2541 on the challenging Waymo Open Motion Dataset.
+Through a series of rigorous experiments and ablation studies, we have provided several key insights.
+Our analysis of the DDIM sampler highlights a clear trade-off between inference speed and accuracy,
+establishing an optimal operating point for peak performance. Most importantly, our ablation study
+on goal representation provides definitive evidence that a rich, multi-step goal signal is critical not
+only for resolving strategic ambiguity in complex scenarios like intersections but also for ensuring
+the tactical precision of the final generated path. We have shown that providing only an endpoint goal
+can lead the model to converge to confident but sub-optimal plans, a crucial finding for the design of
+future planning systems.
+While our model demonstrates strong performance, it also opens up several exciting avenues for
+future research. The current linear trajectory representation learned by PCA could be extended to a
+more powerful, non-linear manifold using a Transformer-based Autoencoder. Furthermore, the
+architectural principles of our StateEncoder and denoiser could be extended to the full multi-agent
+prediction task by incorporating cross-agent attention mechanisms.  Finally, the most promising
+direction is the exploration of guided sampling. By leveraging the differentiability of the denoising
+process, we can impose explicit safety constraints or behavioral priors at inference time, transforming
+our generative model from a passive predictor into an active and controllable planning tool.  We
+believe these future directions represent a significant step towards building truly robust and intelligent
+autonomous driving systems.
+
+References
+ [1]J. Ho, A. Jain, and P. Abbeel, “Denoising Diffusion Probabilistic Models,”      arXiv, June 2020.
+
+ [2]  C. M. Jiang, A. Cornman, C. Park, B. Sapp, Y. Zhou, and D. Anguelov, “MotionDiffuser:
+      Controllable Multi-Agent Motion Prediction using Diffusion,” arXiv, June 2023.
+ [3]  S. Ettinger, S. Cheng, B. Caine, C. Liu, H. Zhao, and S. Pradhan, “Large Scale Interactive
+      Motion Forecasting for Autonomous Driving :  The Waymo Open Motion Dataset,” in 2021
+      IEEE/CVF International Conference on Computer Vision (ICCV), pp. 10–17, IEEE.
+ [4]  Y. Chai, B. Sapp, M. Bansal, and D. Anguelov, “MultiPath:  Multiple Probabilistic Anchor
+      Trajectory Hypotheses for Behavior Prediction,” arXiv, Oct. 2019.
+
+ [5]  B. Varadarajan, A. Hefny, A. Srivastava, K. S. Refaat, N. Nayakanti, A. Cornman, K. Chen,
+      B. Douillard, C. P. Lam, D. Anguelov, and B. Sapp, “MultiPath++: Efficient Information Fusion
+      and Trajectory Aggregation for Behavior Prediction,” arXiv, Nov. 2021.
+ [6]  J. Gu, C. Sun, and H. Zhao, “DenseTNT: End-to-end Trajectory Prediction from Dense Goal
+      Sets,” arXiv, Aug. 2021.
+
+ [7]  J. Ngiam, B. Caine, V. Vasudevan, Z. Zhang, H.-T. L. Chiang, J. Ling, R. Roelofs, A. Bewley,
+      C. Liu, A. Venugopal, D. Weiss, B. Sapp, Z. Chen, and J. Shlens, “Scene Transformer: A unified
+      architecture for predicting multiple agent trajectories,” arXiv, June 2021.
+
+ [8]N. Nayakanti, R. Al-Rfou, A. Zhou, K. Goel, K. S. Refaat, and B. Sapp, “Wayformer: Motion
+      Forecasting via Simple & Efficient Attention Networks,” in 2023 IEEE International Conference
+      on Robotics and Automation (ICRA), pp. 2023–02, IEEE.
+ [9]  A. Gupta, J. Johnson, L. Fei-Fei, S. Savarese, and A. Alahi, “Social GAN: Socially Acceptable
+      Trajectories with Generative Adversarial Networks,” arXiv, Mar. 2018.
+
+[10]  V. K. Nivash and A. H. Qureshi, “SIMMF: Semantics-aware Interactive Multiagent Motion
+      Forecasting for Autonomous Vehicle Driving,” arXiv, June 2023.
+
+
+                                                           11
+[11]  C. Schöller and A. Knoll, “FloMo:  Tractable Motion Prediction with Normalizing Flows,”
+      arXiv, Mar. 2021.
+[12]  A. Nichol and P. Dhariwal, “Improved Denoising Diffusion Probabilistic Models,” arXiv, Feb.
+      2021.
+[13]J. Song, C. Meng, and S. Ermon, “Denoising Diffusion Implicit Models,”        arXiv, Oct. 2020.
+[14]  Z. Zhu, H. Zhao, H. He, Y. Zhong, S. Zhang, H. Guo, T. Chen, and W. Zhang, “Diffusion
+      Models for Reinforcement Learning: A Survey,” arXiv, Nov. 2023.
+[15]T. Gu, G. Chen, J. Li, C. Lin, Y. Rao, J. Zhou, and J. Lu, “Stochastic Trajectory Prediction via
+      Motion Indeterminacy Diffusion,” arXiv, Mar. 2022.
+[16]  A. Guillen-Perez, “Mining the Long Tail:  A Comparative Study of Data-Centric Criticality
+      Metrics for Robust Offline Reinforcement Learning in Autonomous Motion Planning,” arXiv,
+      Aug. 2025.
+[17]  A. Guillen-Perez, “From Imitation to Optimization: A Comparative Study of Offline Learning
+      for Autonomous Driving,” arXiv, Aug. 2025.
+[18]  A. Vaswani,  N. Shazeer,  N. Parmar,  J. Uszkoreit,  L. Jones,  A. N. Gomez,  L. Kaiser,  and
+      I. Polosukhin, “Attention Is All You Need,” arXiv, June 2017.
+[19]I. Loshchilov and F. Hutter, “Decoupled Weight Decay Regularization,”        arXiv, Nov. 2017.
+[20]  I. Loshchilov and F. Hutter, “SGDR: Stochastic Gradient Descent with Warm Restarts,” arXiv,
+      Aug. 2016.
+
+A    Additional Qualitative Results
+
+To further demonstrate the consistent performance of our proposed goal representation, this section
+provides additional qualitative examples from our ablation study. The scenarios presented in Figure 5,
+6, and 7 reinforce the conclusions drawn in Section 5.
+Across a variety of intersection geometries and turn types, we consistently observe the same behavioral
+patterns. The No Goal model correctly identifies the multi-modal nature of the decision space but
+cannot commit to a single plan.  The Endpoint Goal model resolves the strategic ambiguity but
+suffers from tactical imprecision, often generating geometrically unnatural paths.  Our proposed
+Sparse Route model consistently produces a tight, uni-modal distribution of trajectories that are both
+strategically correct and tactically precise, closely matching the ground truth.
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 5: Qualitative results for a left turn at a complex, multi-lane intersection. The Endpoint Goal
+model’s predictions (center) exhibit significant variance and imprecision compared to our proposed
+model (right).
+
+
+
+
+
+
+
+
+                                                           12
+Figure 6: Qualitative results for a standard, 90-degree left turn. The superiority of the path-aware
+Sparse Route goal is evident in the precision of the generated trajectory arc.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 7: Qualitative results for another left turn scenario. Our model (right) correctly infers the need
+for a smooth, curved path, while the Endpoint model (center) generates trajectories that unnaturally
+cut the corner.
+
+
+
+
+
+
+
+
+
+                                                              13

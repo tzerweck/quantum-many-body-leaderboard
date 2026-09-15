@@ -1,0 +1,783 @@
+      Liquid Latent State Dynamics for Interpretable Turbofan
+                                             Degradation Modeling
+
+                                            Weizhi Nie, Weijie Wang, Yuting Su
+                                                         Tianjin University
+
+                                                                 Abstract
+
+       Multivariate time-series models for prognostics are often evaluated by point prediction accuracy, yet
+       their internal states rarely expose a coherent degradation process.  We study liquid neural networks as
+       latent dynamics models for aircraft engine health monitoring on the C-MAPSS benchmark. The proposed
+       model encodes a history window into a latent state, evolves that state with a liquid transition model, and
+       decodes future sensor observations. To separate health evolution from operating-condition variation, the
+       latent state is factorized into degradation and condition components. Remaining useful life, monotonic
+       risk, and latent-consistency losses supervise the degradation component, while condition prediction and
+       decorrelation losses discourage operating-condition leakage. Across FD001–FD004, the full disentangled
+       model improves overall sensor forecasting RMSE from 0.2438 for a GRU baseline to 0.2266, with the
+       largest gains on the multi-condition subsets FD002 and FD004. The learned degradation state also forms
+       a clearer temporal degradation axis, reaching an average state-speed Spearman correlation of 0.5960.
+       Direct remaining-useful-life regression remains stronger for the GRU baseline, indicating that the proposed
+       representation is currently more effective as an interpretable world model for degradation dynamics than
+       as a calibrated lifetime regressor. These results suggest that liquid latent dynamics can bridge predictive
+       maintenance forecasting and inspectable health-state modeling.
+
+1Introduction
+
+Reliable prognostics for complex engineering systems requires more than accurate one-step prediction.  In aircraft
+engine monitoring, the measured signal is a multivariate time series of sensor readings and operating settings, while the
+quantity of interest is an unobserved health state that evolves over time. A model can therefore obtain low forecasting
+error by exploiting short-term sensor regularities without learning a state representation that corresponds to degradation.
+This distinction matters in predictive maintenance: practitioners need not only a forecast of future measurements or
+remaining useful life (RUL), but also an inspectable trajectory that explains how the system is moving toward failure.
+The C-MAPSS turbofan benchmark makes this issue especially clear.  Its subsets contain different combinations of
+fault modes and operating conditions, so changes in sensor values may reflect either health deterioration or benign
+condition shifts.  Standard recurrent forecasting models can absorb both effects into a single hidden state.  Such a
+representation may be sufficient for direct regression, but it is difficult to interpret as an engine health state, and it does
+not explicitly define how the state should be rolled forward as a dynamical system. A central challenge is therefore to
+learn a latent state that is useful for forecasting while preserving a meaningful separation between degradation dynamics
+and operating-condition variation.
+We study liquid neural networks as latent dynamics models for this setting.  Given a history window, an encoder
+maps the observed sequence to a latent state. A liquid transition model then evolves the state forward, and a decoder
+reconstructs future sensor observations. This design treats forecasting as the consequence of latent state evolution rather
+than as direct sequence extrapolation. To reduce condition-induced entanglement, the latent state is factorized into a
+degradation component and a condition component. RUL, monotonic risk, and latent-consistency losses are applied to
+the degradation component, while condition prediction and decorrelation losses encourage the condition component to
+capture operating context.
+The resulting empirical picture is mixed but informative. On C-MAPSS FD001–FD004, the proposed disentangled
+liquid latent model improves overall sensor forecasting RMSE from 0.2438 for a GRU baseline to 0.2266, with the
+largest gains on FD002 and FD004, the subsets with more complex operating conditions.  The learned degradation
+component also exhibits a clearer temporal degradation axis, with an average state-speed Spearman correlation of
+
+
+                                                                      1
+Figure 1:  Motivation for learning latent degradation dynamics.  Sensor observations mix health degradation with
+operating-condition variation; the desired representation is an interpretable hidden-state trajectory whose evolution
+exposes the degradation trend behind future observations.
+
+
+0.5960.  However, the method does not yet outperform the GRU baseline on direct RUL RMSE. This limitation is
+important: the current model is best understood as an interpretable latent world model for degradation dynamics, rather
+than as a fully calibrated lifetime regressor.
+This paper makes the following contributions:
+
+     •  A liquid latent dynamics formulation for multivariate turbofan sensor forecasting, in which future observations
+       are generated by rolling forward an explicit latent state.
+
+     •  A disentangled state design that separates degradation and operating condition factors and restricts RUL-oriented
+       supervision to the degradation component.
+
+     •  An empirical evaluation on all four C-MAPSS subsets showing improved sensor forecasting under complex
+       operating conditions and more coherent degradation-state geometry, together with a transparent analysis of the
+       remaining RUL calibration gap.
+
+2Related Work
+
+Remaining useful life estimation.The C-MAPSS turbofan benchmark is a standard testbed for data-driven prognos-
+tics because it provides run-to-failure trajectories under different fault and operating-condition settings [Saxena et al.,
+2008].  More broadly, prognostics and health management has long studied the estimation of degradation state and
+remaining useful life from condition-monitoring signals [Schwabacher, 2005, Jardine et al., 2006, Si et al., 2011, Lei
+et al., 2018, Zhao et al., 2019, Gao et al., 2020]. A large body of work frames C-MAPSS primarily as a supervised RUL
+regression problem. Early neural approaches already used recurrent models for engine RUL estimation [Heimes, 2008],
+while later work adopted LSTMs and sequence embeddings to learn temporal features directly from sensor windows
+[Zheng et al., 2017, Gugulothu et al., 2017, Malhotra et al., 2016]. Convolutional and temporal-convolutional variants
+improve local temporal feature extraction [Babu et al., 2016, Li et al., 2018, Jayasinghe et al., 2019], and attention-based
+
+
+                                                                       2
+or Transformer-style architectures provide more flexible feature aggregation [Vaswani et al., 2017, Lim et al., 2021,
+Zhou et al., 2021]. These models are strong baselines for direct lifetime regression, and our experiments confirm that a
+GRU remains competitive for RUL RMSE. The goal of this paper is therefore not to claim a new RUL-only state of the
+art. Instead, it asks whether a prognostic model can learn an explicit latent degradation dynamics that remains useful for
+forecasting and inspection.
+
+
+Latent dynamics and world models.Learning a compact state whose evolution explains future observations is a
+central idea in latent dynamics models and world models. Variational recurrent and state-space models combine latent
+variables with learned transition models for sequential data [Chung et al., 2015, Krishnan et al., 2015, Fraccaro et al.,
+2016]. In model-based reinforcement learning, world models learn compressed representations and predict their future
+evolution to support planning or policy learning [Ha and Schmidhuber, 2018, Hafner et al., 2019]. This perspective is
+attractive for prognostics because sensor readings are observations of an underlying physical process rather than the
+process itself. However, most industrial RUL models optimize the final prediction target directly, leaving the learned
+hidden state underconstrained. Our work adopts the latent dynamics view but applies it to predictive maintenance: the
+latent state is rolled forward to forecast future sensors, and its geometry is evaluated as a candidate degradation state.
+
+
+Continuous-time neural dynamics.Neural ordinary differential equations introduced a general framework for
+learning continuous transformations by parameterizing the derivative of a hidden state with a neural network [Chen
+et al., 2018]. Subsequent work extended this idea to irregularly sampled time series through ODE-RNNs and Latent
+ODEs [Rubanova et al., 2019]. Liquid time-constant networks belong to the same broad family of continuous-time
+recurrent models, but use input- and state-dependent time constants to obtain adaptive hidden dynamics [Hasani et al.,
+2021]. Related continuous-time recurrent architectures include neural circuit policies and closed-form continuous-depth
+models [Lechner et al., 2020, Hasani et al., 2022].  This property is appealing for degradation modeling, where the
+rate of change may vary with both health state and operating condition.  Existing liquid-network work has mainly
+emphasized expressivity, stability, and sequence prediction. We use liquid dynamics more narrowly: as the transition
+operator of a prognostic latent state whose degradation-related structure can be inspected.
+
+
+Disentanglement under operating conditions.A persistent difficulty in turbofan prognostics is that sensor variation
+mixes two factors: degradation and operating condition. Multi-condition C-MAPSS subsets such as FD002 and FD004
+are therefore harder than single-condition subsets because a model may mistake benign operating shifts for health
+changes, or hide both factors in the same representation. Prior RUL models often address this issue implicitly through
+normalization, windowing, attention, or larger sequence encoders. These choices can improve predictive accuracy, but
+they do not by themselves specify which part of the representation corresponds to degradation. Representation-learning
+work has shown that disentanglement can be encouraged through architectural and objective-level constraints, but also
+that unsupervised disentanglement is fragile without suitable inductive bias [Bengio et al., 2013, Higgins et al., 2017,
+Locatello et al., 2019]. Our approach therefore makes the intended separation explicit by factorizing the latent state into
+degradation and condition components, supervising RUL and monotonic risk only through the degradation component,
+and penalizing correlation with operating settings. The resulting separation is imperfect, as condition states still contain
+some degradation information, but it provides a concrete mechanism for testing whether a learned prognostic state is
+interpretable rather than merely predictive.
+
+3Method
+
+3.1Problem Formulation
+
+Letxt∈R dx denote the observed sensor vector at cyclet, and letat∈R da denote the corresponding operating setting.
+In C-MAPSS,da = 3 anddx = 21. We writeut = [a t,xt]∈R  da+d   x for the full observation at one cycle. Given a
+history window of lengthL,
+                                              Xt = [u t−L+1  ,...,ut],   u t = [a t,xt],                                                      (1)
+the model predicts future sensor observations ˆx t+1:t+H           over a horizonH, given future operating settingsat+1:t+H          . It
+also estimates a normalized RUL target at the end of the horizon. We usezt∈R dz to denote the learned latent system
+
+
+                                                                        3
+Figure 2:  Framework of the proposed liquid latent dynamics model.  The method encodes a history window into
+degradation and condition states,  rolls the degradation state forward with liquid dynamics conditioned on future
+operating settings, and decodes the resulting hidden-state trajectory into future sensor predictions. The central object is
+the learned evolution trend of the latent degradation state, rather than a direct sequence-to-sequence mapping.
+
+
+state, and ∆z  t+h    =z t+h −z t+h−1         to denote the learned state increment during one rollout step. The central modeling
+assumption is that the sensor readings are observations of an underlying state, rather than the state itself:
+
+                                                                     xt∼p(x   t|z t,at).                                                                         (2)
+
+The objective is therefore to learn a state representation whose rollout explains future observations and whose state
+increments reflect degradation progress.
+
+
+3.2Liquid Latent Dynamics
+
+The basic model consists of three components: an encoder, a liquid transition operator, and a decoder.  A recurrent
+encoder maps the history window to an initial latent state,
+
+                                                                         zt =E θ(X t).                                                                             (3)
+The latent state is then rolled forward with a setting-conditioned liquid cell,
+
+                                            zt+h ,∆z  t+h    =G ψ(z t+h−1   ,at+h   ),   h= 1,...,H.                                            (4)
+
+In implementation, the liquid cell computes a target drift and an adaptive time constant.  For compactness, define
+ct+h    = [z t+h−1   ,at+h   ]as the transition input. The cell computes
+
+                                                          mt+h    =f ψ(c t+h   ),                                                                                      (5)
+                                                            τt+h    = softplus(g       ψ(c t+h   )) +ϵ,                                                             (6)
+                                                            γt+h    = 1−exp(−∆t/τ         t+h   ),                                                                   (7)
+                                                         ∆z  t+h    =γ t+h ⊙(m  t+h −z t+h−1       ),                                                           (8)
+                                                            zt+h    =z t+h−1        + ∆z  t+h .                                                                         (9)
+
+
+                                                                                  4
+Herefψ  andgψ  are neural networks,mt+h     is the state-dependent drift target,τt+h     is an adaptive time constant,ϵ
+prevents numerical degeneracy,γt+h ∈(0,1)        is the learned update gate, and⊙ denotes elementwise multiplication.
+The key quantity is ∆z  t+h    : the model does not predict an unconstrained next state directly. Instead, it learns how far
+the current state should move toward a locally predicted drift target, with the step size controlled by the time constant.
+A smallτ produces a larger gate and faster movement, whereas a largeτ produces a smaller gate and slower movement.
+The liquid transition therefore parameterizes the trend of hidden-state change.
+The state increment is learned indirectly through several constraints. Sensor forecasting gradients force the rolled-out
+states to reconstructxt+1:t+H          .  Latent consistency pulls the rollout state toward the state obtained by re-encoding
+the observed future window. The monotonic risk loss biases the degradation direction so that risk does not decrease
+along the rollout. Finally, the smoothness penalty controls the magnitude of ∆z    , preventing the latent trajectory from
+becoming an arbitrary jump process. This is a discrete rollout of adaptive continuous-time recurrent dynamics, but we
+treat it as a learned transition model rather than an identified physical law. Future sensor values are decoded from the
+rolled-out states:
+                                                                   ˆx t+h    =D ϕ(z t+h   ).                                                                       (10)
+A risk/RUL head also reads from the final latent state,
+
+                                                                RULt+H     =Q η(z t+H    ).                                                                   (11)[
+
+
+3.3Disentangled Degradation and Condition State
+
+The basic latent state can mix degradation and operating condition. To make the intended structure explicit, the proposed
+model factorizes the encoded state as
+                                                                    zt = [z degt  ,zcondt     ],                                                                        (12)
+wherezdegt     is intended to carry health and degradation information, andzcondt       is intended to carry operating-context
+information. The encoder produces the two components through separate heads:
+
+                                                                 zdegt  ,zcondt      =E θ(X t).                                                                    (13)
+
+During rollout, the condition state is updated from the previous condition state and the future operating setting,
+
+                                                             zcondt+h      =C ω(z  condt+h−1   ,at+h   ),                                                                (14)
+
+while the degradation state is evolved by a liquid transition conditioned on both the operating setting and the current
+condition state:
+                                                 zdegt+h ,∆z     degt+h    =G ψzdegt+h−1   ,[a t+h ,zcondt+h     ].                                                   (15)
+
+In this form, the learned degradation increment ∆z    degt+h     is the main object of interest. It describes how the health-related
+state changes from one cycle to the next after accounting for operating condition. The condition state does not directly
+determine RUL; instead, it modulates the degradation transition by indicating the operating regime. This design prevents
+the model from explaining all sensor variation with a single hidden vector and allows us to test whether the degradation
+subspace follows a coherent trajectory. The decoder uses both factors,
+
+                                                               ˆx t+h    =D ϕ(z  degt+h ,zcondt+h     ),                                                                  (16)
+
+but the prognostic head uses only the degradation component:
+
+                                                                RULt+H     =Q η(z  deg[  t+H    ).                                                                   (17)
+
+We define a normalized risk score as
+                                                                 rt+h    = 1−Q  η(z  degt+h   ),                                                                    (18)
+so that increasing risk corresponds to decreasing predicted remaining life.
+
+
+
+
+                                                                               5
+3.4Training Objective
+
+The model is trained with a multi-term objective that combines forecasting accuracy, RUL supervision, latent rollout
+consistency, monotonic risk, condition prediction, decorrelation, and a smoothness penalty:
+
+                                       L=L       sensor +λ    rulLRUL +λ    latentLlatent +λ    monoLmono
+                                              +λ    condLcond +λ    decorLdecor +λ    smoothLsmooth.                                             (19)
+
+The sensor forecasting loss is
+                                                                          HX
+                                                      Lsensor =  1H           ∥ˆx  t+h −x t+h ∥22.                                                          (20)
+                                                                         h=1
+The RUL loss supervises the normalized RUL prediction at the end of the forecasting horizon:
+                                                                  [                             2
+                                                      LRUL =        RULt+H −RUL t+H
+                                                                                                   2.                                                          (21)
+
+Latent consistency compares the rolled-out latent states with states obtained by re-encoding shifted windows that
+include the observed future. In the disentangled model, this consistency term is applied to the degradation component:
+
+                                                                          HX  zdeg              2
+                                                       Llatent =  1H              t+h −¯z      degt+h
+                                                                         h=1                       2,                                                          (22)
+
+where ¯z   degt+h     is produced by encoding the shifted window ending att+h     , and gradients are stopped through this target.
+The monotonicity loss discourages decreasing degradation risk during the rollout:
+
+                                                                  HX
+                                               Lmono =  1H             max(0,−(r        t+h −r t+h−1       )).                                                  (23)
+                                                                 h=1
+
+To make the condition component carry operating context, an auxiliary head predicts the future setting:
+
+                                                                         HX
+                                                       Lcond =  1H           ∥ˆa  t+h −a t+h ∥22.                                                           (24)
+                                                                        h=1
+The decorrelation term penalizes empirical covariance between degradation and condition states, and between degrada-
+tion states and operating settings:
+
+                                          Ldecor =Cov(z  deg,zcond)2F +Cov(z  deg,a) 2F.                                            (25)
+
+Finally, the smoothness penalty controls the average magnitude of the liquid state update:
+
+                                                                               HX  ∆z    deg2.                                                              (26)
+                                                         Lsmooth =  1H                   t+h
+                                                                             h=1
+
+3.5Implementation Details
+
+The encoder is a GRU over the concatenated operating settings and sensor measurements. The liquid transition, decoder,
+RUL head, and condition head are implemented as small multilayer perceptrons with smooth nonlinearities.  The
+disentangled model splits the latent dimension approximately in half between degradation and condition components.
+Training uses teacher-observed future windows only to form latent-consistency targets; the rollout itself predicts future
+sensors autoregressively through the learned latent transition.  Gradients through the latent-consistency targets are
+stopped, so this term regularizes the rollout toward the encoder geometry without collapsing the encoder to the transition
+output.
+
+
+                                                                             6
+Algorithm 1Training Disentangled Liquid Latent Dynamics
+Require:  History window Xt  =  [u t−L+1  ,...,ut],  future settings at+1:t+H          ,  future sensors xt+1:t+H          ,  and target
+     RULt+H
+Ensure:  Trained encoderEθ, liquid transitionGψ, condition updateCω, decoderDϕ, setting headPρ, and RUL head
+     Qη
+  1:Encode history:(z                   degt  ,zcondt     )←E   θ(X t)
+  2:Initialize riskr    t←1−Q    η(z  degt    )
+  3:forh= 1,...,Hdo
+  4:  z   condt+h  ←C  ω(z  condt+h−1   ,at+h   )
+  5:     (z     degt+h ,∆z     degt+h   )←G   ψ(z  degt+h−1   ,[a t+h ,zcondt+h     ])
+  6:     ˆx  t+h ←D  ϕ(z  degt+h ,zcondt+h     )
+  7:  r t+h ←1−Q    η(z  degt+h   )
+  8:     ˆa  t+h ←P  ρ(z  condt+h     )
+  9:      Re-encode the shifted observed window ending att+hto obtain stop-gradient target¯z                      degt+h
+10:end for
+11:Compute the weighted objective in Eq. 19
+12:Update all trainable parameters by backpropagation
+
+
+4Experiments
+
+4.1Dataset
+
+We evaluate on the NASA C-MAPSS turbofan degradation benchmark [Saxena et al., 2008]. The benchmark contains
+simulated run-to-failure trajectories of aircraft engines.  Each cycle contains three operating settings and 21 sensor
+measurements. The four subsets differ in the number of operating conditions and fault modes: FD001 contains one
+operating condition and one fault mode; FD002 contains multiple operating conditions and one fault mode; FD003
+contains one operating condition and multiple fault modes; and FD004 contains multiple operating conditions and
+multiple fault modes. This structure is important for our study because FD002 and FD004 explicitly test whether the
+model can handle operating-condition variation while learning degradation dynamics.
+For each engine trajectory, the raw RUL at cyclet is computed as the number of remaining cycles before the final
+observed cycle of that engine. We use the common capped RUL target,
+
+                                                        RULcapt    = min(RULt,125)125    ,                                                              (27)
+
+so the supervised RUL target lies in [0,1]    .  Sensor and operating-setting features are standardized using statistics
+computed only from the training engines of the corresponding subset.
+We construct supervised windows from each trajectory. A history window of lengthL= 30    is used as input, and the
+model predicts the nextH= 5    cycles. The input at each history step is the concatenation of operating settings and
+sensor values. The future operating settingsat+1:t+H           are provided to the model during rollout, and the prediction target
+is the future sensor sequencext+1:t+H           together with the capped RUL at the end of the horizon. For each subset and
+random seed, engines are split by unit identity into 70% training, 15% validation, and 15% test units. This unit-level
+split prevents windows from the same engine trajectory from appearing in both training and evaluation.
+
+
+4.2Evaluation Protocol
+
+We evaluate three complementary aspects of the model: sensor forecasting, direct RUL regression, and latent degradation
+alignment.  Sensor forecasting is measured by root mean squared error (RMSE) over all predicted sensors and all
+
+
+
+
+
+                                                                          7
+Table 1: Sensor forecasting and RUL regression comparison on C-MAPSS. Lower is better for sensor RMSE and RUL
+RMSE; higher is better for Spearman correlations.
+                         Subset      GRU sensor     Dis+RUL sensor     GRU RUL     Dis+RUL RUL     Speedρ
+                         FD001              0.4401                     0.4415         15.4393                 16.2309       0.5533
+                         FD002              0.1058         0.0627         18.6980    19.5579       0.6115
+                         FD003  0.3357          0.339814.3790    14.6824       0.5859
+                         FD004              0.0936         0.0625         19.7048    21.1477       0.6335
+
+
+forecasting horizons:                                       vuut
+                                                                   1       NX   HX  ˆx  (i)            2
+                                        RMSEsensor =            NHdx                    ti+h −x    (i)ti+h
+                                                                          i=1  h=1                        2.                                           (28)
+
+We also report first-step and last-step sensor RMSE when analyzing horizon effects. RUL regression is measured by
+RMSE after rescaling the normalized prediction back to cycle units:
+                                                              vuut
+                                                                  1    NX           (i) −RUL    (i)  2
+                                           RMSERUL =              N          RUL[                       .                                                (29)
+                                                                      i=1
+
+To evaluate whether the learned state reflects degradation progress, we compute rank correlations against a capped
+degradation variable,
+                                                       dt = 125−min(RUL    t,125).                                                              (30)
+First, we measure the Spearman correlation between predicted riskrt = 1−  [PHRULt anddt. Second, for liquid models,
+we measure the Spearman correlation between the average rollout speed  1H                         h=1 ∥∆z   t+h ∥2 anddt. The latter metric
+is not a conventional RUL accuracy metric; it is intended to test whether the learned latent dynamics changes more
+strongly as the engine moves toward failure.
+As an auxiliary degradation-detection evaluation, we convert RUL into a binary normal/abnormal label using two
+separated regions:  samples with RUL≥125          are treated as normal, and samples with RUL≤30          are treated as
+abnormal. Intermediate samples are excluded from this binary evaluation. The detection score is the model riskrt. We
+report AUROC, AUPRC, balanced accuracy, and F1. The threshold for balanced accuracy and F1 is selected on the
+validation split by maximizing F1 and is then applied once to the held-out test split.
+All reported experiments use five random seeds,{7,11,13,17,23}                        , and train for 50 epochs. The validation criterion is
+the sum of sensor RMSE and a small weighted RUL RMSE term, RMSEsensor + 0.02 RMSE    RUL, which selects check-
+points that preserve forecasting accuracy while discouraging pathological RUL predictions. The primary comparison is
+against a GRU baseline with the same history window and future-setting inputs. We also compare basic liquid latent
+dynamics, disentangled liquid dynamics, and the full disentangled model with RUL, monotonicity, latent-consistency,
+condition, and decorrelation losses.
+
+
+4.3Comparison with Existing Baselines
+
+Table 1 compares the current GRU baseline and the full disentangled liquid model on sensor forecasting and RUL
+regression.  The results reveal a useful but nontrivial trade-off.  The proposed model gives clear sensor-forecasting
+gains on the multi-condition subsets FD002 and FD004, where operating-condition variation is most prominent. On
+FD002, sensor RMSE decreases from 0.1058 to 0.0627; on FD004, it decreases from 0.0936 to 0.0625.  These are
+the settings where disentangling degradation from condition variation should be most beneficial. However, the GRU
+remains stronger for direct RUL RMSE on three of the four subsets.  This supports our central interpretation:  the
+proposed model is better positioned as a latent degradation dynamics model and sensor world model than as a purely
+optimized RUL regressor.
+
+
+
+
+                                                                         8
+Figure 3: Sensor forecasting RMSE by subset. The proposed Dis+RUL model provides the clearest improvement on
+the multi-condition subsets FD002 and FD004.
+
+
+Figure 3 visualizes the same forecasting pattern. The gains are small or absent on FD001 and FD003, but become large
+on FD002 and FD004.  This is consistent with the motivation of the method: a separate condition-modulated latent
+dynamics is most useful when operating regimes vary.
+We further compare against a broader set of degradation-detection baselines in Table 2.  This comparison uses the
+normal/abnormal protocol described above, with risk as the detection score.  Under this protocol, both the current
+GRU and the proposed Dis+RUL model are very strong, and the task is close to saturated.  The proposed model
+obtains the best AUPRC, balanced accuracy, and F1 among the compared methods, while the GRU has a marginally
+higher risk-degradation rank correlation. Compared with the strongest previous non-current baseline, knn_last_5,
+Dis+RUL improves AUPRC from 0.9921 to 0.9984, balanced accuracy from 0.9717 to 0.9953, and F1 from 0.9592 to
+0.9923. The practical implication is not that detection alone proves a superior RUL model; rather, it shows that the
+learned risk signal is highly separable for early-vs-late degradation while the latent dynamics model simultaneously
+improves sensor forecasting.
+Figure 4 highlights the near-saturated detection performance of both current models. Dis+RUL is slightly better on
+AUPRC, balanced accuracy, and F1, while AUROC is essentially tied.  This supports the view that the learned risk
+score is highly effective for separating normal and late-degradation samples, but it also warns against overinterpreting
+detection as full RUL calibration.
+The detection results should be interpreted with care. The normal/abnormal split removes intermediate degradation
+stages, so it is easier than calibrated RUL regression over the full trajectory.  For this reason, we use the detection
+comparison as evidence that the learned risk score is discriminative, while the RUL RMSE results remain the stricter
+test of lifetime calibration. Under this more conservative reading, the main empirical claim is that Dis+RUL combines
+strong degradation detection with better sensor forecasting and an inspectable latent degradation trajectory, but does not
+yet dominate direct GRU regression on RUL RMSE.
+
+
+4.4Ablation Study
+
+Table 3 summarizes the main ablation over model structure and supervision. Moving from the GRU baseline to basic
+liquid latent dynamics improves overall sensor RMSE from 0.2438 to 0.2347, suggesting that rolling a latent state
+
+
+                                                                      9
+Table 2: Degradation detection comparison with existing baselines. Higher is better for all metrics. Current models use
+rt = 1−  [RULt as the detection score.
+                           Method                                         AUROC     AUPRC       BAcc            F1    ρ
+                           GRU-current                  0.99970.9978     0.9948     0.99210.8570
+                           Dis+RUL-current                            0.99970.9984     0.9953     0.99230.8564
+                           knn_last_5        0.9951       0.9921     0.9717     0.9592     0.6831
+                           Normal-World Ours                        0.9866       0.9712     0.9594     0.9316     0.7056
+                           gdn_lite                  0.9184       0.8969     0.8704     0.8089     0.5159
+                           pca_last_8        0.8322       0.7587     0.7623     0.6526     0.3848
+                           gru_forecast0.7632       0.6500     0.7463     0.6914     0.3143
+                           tcn_forecast0.7582       0.6425     0.7397     0.6799     0.2872
+                           gaussian_last0.7527       0.6924     0.7728     0.7159     0.3906
+                           transformer_forecast0.7525       0.6496     0.7516     0.7063     0.3150
+                           ridge_predictor0.7086       0.5636     0.6781     0.5570     0.2282
+
+
+Table 3: Overall ablation across all four C-MAPSS subsets. Lower is better for sensor and RUL RMSE; higher is better
+for rank correlations. Speedρ measures whether the magnitude of latent-state change aligns with degradation progress.
+                                    Model                Sensor RMSE     RUL RMSE      Riskρ   Speedρ
+                                    GRU                              0.2438 17.0553     0.8636     –
+                                    Liquid                            0.2347            17.2997     0.8586       0.2847
+                                    Disentangled                 0.2325            17.4737     0.8531       0.2966
+                                    Dis+RUL                0.2266 17.9047     0.85200.5960
+
+
+forward is useful for multistep sensor forecasting. Adding the degradation/condition factorization further improves
+sensor RMSE to 0.2325. The full Dis+RUL model, which adds RUL supervision, monotonic risk, latent consistency,
+condition prediction, and decorrelation, gives the best overall sensor RMSE of 0.2266. The most important change is in
+the latent-speed alignment: the average speed-vs-degradation Spearman correlation increases from 0.2847 for basic
+liquid dynamics and 0.2966 for disentangled liquid dynamics to 0.5960 for Dis+RUL.
+This ablation clarifies the role of each design choice. The liquid transition alone improves forecasting because it gives
+the model an explicit rollout mechanism, but its latent increments are not yet strongly ordered by degradation. The
+disentangled state improves forecasting slightly by separating condition-dependent variation from the state used for
+degradation prediction, but this structural split alone is also insufficient to make the trajectory monotonic or health-
+aligned. The large increase in speedρ appears only after adding degradation-specific supervision and latent consistency.
+This means that the state-change signal ∆z    deg is learned through the combination of rollout prediction, re-encoding
+consistency, and monotonic risk, rather than emerging automatically from the liquid architecture alone.
+The subset-level ablation in Table 4 shows that the forecasting benefit is concentrated on the multi-condition subsets.
+On FD002, Dis+RUL reduces sensor RMSE by 40.7% relative to GRU, and on FD004 it reduces sensor RMSE by
+33.2%. These are precisely the subsets where operating conditions can obscure degradation. On FD001 and FD003,
+where the operating condition structure is simpler, the liquid models do not improve forecasting over the GRU baseline.
+This pattern gives a scoped interpretation of the method: it is not uniformly better on every subset, but is most useful in
+the setting it targets, namely degradation modeling under condition variation.
+The same pattern appears in the state-evolution metric.  In FD002 and FD004, basic liquid dynamics has near-zero
+speed correlation, indicating that the latent state may move, but its movement is not aligned with health progression.
+After adding the full degradation-specific objective, speedρ reaches 0.6115 on FD002 and 0.6335 on FD004. Thus, the
+ablation supports a two-part claim: liquid rollout helps prediction, while the RUL, monotonic, and latent-consistency
+losses make the rollout direction meaningful as a degradation-state transition.
+Figure 5 makes the ablation effect on state evolution more explicit. On FD002 and FD004, the basic liquid model has
+almost no positive speed-degradation alignment, which means that merely rolling a latent state forward is not enough.
+The full Dis+RUL objective changes this behavior: the learned update magnitude becomes strongly associated with
+degradation progress.  This is one of the clearest quantitative signs that the model learns a meaningful state-change
+
+
+                                                                         10
+Figure 4: Normal/abnormal degradation detection metrics for current models. Detection is close to saturated under the
+selected split; Dis+RUL gives small but consistent gains in AUPRC, balanced accuracy, and F1.
+
+
+Table 4: Sensor forecasting ablation by subset. Lower is better. The largest gains appear on FD002 and FD004, the
+multi-condition subsets.
+                                         Subset         GRU      Liquid     Disentangled     Dis+RUL
+                                         FD0010.44010.4402               0.4402          0.4415
+                                         FD002      0.1058     0.0822               0.07990.0627
+                                         FD0030.33570.3419               0.3390          0.3398
+                                         FD004      0.0936     0.0743               0.07110.0625
+                                         Overall     0.2438     0.2347               0.23250.2266
+
+
+trend.
+
+
+4.5Analysis of Learned State Evolution
+
+The ablation results indicate that the full objective does more than improve sensor forecasting. It changes the geometry
+and dynamics of the learned latent state. In the basic liquid and disentangled variants, the latent update speed is only
+weakly aligned with degradation progress, especially on FD002 and FD004. For example, the speed correlation on
+FD004 is 0.0111 for the basic liquid model and 0.0720 for the disentangled model, but rises to 0.6335 after adding
+RUL, monotonicity, and degradation-state latent consistency. Similarly, on FD002 the speed correlation changes from
+approximately zero to 0.6115. This suggests that the added supervision does not merely alter the final RUL head; it
+makes the latent transition itself move in a way that is ordered by degradation.
+Training dynamics on FD004 provide another view of this process (Fig. 6). Sensor RMSE decreases rapidly during
+early epochs, while detection F1 also becomes high after the risk head learns a separable normal/abnormal score. The
+speed-alignment curve is more informative for our main claim: it rises from near zero to a high positive correlation,
+showing that the latent transition gradually becomes organized with respect to degradation. Thus, the model first learns
+to forecast and separate risk, and then stabilizes a latent trajectory whose increments carry degradation information.
+Figure 7 provides a qualitative view of this effect on FD004 with seed 23.  The GRU baseline latent PCA does not
+expose a clean degradation coordinate: early, middle, and late states are mixed in a representation trained primarily
+for direct prediction. The full liquid latent state is more ordered, but it still contains both degradation and condition
+
+
+                                                                        11
+Figure 5: Latent state-change alignment by subset. Speedρ measures the Spearman correlation between degradation
+and the average magnitude of ∆z    . The full Dis+RUL objective strongly increases this alignment on FD002 and FD004.
+
+
+information. When the state is decomposed,zdeg forms the clearest degradation trajectory: early states occupy a broad
+region on one side of the projection, while high-degradation states concentrate along a terminal band.  In contrast,
+zcond is more diffuse and does not form the same clean terminal degradation structure. This difference supports the
+intended factorization, but also reveals its limitation:zcond is not completely free of degradation information, so the
+disentanglement should be viewed as useful but imperfect.
+Panel (c) in Fig. 7 provides the most direct visual evidence. It visualizes onlyzdeg, the subspace that receives RUL,
+monotonicity, and latent-consistency supervision. If the model were merely usingzdeg as another unconstrained feature
+vector, the projection would look similar to the GRU hidden state or to the diffuse condition state. Instead, the samples
+organize along a visible degradation direction: low degradation states are spread over the early region, intermediate
+states move through the middle of the projection, and high degradation states concentrate near a terminal band. This
+geometry matches the intended behavior of the degradation state. It suggests thatzdeg is not only predictive, but also
+behaves like a state coordinate whose position changes as the engine moves toward failure.
+This  visual  trend  is  consistent  with  the  learned  liquid  increment.   During  rollout,  the  model  repeatedly  applies
+zdegt+h    =z    degt+h−1        + ∆z    degt+h    . The ordered structure in Fig. 7(c) therefore indicates that the accumulated increments move
+the latent state along a degradation-oriented path rather than scattering it arbitrarily. The high speed-vs-degradation
+correlations provide the quantitative counterpart:  as degradation increases, the magnitude of the learned transition
+∥∆z      deg∥ becomes more aligned with the degradation level. Together, panel (c) and the speed correlations form the
+main evidence that the model learns a trend-changing hidden state.
+Together, the quantitative speed correlations and the PCA visualizations support the claim that the model learns a
+degradation-related state evolution rather than only a static predictive embedding. The evidence is strongest on FD002
+and FD004, where operating-condition variation makes a single hidden state harder to interpret.  At the same time,
+the weaker RUL RMSE and residual degradation leakage intozcond show that the learned state is not yet a perfectly
+calibrated health coordinate. This is the main remaining gap between an interpretable latent dynamics model and a fully
+accurate prognostic estimator.
+
+
+
+
+
+
+                                                                       12
+Figure 6: Training dynamics for FD004 seed 23. Forecasting error decreases, detection F1 becomes high, and speed-
+degradation alignment rises from near zero to a strong positive value, indicating that the learned state increments
+become ordered by degradation during training.
+
+5Future Work
+
+This work suggests several directions for improvement. First, the current model learns a degradation-oriented latent
+trajectory, but its RUL calibration is still weaker than the GRU baseline. Future work should separate representation
+learning from calibration more explicitly, for example by adding calibration losses, uncertainty estimates, or post-hoc
+monotone calibration on top of the learned degradation coordinate.  Second, the disentanglement betweenzdeg and
+zcond is useful but imperfect. Stronger decorrelation, adversarial condition removal, or condition-invariant contrastive
+objectives may reduce degradation leakage into the condition state.  Third, the current evaluation uses C-MAPSS,
+where degradation trajectories are simulated and relatively clean. Real industrial systems may contain maintenance
+events, sensor drift, missing observations, and non-monotone operating regimes, all of which require more robust latent
+dynamics.
+A broader direction is to extend liquid latent state dynamics from machinery degradation to biological and medical
+progression.  Many diseases can also be viewed as partially observed dynamical processes:  clinical measurements,
+laboratory tests, imaging biomarkers, or wearable signals are observations of an underlying health state that changes
+over time. Related work on time-domain event recognition, clinical temporal modeling, medical prior knowledge, and
+causal diagnosis suggests that progression modeling benefits from explicitly representing temporal change and domain
+constraints [Su et al., 2019, Nie et al., 2018, 2023, Li et al., 2023, Nie et al., 2024, Li et al., 2024, Zhang et al., 2025]. A
+model that learns ∆z    , rather than only a static risk score, could potentially describe how a patient’s latent disease state
+evolves and how interventions or conditions modulate that evolution. This extension should be treated carefully. Unlike
+C-MAPSS, disease progression involves heterogeneous populations, irregular sampling, treatment effects, confounding,
+and high-stakes clinical decisions.  Applying this framework to medicine will require uncertainty-aware prediction,
+causal validation, clinically meaningful state definitions, and prospective evaluation. Nevertheless, the present results
+motivate studying liquid latent dynamics as a tool for interpretable progression modeling in domains where the main
+object of interest is an unobserved state trajectory.
+
+6Conclusion
+
+This paper presented a disentangled liquid latent dynamics model for interpretable turbofan degradation modeling. The
+method encodes a history of sensor readings and operating settings into a latent state, learns liquid state increments ∆z
+to roll that state forward, and decodes the resulting trajectory into future sensor predictions. By separating degradation
+and condition components and applying RUL, monotonicity, and latent-consistency losses to the degradation state, the
+model encouragesz                     deg to behave as an inspectable health-state coordinate.
+Experiments on C-MAPSS show that the full model improves sensor forecasting overall, with the largest gains on
+the multi-condition FD002 and FD004 subsets.  The ablation study and PCA visualizations further show that the
+
+
+                                                                       13
+                       (a) GRU hidden state                                                     (b) Full liquid latent state
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                    (c) Degradation statez          deg                                          (d) Condition statez          cond
+Figure 7: PCA visualization of learned states on FD004 with seed 23, colored by capped degradation. Compared with
+the GRU hidden state, the proposed model learns a more ordered latent evolution. The degradation componentzdeg
+shows the clearest progression from early states to terminal degraded states, whilez           cond remains more diffuse.
+
+
+learned degradation state exhibits an ordered trajectory, and that the magnitude of latent state change aligns with
+degradation progress. At the same time, direct RUL RMSE remains stronger for the GRU baseline, and the condition
+state still contains some degradation leakage. The resulting conclusion is deliberately bounded: liquid latent dynamics
+is promising for learning interpretable degradation-state evolution and sensor world models, but further work is needed
+to turn this representation into a fully calibrated lifetime predictor.
+
+References
+
+Giduthuri Sateesh Babu, Peilin Zhao, and Xiao-Li Li. Deep convolutional neural network based regression approach
+   for estimation of remaining useful life.  InProceedings of the International Conference on Database Systems for
+  Advanced Applications, pages 214–228, 2016.
+
+Yoshua Bengio, Aaron Courville, and Pascal Vincent. Representation learning: A review and new perspectives.IEEE
+  Transactions on Pattern Analysis and Machine Intelligence, 35(8):1798–1828, 2013.
+
+
+
+                                                                        14
+Ricky T. Q. Chen, Yulia Rubanova, Jesse Bettencourt, and David Duvenaud. Neural ordinary differential equations. In
+  Advances in Neural Information Processing Systems, 2018.
+
+Junyoung Chung, Kyle Kastner, Laurent Dinh, Kratarth Goel, Aaron Courville, and Yoshua Bengio. A recurrent latent
+  variable model for sequential data. InAdvances in Neural Information Processing Systems, 2015.
+
+Marco Fraccaro, Søren Kaae Sønderby, Ulrich Paquet, and Ole Winther.  Sequential neural models with stochastic
+  layers. InAdvances in Neural Information Processing Systems, 2016.
+
+Yifan Gao, Yuxuan Zhu, Xin Li, and Yaguo Wang. A survey of deep learning for remaining useful life prediction.arXiv
+  preprint arXiv:2006.06414, 2020.
+
+Narendhar  Gugulothu,  Vishnu  TV,  Pankaj  Malhotra,  Lovekesh  Vig,  Puneet  Agarwal,  and  Gautam  Shroff.   Pre-
+  dicting remaining useful life using time series embeddings based on recurrent neural networks.arXiv preprint
+  arXiv:1709.01073, 2017.
+
+David Ha and Jürgen Schmidhuber.   Recurrent world models facilitate policy evolution.   InAdvances in Neural
+  Information Processing Systems, 2018.
+
+Danijar Hafner, Timothy Lillicrap, Ian Fischer, Ruben Villegas, David Ha, Honglak Lee, and James Davidson. Learning
+  latent dynamics for planning from pixels.  InProceedings of the International Conference on Machine Learning,
+  2019.
+
+Ramin Hasani, Mathias Lechner, Alexander Amini, Daniela Rus, and Radu Grosu. Liquid time-constant networks. In
+  Proceedings of the AAAI Conference on Artificial Intelligence, 2021.
+
+Ramin Hasani, Mathias Lechner, Alexander Amini, Daniela Rus, and Radu Grosu. Closed-form continuous-time neural
+  networks.Nature Machine Intelligence, 4:992–1003, 2022.
+
+Felix O. Heimes. Recurrent neural networks for remaining useful life estimation. InProceedings of the International
+  Conference on Prognostics and Health Management, 2008.
+
+Irina Higgins, Loic Matthey, Arka Pal, Christopher Burgess, Xavier Glorot, Matthew Botvinick, Shakir Mohamed,
+  and Alexander Lerchner.  beta-vae: Learning basic visual concepts with a constrained variational framework.  In
+  Proceedings of the International Conference on Learning Representations, 2017.
+
+Andrew K. S. Jardine,  Daming Lin,  and Dragan Banjevic.   A review on machinery diagnostics and prognostics
+  implementing condition-based maintenance.Mechanical Systems and Signal Processing, 20(7):1483–1510, 2006.
+
+Lahiru Jayasinghe, Tharaka Samarasinghe, Chau Yuen, Jenny Chen Ni Low, and Shuzhi Sam Ge. Temporal convolu-
+  tional memory networks for remaining useful life estimation of industrial machinery.arXiv preprint arXiv:1810.05644,
+  2019.
+
+Rahul G. Krishnan, Uri Shalit, and David Sontag. Deep kalman filters.arXiv preprint arXiv:1511.05121, 2015.
+
+Mathias Lechner, Ramin Hasani, Alexander Amini, Thomas A. Henzinger, Daniela Rus, and Radu Grosu.  Neural
+  circuit policies enabling auditable autonomy.Nature Machine Intelligence, 2:642–652, 2020.
+
+Yaguo Lei, Naipeng Li, Liang Guo, Ningbo Li, Tao Yan, and Jing Lin. Machinery health prognostics: A systematic
+  review from data acquisition to rul prediction.Mechanical Systems and Signal Processing, 104:799–834, 2018.
+
+Qiang Li, Hengxin Liu, Weizhi Nie, and Ting Wu.  Brain tumor image segmentation based on prior knowledge via
+  transformer.International Journal of Imaging Systems and Technology, 2023.
+
+Qiang Li, Dongchen Li, He Jiao, Zhenhua Wu, and Weizhi Nie. Cisepsis: A causal inference framework for early sepsis
+  detection.Frontiers in Cellular and Infection Microbiology, 2024.
+
+Xiang Li, Qian Ding, and Jian-Qiao Sun. Remaining useful life estimation in prognostics using deep convolution neural
+  networks.Reliability Engineering & System Safety, 172:1–11, 2018.
+
+
+
+                                                                    15
+Bryan Lim, Sercan O. Arik, Nicolas Loeff, and Tomas Pfister. Temporal fusion transformers for interpretable multi-
+  horizon time series forecasting.International Journal of Forecasting, 37(4):1748–1764, 2021.
+
+Francesco Locatello, Stefan Bauer, Mario Lucic, Gunnar Raetsch, Sylvain Gelly, Bernhard Schoelkopf, and Olivier
+  Bachem.   Challenging common assumptions in the unsupervised learning of disentangled representations.   In
+  Proceedings of the International Conference on Machine Learning, 2019.
+
+Pankaj Malhotra, Anusha Ramakrishnan, Gaurangi Anand, Lovekesh Vig, Puneet Agarwal, and Gautam Shroff. Lstm-
+  based encoder-decoder for multi-sensor anomaly detection.  InProceedings of the ICML Workshop on Anomaly
+  Detection, 2016.
+
+Weizhi Nie, Yan Yan, Tong Hao, Chenchen Liu, and Yuting Su.  Mitosis event recognition and detection based on
+  evolution of feature in time domain.Machine Vision and Applications, 29(8):1249–1256, 2018.
+
+Weizhi Nie, Yuhe Yu, Chen Zhang, Dan Song, Lina Zhao, and Yunpeng Bai.  Temporal-spatial correlation attention
+  network for clinical data analysis in intensive care unit.IEEE Transactions on Biomedical Engineering, 2023.
+
+Weizhi Nie, Ruidong Chen, Weijie Wang, Bruno Lepri, and Nicu Sebe. T2td: Text-3d generation model based on prior
+  knowledge guidance.IEEE Transactions on Pattern Analysis and Machine Intelligence, pages 1–18, 2024.
+
+Yulia Rubanova, Ricky T. Q. Chen, and David Duvenaud. Latent ordinary differential equations for irregularly-sampled
+  time series. InAdvances in Neural Information Processing Systems, 2019.
+
+Abhinav Saxena,  Kai Goebel,  Don Simon,  and Neil Eklund.   Damage propagation modeling for aircraft engine
+  run-to-failure simulation. InProceedings of the International Conference on Prognostics and Health Management,
+  2008.
+
+Mark Schwabacher. A survey of data-driven prognostics.AIAA Infotech@Aerospace Conference, 2005.
+
+Xiao-Sheng Si, Wenbin Wang, Chang-Hua Hu, and Dong-Hua Zhou. Remaining useful life estimation: A review on the
+  statistical data driven approaches.European Journal of Operational Research, 213(1):1–14, 2011.
+
+Yuting Su, Shan Wang, Weizhi Nie, and Yang An.  Pooled time series representation for mitosis event recognition.
+  Multimedia Systems, 2019.
+
+Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser, and Illia
+  Polosukhin. Attention is all you need. InAdvances in Neural Information Processing Systems, 2017.
+
+Qiyi Zhang, Wei Zhang, Qiang Li, Yunpeng Bai, Weizhi Nie, and Keliang Xie. Causal inference model for accurate
+  medical diagnosis in coronary artery bypass graft operation.Artificial Intelligence in Medicine, 2025.
+
+Rui Zhao, Ruqiang Yan, Zhenghua Chen, Kezhi Mao, Peng Wang, and Robert X. Gao. Deep learning and its applications
+  to machine health monitoring. InMechanical Systems and Signal Processing, 2019.
+
+Shuai Zheng, Kosta Ristovski, Ahmed Farahat, and Chetan Gupta. Long short-term memory network for remaining
+  useful life estimation. InProceedings of the IEEE International Conference on Prognostics and Health Management,
+  2017.
+
+Haoyi Zhou, Shanghang Zhang, Jieqi Peng, Shuai Zhang, Jianxin Li, Hui Xiong, and Wancai Zhang. Informer: Beyond
+  efficient transformer for long sequence time-series forecasting. InProceedings of the AAAI Conference on Artificial
+  Intelligence, 2021.
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                    16

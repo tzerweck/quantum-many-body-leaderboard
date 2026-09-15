@@ -1,0 +1,1002 @@
+    GRAPHNETZ: Statistical Benchmarking of Graph
+         Neural Networks with Paired Tests and Rank
+                                             Aggregation
+
+
+
+
+                   Kleyton da Costa∗                                   Bernardo Modenesi
+                        Holistic AI                                     University of Utah
+                       London, UK                                    Salt Lake City, UT, USA
+              kleyton.vsc@gmail.com                            bernardo.modenesi@utah.edu
+
+
+
+                 Code:github.com/quant-sci/graphnetz•  Docs:graphnetz.readthedocs.io
+
+                                                    Abstract
+
+          Graph Neural Networks (GNNs) benchmarks often report single point estimates,
+          even when performance differences are small relative to variation across random
+          seeds, train/test splits, and datasets.  Confidence intervals, paired comparisons,
+          multiple-comparison correction, and rank-based aggregation are standard statistical
+          tools, but they are rarely the default output of graph-learning benchmark suites.
+          We introduceGRAPHNETZ, a benchmarking framework whose default output
+          is a structured statistical report rather than a raw accuracy table.GRAPHNETZ
+          currently includes 63 dataset loaders, four task types, and five canonical GNN
+          architectures, while also supporting custom datasets and models. The framework
+          standardizes multi-seed evaluation and automatically returns per-cell confidence
+          intervals, Holm-corrected paired tests, and Friedman–Nemenyi critical-difference
+          diagrams across tasks. In a cross-category benchmark over ten heterogeneous tasks,
+          apparent rank differences among four canonical node-level encoders fall within a
+          single Nemenyi clique, indicating that none is significantly better than the others
+          atα= 0.05      . GRAPHNETZtherefore provides researchers with a reproducible
+          computational and statistical pipeline to benchmark new graph-learning methods
+          against standard architectures, over different tasks and a wide set of applications,
+          while reporting principled statistical evidence for benchmarking which accounts
+          for seed uncertainty. This framework is set to serve the graph-learning community
+          with a reproducible and honest model comparison ready to be added to papers.
+
+1    Introduction
+
+Graph neural networks (GNNs) are now the default tool for problems as diverse as molecular property
+prediction,  citation  analysis,  social  network  mining,  anti-money  laundering,  and  combinatorial
+optimization.   However,  a typical benchmarking paper in this area trains a few models on few
+datasets, reports a single test accuracy (plus standard deviation) per cell, and concludes that one
+model “outperforms” another. Headline differences are reported without confidence intervals, paired
+comparisons,  multiple-comparison  correction,  or  rank-based  aggregation  across  datasets.   This
+behavior can be viewed as a symptom of the recent reproducibility crises in artificial intelligence in
+general [Hutson,2018] and graph learning in specifics [Bechler-Speicher et al.,2025]. The result is a
+literature whose effect sizes are routinely smaller than the noise from which they are extracted, and
+can produce negative implications for the relevance of the field.
+
+   ∗Corresponding author.
+
+
+Preprint. Under review.
+Two well-known re-evaluations established this concretely. Shchur et al.[2018] showed that the
+headline differences between GCN, GAT, and GraphSAGE on the Planetoid splits collapse once the
+seed and split are randomized;Errica et al.[2020] reached the same conclusion for graph classification
+under a fair hyperparameter search, tracing much of the literature’s reported “progress” to evaluation
+artifacts rather than architectural gains. Both works argue, in effect, that the right statistical apparatus
+must be embedded in the default pipeline, not bolted on by careful authors.
+Using multi-seed Student’st confidence intervals, pairedt-tests (and their non-parametric Wilcoxon
+signed-rank alternatives) with Holm-Bonferroni correction [Holm,1979], and rank-based aggregation
+with the Friedman omnibus and Nemenyi post-hoc, visualized as a critical-difference (CD) dia-
+gram [Demšar,2006], is half a century old and well understood. Nothing prevents a GNN practitioner
+from applying it; what is missing is a default surface that produces it without bespoke statistics code.
+
+Where the existing tooling stops.PyTorch (PyG) [Fey and Lenssen,2019] is the main layer
+library for GNN research, exposing message-passing primitives and a broad collection of dataset
+loaders, and metrics.  The library is deliberatelyarchitecture-firstand leave training loops, multi-
+seed orchestration, and statistical reporting to the user.  The major benchmark suites:  the Open
+Graph Benchmark [Hu et al.,2020], Benchmarking-GNNs [Dwivedi et al.,2020], and the recent
+GraphBench [Stoll et al.,2025]                    2. None of them makes per-cell CIs, multiple-comparison-corrected
+pairwise tests, or critical-difference diagrams the default return type of a benchmark run.  Table1
+summarizes this gap.
+
+Our position.Statistical rigor in GNN benchmarking is both a tooling problem and a reproducibility
+one. If multi-seed, multiple-comparison-corrected, rank-aggregated reporting were the default surface
+of the dominant benchmarking framework, every benchmark paper would inherit it for free.  We
+introduceGRAPHNETZ,  a benchmarking framework for the graph-learning community,  whose
+default output is a structured statistical report rather than a raw accuracy table, utilizing a wide set of
+applications and state-of-the-art graph-learning models for a thorough and honest model comparison.
+This not only streamlines the benchmark process with a clear and reproducible pipeline, but also
+mitigatescherry-pickingconcerns, comparing competing GNN methods to existing ones in a wide
+cast of scenarios, while accounting for seed uncertainty. To our knowledge,GRAPHNETZis the first
+GNN-focused benchmarking framework to make the full chain the default output of a benchmark run.
+Our main contributions include:
+
+        •  A categorical dataset taxonomy that maps 63 loaders to ten research areas (combinatorial
+           optimization, biology, social, knowledge, infrastructure, finance, computing, vision, physics,
+           and security), with explicit notes on subtopics that lack canonical public benchmarks;
+        •  A uniform benchmark protocol for five of the most used GNN architectures (GCN, GAT,
+           GIN, GraphSAGE, Graph Transformer) across four task types (node classification, graph
+           classification, graph regression, link prediction) so that differences in reported performance
+           reflect modeling choices rather than evaluation idiosyncrasies;
+        •  A statistically principled reporting layer, mean± Student’st CI per cell, Holm–Bonferroni-
+           corrected pairedt-tests within tasks, and Friedman-Nemenyi critical-difference diagrams
+           across tasks, formally defined in the AppendixAand instantiated as the default return type
+           of every benchmark run;
+        •  A cross-category empirical illustration of the full pipeline (Section3) showing that with
+           N= 10    heterogeneous tasks under a uniform held-out-metric protocol, none of the four
+           node-level encoders is significantly better than any other atα= 0.05       — all four fall within
+           a single Nemenyi clique (CD 0.05   = 1.48);
+
+This paper is organized as follows: Section2describes theGRAPHNETZevaluation protocol and
+states it formally as Algorithm1. Section3runs the cross-category benchmark and reports its results.
+Sections4discuss the findings and limitations of the framework. The formal statistical machinery
+(Student’st CI, paired-t with Holm correction, Friedman–NemenyiCD) is collected in AppendixA.
+
+
+    2The paper extends task coverage to node-level, edge-level, graph-level, and generative settings with out-of-
+distribution splits and unified hyperparameter tuning
+
+
+                                                             2
+                                   Figure    1:   TheGRAPHNETZ  evaluation    protocol.Top: the    processing    pipeline    Cata-
+                                   log→ Encoders→ Training→ Statistical  layerR;  arrows  carry  the  data  axes  –  a  (task t, data)  pair,  a
+                                   modelm, and the seed-paired metric tensorX[t,m,s]      . The dashed arc on Training marks the multi-seed inner
+                                   loop that builds the seed axis ofX.Bottom:the three artifacts the framework emits by default – per-cell mean
+                                   with Student’st confidence interval, a Holm-corrected pairwisep-value matrix, and a Demšar critical-difference
+                                   diagram whose horizontal bar joins models within the Nemenyi thresholdCD.
+
+                                   Algorithm 1GRAPHNETZbenchmark protocol.
+                                   Require:categoryC, modelsM, seedsS, epochsE, levelα
+                                   Ensure:structured statistical reportR
+                                    1:T ←TASKS(C)                       ▷representative datasets and tasks forC
+                                    2:X←∅              ▷tensor of per-seed final metrics indexed by (task, model, seed)
+                                    3:foreach taskt∈Tdo
+                                    4:     foreach modelm∈Mcompatible withTASK(t)do
+                                    5:           foreach seeds∈Sdo
+                                    6:                 seed all RNGs withs; instantiatemwith task-appropriate dimensions
+                                    7:                 trainmontforEepochs; record final metricX[t,m,s]
+                                    8:           end for
+                                    9:     end for
+                                   10:end for
+                                   11:Per-cell:compute¯x              t,m andh   t,m at levelαfromX                                     pairs and apply Holm–
+                                   12:  Per-task pairwise:for each       t, compute paired-tp-values for all |Mt|2
+                                        Bonferroni
+                                   13:Across-task:rank models per task, compute Friedmanχ                                      2F  and NemenyiCD α
+                                   14:returnR= (X,¯x,h,˜p,¯r,CD            α)
+
+
+                                   2    The GRAPHNETZEvaluation Protocol
+
+                                   GRAPHNETZis organized around four conceptual layers:  a categorized catalog of datasets, a setseed loop
+                                   of model evaluations under a common protocol, training routines covering the standard task types,
+       Catalog             (t,k)   and the statistical reporting layer (formal definitions in AppendixEncodersmTrainingX[t,m,s]Statistical layerRA). Figure1is the schematic. The
+       63 loaders                  Algorithm1formally states the same pipeline.5 architecturesSseeds×Eepochs   t-CI  /  Holm  /  CD
+10 categories·4 task types               + task adapters                     Adam, paired
+                                   Datasets.The catalog spans ten categories and is indexed by acategory     × tasktaxonomy: each
+                                   loader declares the tasks it can serve, so the same dataset can appear in more than one task (Cora,
+                                   CiteSeer and PubMed, for example, are exposed as both node-classification and link-prediction
+                                   tasks  via  PyG’s RandomLinkSplit).   The  taxonomy  is  materialized  at  module  import  time  as
+                                   LOADER_REGISTRY[category][task],  and  the  curated  benchmark  mirrors  the  same  shape  as
+                                   BENCHMARK_TASKS[category][task]. Where canonical public benchmarks exist (Planetoid [SenGCNGAT
+                                                          1                                       SAGE     GT
+              ¯x                                          2
+                                                          3                              1     2    33    4     5
+                                                          4
+                                                            1  2  3  4                CD0.05   =1.48
+
+                  per-cell mean±t-CI                    pairwise Holmp                   Demšar CD diagram
+                                     Table 1:Positioning ofGRAPHNETZagainst related GNN benchmarking frameworks.Coveragecounts built-it
+                                     loaders and architectures (“open” = user-supplied; “N + open” =N built-ins plus a one-line extension API).
+                                     Statistical layerflags whether the default report emits per-cell CIs (   t = Student’s-t,std= raw stdev), corrected
+                                     pairwise tests, a Friedman–Nemenyi CD diagram, and a bootstrap CI option.Extensibility & reproducibility
+                                     flag a one-line custom-dataset / custom-model API and automatic per-(task, model, seed)RNG reseeding.       ✓ =
+                                     first-class; – = unsupported;partial= available but not default. Counts reflect each framework’s reference paper.
+
+
+
+
+
+
+
+
+
+                                     et al.,2008], TUDataset [Morris et al.,2020], QM9, ZINC, ModelNet, ShapeNet, Elliptic Bitcoin [We-
+                                     ber et al.,2019], MalNet [Freitas et al.,2021], the Long-Range graph benchmark Peptides [Dwivedi
+                                     et al.,2022], and the Heterophilous graph benchmark [Platonov et al.,2023]), they are wrapped
+                                     directly. Otherwise we draw from the Netzschleuder catalog [Peixoto,2020] or generate synthetic
+                                     instances (TSP, VRP, max-flow, bipartite matching, graph coloring, Ising lattice). Table4summarizes
+                                     the loaders per category.
+
+                                     Models.The  framework  evaluates  five  architectures:   GCN  [Kipf  and  Welling, 2017],  GAT
+                                     [Veli  ˇckovi´c  et  al.,2018],  GIN  [Xu  et  al.,2019],  GraphSAGE  [Hamilton  et  al.,2017],  and  the
+                                     Graph Transformer [Shi et al.,2021]. Two task adapters, a graph-level pooling head over a node-level
+                                     encoder and a dot-product link-prediction head, let the four node-level encoders enter every task in the
+                                     benchmark (node classification, graph classification, graph regression, link prediction). GIN keeps its
+                                     native graph-level pooling and is evaluated on the two graph-level. Task compatibility is checked
+                                     before training, so incompatible (model, task) pairs are skipped automatically (Algorithm1, line 4).
+                                     Deep Graph Infomax [Veli  ˇckovi´c et al.,2019] is exposed as an optionaltraining utility(                                  train_dgi
+                                    + DGIWrapper) rather than a benchmark-task model: it is a self-supervised training objective whose
+                                    “metric” is its own loss, so it cannot serve as a held-out test metric in the same row of the report as
+                                     node-classification accuracy or link-prediction AUC.
+
+                                     Training.   Five training routines cover the four tasks plus a self-supervised pre-training utility:
+                                     node classification, graph classification, graph regression, link prediction (binary cross-entropy on
+                                     a RandomLinkSplit with negative sampling, evaluated by ROC-AUC), and an optional DGI pre-
+                                     training step that returns an unsupervised representation but is excluded from the default benchmark
+                                     report because its loss is not a held-out metric. Each emits per-epoch metrics that feed the reporting
+                                     layer (AppendixA).
+
+                                     Programmatic   interface.The   algorithm1 is   exposed   through   a   single   entry   point,
+                                     run_benchmark, that takes a category (or an explicit list of Task objects), a mapping from model
+                                     names to model classes, a seed list, and an optional task filter; it returns a BenchmarkReport whose
+                                     methods produce the artifacts of Figure1. The same report object supports both the curated catalog
+                                     and any user-defined task list (AppendixC), so reviewers can reproduce the cells in this paper and
+                                     extend the analysis with their own architectures or datasets without touching the internals of the
+                                     framework.
+
+                                     Positioning.   Table1summarizes howGRAPHNETZdiffers from the closest related frameworks.
+                                     The distinguishing axis is not architectural breadth or dataset count, but the presence of an out-of-the-
+                                     box statistical reporting layer.
+
+                                     3    Cross-Category Experiment
+
+                                     3.1    Protocol
+
+                                    We pick one representative dataset from each of the ten research categories and run the benchmark
+                                     once per category with five architectures (GCN, GAT, GraphSAGE, Graph Transformer, GIN). The
+
+
+                                                                                                        4
+
+                                                    Coverage              Statistical layer (default report)   Extensibility (1-line API)   Repro.
+Framework                                                 Data           Models      CI   Pairwise   CD   Bootstrap   Dataset        Model        Reseed
+PyTorch Geometric [Fey and Lenssen,2019]        many           many        –        –        –         –         open           open             –
+Open Graph Benchmark [Hu et al.,2020]             15+             open       std       –        –         –         open           open             –
+Benchmarking-GNNs [Dwivedi et al.,2020]           8                 6         std       –        –         –         open           open          partial
+GraphBench [Stoll et al.,2025]                   multi-domain   MPNN, GT   std       –        –         –         open           open          partial
+GRAPHNETZ(ours)                                 63 + open      5 + opent    Holm✓     ✓      ✓         ✓         ✓
+dispatcher trains each compatible (model,  task,  seed) combination in S=  10    seeds (0–9) and
+automatically skips incompatible pairs . Every (model, task, seed) combination trains independently
+with full-batch Adam optimizer [Kingma and Ba,2014] and 64 hidden channels;  the optimizer
+configuration follows the per-task defaults of the framework’s training routines:  lr = 10−2    with
+weight decay 5×10  −4    for node classification, lr = 10−3    without weight decay for graph classification
+and graph regression, and lr = 10−2    without weight decay for link prediction. The number of epochs
+E is set per task to keep total runtime in a laptop-friendly budget (Cora, CiteSeer, PubMed: 100;
+MUTAG: 40; ZINC: 10; MNIST-superpixels: 4; FB15k-237: 20; Euroroad, Board-directors, Internet
+AS: 40–80; TSP-random and Ising-lattice: 60-80; 9/11 terrorists: 120). Random number generators
+are reset before each run, so the entire pipeline is deterministic given a fixed software stack.
+The  multi  adapters  described  in  Section2register  every  node-level  encoder  for  every  task,  so
+each category exposesat least fourmodels for comparison; categories whose natural task is graph
+classification expose five (the four node-level encoders wrapped with mean-pool plus the native GIN).
+The selected datasets and the corresponding tasks are listed in Table3.  The knowledge slot uses
+FB15k-237 with a relational DistMult decoder over the canonical (train,  valid,  test) edge
+split shipped by PyG’s RelLinkPredDataset:  relation types are kept and the score is⟨z h,r,zt⟩.
+The AUC reported here is a baseline rather than the SOTA relational LP number, since the encoder
+uses fabricated 3-d log-degree node features and a single-pass DistMult head; replacing either with a
+stronger choice is straightforward but orthogonal to the methodological focus of this paper.
+
+
+3.2    Pre-registered statistical analysis
+
+For each (task, model) pair we report mean± 95 % Student’st CI half-width (Eq. 2) across the ten
+seeds. Within each task we runtwopairwise tests on per-seed final metrics: a paired     t-test (parametric)
+and a Wilcoxon signed-rank test (non-parametric); both are corrected with Holm–Bonferroni (Eq. 4)
+atα= 0.05      .  The Wilcoxon variant follows the recommendation ofBenavoli et al.[2016] and is
+included here as a robustness check on the parametric test’s normality assumption. Across the ten
+executed categories we rank the four node-level encoders per task with the correct metric direction
+(higher accuracy and higher AUC are better, lower MAE is better), average the ranks, and compute
+the Nemenyi critical difference (Eq. 6) atα= 0.05       withk= 4   andN= 10   . The Friedman–Nemenyi
+step is rank-based and therefore inherits no parametric assumption from either pairwise test.
+
+
+3.3    Per-category results
+
+Figure2renders one panel per category; each panel uses the natural metric for the underlying task
+(test accuracy for node classification on the canonical Planetoid split, validation accuracy on a per-run
+80/20 in-script split for graph classification, validation MAE for graph regression, and test AUC for
+link prediction on a held-out edge split) and shows the mean± 95 % CI across ten seeds. Table3lists
+the same numbers in long format. Because every working category receives at least four architectures,
+the per-category bars admit the full within-task pairwise machinery (pairedt on seed-aligned final
+metrics with Holm–Bonferroni correction) without any change to the protocol.
+
+
+3.4    Across-category ranking
+
+Although the per-category metrics are not commensurable (test accuracy vs. test AUC vs. MAE),
+ranksare.  The Friedman statistic and Nemenyi post-hoc described in AppendixAyield the CD
+diagram of Figure3.  The Friedman omnibus on the same rank table gives     χ23 = 2.04    (p= 0.56     ),
+so we already fail to reject the global null of equal mean ranks atα= 0.05       before applying any
+post-hoc. Withk= 4   node-level encoders common to every category andN= 10    tasks, the Nemenyi
+critical difference isCD0.05   = 1.48    rank units. GraphSAGE has the lowest mean rank (¯r= 2.10       ),
+followed by GCN (2.40   ), the Graph Transformer (2.60   ), and GAT (2.90   ). The maximum rank gap
+(between GraphSAGE and GAT) is 0.80   , which is belowCD, sononeof the four architectures is
+significantly different from any other atα= 0.05       across this benchmark:  all four fall in a single
+Nemenyi clique. This is a sharper version of the headline argument: under a uniform held-out test
+metric on heterogeneous tasks, headline differences between canonical GNN architectures dissolve at
+typical sample sizes.
+
+
+                                                             5
+3.5    Sensitivity to the pairwise test
+
+The two pairwise tests of Section3.2agree on every within-task comparison at the seed count used
+here. Table2reports the side-by-side adjusted    p-values on the social/Planetoid demo (Cora, CiteSeer, = 18 comparisons): both the pairedt-test and the Wilcoxon signed-rank flag
+PubMed, 3×  42                                                                                                     ten
+comparisons as significant atα= 0.05       after Holm–Bonferroni correction, and disagree on none. The
+agreement is not coincidence: it is a structural consequence of running the demo atS= 10   rather
+than at smaller seed counts where the exact Wilcoxon null is too coarse to clear Holm correction.
+
+Why Wilcoxon and pairedt agree atS= 10  .   With S= 10   paired observations and a two-sided
+exact null, the smallest achievable Wilcoxonp-value is 2·2 −S    = 1/512≈0.00195                , attained when
+all ten paired differences share the same sign. Six pairwise comparisons per task multiply through
+Holm to 0.00195×6≈0.0117                        , which is well below theα= 0.05       threshold. The pairedt-test, by
+contrast, has a continuous null and can drivep-values arbitrarily low when the seeds agree strongly.
+AtS= 10   both tests have sufficient power to detect the systematic differences visible in the Planetoid
+demo; the agreement on all 18 comparisons is a reassurance that the parametric assumption is not
+misleading here. At smaller seed counts (S= 5   gives a smallest adjusted Wilcoxonp≈0.375        ) the
+non-parametric test would be underpowered and the two methods would diverge, which is why the
+framework recommends Wilcoxon as the small-sample default while reporting both.
+
+Recommendation.We followBenavoli et al.[2016] in treating the Wilcoxon signed-rank test as the
+small-sample-friendly default for classifier comparisons, while reporting the pairedt-test in parallel
+as the more powerful (but more parametric) alternative. The framework’s default report includes both
+(report.pairwise(method="t") and report.pairwise(method="wilcoxon")) so the reader
+can inspect the agreement directly; pairs where the two tests agree deserve more confidence than
+pairs where they disagree.
+
+
+Table 2:Per-task pairwise tests on the social/Planetoid sweep (Cora,  CiteSeer,  PubMed;  S=  10    seeds, = 18 comparisons). ∆µ    is the mean accuracy difference (positive = first model better).ptHolm andpW
+3×  42                                                                                                                 Holm
+are Holm-adjusted paired-t and Wilcoxon signed-rankp-values, with            khaki  marking significance atα= 0.05      .
+ almondmarks non-significant pairs.
+         Task             Comparison                        ∆µ    p           tHolm    pWHolm       Agree
+                       GATVS. GCN       −0.018                                  0.000523       0.0117✓
+                       GATVS. GraphSAGE     −0.006                                 0.341       0.547✓
+         Cora          GATVS. GraphTransformer−0.001                               0.778       0.713✓
+                       GCNVS. GraphSAGE                   +0.012                 3.58e-05      0.0117✓
+                       GCNVS. GraphTransformer+0.017                            0.000149       0.0117✓
+                       GraphSAGEVS. GraphTransformer    +0.005                     0.176       0.264✓
+                       GATVS. GCN       −0.043                                  0.000139       0.0117✓
+                       GATVS. GraphSAGE     −0.050                              0.000274       0.0117✓
+         CiteSeer      GATVS. GraphTransformer−0.060                             9.06e-06      0.0117✓
+                       GCNVS. GraphSAGE     −0.008                                 0.245       0.164✓
+                       GCNVS. GraphTransformer−0.017                             5.12e-05      0.0117✓
+                       GraphSAGEVS. GraphTransformer −0.009                        0.245       0.164✓
+                       GATVS. GCN       −0.027                                  0.000108       0.0117✓
+                       GATVS. GraphSAGE     −0.004                                 0.444         0.5    ✓
+         PubMed        GATVS. GraphTransformer+0.003                               0.48        0.574✓
+                       GCNVS. GraphSAGE                   +0.023                 1.93e-06      0.0117✓
+                       GCNVS. GraphTransformer+0.030                             7.14e-07      0.0117✓
+                       GraphSAGEVS. GraphTransformer    +0.007                    0.0818       0.0703✓
+
+
+3.6    Scope of the experiment
+
+The cross-category experimentisa multi-architecture, multi-category benchmark: every working
+category receives at least four architectures with paired-by-seed confidence intervals on a uniform
+metric, and the four-encoder slice common to all categories admits a proper across-task CD diagram.
+
+
+                                                             6
+It isnota single uniform-metric leaderboard, and the per-category bar in Figure2should not be
+compared against the bar in a neighboring category. Homogeneous head-to-head comparisons must
+restrict attention to a single task.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 2:Cross-category dashboard: one representative dataset per research area, every compatible architecture
+trained across the same ten seeds.
+
+
+                                                               7
+                                                  Table 3:Cross-category benchmark results. Each row is one representative dataset; each cell is the seed mean
+                                                  x±h    withh the 95 % Student’st CI half-width across ten seeds. The metric direction column gives the “best”
+                                                  direction (↑ higher /↓ lower).                        khaki  marks the best architecture per row;                                   almond  marks architectures whose
+                                                  95 % CI overlaps that of the winner (statistically indistinguishable at this sample size);n/amarks architectures
+                                                  that are incompatible with the task.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                  Figure 3:Cross-category Demšar critical-difference (CD) diagram at  α= 0.05       acrossN= 10    tasks.  The
+                                                  diagram is restricted to the four node-level encoders (GCN, GAT, GraphSAGE, Graph Transformer) that are
+                                                  present in every category.
+
+
+
+
+Category             Dataset                       Kind             Metric             GCN                   GAT                  SAGE                   GT                     GIN8
+
+Combinatorial      TSP-random                link_pred      AUC↑                 0.864 ±0.025         0.832 ±0.017            0.884 ±0.021          0.871 ±0.023                    n/a
+Biology               MUTAG                     graph_cls      Acc.↑   0.705   ±0.059         0.637 ±0.038         0.708 ±0.050         0.721 ±0.049                      0.834 ±0.036
+Social                  Cora                           node_cls        Acc.↑     0.811 ±0.001         0.793 ±0.007         0.798 ±0.003         0.794 ±0.004                    n/a
+Knowledge          FB15k-237                  link_pred      AUC↑                0.674 ±0.009         0.528 ±0.007            0.633 ±0.044         0.538 ±0.012                    n/a
+Infrastructure       Euroroad                     link_pred      AUC↑   0.524   ±0.019                 0.609 ±0.022         0.534 ±0.030         0.524 ±0.021                    n/a
+Finance               Board-directors            link_pred      AUC↑   0.968   ±0.007                  0.988 ±0.002         0.902 ±0.016         0.847 ±0.016                    n/a
+Computing           Internet AS                 link_pred      AUC↑              0.967 ±0.001         0.652 ±0.015         0.751 ±0.018         0.598 ±0.070                    n/a
+Vision                 MNIST-superpixels      graph_cls      Acc.↑   0.103   ±0.010         0.107 ±0.010         0.123 ±0.017         0.137 ±0.026                        0.267 ±0.038
+Physics                Ising-lattice                 link_pred      AUC↑         0.676 ±0.030          0.625 ±0.031           0.632 ±0.021          0.628 ±0.026                    n/a
+Security               9/11 terrorists              link_pred      AUC↑          0.685 ±0.096          0.756 ±0.083           0.700 ±0.103          0.712 ±0.089                    n/a
+Table 4:Dataset loaders per research category entries. Note:NCnode classification,GCgraph classification,
+GRgraph regression,LPlink prediction.
+     Category                #     Kind     Loaders
+     Combinatorial       6   LP   bipartite matching, TSP, VRP, coloring, max-cut, max-flow
+                                 GC MUTAG, PROTEINS, ENZYMES, Peptides-func, ogbg-molhiv,
+     Biology                12            ogbg-molpcba
+                                 GR Peptides-struct
+                                 LP   C. elegans, Budapest connectome, hospital contacts, high-school
+                                          contacts, PPI
+
+     Social                  16     NC  Cora, CiteSeer, PubMed, WikiCS, Roman-empire, Amazon-ratings,Minesweeper, Tolokers, Questions, ogbn-arxiv
+                                 LP        Cora, CiteSeer, PubMed, MovieLens-100k, Karate, Facebook friends,
+                                          DBLP coauthor, DNC emails, ogbl-collab
+     Knowledge            3   LP   FB15k-237, WordNet18-RR, WordNet (Netz)
+     Infrastructure         6   LP   power grid, EuroRoad, US roads, EU airlines, London transport,
+                                          urban streets
+
+     Finance                  5     NC  Elliptic Bitcoin, ogbn-productsLP   product space, board of directors, US patents
+
+     Computing            4   LP   Internet AS, Internet topology, AS-Skitter, route views
+
+     Vision                    5     NC  ShapeNetGC MNIST superpixels, CIFAR-10 superpixels, ModelNet10,
+                                          ModelNet40
+
+     Physics                  3     GR QM9, ZINCLP   Ising lattice
+
+     Security                 3     GC MalNet-TinyLP   9/11 terrorists, train terrorists
+
+     Total                    63
+
+
+4    Discussion and Limitations
+
+The cross-category result is a sharper version of the prior empirical finding that headline differences
+among GNN architectures often disappear once seed-level variance and multiple comparisons are
+properly accounted for [Shchur et al.,2018,Errica et al.,2020]. The CD diagram makes the residual
+signal precise: atN= 10    heterogeneous tasks under uniform held-out test metrics, the largest mean-
+rank gap among the four node-level encoders is 0.80   , below the Nemenyi thresholdCD0.05   = 1.48   ,
+so none of the architectures is significantly different from any other atα= 0.05      . The methodological
+implication is that the default report, per-cell CI, per-task pairwise Holm, across-task Friedman-
+Nemenyi, is precisely calibrated to the kind of evidence the field actually has at typical sample
+sizes.
+
+Number of datasets.Friedman–Nemenyi power scales with the number of datasets      N: CDα
+shrinks asp1/N  .  With N=  10     the diagram is informative about rankorderingbut unable to
+certify the small mean-rank gaps observed here as significant; lifting more of the catalogue (e.g. the
+heterophilic node-classification suite, the LRGB Peptides graphs, additional Netzschleuder snapshots)
+into the sweep would tightenCDproportionally and is the right next experiment.
+
+Fixed-epoch evaluation.The benchmark currently reports the test metric at a fixed final epoch.
+Checkpoint selection on a held-out validation set, early stopping, and best-of-window aggregation
+are natural extensions to the reporting layer that do not change the statistical pipeline of AppendixA.
+
+Fixed hyperparameters.We hold optimisation hyperparameters fixed across categories.Errica
+et al.[2020] argue that benchmarks should also be honest over the hyperparameter grid; extending
+Algorithm1with an inner search loop is straightforward but multiplies compute.
+
+
+                                                               9
+Coverage gaps in the taxonomy.   Several subtopics still lack canonical public benchmarks: schedul-
+ing and bin packing in combinatorics; patient-disease-treatment knowledge graphs in biology; inter-
+bank exposure in finance; program control-flow, dataflow, build-dependency, and EDA graphs in
+computing;  scene, skeleton, and SLAM pose graphs in vision;  Feynman diagrams and reaction
+networks in physics;  attack and threat-intelligence graphs in security.  We document these gaps
+explicitly so that downstream users do not assume coverage that is absent.
+
+Parametric assumptions.The paired         t-test assumes approximate normality of per-seed differ-
+ences.  With S=  10    seeds the test is robust under mild departures from normality.  The frame-
+work  exposes  two  alternatives  on  the  same  paired-by-seed  scaffolding:   a  percentile-bootstrap
+CI for skewed metrics (AppendixB) and a non-parametric Wilcoxon signed-rank pairwise test
+(report.pairwise(method="wilcoxon")).  The latter is the small-sample-friendly default rec-
+ommended byBenavoli et al.[2016] for classifier comparisons; pass                  method="wilcoxon" or set
+report.pairwise_method once and the Holm correction, the LaTeX exporter, and the pairwise
+significance plots all switch over.
+
+5    Conclusion
+
+GNN benchmarking sits at contrasting methodological grounds: the field has the statistical apparatus
+it needs, but the apparatus is not part of the default reporting pipeline.GRAPHNETZpackages a
+category× task dataset taxonomy, a uniform model-evaluation protocol across four tasks categories,
+and a statistically structured reporting layer behind a benchmark whose default output is a structured
+statistical report. A single cross category run across ten heterogeneous tasks produces seed-paired
+confidence intervals per category and a Friedman-Nemenyi CD diagram between categories in which
+all four node-level encoders fall within a single indistinguishable clique atα= 0.05      , a calibrated
+picture of what the data actually support.
+
+Reproducibility.   The benchmark protocol is fully specified by Algorithm1and the hyperparameters
+in Section3.1. All random number generators are seeded, so given a fixed software stack, the pipeline
+is deterministic.
+
+Data and code availability.   All datasets used in Section3are released under their original public
+licenses; loaders for them are part of theGRAPHNETZcatalog. Synthetic categories (combinatorial,
+physics) are generated deterministically from the protocol seeds.
+The natural research and implementation trajectory forGRAPHNETZinvolves expanding into graph
+foundation models and relational datasets, while prioritizing graph learning applications in real-world
+and scalable research environments.
+
+References
+M. Bechler-Speicher, B. Finkelshtein, F. Frasca, L. Müller, J. Tönshoff, A. Siraudin, V. Zaverkin,
+   M. M. Bronstein, M. Niepert, B. Perozzi, M. Galkin, and C. Morris.   Position:  Graph learn-
+   ing will lose relevance due to poor benchmarks.  InForty-second International Conference on
+   Machine Learning Position Paper Track, 2025.  URL   https://openreview.net/forum?id=
+   nDFpl2lhoH.
+
+A. Benavoli, G. Corani, and F. Mangili. Should we really use post-hoc tests based on mean-ranks?
+   Journal of Machine Learning Research, 17(5):1–10, 2016. URL   https://jmlr.org/papers/
+   volume17/benavoli16a/benavoli16a.pdf.
+
+J. Demšar. Statistical comparisons of classifiers over multiple data sets.Journal of Machine Learning
+   Research, 7:1–30, 2006.
+
+V. P. Dwivedi, C. K. Joshi, T. Laurent, Y. Bengio, and X. Bresson.  Benchmarking graph neural
+   networks. InWorkshop on Graph Representation Learning, NeurIPS, 2020.
+
+V. P. Dwivedi, L. Rampášek, M. Galkin, A. Parviz, G. Wolf, A. T. Luu, and D. Beaini. Long range
+   graph benchmark. InAdvances in Neural Information Processing Systems (NeurIPS), 2022.
+
+
+                                                          10
+F. Errica, M. Podda, D. Bacciu, and A. Micheli.  A fair comparison of graph neural networks for
+   graph classification.International Conference on Learning Representations (ICLR), 2020.
+
+M. Fey and J. E. Lenssen. Fast graph representation learning with pytorch geometric, 2019.
+
+S. Freitas, Y. Dong, J. Neil, and D. H. Chau. A large-scale database for graph representation learning.
+   InAdvances in Neural Information Processing Systems (NeurIPS) Datasets and Benchmarks Track,
+   2021.
+
+W. L. Hamilton, R. Ying, and J. Leskovec.  Inductive representation learning on large graphs.  In
+  Advances in Neural Information Processing Systems (NeurIPS), 2017.
+
+S. Holm. A simple sequentially rejective multiple test procedure.Scandinavian Journal of Statistics,
+   6(2):65–70, 1979.
+
+W. Hu, M. Fey, M. Zitnik, Y. Dong, H. Ren, B. Liu, M. Catasta, and J. Leskovec. Open graph bench-
+   mark: Datasets for machine learning on graphs. InAdvances in Neural Information Processing
+  Systems (NeurIPS), 2020.
+
+M. Hutson. Artificial intelligence faces reproducibility crisis, 2018.
+
+D. P. Kingma and J. Ba. Adam: A method for stochastic optimization.arXiv preprint arXiv:1412.6980,
+   2014.
+
+T. N. Kipf and M. Welling.  Semi-supervised classification with graph convolutional networks.  In
+  International Conference on Learning Representations (ICLR), 2017.
+
+C. Morris, N. M. Kriege, F. Bause, K. Kersting, P. Mutzel, and M. Neumann. TUDataset: A collection
+   of benchmark datasets for learning with graphs, 2020.
+
+T. P. Peixoto. The netzschleuder network catalogue and repository, 2020. URL https://networks.
+   skewed.de/.
+
+O. Platonov, D. Kuznedelev, M. Diskin, A. Babenko, and L. Prokhorenkova.   A critical look at
+   the evaluation of GNNs under heterophily:  Are we really making progress?   InInternational
+  Conference on Learning Representations (ICLR), 2023.
+
+P. Sen, G. Namata, M. Bilgic, L. Getoor, B. Galligher, and T. Eliassi-Rad. Collective classification in
+   network data.AI Magazine, 29(3):93–106, 2008.
+
+O.  Shchur,  M.  Mumme,  A.  Bojchevski,  and  S.  Günnemann.   Pitfalls  of  graph  neural  network
+   evaluation.Workshop on Relational Representation Learning, NeurIPS, 2018.
+
+Y. Shi, Z. Huang, S. Feng, H. Zhong, W. Wang, and Y. Sun.  Masked label prediction:  Unified
+   message passing model for semi-supervised classification. InInternational Joint Conference on
+  Artificial Intelligence (IJCAI), 2021.
+
+T. Stoll, C. Qian, B. Finkelshtein, et al. GraphBench: Next-generation graph learning benchmarking.
+   arXiv preprint arXiv:2512.04475, 2025.
+
+P. Veliˇckovi´c, G. Cucurull, A. Casanova, A. Romero, P. Liò, and Y. Bengio. Graph attention networks.
+   InInternational Conference on Learning Representations (ICLR), 2018.
+
+P. Veliˇckovi´c, W. Fedus, W. L. Hamilton, P. Liò, Y. Bengio, and R. D. Hjelm. Deep graph infomax.
+   InInternational Conference on Learning Representations (ICLR), 2019.
+
+M. Weber, G. Domeniconi, J. Chen, D. K. I. Weidele, C. Bellei, T. Robinson, and C. E. Leiserson.
+  Anti-money laundering in bitcoin: Experimenting with graph convolutional networks for financial
+   forensics, 2019.
+
+K. Xu, W. Hu, J. Leskovec, and S. Jegelka. How powerful are graph neural networks? InInternational
+  Conference on Learning Representations (ICLR), 2019.
+
+
+                                                           11
+A    Statistical Overview
+
+We fix notation for the three layers of the statistical report produced by Algorithm1.
+
+Per-cell estimation.For a fixed task and model, let     {x s}Ss=1   be the per-seed final test metrics from
+Sindependent training runs. The unbiased estimators of the population mean and variance are
+
+
+                                               SX                             SX
+                                    ¯x=       1S  xs,       ˆσ    2 =    1S−1    (x s−¯x)        2.                                      (1)
+                                             s=1                            s=1
+The Student’st(1−α)confidence interval for the mean is¯x±hwith half-width
+                                                  h=t   S−1,1−α/2              ˆσ/ √S,                                                       (2)
+wheretS−1,1−α/2                is the 1−α/2        quantile of thet-distribution withS−1       degrees of freedom. We
+report¯x±hthroughout.
+
+Per-task pairwise tests.For a fixed task, let    x(i)s    andx(j)s    denote the per-seed final metrics for
+modelsi andj, and letds =x   (i)s −x   (j)s   . Pairing by seed cancels seed-level variance. The paired-t
+statistic
+                                                       Tij =       ¯dˆσ d/√S,                                                              (3)
+with  ¯d and ˆσ d the sample mean and standard deviation ofds, is referred to atS−1      null.  The k
+                                                                                                                                2
+pairwise testswithina task are corrected with the Holm-Bonferroni step-down procedure [Holm and define adjusted values,
+1979]: order rawp-valuesp                       (1)≤...≤p        (m)     withm=     k 2
+                                     ˜p  (r)    = min 1, maxr′≤r(m−r   ′ + 1)p    (r′) .                                        (4)
+
+Holm controls the family-wise error rate atα and is uniformly more powerful than plain Bonferroni.
+We additionally report the paired effect size as Cohen’sdz  =  ¯d/ˆσ   d, which is invariant toS and
+complements thep-value with a magnitude.
+
+Wilcoxon signed-rank alternative. The paired t-test relies on approximate normality ofds, which
+at smallS is fragile. The framework exposes a non-parametric alternative on the same paired-by-
+seed scaffolding:  the Wilcoxon signed-rank test on{d s}.  Let Rs  =  rank(|d     s|)   be the rank of
+each absolute paired difference (omitting ties at zero, following zero_method="wilcox");  the
+signed-rank statistic
+                                            W=   X             Rs − X              Rs                                                  (5)
+                                                      s:d s>0            s:d s<0
+is  referred  to  its  exact  null  at  small S  rather  than  to  a  normal  approximation.     The  re-
+sulting p-values  feed  the  same  Holm  adjustment  of  Eq.  4.  Benavoli  et  al.[2016]  argue
+this  is  the  small-sample-friendly  default  for  classifier  comparisons;   we  expose  it  through
+report.pairwise(method="wilcoxon") (or the sticky report.pairwise_method attribute),
+and the same flag flows intopairwise_to_latexand the pairwise significance plots.
+
+Across-task aggregation.For benchmarks spanning      N tasks andk models, letrn,i be the rank of
+modeli on taskn (rank 1 = best, with average ranks for ties and the metric direction handled per
+task). The Friedman statistic
+                                                h kX                    i                    X
+                           χ2F  =    12Nk(k+ 1)        ¯r  2i− k(k+1)       24,       ¯r i =  1N  rn,i,                           (6)
+                                                  i=1                                         n
+rejects the global null of equal mean ranks at levelα when it exceeds the appropriateχ2k−1     quantile.
+The Nemenyi post-hoc declares two models significantly different when their mean ranks differ by
+more than the critical difference                               r
+                                                 CDα =q α           k(k+ 1)
+                                                                        6N   ,                                                       (7)
+withqα the studentised-range quantile fork models at levelα. The Demšar diagram visualises mean
+ranks on a number line and joins “cliques” of within-CD models with a horizontal bar; this is the
+standard scalable view when the benchmark spans many tasks.
+
+
+                                                                12
+                                  Figure 4:Anatomy of a cross-category Demšar critical-difference (CD) diagram.Top:the         CDα reference
+                                  scale, fixed byk andN  throughCDα  =q αpk(k+ 1)/(6N)                   , calibrates which mean-rank gaps are large
+                                  enough to be significant.Middle:each model is plotted at its mean rank across the        N  tasks; lower is better.
+                                  Bottom:clique bars connect contiguous runs of models whose total mean-rank span is below      CDα, they are
+                                  not significantly different from one another at levelα. Models that share no bar (here A and C) are declared
+                                  significantly different. The diagram is the standard scalable view when the benchmark spans many tasks; in this
+                                  paper it appears as Figure 3 withk= 4   encoders andN= 10    tasks, whereCD0.05    = 1.48    exceeds the largest
+                                  observed mean-rank gap and all four architectures fall in a single Nemenyi clique.
+
+
+                                  Reading the cross-category Demšar CD diagram.The CD diagram answers three questions at
+                                  once:(i)which models rank highest on average across the benchmark,(ii)which pairs of models
+                                  are statistically interchangeable at levelα, and(iii)what minimum mean-rank gap counts as a real
+                                  ordering. Figure4labels the visual elements. The reading protocol is:
+
+                                   1.  Locate each model on the horizontalmean-rank axis. Lower mean rank is uniformly better by
+                                        construction, per-task ranks are computed with the metric direction already factored in (higher
+                                        accuracy/AUC is rank 1, lower MAE is rank 1) and only then averaged across tasks;
+                                   2.  Read theCDα referenceat the top: any pair of models whose mean ranks differ by more than
+                                        this length is declared significantly different at levelα by the Nemenyi post-hoc. The reference is
+                                        fixed bykandNthrough Eq. 6 and is independent of the data;
+                                   3.  Inspect the horizontalclique bars: each bar joins a contiguous run of models whose mean-rank
+                                        span is belowCDα. Models under a common bar are not significantly different from one another.
+                                        Models that are not connected by any shared bar are significantly different.
+
+                                  Three caveats.  First, CDα shrinks asp1/N  , so adding benchmark tasks tightens the threshold
+                                  proportionally; withN= 10    the diagram is informative about rankorderingbut rarely strong enough
+                                  to certify small gaps as significant. Second, only models present on every task enter the rank table,
+                                  dropping a single model from one task removes it from the diagram entirely. Third, the diagram makes
+                                  a statement about average rank, not about absolute metric magnitude: a single-rank improvement on
+CDα = 1.40rank units  (α= 0.05,k= 5,N= 12)a tiny task counts as much as a single-rank improvement on a large one.(1) Reference scale.
+                                                                                                     A pair of models is significantly
+                                                                                                     different iff their mean ranks
+                                                                                                     differ by more thanCD  α.
+                                Model BB    Bootstrap Confidence IntervalsModel D
+                     Model A    (2.10)                    Model C   (3.90)  Model E
+                      (1.60)                              (3.40)            (4.30)                   (2) Model marker.
+                                                                                                     Plotted at the model’s mean rank
+                                  The Student’st confidence interval of AppendixAassumes that per-seed final metrics are approx-across allNtasks (lower is better).
+                                  imately normally distributed.  For metrics that are bounded away from this assumption, Hits@K
+                                  on knowledge graphs, MRR, AUC on highly imbalanced edge splits, a percentile bootstrap is more
+                                  honest. We expose a percentile-bootstrap CI as a drop-in alternative: pass method="bootstrap"
+                                  to report.summary() or set report.ci_method  =  "bootstrap" so that every downstream plot
+            1                   2 and LaTeX export uses the bootstrap envelope.34            5
+                               Mean rank acrossNtasks (lower is better)
+                                                                                                  13(3) Clique bar.
+                                                                                                     Connects models whose mean-rank
+                                                                                                     span is belowCD α – i.e.
+                                                                                                     not significantly different.
+
+
+                    A vs. C: rank gap1.80>CD    α⇒significantly different
+Procedure. For a fixed (task, model) cell with per-seed final metrics {x s}Ss=1   we drawB resamplesP
+{x ∗b}Bb=1   with replacement, each of sizeS, and compute the resampled means ¯x ∗b =  1S                    sx∗b,s. The
+(1−α)          percentile interval is [q α/2    (¯x ∗), q  1−α/2       (¯x ∗) ].  Because the report API displays a singleq1−α/2       (¯x ∗)−q  α/2    (¯x ∗),
+¯x±h        figure per cell for symmetry with thet-CI form, we reporth=    12
+i.e. the half-width of a symmetric envelope with the same total width as the percentile interval. We
+useB= 10,000         by default and seed the resampling RNG with a configurable bootstrap_seed so
+the bootstrap is itself reproducible.
+
+When to prefer it. At  S= 10   seeds thet-CI and bootstrap envelopes coincide for near-Gaussian
+metrics; the bootstrap is meaningfully tighter when the per-seed distribution is skewed (e.g. a single
+seed lands far above or below the others on AUC). The bootstrap also degrades more gracefully than
+thet-CI on metrics with hard ceilings: a sample clustered at 0.99    test accuracy yields a percentile
+interval that respects the upper bound, whereas thet-CI happily extends past1.0.
+
+C    Custom-Model Templates
+
+GRAPHNETZships five built-in architectures (Section2) behind a small registration surface so
+user-defined models flow through the same multi-seed, Holm-corrected, CD-diagrammed pipeline.
+We document the three integration paths below; all three end at the samerun_benchmarkcall.
+
+Path A: decorator (recommended for libraries).Permanent registration at import time.  The
+model becomes visible to every run_benchmark call by name and the dispatcher skips incompatible
+(model, task) pairs without further bookkeeping.
+
+importtorch
+fromtorch_geometric.nnimportGCNConv
+fromgraphnetzimportregister_model,  run_benchmark
+
+@register_model(task_type={"node_cls"})
+classTinyGCN(torch.nn.Module):
+      def__init__(self,  in_channels,  hidden_channels,  out_channels):
+            super().__init__()
+            self.conv1  =  GCNConv(in_channels,  hidden_channels)
+            self.conv2  =  GCNConv(hidden_channels,  out_channels)
+
+      defforward(self,  data):
+            x,  ei  =  data.x,  data.edge_index
+            returnself.conv2(torch.relu(self.conv1(x,  ei)),  ei)
+
+report  =  run_benchmark("social",  {"TinyGCN":  TinyGCN},
+                                task_type="node_cls",  seeds=(0,  1,  2,  3,  4,  5,  6,  7,  8,  9))
+
+
+Path B: class attribute (no decorator dependency).Equivalent semantics; useful when imports
+cannot be edited at the top of a third-party file.
+
+classAttrGCN(torch.nn.Module):
+      task_types  =  {"node_cls"}
+      def__init__(self,  in_channels,  hidden_channels,  out_channels):
+            ...
+
+
+Path C: inline tuple (one-shot variants).Useful for hyperparameter sweeps where each vari-
+ant  needs  its  own  factory.    The  third  slot  is  a  callable  (in_channels,  hidden_channels,
+out_channels)→Module.
+
+run_benchmark(
+      "social",
+      {
+            "MyGNN-d0.3":  (MyGNN,"node_cls",
+                                  lambdai,  h,  o:  MyGNN(i,  h,  o,  dropout=0.3)),
+
+
+                                                           14
+            "MyGNN-d0.5":  (MyGNN,"node_cls",
+                                   lambdai,  h,  o:  MyGNN(i,  h,  o,  dropout=0.5)),
+      },
+      seeds=(0,  1,  2,  3,  4,  5,  6,  7,  8,  9),
+)
+
+
+Multi-task factory.   For node-level encoders that should run onall fourtask types without writing
+the adapter glue,  we expose _multi_task_factory(cls),  which wraps the encoder with the
+appropriate adapter (graph-level pooling head, dot-product link-prediction head, or DGI head) given
+the dispatched task type.
+
+fromgraphnetz.benchmarkimport_multi_task_factory,  register_model
+
+classMyEncoder(torch.nn.Module):
+      """Returnsper-nodeembeddingsofshape[N,hidden_channels]."""
+      ...
+
+ALL_TASKS  =  {"node_cls","graph_cls","graph_reg","link_pred"}
+register_model(MyEncoder,  task_type=ALL_TASKS,
+                      factory=_multi_task_factory(MyEncoder))
+
+
+D    Custom-Dataset Templates
+
+The catalog ships 63 loaders, butGRAPHNETZis not a closed catalog:  any object satisfying the
+standard PyG contract can be plugged in as aTaskand run through the same statistical pipeline.
+
+Path A: ad-hoc tasks= (no global state).The simplest form.  Wrap an already-loaded dataset
+with task_from_dataset and pass it to run_benchmark through the tasks= argument; nothing
+is  registered  globally,  so  test  code  that  uses  this  path  leaves  the BENCHMARK_TASKS  dictionary
+untouched.
+
+fromgraphnetzimportGCN,  run_benchmark,  task_from_dataset
+
+ds  =  my_loader("data/my_dataset")  #anyPyG-shapeddataset
+task  =  task_from_dataset("my_dataset","node_cls",  ds,  epochs=100)
+
+report  =  run_benchmark(
+      models={"GCN":  GCN},
+      tasks=[task],
+      seeds=(0,  1,  2,  3,  4,  5,  6,  7,  8,  9),
+)
+
+
+Path       B:       permanent       registration.For       datasets       that       should       appear       in
+iter_benchmark_tasks(category=...)       alongside   the   built-ins.       Always   pair   with
+unregister_taskin tests so state does not leak between cases.
+
+fromgraphnetzimportregister_task,  task_from_dataset,  unregister_task
+
+register_task("my_lab",  task_from_dataset(
+      "my_assay","graph_cls",  ds,  epochs=50))
+
+#...later...
+"my_lab","my_assayunregister_task(")
+
+
+Path  C:  seed-aware  loader  for  synthetic  data.For  generators  rather  than  fixed  datasets,
+write  a  loader  that  takes  a seed  keyword  argument.   The  dispatcher  detects  the  parameter  via
+inspect.signature and threads the benchmark seed into the loader, so cross-seed variance reflects
+bothmodel initialisation and data resampling instead of only the former.
+
+
+                                                           15
+fromgraphnetz.benchmarkimportTask
+
+defsynthetic_loader(_root,  *,  seed):
+      returnMySyntheticDataset(num_graphs=100,  seed=seed)
+
+task  =  Task("synthetic_g100","graph_cls",  synthetic_loader,  epochs=20)
+run_benchmark(models={"GCN":  GCN},  tasks=[task],
+                    seeds=(0,  1,  2,  3,  4,  5,  6,  7,  8,  9))
+
+
+Conventions per task type.A custom dataset must satisfy the conventions of the trainer for
+its declared task_type: a Data object with train_mask/val_mask/test_mask for node_cls; a
+graph-level y for graph_cls and graph_reg; an edge_index suitable for RandomLinkSplit for
+homogeneous link_pred; and train_edge_index/train_edge_type, plus the valid_*/test_*
+counterparts and num_relations, for relational link_pred. The runner detects the relational variant
+from the data attributes and routes it through a DistMult decoder automatically; nothing else in the
+call site changes.
+
+E    Reproducibility and RNG Reseeding
+
+Algorithm1reseeds every random number generator the training code reaches before each(task,
+model, seed)triple: Python         random, NumPy, Torch CPU, and Torch CUDA (when available). With a
+fixed software stack – torch  >=  2.6, torch-geometric  >=  2.6, the same CUDA driver – the
+entire pipeline is deterministic.
+
+Combinatorial seed threading.   For loaders whose signature exposes a  seed keyword (the synthetic
+combinatorial generators in Section2and any user-defined seed-aware loader from AppendixD),
+the dispatcher passes the benchmark seed into the loader as well. This is a small but methodologi-
+cally important detail: cross-seed variance for synthetic-data benchmarks then reflects both model
+initialisation and data resampling, instead of only the former. For loaders without a seed keyword
+the dataset is loaded once and reused across seeds; the runner caches it to avoid re-downloading.
+
+Software stack used for the headline experiment.  The numbers in Section3were produced with
+Python 3.12, torch 2.6.0, torch-geometric 2.6.1, and scipy 1.13 on a CPU runner. All seeds in
+(0,  1,  2,  3,  4,  5,  6,  7,  8,  9) were used; the resulting pickled BenchmarkReport cache
+is part of the artefact bundle so the figures and tables can be regenerated without retraining.
+
+F    Broader Impact and Significance
+
+GRAPHNETZdoes not propose new models or datasets and so has no direct deployment impact. Its
+intended effect is methodological: lower the activation energy required to report GNN results with
+confidence intervals and corrected pairwise tests, so that the modal benchmark paper in the field
+communicates calibrated rather than over-confident evidence.  The same pipeline can be applied
+to any future GNN architecture or dataset added to the catalog, and the methodological apparatus
+generalizes to any benchmark whose output is a per task, method, and seed metric tensor.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                         16
