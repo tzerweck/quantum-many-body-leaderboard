@@ -60,8 +60,8 @@ const byId = new Map(instances.map(i => [i.instance_id, i]));
 const s = summarize(instances);
 
 const lines = [];
-lines.push("| instance | record | method | source | closest challenger |");
-lines.push("|---|---|---|---|---|");
+lines.push("| instance | record | method | closest challenger |");
+lines.push("|---|---|---|---|");
 
 for (const [id, label] of FRONTIER) {
   const inst = byId.get(id);
@@ -69,7 +69,7 @@ for (const [id, label] of FRONTIER) {
   const f = perSiteDivisor(inst) ?? 1;
   const rec = recordOf(inst);
   if (!rec) {
-    lines.push(`| ${label} | no record | | | |`);
+    lines.push(`| ${label} | no record | | |`);
     continue;
   }
   const q = quote(rec.energy / f, rec.sigma == null ? null : rec.sigma / f);
@@ -78,11 +78,12 @@ for (const [id, label] of FRONTIER) {
     .slice(sorted.indexOf(rec) + 1)
     .find(r => r.bound_type === "variational" && !r.defect);
   // Quoted at the record's precision so the two are readable against each other, with
-  // the same markers the record cell uses.
+  // the same markers the record cell uses. Each method carries its own source link, so
+  // the challenger is as checkable as the record.
   const challenger = next
-    ? `${(next.energy / f).toFixed(q.decimals)}${marks(next)} ${shorten(next.method, 34)}`
+    ? `${(next.energy / f).toFixed(q.decimals)}${marks(next)} ${shorten(next.method, 34)} ${citeCell(next)}`
     : "none";
-  lines.push(`| ${label} | **${q.text}**${marks(rec)} | ${shorten(rec.method, 46)} | ${citeCell(rec)} | ${challenger} |`);
+  lines.push(`| ${label} | **${q.text}**${marks(rec)} | ${shorten(rec.method, 46)} ${citeCell(rec)} | ${challenger} |`);
 }
 
 // Tristan's wording, written into the block on GitHub on 2026-09-15; kept here so the build
