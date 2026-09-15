@@ -39,14 +39,269 @@ and a declared `bound_type` saying what kind of quantity the energy value actual
 variational bound, a fixed-node estimate or a zero-variance extrapolation).
 
 Energies are per site: spin models as `E/N (S.S)`, Hubbard as `E/site` (see
-[units and conventions](#units-and-conventions)). **Bold** is the record under
-[the ranking rules](#how-the-ranking-works). 
+[units and conventions](DATA.md#units-and-conventions)). **Bold** is the record under
+[the ranking rules](RULES.md#6-records-and-ties). 
 **&#9675;** marks a row where **we found no error
 metric** (neither an error bar nor an energy variance) in the source we read; 
 **&dagger;** marks a
 sampled energy with a variance but no error bar. 
 Both rows stay in the table and in rank
-order; the marker is an open question regarding ambiguous information (see [error metrics](#error-metrics)).
+order; the marker is an open question regarding ambiguous information (see [error metrics](DATA.md#error-metrics)).
+
+### All 205 instances
+
+<details>
+<summary><b>Heisenberg</b>: 36 instances, 31 with a record, energies as <code>E/N (S.S)</code></summary>
+
+| instance | record | method | closest challenger |
+|---|---|---|---|
+| chain, 20 sites, open | **-0.4341237** | DMRG (max truncation error ~ 1.0E-12) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_heisenberg/chain_20_O.jl), no paper cited | -0.4341229 RNN [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/chain_20_O/vmc_rnn.sh), no paper cited |
+| chain, 20 sites | **-0.4452193** | DMRG (max truncation error ~ 1.0E-13) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_heisenberg/chain_20_P.jl), no paper cited | -0.4452189 RNN + translational symmetry [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/chain_20_P/vmc_rnn.sh), no paper cited |
+| chain, 200 sites, open | **-0.4422078** | DMRG (max truncation error ~ 1.0E-14) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_heisenberg/chain_200_O.jl), no paper cited | -0.4378396 RBM (alpha = 1) [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/chain_200_O/vmc_rbm.sh), no paper cited |
+| chain, 200 sites | **-0.4431678** | DMRG (max truncation error ~ 2.8E-12) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_heisenberg/chain_200_P.jl), no paper cited | -0.4430967 VMC with projected fermions +... [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/chain_200_P/vmc_gutzwiller.sh), no paper cited |
+| kagome 2x3 (18 sites) | **-0.4471262** | DMRG (bond dimension = 368) [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/kagome-2x3_18_P/dmrg.sh), no paper cited | -0.4467304 &dagger; VQE (SR + symm. + 108 variational... [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/kagome-2x3_18_P/vqe.sh), no paper cited |
+| kagome 4x4 (48 sites) | **-0.4375(2)** | GCNN (6 layers, 6 feature maps), symmetric... [Đurić et al. (2024)](https://doi.org/10.48550/arxiv.2401.02866) | -0.4304 VMC with Dirac spin liquid +... [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/kagome-4x4_48_P/vmc_gutzwiller.sh), no paper cited |
+| kagome 6x6 (108 sites) | no record | every variational row is flagged | |
+| kagome 8x8 (192 sites) | **-0.42987(1)** | VMC with Dirac spin liquid + Jastrow [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/kagome-8x8_192_P/vmc_gutzwiller.sh), no paper cited | none |
+| pyrochlore 2x2x2 (32 sites) | **-0.51627(2)** | mVMC with SU(2) and symmetry projections [Astrakhantsev et al. (2021)](https://doi.org/10.1103/physrevx.11.041021) | -0.51523 RBM with symmetry projections [Astrakhantsev et al. (2021)](https://doi.org/10.1103/physrevx.11.041021) |
+| pyrochlore 2x2x2 (128 sites) | **-0.49220(4)** | mVMC (PP + RBM + 1st step Lanczos... [Pohle et al. (2023)](https://doi.org/10.48550/arxiv.2311.11561) | none |
+| pyrochlore 3x3x3 (108 sites) | **-0.48711(9)** | mVMC with SU(2) and symmetry projections [Astrakhantsev et al. (2021)](https://doi.org/10.1103/physrevx.11.041021) | -0.48510 DMRG [Hagymási et al. (2021)](https://doi.org/10.1103/physrevlett.126.117204) |
+| pyrochlore 3x3x3 (432 sites) | **-0.48847(3)** | mVMC (PP + 1st step Lanczos, spin-parity... [Pohle et al. (2023)](https://doi.org/10.48550/arxiv.2311.11561) | none |
+| pyrochlore 4x4x4 (256 sites) | **-0.48310(7)** | mVMC with SU(2) and symmetry projections [Astrakhantsev et al. (2021)](https://doi.org/10.1103/physrevx.11.041021) | none |
+| pyrochlore 4x4x4 (1024 sites) | **-0.48800(1)** | mVMC (PP + 1st step Lanczos, spin-parity... [Pohle et al. (2023)](https://doi.org/10.48550/arxiv.2311.11561) | none |
+| rectangular 6x8 | no record | solved exactly | |
+| shuriken, 24 sites | no record | solved exactly | |
+| shuriken, 96 sites | **-0.43826(1)** | mVMC with SU(2) and point group projection [Astrakhantsev et al. (2021)](https://doi.org/10.1103/physrevb.104.l220408) | none |
+| shuriken, 216 sites | **-0.4376(1)** | mVMC with SU(2) and point group projection [Astrakhantsev et al. (2021)](https://doi.org/10.1103/physrevb.104.l220408) | none |
+| shuriken, 384 sites | **-0.4371(1)** | mVMC with SU(2) and point group projection [Astrakhantsev et al. (2021)](https://doi.org/10.1103/physrevb.104.l220408) | none |
+| square 4x4 | **-0.7017449** | VQE + symm. circuit (64 pars., exact grad... [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/square_16_P/vqe.sh), no paper cited | -0.7017252 &dagger; VQE + symm. circuit (64 pars.... [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/square_16_P/vqe_noisy.sh), no paper cited |
+| square 6x6, open | **-0.6035218** | DMRG (bond dimension = 2048) [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/square_36_O/dmrg.sh), no paper cited | -0.5948382 Jastrow baseline [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/square_36_O/vmc_jastrow.sh), no paper cited |
+| square 6x6 | **-0.67887(2)** | 2D RNN wavefunction (best variational) [Moss et al. (2025)](https://doi.org/10.48550/arxiv.2502.17144) | -0.67887 RBM + Lanczos recursion [Chen et al. (2022)](https://doi.org/10.48550/arxiv.2206.14307) |
+| square, 50 sites | no record | solved exactly | |
+| square 10x10, open | **-0.628656(9)** | 2D tensorized RNN (symmetry + annealing) [Hibat-Allah et al. (2022)](https://doi.org/10.48550/arxiv.2207.14314) | -0.628649 RNN + translational symmetry [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/square_100_O/vmc_rnn.sh), no paper cited |
+| square 10x10 | **-0.67155260(3)** | CNN + MinSR [Chen & Heyl (2023)](https://doi.org/10.48550/arxiv.2302.01941) | -0.67151900 RBM + Lanczos recursion [Chen et al. (2022)](https://doi.org/10.48550/arxiv.2206.14307) |
+| square 14x14 | **-0.668346(8)** | VMC with fermions (flux+neel+Jastrow) [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/square_196_P/vmc_gutzwiller.sh), no paper cited | -0.663805 RBM (alpha = 1) [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/square_196_P/vmc_rbm.sh), no paper cited |
+| square 16x16, open | **-0.643504(3)** | 2D minGRU (3 layers, c4v symmetry, parallel... [Merali et al. (2026)](https://doi.org/10.48550/arxiv.2605.13807) | -0.643448 PixelCNN (deep autoregressive) Sharir, Levine, Wies, Carleo & S |
+| triangular 4x4 | **-0.5347197** | DMRG (bond dimension = 256) [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/triangular_16_P/dmrg.sh), no paper cited | -0.5340324 VQE (SR + symm. + 64 par) [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/triangular_16_P/vqe.sh), no paper cited |
+| triangular 6x6 | **-0.560313(3)** | Group CNN (deep, symmetry-projected) [Roth et al. (2022)](https://doi.org/10.48550/arxiv.2211.07749) | -0.560100 Lattice Convolutional Network [Fu et al. (2022)](https://doi.org/10.48550/arxiv.2206.07370) |
+| triangular, 48 sites | no record | solved exactly | |
+| triangular 10x10, open | **-0.5147668** | DMRG (bond dimension = 4096) [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/triangular_100_O/dmrg.sh), no paper cited | -0.5138630 Tensor-RNN (bond dimension = 40) [Wu et al. (2023)](https://doi.org/10.1103/physrevresearch.5.l032001) |
+| triangular, 108 sites | **-0.55315(3)** | GCNN (deep group-equivariant CNN) [Roth et al. (2022)](https://doi.org/10.48550/arxiv.2211.07749) | -0.55190 Graph neural network [Kochkov et al. (2021)](https://doi.org/10.48550/arxiv.2110.06390) |
+| triangular 12x12, open | **-0.5150648** | DMRG (Bond dimension = 3000) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensor_cpp/dmrg_triangular_heisenberg_12x12.cc), no paper cited | -0.5119722 2D Gated RNN [Hibat-Allah et al. (2022)](https://doi.org/10.48550/arxiv.2207.14314) |
+| triangular 12x12 | **-0.54624(2)** | VMC with Dirac+field+Jastrow [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/triangular_144_P/vmc_gutzwiller.sh), no paper cited | -0.48966 RBM (alpha = 1) [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/triangular_144_P/vmc_rbm.sh), no paper cited |
+| triangular 14x14, open | **-0.5138(1)** | 2D Gated RNN [Hibat-Allah et al. (2022)](https://doi.org/10.48550/arxiv.2207.14314) | -0.5108 DMRG (Bond dimension = 2000) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensor_cpp/dmrg_triangular_heisenberg_14x14.cc), no paper cited |
+| triangular 16x16, open | **-0.51668(9)** | 2D Gated RNN [Hibat-Allah et al. (2022)](https://doi.org/10.48550/arxiv.2207.14314) | -0.50797 DMRG (Bond dimension = 2000) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensor_cpp/dmrg_triangular_heisenberg_16x16.cc), no paper cited |
+
+</details>
+
+<details>
+<summary><b>J1-J2</b>: 44 instances, 43 with a record, energies as <code>E/N (S.S)</code></summary>
+
+| instance | record | method | closest challenger |
+|---|---|---|---|
+| rectangular 4x6, J2 = 0.5 | **-0.5225249** | DMRG (bond dimension = 4096) [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/rectangular-4x6_24_P_0.5/dmrg.sh), no paper cited | -0.5218948 VQE + symm. circuit (96 pars.... [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/rectangular-4x6_24_P_0.5/vqe.sh), no paper cited |
+| square 4x4, J2 = 0.05 | **-0.6805657** | VQE + symm. circuit (64 pars., exact grad... [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_16_P_0.05/vqe.sh), no paper cited | -0.6804795 &dagger; VQE + symm. circuit (64 pars.... [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_16_P_0.05/vqe_noisy.sh), no paper cited |
+| square 4x4, J2 = 0.1 | **-0.6597832** | VQE + symm. circuit (64 pars., exact grad... [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_16_P_0.1/vqe.sh), no paper cited | -0.6597647 &dagger; VQE + symm. circuit (64 pars.... [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_16_P_0.1/vqe_noisy.sh), no paper cited |
+| square 4x4, J2 = 0.15 | **-0.6395066** | VQE + symm. circuit (64 pars., exact grad... [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_16_P_0.15/vqe.sh), no paper cited | none |
+| square 4x4, J2 = 0.2 | **-0.6198639** | VQE + symm. circuit (64 pars., exact grad... [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_16_P_0.2/vqe.sh), no paper cited | -0.6198018 &dagger; VQE + symm. circuit (64 pars.... [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_16_P_0.2/vqe_noisy.sh), no paper cited |
+| square 4x4, J2 = 0.25 | **-0.6009332** | VQE + symm. circuit (64 pars., exact grad... [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_16_P_0.25/vqe.sh), no paper cited | -0.6009187 &dagger; VQE + symm. circuit (64 pars.... [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_16_P_0.25/vqe_noisy.sh), no paper cited |
+| square 4x4, J2 = 0.3 | **-0.5829420** | VQE + symm. circuit (64 pars., exact grad... [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_16_P_0.3/vqe.sh), no paper cited | none |
+| square 4x4, J2 = 0.35 | **-0.5662285** | VQE + symm. circuit (64 pars., exact grad... [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_16_P_0.35/vqe.sh), no paper cited | -0.5662099 &dagger; VQE + symm. circuit (64 pars.... [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_16_P_0.35/vqe_noisy.sh), no paper cited |
+| square 4x4, J2 = 0.4 | **-0.5511033** | VQE + symm. circuit (64 pars., exact grad... [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_16_P_0.4/vqe.sh), no paper cited | none |
+| square 4x4, J2 = 0.45 | **-0.5382766** | VQE + symm. circuit (64 pars., exact grad... [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_16_P_0.45/vqe.sh), no paper cited | -0.5382744 &dagger; VQE + symm. circuit (64 pars.... [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_16_P_0.45/vqe_noisy.sh), no paper cited |
+| square 4x4, J2 = 0.5 | **-0.5286202** | DMRG (bond dimension = 256) [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_16_P_0.5/dmrg.sh), no paper cited | -0.5286173 VQE + symm. circuit (64 pars.... [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_16_P_0.5/vqe.sh), no paper cited |
+| square 4x4, J2 = 0.6 | **-0.5258158** | VQE + symm. circuit (64 pars., exact grad... [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_16_P_0.6/vqe.sh), no paper cited | -0.5257913 &dagger; VQE + symm. circuit (64 pars.... [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_16_P_0.6/vqe_noisy.sh), no paper cited |
+| square 4x4, J2 = 0.65 | **-0.5393444** | VQE + symm. circuit (64 pars., exact grad... [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_16_P_0.65/vqe.sh), no paper cited | -0.5390826 &dagger; VQE + symm. circuit (64 pars.... [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_16_P_0.65/vqe_noisy.sh), no paper cited |
+| square 4x4, J2 = 0.7 | **-0.5637643** | VQE + symm. circuit (64 pars., exact grad... [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_16_P_0.7/vqe.sh), no paper cited | none |
+| square 4x4, J2 = 0.75 | **-0.5942152** | VQE + symm. circuit (64 pars., exact grad... [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_16_P_0.75/vqe.sh), no paper cited | -0.5941871 &dagger; VQE + symm. circuit (64 pars.... [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_16_P_0.75/vqe_noisy.sh), no paper cited |
+| square 4x4, J2 = 0.8 | **-0.6273137** | VQE + symm. circuit (64 pars., exact grad... [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_16_P_0.8/vqe.sh), no paper cited | -0.6272153 &dagger; VQE + symm. circuit (64 pars.... [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_16_P_0.8/vqe_noisy.sh), no paper cited |
+| square 4x4, J2 = 0.85 | **-0.6617069** | VQE + symm. circuit (64 pars., exact grad... [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_16_P_0.85/vqe.sh), no paper cited | -0.6615474 &dagger; VQE + symm. circuit (64 pars.... [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_16_P_0.85/vqe_noisy.sh), no paper cited |
+| square 4x4, J2 = 0.9 | **-0.6967967** | VQE + symm. circuit (64 pars., exact grad... [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_16_P_0.9/vqe.sh), no paper cited | -0.6967130 &dagger; VQE + symm. circuit (64 pars.... [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_16_P_0.9/vqe_noisy.sh), no paper cited |
+| square 4x4, J2 = 0.95 | **-0.7324804** | VQE + symm. circuit (64 pars., exact grad... [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_16_P_0.95/vqe.sh), no paper cited | -0.7324222 &dagger; VQE + symm. circuit (64 pars.... [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_16_P_0.95/vqe_noisy.sh), no paper cited |
+| square 4x4, J2 = 1 | **-0.7684501** | VQE + symm. circuit (64 pars., exact grad... [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_16_P_1.0/vqe.sh), no paper cited | -0.7683608 &dagger; VQE + symm. circuit (64 pars.... [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_16_P_1.0/vqe_noisy.sh), no paper cited |
+| square 6x6, J2 = 0.3 | **-0.5618876** | DMRG (bond dimension = 2048) [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_36_P_0.3/dmrg.sh), no paper cited | -0.5549965 RBM (alpha = 1) [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_36_P_0.3/vmc_rbm.sh), no paper cited |
+| square 6x6, J2 = 0.4 | **-0.529687(7)** | RBM wave function [Chen et al. (2022)](https://doi.org/10.48550/arxiv.2206.14307) | -0.529360 CNN Choo, Neupert & Carleo, Two-dime |
+| square 6x6, J2 = 0.5 | **-0.503800(1)** | RBM+PP with momentum (K=0), spin-parity (even... [Nomura & Imada (2021)](https://doi.org/10.1103/physrevx.11.031034) | -0.503780 RBM wave function + 2-step... [Chen et al. (2022)](https://doi.org/10.48550/arxiv.2206.14307) |
+| square 6x6, J2 = 0.6 | **-0.49318(5)** | RBM wave function + 2-step Lanczos recursion [Chen et al. (2022)](https://doi.org/10.48550/arxiv.2206.14307) | -0.49313 RBM wave function + 1-step... [Chen et al. (2022)](https://doi.org/10.48550/arxiv.2206.14307) |
+| square 6x6, J2 = 0.7 | **-0.5299243** | DMRG (bond dimension = 2048) [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_36_P_0.7/dmrg.sh), no paper cited | -0.5299210 RBM wave function [Chen et al. (2022)](https://doi.org/10.48550/arxiv.2206.14307) |
+| square 6x6, J2 = 0.8 | **-0.586411(9)** | RBM wave function [Chen et al. (2022)](https://doi.org/10.48550/arxiv.2206.14307) | -0.585900 CNN Choo, Neupert & Carleo, Two-dime |
+| square 6x6, J2 = 0.9 | **-0.6478705** | DMRG (bond dimension = 2048) [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_36_P_0.9/dmrg.sh), no paper cited | -0.6416472 RBM (alpha = 1) [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_36_P_0.9/vmc_rbm.sh), no paper cited |
+| square 6x6, J2 = 1 | **-0.71429(1)** | RBM wave function [Chen et al. (2022)](https://doi.org/10.48550/arxiv.2206.14307) | -0.71351 CNN Choo, Neupert & Carleo, Two-dime |
+| square 8x8, J2 = 0.5 | **-0.498963(2)** | RBM+PP with momentum (K=0), spin-parity (even... [Nomura & Imada (2021)](https://doi.org/10.1103/physrevx.11.031034) | -0.498666 RBM with momentum (K=0)... [Nomura (2021)](https://doi.org/10.1088/1361-648x/abe268) |
+| square 8x8, J2 = 0.55 | **-0.48835(8)** | ClebschTree [Vieijra & Nys (2021)](https://doi.org/10.1103/physrevb.104.045123) | none |
+| square 10x10, J2 = 0.3 | **-0.55485(1)** | VMC with fermions (flux+neel+Jastrow) [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_100_P_0.3/vmc_gutzwiller.sh), no paper cited | -0.54909 DMRG (bond dimension = 1024) [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_100_P_0.3/dmrg.sh), no paper cited |
+| square 10x10, J2 = 0.4 | **-0.52388(2)** | RBM wave function [Chen et al. (2022)](https://doi.org/10.48550/arxiv.2206.14307) | -0.52371 CNN Choo, Neupert & Carleo, Two-dime |
+| square 10x10, J2 = 0.5 | **-0.4976939(2)** | CNN-MPS (h,D,l)=(32,20,20), Marshall sign... [Fan et al. (2026)](https://doi.org/10.48550/arxiv.2603.14425) | -0.4976923 T-MPS [Fan et al. (2026)](https://doi.org/10.48550/arxiv.2603.14425) |
+| square 10x10, J2 = 0.6 | **-0.4774611** | DMRG (bond dimension = 1024) [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_100_P_0.6/dmrg.sh), no paper cited | -0.4766200 RBM wave function [Chen et al. (2022)](https://doi.org/10.48550/arxiv.2206.14307) |
+| square 10x10, J2 = 0.7 | **-0.51889(2)** | RBM wave function [Chen et al. (2022)](https://doi.org/10.48550/arxiv.2206.14307) | -0.51643 DMRG (bond dimension = 1024) [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_100_P_0.7/dmrg.sh), no paper cited |
+| square 10x10, J2 = 0.8 | **-0.57404(2)** | RBM wave function [Chen et al. (2022)](https://doi.org/10.48550/arxiv.2206.14307) | -0.57383 CNN Choo, Neupert & Carleo, Two-dime |
+| square 10x10, J2 = 0.9 | **-0.6269664** | DMRG (bond dimension = 1024) [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_100_P_0.9/dmrg.sh), no paper cited | -0.5974150 RBM (alpha = 1) [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_100_P_0.9/vmc_rbm.sh), no paper cited |
+| square 10x10, J2 = 1 | **-0.69670(2)** | RBM wave function [Chen et al. (2022)](https://doi.org/10.48550/arxiv.2206.14307) | -0.69636 CNN Choo, Neupert & Carleo, Two-dime |
+| square 14x14, J2 = 0.5 | **-0.49443(1)** | VMC with projected BCS (Z2 spin liquid) [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_196_P_0.5/vmc_gutzwiller.sh), no paper cited | -0.48238 DMRG (bond dimension = 512) [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_196_P_0.5/dmrg.sh), no paper cited |
+| square 16x16, J2 = 0.5 | **-0.4969140(5)** | CNN-MPS [Fan et al. (2026)](https://doi.org/10.48550/arxiv.2603.14425) | -0.4967860 T-MPS [Fan et al. (2026)](https://doi.org/10.48550/arxiv.2603.14425) |
+| square 20x20, J2 = 0.5 | **-0.4967987(6)** | CNN-MPS (h,D,l)=(32,15,20) [Fan et al. (2026)](https://doi.org/10.48550/arxiv.2603.14425) | -0.4967320 ViT with symmetry restoration [Viteritti et al. (2026)](https://doi.org/10.48550/arxiv.2602.02665) |
+| triangular, 48 sites, J2 = 0.125 | no record | solved exactly | |
+| triangular, 108 sites, J2 = 0.125 | **-0.51268(9)** | GCNN + Lanczos step [Roth et al. (2022)](https://doi.org/10.48550/arxiv.2211.07749) | -0.51175 GCNN (deep group-equivariant CNN) [Roth et al. (2022)](https://doi.org/10.48550/arxiv.2211.07749) |
+| triangular 12x12, J2 = 0.125 | **-0.51218(9)** | GCNN + Lanczos step [Roth et al. (2022)](https://doi.org/10.48550/arxiv.2211.07749) | -0.51101 GCNN (deep group-equivariant CNN) [Roth et al. (2022)](https://doi.org/10.48550/arxiv.2211.07749) |
+
+</details>
+
+<details>
+<summary><b>Hubbard</b>: 92 instances, 75 with a record, energies as <code>E/site</code></summary>
+
+| instance | record | method | closest challenger |
+|---|---|---|---|
+| chain, 14 sites, U = 1, n &asymp; 0.5714 | **-0.9116293** | DMRG (MaxBondDim = 1550, Extrap Energy =... [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_hubbard/chain_14_P_4_1.jl), no paper cited | none |
+| chain, 14 sites, U = 1.66810054, n &asymp; 0.5714 | no record | solved exactly | |
+| chain, 14 sites, U = 2.15443469, n &asymp; 0.5714 | **-0.8542284** | DMRG (MaxBondDim ~1500) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_hubbard/chain_14_P_4_2.15443469.jl), no paper cited | none |
+| chain, 14 sites, U = 2.7825594, n &asymp; 0.5714 | **-0.8300032** | DMRG (MaxBondDim ~1500) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_hubbard/chain_14_P_4_2.7825594.jl), no paper cited | none |
+| chain, 14 sites, U = 3.59381366, n &asymp; 0.5714 | **-0.8043230** | DMRG (MaxBondDim ~1500) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_hubbard/chain_14_P_4_3.59381366.jl), no paper cited | none |
+| chain, 14 sites, U = 4.64158882, n &asymp; 0.5714 | **-0.7783541** | DMRG (MaxBondDim ~1500) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_hubbard/chain_14_P_4_4.64158882.jl), no paper cited | none |
+| chain, 14 sites, U = 7.74263683, n &asymp; 0.5714 | **-0.7304717** | DMRG (MaxBondDim ~1500) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_hubbard/chain_14_P_4_7.74263683.jl), no paper cited | none |
+| chain, 14 sites, U = 10, n &asymp; 0.5714 | **-0.7103637** | DMRG (MaxBondDim ~1500, Extrap Eng =... [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_hubbard/chain_14_P_4_10.jl), no paper cited | none |
+| rectangular 14x16, U = 8, n = 0.875 | **-0.75830(4)** | VAFQMC stripe length=7 [Sorella (2023)](https://doi.org/10.1103/physrevb.107.115133) | none |
+| rectangular 4x16, U = 8, n = 0.875 | **-0.76623(1)** | ACE (16 conv layers) + full symmetry... [Gu et al. (2026)](https://doi.org/10.48550/arxiv.2604.25775) | -0.76560 NNBF, 32 determinants + free... [Loehr & Clark (2025)](https://doi.org/10.48550/arxiv.2510.26906) |
+| rectangular 4x16, periodic/open, U = 2, n = 0.8125 | **-1.2852656** | DMRG (MaxLinkDim = 6000, MaxTruncErr~1.0E-04) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_hubbard/rectangular-4x16_64_PO_26_2.jl), no paper cited | none |
+| rectangular 4x16, periodic/open, U = 8, n = 0.8125 | **-0.8530000** | DMRG (MaxLinkDim = 4000, MaxTruncErr~5.0E-05) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_hubbard/rectangular-4x16_64_PO_26_8.jl), no paper cited | none |
+| rectangular 4x16, periodic/open, U = 2, n = 0.875 | **-1.2611875** | DMRG (MaxLinkDim = 4000, MaxTruncErr~8.0E-05) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_hubbard/rectangular-4x16_64_PO_28_2.jl), no paper cited | none |
+| rectangular 4x16, periodic/open, U = 8, n = 0.875 | **-0.7508328** | DMRG (MaxLinkDim = 10000, MaxTruncErr~2.0E-05... [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_hubbard/rectangular-4x16_64_PO_28_8.jl), no paper cited | -0.7465937 VMC Hidden Fermion Determinant... [Moreno et al. (2022)](https://doi.org/10.1073/pnas.2122059119) |
+| rectangular 4x16, periodic/open, U = 2, n = 0.9375 | **-1.2199062** | DMRG (MaxLinkDim = 4000, MaxTruncErr~1.2E-04) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_hubbard/rectangular-4x16_64_PO_30_2.jl), no paper cited | none |
+| rectangular 4x16, periodic/open, U = 8, n = 0.9375 | **-0.6378750** | DMRG (MaxLinkDim = 4000, MaxTruncErr~1.5E-05) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_hubbard/rectangular-4x16_64_PO_30_8.jl), no paper cited | none |
+| rectangular 4x16, periodic/open, U = 2, n = 1 | **-1.1710781** | DMRG (MaxLinkDim = 4000, MaxTruncErr~3.5E-05) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_hubbard/rectangular-4x16_64_PO_32_2.jl), no paper cited | none |
+| rectangular 4x16, periodic/open, U = 8, n = 1 | **-0.5144219** | DMRG (MaxLinkDim = 4000, MaxTruncErr~4.7E-07) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_hubbard/rectangular-4x16_64_PO_32_8.jl), no paper cited | none |
+| rectangular 4x8, U = 8, n = 0.875 | **-0.76690(1)** | HFPS (hidden-fermion Pfaffian state) [Chen et al. (2025)](https://doi.org/10.48550/arXiv.2507.10705) | -0.76410 RHB (hierarchical backflow K = 2... Zhou, Zhou & Liu, Locality-Induc |
+| rectangular 4x8, periodic/open, U = 8, n = 0.875 | **-0.7363906** | DMRG (MaxLinkDim = 12000, MaxTruncErr~6.6E-06... [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_hubbard/rectangular-4x8_32_PO_14_8.jl), no paper cited | -0.7350000 VMC Hidden Fermion Determinant... [Moreno et al. (2022)](https://doi.org/10.1073/pnas.2122059119) |
+| rectangular 6x48, U = 8, n &asymp; 0.8333 | **-0.82075(3)** | VMC with stripe of wavelength 6 (+Jastrow and... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/rectangular-6x48_288_P_120_8/VMC-stripes/vmc_hubbard.sh), no paper cited | -0.81909 VMC with uniform BCS pairing... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/rectangular-6x48_288_P_120_8/VMC-uniform/vmc_hubbard.sh), no paper cited |
+| rectangular 6x48, U = 8, n = 0.875 | **-0.74834(3)** | VMC with stripe of wavelength 8 (+Jastrow and... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/rectangular-6x48_288_P_126_8/VMC-stripes/vmc_hubbard.sh), no paper cited | -0.74365 VMC with uniform BCS pairing... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/rectangular-6x48_288_P_126_8/VMC-uniform/vmc_hubbard.sh), no paper cited |
+| rectangular 6x48, U = 12, n = 0.875 | **-0.62556(3)** | VMC with stripe of wavelength 6 (+Jastrow and... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/rectangular-6x48_288_P_126_12/VMC-stripes/vmc_hubbard.sh), no paper cited | -0.62226 VMC with uniform BCS (+Jastrow... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/rectangular-6x48_288_P_126_12/VMC-uniform/vmc_hubbard.sh), no paper cited |
+| rectangular 6x48, U = 8, n &asymp; 0.9167 | **-0.67269(3)** | VMC with stripe of wavelength 8 (+Jastrow and... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/rectangular-6x48_288_P_132_8/VMC-stripes/vmc_hubbard.sh), no paper cited | -0.66615 VMC with uniform BCS pairing and... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/rectangular-6x48_288_P_132_8/VMC-uniform/vmc_hubbard.sh), no paper cited |
+| square 4x4, U = 2, n = 0.5 | **-1.1559648** | DMRG (MaxLinkDim ~ 3200) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_hubbard/square_16_P_4_2.jl), no paper cited | none |
+| square 4x4, U = 3.5981, n = 0.5 | **-1.1060144** | DMRG (MaxBondDim ~3200) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_hubbard/square_16_P_4_3.5981.jl), no paper cited | -1.1058481 VMC Hidden Fermion Determinant... [Moreno et al. (2022)](https://doi.org/10.1073/pnas.2122059119) |
+| square 4x4, U = 4, n = 0.5 | **-1.0959310** | DMRG (MaxBondDim ~ 3200) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_hubbard/square_16_P_4_4.jl), no paper cited | none |
+| square 4x4, U = 6, n = 0.5 | **-1.0562454** | DMRG (MaxBondDim ~ 3200) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_hubbard/square_16_P_4_6.jl), no paper cited | none |
+| square 4x4, U = 7.74264, n = 0.5 | **-1.0318221** | DMRG (MaxBondDim ~3200) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_hubbard/square_16_P_4_7.74264.jl), no paper cited | -1.0315625 VMC Hidden Fermion Determinant... [Moreno et al. (2022)](https://doi.org/10.1073/pnas.2122059119) |
+| square 4x4, U = 8, n = 0.5 | **-1.0287892** | DMRG (MaxBondDim ~ 3200) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_hubbard/square_16_P_4_8.jl), no paper cited | none |
+| square 4x4, U = 10, n = 0.5 | **-1.0089505** | DMRG (MaxBondDim = 3200) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_hubbard/square_16_P_4_10.jl), no paper cited | -1.0086438 VMC Hidden Fermion Determinant... [Moreno et al. (2022)](https://doi.org/10.1073/pnas.2122059119) |
+| square 4x4, U = 2, n = 0.625 | **-1.3360594** | DMRG (MaxBondDim = 7000) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_hubbard/square_16_P_5_2.jl), no paper cited | none |
+| square 4x4, U = 2.1544, n = 0.625 | **-1.3257670** | DMRG (MaxBondDim 7000) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_hubbard/square_16_P_5_2.1544.jl), no paper cited | -1.3257435 VMC Hidden Fermion Determinant... [Moreno et al. (2022)](https://doi.org/10.1073/pnas.2122059119) |
+| square 4x4, U = 3.5981, n = 0.625 | **-1.2431527(4)** | VMC Hidden Fermion Determinant State Ansatz... [Moreno et al. (2022)](https://doi.org/10.1073/pnas.2122059119) | -1.2430143 DMRG (MaxBondDim = 7000) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_hubbard/square_16_P_5_3.5981.jl), no paper cited |
+| square 4x4, U = 4, n = 0.625 | **-1.2238086** | DMRG (MaxBondDim = 7000) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_hubbard/square_16_P_5_4.jl), no paper cited | none |
+| square 4x4, U = 6, n = 0.625 | **-1.1473978** &#9675; | DMRG (MaxBondDim = 7000) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_hubbard/square_16_P_5_6.jl), no paper cited | none |
+| square 4x4, U = 7.74264, n = 0.625 | **-1.1002331** | DMRG (MaxBondDim = 7000) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_hubbard/square_16_P_5_7.74264.jl), no paper cited | -1.1001250 VMC Hidden Fermion Determinant... [Moreno et al. (2022)](https://doi.org/10.1073/pnas.2122059119) |
+| square 4x4, U = 8, n = 0.625 | **-1.0943979** | DMRG (MaxBondDim = 7000) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_hubbard/square_16_P_5_8.jl), no paper cited | none |
+| square 4x4, U = 10, n = 0.625 | **-1.0564725** | DMRG (MaxBondDim = 7000) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_hubbard/square_16_P_5_10.jl), no paper cited | -1.0563644 VMC Hidden Fermion Determinant... [Moreno et al. (2022)](https://doi.org/10.1073/pnas.2122059119) |
+| square 6x6, U = 4, n &asymp; 0.6667 | no record | no variational row | |
+| square 6x6, U = 4, n &asymp; 1.3333 | no record | no variational row | |
+| square 6x6, periodic/antiperiodic, U = 2, n = 1 | **-1.2079(1)** | VMC Hidden Fermion Determinant State Ansatz... [Moreno et al. (2022)](https://doi.org/10.1073/pnas.2122059119) | none |
+| square 6x6, periodic/antiperiodic, U = 4, n = 1 | **-0.87173(2)** | VMC Hidden Fermion Determinant State Ansatz... [Moreno et al. (2022)](https://doi.org/10.1073/pnas.2122059119) | none |
+| square 6x6, periodic/antiperiodic, U = 6, n = 1 | **-0.66094(3)** | VMC Hidden Fermion Determinant State Ansatz... [Moreno et al. (2022)](https://doi.org/10.1073/pnas.2122059119) | none |
+| square 6x6, periodic/antiperiodic, U = 8, n = 1 | **-0.52705(3)** | VMC Hidden Fermion Determinant State Ansatz... [Moreno et al. (2022)](https://doi.org/10.1073/pnas.2122059119) | none |
+| square, 50 sites, U = 8, n = 0.84 | **-0.82328(3)** | VAFQMC [Sorella (2023)](https://doi.org/10.1103/physrevb.107.115133) | none |
+| square 8x8, U = 4, n = 0.4375 | no record | no variational row | |
+| square 8x8, U = 4, n = 0.6875 | no record | no variational row | |
+| square 8x8, U = -8, n &asymp; 0.7813 | no record | solved exactly | |
+| square 8x8, U = -4, n &asymp; 0.7813 | no record | solved exactly | |
+| square 8x8, U = 4, n &asymp; 0.7813 | **-1.130375(5)** | mVMC with SU(2) and momentum projections... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_64_P_25_4/mVMC/mVMC.sh), no paper cited | -1.126833 VMC with uniform pairing... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_64_P_25_4/VMC-uniform/vmc_hubbard.sh), no paper cited |
+| square 8x8, U = 8, n &asymp; 0.7813 | **-0.91483(2)** | mVMC with SU(2) and momentum projections... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_64_P_25_8/mVMC/mVMC.sh), no paper cited | -0.91012 VMC with uniform BCS pairing... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_64_P_25_8/VMC-uniform/vmc_hubbard.sh), no paper cited |
+| square 8x8, U = -8, n = 0.875 | no record | solved exactly | |
+| square 8x8, U = -4, n = 0.875 | no record | solved exactly | |
+| square 8x8, U = 4, n = 0.875 | **-1.00580(3)** | VMC with uniform BCS pairing (+Jastrow and... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_64_P_28_4/VMC-uniform/vmc_hubbard.sh), no paper cited | none |
+| square 8x8, U = 8, n = 0.875 | **-0.7458(6)** | Jastrow-backflow (JBf), 8x8 torus [Sharma et al. (2025)](https://doi.org/10.48550/arXiv.2510.11710) | -0.7454 Hidden-fermion determinant state... [Sharma et al. (2025)](https://doi.org/10.48550/arXiv.2510.11710) |
+| square 8x8, U = -8, n = 1 | no record | solved exactly | |
+| square 8x8, U = -4, n = 1 | no record | solved exactly | |
+| square 8x8, U = 4, n = 1 | **-0.859156(8)** | mVMC with SU(2) and momentum projections... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_64_P_32_4/mVMC/mVMC.sh), no paper cited | -0.856506 VMC with Neel AF (+Jastrow and... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_64_P_32_4/VMC-uniform/vmc_hubbard.sh), no paper cited |
+| square 8x8, U = 8, n = 1 | **-0.52459(1)** | mVMC with SU(2) and momentum projections... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_64_P_32_8/mVMC/mVMC.sh), no paper cited | none |
+| square 8x8, periodic/antiperiodic, U = 2, n = 1 | **-1.19003(9)** | VMC Hidden Fermion Determinant State Ansatz... [Moreno et al. (2022)](https://doi.org/10.1073/pnas.2122059119) | none |
+| square 8x8, periodic/antiperiodic, U = 4, n = 1 | **-0.8622(2)** | VMC Hidden Fermion Determinant State Ansatz... [Moreno et al. (2022)](https://doi.org/10.1073/pnas.2122059119) | none |
+| square 8x8, periodic/antiperiodic, U = 6, n = 1 | **-0.6574(2)** | VMC Hidden Fermion Determinant State Ansatz... [Moreno et al. (2022)](https://doi.org/10.1073/pnas.2122059119) | none |
+| square 8x8, periodic/antiperiodic, U = 8, n = 1 | **-0.5245(2)** | VMC Hidden Fermion Determinant State Ansatz... [Moreno et al. (2022)](https://doi.org/10.1073/pnas.2122059119) | none |
+| square 8x8, periodic/open, U = 8, n = 1 | **-0.49944(4)** | VAFQMC [Sorella (2023)](https://doi.org/10.1103/physrevb.107.115133) | -0.49843 DMRG (MaxLinkDim=10000... [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_hubbard/square_64_PO_32_8.jl), no paper cited |
+| square 10x10, U = 4, n = 0.8 | no record | no variational row | |
+| square 12x12, U = 4, n &asymp; 0.8056 | no record | no variational row | |
+| square 16x16, U = 8, n &asymp; 0.8281 | **-0.83788(6)** | VAFQMC stripe length=8 [Sorella (2023)](https://doi.org/10.1103/physrevb.107.115133) | none |
+| square 16x16, U = 8, n &asymp; 0.8438 | **-0.81198(6)** | VAFQMC stripe length=8 [Sorella (2023)](https://doi.org/10.1103/physrevb.107.115133) | none |
+| square 16x16, U = 8, n &asymp; 0.8516 | **-0.79896(5)** | VAFQMC stripe length=8 [Sorella (2023)](https://doi.org/10.1103/physrevb.107.115133) | none |
+| square 16x16, U = 8, n &asymp; 0.8594 | **-0.78530(6)** | VAFQMC stripe length=8 [Sorella (2023)](https://doi.org/10.1103/physrevb.107.115133) | -0.77524 VMC stripe length=8 (+Jastrow and... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_256_P_110_8/VMC-uniform/vmc_hubbard.sh), no paper cited |
+| square 16x16, U = 8, n &asymp; 0.8672 | **-0.77196(6)** | VAFQMC stripe length=8 [Sorella (2023)](https://doi.org/10.1103/physrevb.107.115133) | none |
+| square 16x16, U = -8, n = 0.875 | no record | solved exactly | |
+| square 16x16, U = -4, n = 0.875 | no record | solved exactly | |
+| square 16x16, U = 4, n = 0.875 | **-1.02916(2)** | VAFQMC stripe length=8 [Sorella (2023)](https://doi.org/10.1103/physrevb.107.115133) | -1.02139 VMC uniform state (+Jastrow and... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_256_P_112_4/VMC-uniform/vmc_hubbard.sh), no paper cited |
+| square 16x16, U = 6, n = 0.875 | **-0.86592(2)** | VAFQMC stripe length=8 [Sorella (2023)](https://doi.org/10.1103/physrevb.107.115133) | -0.85627 VMC stripe length=8 (+Jastrow and... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_256_P_112_6/VMC-uniform/vmc_hubbard.sh), no paper cited |
+| square 16x16, U = 8, n = 0.875 | **-0.75865(3)** | VAFQMC stripe length 8 [Sorella (2023)](https://doi.org/10.1103/physrevb.107.115133) | -0.75730 &#9675; ACE (16 conv layers), no symmetry... [Gu et al. (2026)](https://doi.org/10.48550/arxiv.2604.25775) |
+| square 16x16, U = 8, n &asymp; 0.8828 | **-0.74455(3)** | VAFQMC stripe length=8 [Sorella (2023)](https://doi.org/10.1103/physrevb.107.115133) | none |
+| square 16x16, U = 4, n &asymp; 0.8906 | **-1.00849(2)** | VAFQMC stripe length=8 [Sorella (2023)](https://doi.org/10.1103/physrevb.107.115133) | -0.99898 VMC uniform state (+Jastrow and... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_256_P_114_4/VMC-uniform/vmc_hubbard.sh), no paper cited |
+| square 16x16, U = 6, n &asymp; 0.8906 | **-0.84058(2)** | VAFQMC stripe length=8 [Sorella (2023)](https://doi.org/10.1103/physrevb.107.115133) | -0.83072 VMC stripe length=8 (+Jastrow and... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_256_P_114_6/VMC-uniform/vmc_hubbard.sh), no paper cited |
+| square 16x16, U = 8, n &asymp; 0.8906 | **-0.73038(5)** | VAFQMC stripe length=8 [Sorella (2023)](https://doi.org/10.1103/physrevb.107.115133) | -0.72030 VMC stripe length=8 (+Jastrow and... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_256_P_114_8/VMC-uniform/vmc_hubbard.sh), no paper cited |
+| square 16x16, U = 8, n &asymp; 0.8984 | **-0.71584(5)** | VAFQMC stripe length=8 [Sorella (2023)](https://doi.org/10.1103/physrevb.107.115133) | none |
+| square 16x16, U = 8, n &asymp; 0.9063 | **-0.70135(3)** | VAFQMC stripe length=8 [Sorella (2023)](https://doi.org/10.1103/physrevb.107.115133) | -0.69132 VMC stripe length=8 (+Jastrow and... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_256_P_116_8/VMC-uniform/vmc_hubbard.sh), no paper cited |
+| square 16x16, U = 8, n &asymp; 0.9141 | **-0.68678(5)** | VAFQMC stripe length=8 [Sorella (2023)](https://doi.org/10.1103/physrevb.107.115133) | none |
+| square 16x16, U = 8, n &asymp; 0.9219 | **-0.67215(5)** | VAFQMC stripe length=8 [Sorella (2023)](https://doi.org/10.1103/physrevb.107.115133) | none |
+| square 16x16, U = 8, n = 0.9375 | **-0.64053(5)** | VAFQMC stripe length=8 [Sorella (2023)](https://doi.org/10.1103/physrevb.107.115133) | none |
+| square 16x16, U = -8, n = 1 | no record | solved exactly | |
+| square 16x16, U = -4, n = 1 | no record | solved exactly | |
+| square 16x16, periodic/antiperiodic, U = 8, n &asymp; 0.8359 | **-0.82333(3)** | VAFQMC stripe length 8 APBC along the stripe [Sorella (2023)](https://doi.org/10.1103/physrevb.107.115133) | -0.79875 mVMC with SU(2) and momentum... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_256_PA_107_8/mVMC/mVMC.sh), no paper cited |
+| square 16x16, periodic/antiperiodic, U = 8, n &asymp; 0.8359, t12 | **-0.79937(4)** | mVMC with SU(2) and momentum projections... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_256_PA_107_8_t12/mVMC/mVMC.sh), no paper cited | none |
+| square 16x16, periodic/antiperiodic, U = 8, n &asymp; 0.8359, t12, UV1V2 | **1.25918(3)** | mVMC with SU(2) and momentum projections... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_256_PA_107_8_t12_UV1V2/mVMC/mVMC.sh), no paper cited | none |
+| square 16x16, periodic/antiperiodic, U = 8, n = 1 | **-0.52427(4)** | VAFQMC [Sorella (2023)](https://doi.org/10.1103/physrevb.107.115133) | -0.51898 mVMC with SU(2) and momentum... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_256_PA_128_8/mVMC/mVMC.sh), no paper cited |
+
+</details>
+
+<details>
+<summary><b>Spinless t-V</b>: 14 instances, 14 with a record, energies as <code>E/site</code></summary>
+
+| instance | record | method | closest challenger |
+|---|---|---|---|
+| chain, 32 sites, V = 1, n = 0.5 | **-0.4983390** | DMRG (maxbonddim = 573) [run script](https://github.com/varbench/methods/blob/main/scripts/tV/chain_32_P_16_1/dmrg_B1024.sh), no paper cited | -0.4983390 &#9675; DMRG (maxbonddim = 200) [run script](https://github.com/varbench/methods/blob/main/scripts/tV/chain_32_P_16_1/dmrg.sh), no paper cited |
+| chain, 32 sites, V = 2, n = 0.5 | **-0.3852719** &#9675; | DMRG (maxbonddim = 200) [run script](https://github.com/varbench/methods/blob/main/scripts/tV/chain_32_P_16_2/dmrg.sh), no paper cited | none |
+| chain, 32 sites, V = 4, n = 0.5 | **-0.2344426** &#9675; | DMRG (maxbonddim = 200) [run script](https://github.com/varbench/methods/blob/main/scripts/tV/chain_32_P_16_4/dmrg.sh), no paper cited | none |
+| square 4x4, V = 0.01, n = 0.3125 | **-0.7487521(6)** | VMC Determinant Slater-Jastrow (RBM) Ansatz [Romero et al. (2024)](https://doi.org/10.48550/arxiv.2406.09077) | -0.7487516 VMC Determinant Slater-Backflow-Ja... [Romero et al. (2024)](https://doi.org/10.48550/arxiv.2406.09077) |
+| square 4x4, V = 0.1, n = 0.3125 | **-0.7376632(3)** | VMC Determinant Slater-Backflow-Jastrow (RBM)... [Romero et al. (2024)](https://doi.org/10.48550/arxiv.2406.09077) | -0.7376632 DMRG (maxbonddim = 72) [run script](https://github.com/varbench/methods/blob/main/scripts/tV/square_16_P_5_0.1/dmrg.sh), no paper cited |
+| square 4x4, V = 1, n = 0.3125 | **-0.6400407** | DMRG (maxbonddim = 74) [run script](https://github.com/varbench/methods/blob/main/scripts/tV/square_16_P_5_1/dmrg.sh), no paper cited | -0.6400388 VMC Determinant Slater-Backflow-Ja... [Romero et al. (2024)](https://doi.org/10.48550/arxiv.2406.09077) |
+| square 4x4, V = 10, n = 0.3125 | **-0.2532535** | DMRG (maxbonddim = 74) [run script](https://github.com/varbench/methods/blob/main/scripts/tV/square_16_P_5_10/dmrg.sh), no paper cited | -0.2511097 VMC Determinant Slater-Backflow-Ja... [Romero et al. (2024)](https://doi.org/10.48550/arxiv.2406.09077) |
+| square 6x6, V = 0.01, n &asymp; 0.3611 | **-0.7759280(1)** | VMC Determinant Slater-Jastrow (RBM) Ansatz... [Romero et al. (2024)](https://doi.org/10.48550/arxiv.2406.09077) | -0.7759279 VMC Determinant Slater-Backflow-Ja... [Romero et al. (2024)](https://doi.org/10.48550/arxiv.2406.09077) |
+| square 6x6, V = 0.1, n &asymp; 0.3611 | **-0.759460(1)** | VMC Determinant Slater-Jastrow (RBM) Ansatz... [Romero et al. (2024)](https://doi.org/10.48550/arxiv.2406.09077) | -0.759460 VMC Determinant Slater-Backflow-Ja... [Romero et al. (2024)](https://doi.org/10.48550/arxiv.2406.09077) |
+| square 6x6, V = 1, n &asymp; 0.3611 | **-0.6132263** | DMRG (maxbonddim = 4096) [run script](https://github.com/varbench/methods/blob/main/scripts/tV/square_36_P_13_1/dmrg.sh), no paper cited | -0.6131929 VMC Determinant Slater-Backflow-Ja... [Romero et al. (2024)](https://doi.org/10.48550/arxiv.2406.09077) |
+| square 6x6, V = 10, n &asymp; 0.3611 | **-0.2201239** | DMRG (maxbonddim = 4096) [run script](https://github.com/varbench/methods/blob/main/scripts/tV/square_36_P_13_10/dmrg.sh), no paper cited | -0.2101835 VMC Determinant Slater-Backflow-Ja... [Romero et al. (2024)](https://doi.org/10.48550/arxiv.2406.09077) |
+| square 8x8, V = 1, n = 0.5 | **-0.4590635** | DMRG (maxbonddim = 4096) [run script](https://github.com/varbench/methods/blob/main/scripts/tV/square_64_P_32_1/dmrg.sh), no paper cited | none |
+| square 8x8, V = 2, n = 0.5 | **-0.2911555** | DMRG (maxbonddim = 4096) [run script](https://github.com/varbench/methods/blob/main/scripts/tV/square_64_P_32_2/dmrg.sh), no paper cited | none |
+| square 8x8, V = 4, n = 0.5 | **-0.1601344** | DMRG (maxbonddim = 4096) [run script](https://github.com/varbench/methods/blob/main/scripts/tV/square_64_P_32_4/dmrg.sh), no paper cited | none |
+
+</details>
+
+<details>
+<summary><b>Transverse-field Ising</b>: 7 instances, 7 with a record, energies as <code>E/N (Pauli)</code></summary>
+
+| instance | record | method | closest challenger |
+|---|---|---|---|
+| chain, 10 sites, open, h = 1 | **-1.2381490** | DMRG (bond dimension = 13) [run script](https://github.com/varbench/methods/blob/main/scripts/TFIsing/chain_10_O_1/dmrg.sh), no paper cited | -1.2381338 &dagger; VQE HV (d = 24) [run script](https://github.com/varbench/methods/blob/main/programs/pqc_ising_1d/pqc_HamVar.py), no paper cited |
+| chain, 10 sites, h = 1 | **-1.2784906** | DMRG (bond dimension = 28) [run script](https://github.com/varbench/methods/blob/main/scripts/TFIsing/chain_10_P_1/dmrg.sh), no paper cited | -1.2772460 Jastrow baseline [run script](https://github.com/varbench/methods/blob/main/scripts/TFIsing/chain_10_P_1/vmc_jastrow.sh), no paper cited |
+| chain, 32 sites, h = 0.5 | **-1.0635444** | DMRG (bond dimension = 24) [run script](https://github.com/varbench/methods/blob/main/scripts/TFIsing/chain_32_P_0.5/dmrg.sh), no paper cited | -1.0635431 Symmetric FFN, Relu, 32 features... [run script](https://github.com/varbench/methods/blob/main/scripts/TFIsing/chain_32_P_0.5/vmc_gcnn.sh), no paper cited |
+| chain, 32 sites, h = 1 | **-1.2737510** | DMRG (bond dimension = 71) [run script](https://github.com/varbench/methods/blob/main/scripts/TFIsing/chain_32_P_1/dmrg.sh), no paper cited | -1.2737502 Symmetric FFN, Relu, 32 features... [run script](https://github.com/varbench/methods/blob/main/scripts/TFIsing/chain_32_P_1/vmc_gcnn.sh), no paper cited |
+| square 6x6, h = 3 | **-3.2009084** | DMRG (bond dimension = 1024) [run script](https://github.com/varbench/methods/blob/main/scripts/TFIsing/square_36_P_3/dmrg.sh), no paper cited | -3.2008792 RBM (alpha = 1) [run script](https://github.com/varbench/methods/blob/main/scripts/TFIsing/square_36_P_3/vmc_rbm.sh), no paper cited |
+| square 12x12, open, h = 3 | **-3.1739018(2)** | 2D Recurrent Neural Network (2DRNN) [Hibat-Allah et al. (2020)](https://doi.org/10.1103/physrevresearch.2.023358) | -3.1739009 DMRG (bond dimension = 1024) [run script](https://github.com/varbench/methods/blob/main/scripts/TFIsing/square_144_O_3/dmrg.sh), no paper cited |
+| square 20x20, open, h = 3 | **-3.1819700** &#9675; | DMRG on TPU (bond dimension = 32768) [Ganahl et al. (2023)](https://doi.org/10.1103/prxquantum.4.010317) | -3.1819040 Tensor-RNN (bond dimension = 64) [Wu et al. (2023)](https://doi.org/10.1103/physrevresearch.5.l032001) |
+
+</details>
+
+<details>
+<summary><b>Impurity</b>: 12 instances, 12 with a record, energies as <code>E (total)</code></summary>
+
+| instance | record | method | closest challenger |
+|---|---|---|---|
+| SB-DMFT-MI-HF, size 9 | **-34.5805205** | DMRG (bond dimension 100) using fork tensor... [Bauernfeind et al. (2017)](https://doi.org/10.1103/physrevx.7.031013) | none |
+| SB-DMFT-MT-AHF, size 9 | **-13.8893249** | DMRG (bond dimension 100) using fork tensor... [Bauernfeind et al. (2017)](https://doi.org/10.1103/physrevx.7.031013) | none |
+| SB-DMFT-MT-HF, size 9 | **-23.3009472** | DMRG (bond dimension 100) using fork tensor... [Bauernfeind et al. (2017)](https://doi.org/10.1103/physrevx.7.031013) | none |
+| SB-IMP, size 9 | **-10.4871285** | DMRG (bond dimension 100) using fork tensor... [Bauernfeind et al. (2017)](https://doi.org/10.1103/physrevx.7.031013) | none |
+| TB-DMFT, size 9 | **-112.9042852** | DMRG (bond dimension 350) using fork tensor... [Bauernfeind et al. (2017)](https://doi.org/10.1103/physrevx.7.031013) | -112.9042852 DMRG (bond dimension 330) using... [Bauernfeind et al. (2017)](https://doi.org/10.1103/physrevx.7.031013) |
+| TB-DMFT, size 19 | **-224.3360713** | DMRG (bond dimension 350) using fork tensor... [Bauernfeind et al. (2017)](https://doi.org/10.1103/physrevx.7.031013) | -224.3360713 DMRG (bond dimension 330) using... [Bauernfeind et al. (2017)](https://doi.org/10.1103/physrevx.7.031013) |
+| TB-DMFT, size 119 | **-1307.5645417** | DMRG (bond dimension 350) using fork tensor... [Bauernfeind et al. (2017)](https://doi.org/10.1103/physrevx.7.031013) | -1307.5645415 DMRG (bond dimension 330) using... [Bauernfeind et al. (2017)](https://doi.org/10.1103/physrevx.7.031013) |
+| TB-DMFT, size 309 | **-3378.6762368** | DMRG (bond dimension 350) using fork tensor... [Bauernfeind et al. (2017)](https://doi.org/10.1103/physrevx.7.031013) | -3378.6762363 DMRG (bond dimension 330) using... [Bauernfeind et al. (2017)](https://doi.org/10.1103/physrevx.7.031013) |
+| TB-DMFT-SOC, size 9 | **-112.8717703** | DMRG (bond dimension 350) using fork tensor... [Bauernfeind et al. (2017)](https://doi.org/10.1103/physrevx.7.031013) | -112.8717703 DMRG (bond dimension 330) using... [Bauernfeind et al. (2017)](https://doi.org/10.1103/physrevx.7.031013) |
+| TB-DMFT-SOC, size 19 | **-219.7669110** | DMRG (bond dimension 350) using fork tensor... [Bauernfeind et al. (2017)](https://doi.org/10.1103/physrevx.7.031013) | -219.7669110 DMRG (bond dimension 330) using... [Bauernfeind et al. (2017)](https://doi.org/10.1103/physrevx.7.031013) |
+| TB-DMFT-SOC, size 119 | **-1305.3902308** | DMRG (bond dimension 350) using fork tensor... [Bauernfeind et al. (2017)](https://doi.org/10.1103/physrevx.7.031013) | -1305.3902296 DMRG (bond dimension 330) using... [Bauernfeind et al. (2017)](https://doi.org/10.1103/physrevx.7.031013) |
+| TB-DMFT-SOC, size 309 | **-3351.7573592** | DMRG (bond dimension 350) using fork tensor... [Bauernfeind et al. (2017)](https://doi.org/10.1103/physrevx.7.031013) | -3351.7573530 DMRG (bond dimension 330) using... [Bauernfeind et al. (2017)](https://doi.org/10.1103/physrevx.7.031013) |
+
+</details>
 
 Across the whole table: **182 of 205 instances have a record**, from 681 rows.
 Of the 23 instances without one, 16 are solved exactly and have nothing to compete
@@ -63,186 +318,10 @@ longest, and whether symmetrising actually wins) are in [the back pages](STATS.m
 
 <!-- END LEADERBOARD -->
 
-## How the ranking works
 
-Five rules decide every cell above. The full text, with the case that prompted each
-clause, is in [`RULES.md`](RULES.md).
-
-1. **Rank by energy.** The variational principle gives a total order per instance, with
-   no calibration constant and no free parameters. It is also what papers claim.
-2. **Only `variational` rows hold records.** Every row declares one of `variational`,
-   `projected`, `extrapolated` or `exact` ([§4](RULES.md#4-bound_type)). The other three are
-   displayed in rank order but never take the record.
-3. **A sampled energy needs a stated error bar; a deterministic one does not.** A
-   Monte-Carlo row without `sigma` is listed and is eligible for nothing, and `sigma`
-   must say how it was estimated: an error bar that ignores autocorrelation
-   understates by about an order of magnitude, which is enough on its own to
-   manufacture a record. DMRG at a stated bond dimension, statevector circuits and
-   tensor-network contractions carry no statistical error, so there is no error bar to
-   withhold; their convergence control is the bond dimension carried in `method`.
-4. **Ties at 2 sigma share the rank.**
-5. **A flagged row cannot hold a record** ([§6.1](RULES.md#61-a-flagged-row-cannot-hold-a-record)). Suspicion is enough to
-   withhold a record; it is never enough to hide a row. This rule exists because the
-   opposite happened on first implementation: 5 of 7 flagged rows held their instance
-   record, because being wrong *downward* is exactly what makes a number look like one.
-
-Aggregates are deliberately thin. There is **no cross-instance score**: the V-score is
-computed and shown wherever the energy variance is available, and is never ranked on.
-
-### Why `bound_type` is the whole point
-
-The 16×16 Hubbard model at U = 8, n = 0.875 is the cleanest demonstration in the table.
-
-VarBench's 2023 VAFQMC entry stands at **−0.7586523(27)** per site, a strict variational
-bound. Recent work reports **−0.7583**, which is lower, and does not take the record,
-because it is a fixed-node GFMC estimate on an ACE trial state: variational only within
-the nodal constraint, so it is not comparable to a strict bound and not comparable to a
-fixed-node number from a different trial state either. The same paper's strict
-variational ACE energy is **−0.7573**, above the 2023 record.
-
-So the honest reading is that the 2023 number still holds, and a table ranking on energy
-alone would have quietly handed the record to a different class of quantity. Nothing in
-that conclusion required re-running anything. It required one field.
-
-On 10×10 J1-J2 the same field separates Chen & Heyl's variational −0.4976921(4) from
-their own zero-variance extrapolated −0.497715(9). The extrapolation is not a bound and
-no ansatz reached it, so it is listed as `extrapolated` and competes with nothing.
-
-## What is in the data
-
-`data/<Model>/<instance>.json`, one file per instance, plus `data/_summary.json`.
-
-This is the row currently holding the 10×10 J1-J2 record, in full:
-
-```json
-{
-  "model": "J1J2", "lattice": "square", "n_sites": 100, "boundary": "P",
-  "params": { "J2": 0.5 },
-  "instance_id": "J1J2/square_100_P_0.5",
-  "rows": [
-    {
-      "energy": -199.07756, "sigma": 0.00008, "energy_variance": null,
-      "dof": 100, "einf": 0, "v_score": null,
-      "method": "CNN-MPS (h,D,l)=(32,20,20), Marshall sign transformation",
-      "bound_type": "variational",
-      "bound_type_reason": "variational ansatz; energy is a strict upper bound",
-      "reference": "arXiv:2603.14425, Disentangling Tensor Network States with Deep Neural Networks",
-      "peer_reviewed": false,
-      "source": "sweep-2026-09-13",
-      "provenance": "primary",
-      "verified": {
-        "checked_on": "2026-09-13",
-        "method": "arXiv HTML parsed locally, no LLM transcription",
-        "reported_as": "-0.4976939 (+/- 2e-7) per site in S.S units",
-        "note": "Read from Table 1 of arXiv:2603.14425 ... Supersedes Chen & Heyl -0.4976921(4) as the record for this instance.",
-        "secondary_of": null
-      }
-    }
-  ]
-}
-```
-
-`baseline: true` marks a row VarBench **computed itself** rather than collected from a
-paper: a reference calculation run across the instance set so the V-score would have
-something to measure against, not a published state-of-the-art claim. 369 of the 578
-imported rows are of this kind, and 96 of them currently hold a record, which means
-*no published result has ever beaten the benchmark's own reference run on those
-instances*. See [§8.2](RULES.md#82-baseline-collected-versus-computed).
-
-`energy` and `sigma` are stored in the instance's own convention; `v_score` is derived,
-never supplied. `verified` records where the number was read from and how: table
-parsed from arXiv HTML locally, never an LLM's summary of a table, after that was caught
-mangling columns and inventing electron counts. `defect` appears on a flagged row and
-carries the reason.
-
-**A missing field never excludes a row**: completeness is a property of the row, not an
-admission gate, and only rules 3 and 5 above govern what can hold a record.
-
-### Units and conventions
-
-Stored conventions follow VarBench and are asserted per instance, not per row. The
-conversions live in [`scripts/units.mjs`](scripts/units.mjs) and are applied by the
-loader, never by hand.
-
-| | stored as | papers usually quote |
-|---|---|---|
-| Heisenberg, J1-J2 | total energy, **Pauli** (σ·σ) convention | `E/N` in `S·S`: divide by `4 * n_sites` |
-| TFIsing | total energy, **Pauli** | `E/N`: divide by `n_sites`; no `S·S` term to rescale |
-| Hubbard, t-V | total energy | per site: divide by `n_sites` |
-| Impurity | total energy | no meaningful per-site energy |
-
-`dof` is the spin count for spin models, `N_up + N_dn` for Hubbard, and the particle
-count for **spinless** t-V. `einf` is `0` for traceless spin Hamiltonians and
-`U * N_up * N_dn / n_sites` for the plain Hubbard model.
-
-Getting these wrong is the single most likely source of a false record, which is why
-they are stated once and reused rather than inlined per script.
-
-### Error metrics
-
-Some rows carry no error information at all: no error bar, no energy variance, nothing
-that says how converged the number is. Those rows are marked **&#9675;** in the table
-above and `o` in `scripts/records.mjs`.
-
-**The marker is about our search, not about the authors.** It records that we did not
-find an error metric in the source we read, and that figure may well exist in a
-supplement, in a companion paper, or in the group's own records. So the number stays in
-the table and stays in the ranking; what the marker says is that the row still wants
-verification, and that a single message from the people who produced it would close the
-question. It is not a judgement on the work, and it is not a `defect`: that field means
-something specific here and withholds the record.
-
-If one of these is yours, see [Contributing](#contributing): the error bar, the
-variance, or the checkpoint all resolve it.
-
-## Provenance and defects
-
-Rows cite **the primary paper that produced the number**. Where a number is quoted from
-a different paper than the one that produced it, the row is marked `secondary` and names
-both. arXiv preprint is the minimum bar; rows record whether the source is peer reviewed
-and at what kind of venue, because a number refereed by a physics-numerics journal and
-the same number refereed for machine-learning contribution are not equal evidence
-([§8.1](RULES.md#81-venue-type)).
-
-The validator in [`scripts/validate.mjs`](scripts/validate.mjs) runs on every build and
-checks `dof` and `einf` against the instance definition, the V-score against the row's
-own inputs, the row's energy against its own reported variance, and the variational
-principle against any exact row in the same instance.
-
-Rows that fail are **flagged in place, never silently corrected and never deleted**. The
-flag withholds the record and nothing else; [§10](RULES.md#10-pending-confirmed-objections) is the process for lifting
-or upholding it. One worked case is resolved in [`checks/`](checks/): three TFIsing
-`RBM (alpha = 1)` energies sit up to 10 sigma below an exact solution, and a rerun with
-full summation over all 1024 basis states shows the published values are minima of the
-optimization trace rather than converged measurements.
-
-## Rebuild it
-
-`data/` is fully derived from `vendor/` plus `scripts/` and is never edited by hand.
-One command, idempotent:
-
-```sh
-scripts/build.sh
-```
-
-It wipes `data/`, re-imports the vendored VarBench snapshot (upstream `390a21ea`,
-2024-10-22), appends the verified literature and sweep rows, applies the defect flags,
-validates, recomputes `data/_summary.json` and regenerates the leaderboard above.
-
-Other tools:
-
-```sh
-node scripts/records.mjs J1J2/square_100_P_0.5   # full ranked table for an instance
-node scripts/classify_report.mjs                 # bound_type coverage
-node scripts/audit.mjs [class]                   # distinct method strings per class
-```
-
-The one step that is **not** part of the build is `scripts/enrich_sources.mjs`, which
-resolves each row's paper identifier to authors, year, DOI, institutions and countries
-via [OpenAlex](https://openalex.org) and caches the result in `sources/openalex.json`.
-It is the only script that touches the network, it is run by hand, and its output is
-committed, so `build.sh` works offline and a fresh clone reproduces the same tables.
-That cache is what turns a bare `[paper]` link into a citation you can read.
+How a record is decided, and why, is in [RULES.md](RULES.md). What a row contains, the
+stored units and conventions, the error-metric marker, and provenance and defect handling
+are in [DATA.md](DATA.md).
 
 ## Contributing
 
