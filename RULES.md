@@ -42,18 +42,18 @@ A missing field never excludes a row. Only §6 and §7 govern what can hold a re
 Every row declares exactly one. **This is the field that keeps the table honest**, because
 energies from different classes are not comparable and mixing them manufactures false records.
 
-- **`variational`** — a strict variational upper bound on the ground-state energy in the
+- **`variational`**: a strict variational upper bound on the ground-state energy in the
   stated sector. VMC, DMRG and MPS at finite bond dimension, PEPS, NQS, VQE and other
   parameterised circuits, and p-step Lanczos applied to a variational state.
-- **`projected`** — variational only within a constraint, or otherwise biased. Fixed-node
+- **`projected`**: variational only within a constraint, or otherwise biased. Fixed-node
   and constrained-path methods, GFMC on a trial state, constraint-release schemes.
   Still an upper bound in most cases, but node- or constraint-dependent, so two projected
   energies from different trial states are not cleanly comparable to each other or to
   variational ones.
-- **`extrapolated`** — the reported number is an extrapolation, not an achieved energy:
+- **`extrapolated`**: the reported number is an extrapolation, not an achieved energy:
   zero-variance, bond-dimension, or Trotter-error extrapolation. **Not a bound.** No
   ansatz ever reached it.
-- **`exact`** — numerically exact for this instance: exact diagonalization, exact solution,
+- **`exact`**: numerically exact for this instance: exact diagonalization, exact solution,
   sign-problem-free QMC where that is established.
 
 Worked cases that fixed the boundaries:
@@ -230,7 +230,7 @@ worth attacking, and one of those readings finds them and the other does not.
 Six issues survive these checks on the imported VarBench data. They are carried as known
 defects attached to the row (§11), not silently corrected.
 
-**Resolved case, 2026-09-11 — the three TFIsing `RBM (alpha = 1)` rows.** They sit 3.8 to
+**Resolved case, 2026-09-11: the three TFIsing `RBM (alpha = 1)` rows.** They sit 3.8 to
 10.4 sigma below an exact solution, which no variational state can be. Rerun on three seeds
 each (netket 3.22.4, alpha=1 complex RBM, 2000 SR steps): evaluating the trained parameters
 by **full summation over all 1024 basis states**, with zero Monte-Carlo error, puts every
@@ -245,7 +245,7 @@ This is why §6 requires a stated sigma *and* how it was estimated, and why §10
 objection. A leaderboard that ranked on energy alone, with no exact-reference check, would
 have carried all three as records.
 
-**The case none of the above would catch — kagome, 108 sites (2026-09-14).** Ðurić et al.,
+**The case none of the above would catch: kagome, 108 sites (2026-09-14).** Ðurić et al.,
 *Phys. Rev. X* 15, 011047 (2025), report a spinon pair-density-wave ground state at
 E₀ = −48.18 on a 108-site cluster, 1.78% below the DMRG benchmark of −47.33964 they compare
 against. A Comment (arXiv:2605.28861) shows the single-spin-flip update used at that size
@@ -254,16 +254,16 @@ S<sup>z</sup><sub>tot</sub> = 0 sector the acceptance rate collapses to *exactly
 5000 iterations, so the chains freeze and the average is taken over a non-representative set
 of configurations. Under the magnetisation-preserving exchange update the same architecture
 converges to ≈ −45.6, and re-evaluating the spin-flip-optimised *parameters* ergodically gives
-≈ −42.6 — the published number lies below all of them.
+≈ −42.6; the published number lies below all of them.
 
 Three things make this the sharpest case in this document:
 
 1. **No check on the number itself could have caught it.** DMRG at finite bond dimension is
-   an upper bound too, so an energy below it is not evidence of error — ordinarily it is just
+   an upper bound too, so an energy below it is not evidence of error; ordinarily it is just
    a better state. There is no exact reference at 108 sites. The refutation had to come from
    the *sampler*, which is why §10 now admits non-ergodic sampling as its own ground.
 2. **The instance ends with no record at all.** Its only `variational` row is flagged, and the
-   DMRG row is `extrapolated` — Depenbrock et al. state their energies are "extrapolated in
+   DMRG row is `extrapolated`: Depenbrock et al. state their energies are "extrapolated in
    the truncation error of single-site DMRG", which lies below any energy an MPS achieved.
    "No eligible record" is the correct answer here, and a table ranking on energy alone would
    instead have printed a refuted number as the record.
@@ -282,7 +282,7 @@ technical. Admissible grounds:
 - `bound_type` misdeclared (§4);
 - `sigma` estimated without autocorrelation correction (§6);
 - the energy violates the variational principle against a known exact reference (§9);
-- **the sampling is non-ergodic** — the Monte Carlo update rule is incompatible with a
+- **the sampling is non-ergodic**: the Monte Carlo update rule is incompatible with a
   conservation law or symmetry of the Hamiltonian, so the reported average is taken over a
   non-representative set of configurations (§9, the kagome case);
 - the number cannot be located in the cited source (§8).

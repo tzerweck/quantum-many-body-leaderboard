@@ -40,7 +40,7 @@ export function citeCell(row, cache = sources()) {
   if (s) return `[${citeText(s)}](${citeUrl(s)})`;
   const ref = row.reference || "";
   const code = ref.match(/\[code\]\((https?:\/\/[^\s)]+)\)/);
-  if (code) return `[run script](${code[1]}) &mdash; no paper cited`;
+  if (code) return `[run script](${code[1]}), no paper cited`;
   const link = ref.match(/\((https?:\/\/[^\s)]+)\)/);
   return link ? `[source](${link[1]})` : (ref.slice(0, 32) || "n/a");
 }

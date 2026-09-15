@@ -6,8 +6,8 @@
 //   1. `max_results=40` with no paging. Every query was truncated at 40 hits no matter
 //      how many matched, so the "161 unique candidates" of 2026-09-12 was 12 queries
 //      capped at 40, not 12 queries answered.
-//   2. `get()` returned "" on any HTTP or network failure. A 429 from arXiv — which this
-//      environment hits routinely — logged as "<tag>: 0 since 2025", indistinguishable
+//   2. `get()` returned "" on any HTTP or network failure. A 429 from arXiv (which this
+//      environment hits routinely) logged as "<tag>: 0 since 2025", indistinguishable
 //      from a query that genuinely matched nothing.
 //
 // Both are fixed. The harvester pages until it reaches the date floor, and a failed
@@ -35,7 +35,7 @@ import fs from "node:fs";
 
 // --- queries ----------------------------------------------------------------------
 // The first block is the original 2026-09-12 set. The second targets the families with
-// ZERO post-2024 coverage — tV (0/14 instances), Impurity (0/12), TFIsing (0/7) — plus
+// ZERO post-2024 coverage: tV (0/14 instances), Impurity (0/12), TFIsing (0/7), plus
 // pyrochlore and shuriken, which had only one thin keyword each. Nobody has ever run a
 // query written for these; the old set reached them only incidentally.
 const Q = [
@@ -389,7 +389,7 @@ fs.writeFileSync("sweep-queries.tsv",
 const trunc = audit.filter(a => a.stop.startsWith("PAGE CAP"));
 console.error(`\n${rows.length} unique candidates -> ${OUT} (${newThisRun} new this run, ${carried} carried)`);
 console.error(`${audit.length} queries audited -> sweep-queries.tsv`);
-if (trunc.length) console.error(`TRUNCATED by the page cap: ${trunc.map(a => a.tag).join(" ")} — raise --max-pages`);
+if (trunc.length) console.error(`TRUNCATED by the page cap: ${trunc.map(a => a.tag).join(" ")}; raise --max-pages`);
 if (hardFail) {
   console.error(`\n!! ${hardFail} QUERIES FAILED OR WERE REJECTED. This harvest is INCOMPLETE.`);
   console.error(`!! See sweep-queries.tsv. Prior candidates were carried forward, so nothing was lost.`);

@@ -1,4 +1,4 @@
-# QMBL — the Quantum Many-Body Leaderboard
+# QMBL: the Quantum Many-Body Leaderboard
 
 <!-- All badges via shields.io. Zenodo's own badge endpoint (zenodo.org/badge/DOI/....svg)
      returns 403 and renders as a broken image, so the DOI badge is built here instead. -->
@@ -29,8 +29,8 @@ As well as place our own results in the context of other research.
 | J1-J2 square 20x20, J2 = 0.5 | **-0.4967987(6)** | CNN-MPS (h,D,l)=(32,15,20) [Fan et al. (2026)](https://doi.org/10.48550/arxiv.2603.14425) | -0.4967320 ViT with symmetry restoration [Viteritti et al. (2026)](https://doi.org/10.48550/arxiv.2602.02665) |
 | Hubbard square 16x16, U = 8, n = 0.875 | **-0.75865(3)** | VAFQMC stripe length 8 [Sorella (2023)](https://doi.org/10.1103/physrevb.107.115133) | -0.75730 &#9675; ACE (16 conv layers), no symmetry... [Gu et al. (2026)](https://doi.org/10.48550/arxiv.2604.25775) |
 | Hubbard 4x16, U = 8, n = 0.875 | **-0.76623(1)** | ACE (16 conv layers) + full symmetry... [Gu et al. (2026)](https://doi.org/10.48550/arxiv.2604.25775) | -0.76560 NNBF, 32 determinants + free... [Loehr & Clark (2025)](https://doi.org/10.48550/arxiv.2510.26906) |
-| Triangular Heisenberg, 196 sites, open | **-0.5138(1)** | 2D Gated RNN [Hibat-Allah et al. (2022)](https://doi.org/10.48550/arxiv.2207.14314) | -0.5108 DMRG (Bond dimension = 2000) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensor_cpp/dmrg_triangular_heisenberg_14x14.cc) &mdash; no paper cited |
-| Kagome Heisenberg, 192 sites | **-0.42987(1)** | VMC with Dirac spin liquid + Jastrow [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/kagome-8x8_192_P/vmc_gutzwiller.sh) &mdash; no paper cited | none |
+| Triangular Heisenberg, 196 sites, open | **-0.5138(1)** | 2D Gated RNN [Hibat-Allah et al. (2022)](https://doi.org/10.48550/arxiv.2207.14314) | -0.5108 DMRG (Bond dimension = 2000) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensor_cpp/dmrg_triangular_heisenberg_14x14.cc), no paper cited |
+| Kagome Heisenberg, 192 sites | **-0.42987(1)** | VMC with Dirac spin liquid + Jastrow [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/kagome-8x8_192_P/vmc_gutzwiller.sh), no paper cited | none |
 | Pyrochlore Heisenberg, 256 sites | **-0.48310(7)** | mVMC with SU(2) and symmetry projections [Astrakhantsev et al. (2021)](https://doi.org/10.1103/physrevx.11.041021) | none |
 
 Every row is one published claim about a Hamiltonian instance, carrying the energy value,
@@ -42,7 +42,7 @@ Energies are per site: spin models as `E/N (S.S)`, Hubbard as `E/site` (see
 [units and conventions](#units-and-conventions)). **Bold** is the record under
 [the ranking rules](#how-the-ranking-works). 
 **&#9675;** marks a row where **we found no error
-metric** — neither an error bar nor an energy variance — in the source we read; 
+metric** (neither an error bar nor an energy variance) in the source we read; 
 **&dagger;** marks a
 sampled energy with a variance but no error bar. 
 Both rows stay in the table and in rank
@@ -51,15 +51,15 @@ order; the marker is an open question regarding ambiguous information (see [erro
 Across the whole table: **182 of 205 instances have a record**, from 681 rows.
 Of the 23 instances without one, 16 are solved exactly and have nothing to compete
 for. Separately, **31 sampled variational rows across 26 instances carry no error bar**, so
-they are listed and rank for nothing — and 5 of them sit below their instance's current
+they are listed and rank for nothing, and 5 of them sit below their instance's current
 record. If one of those is your paper, the error bar is the only thing missing.
 
 And **22 rows carry no error metric we could find** (&#9675;). Those numbers stay in the
-table and in the ranking — the marker only says the row still needs verification or a word
+table and in the ranking; the marker only says the row still needs verification or a word
 from the people who produced it.
 
-More views of the same data — which records nobody has ever challenged, which have stood
-longest, and whether symmetrising actually wins — are in [the back pages](STATS.md).
+More views of the same data (which records nobody has ever challenged, which have stood
+longest, and whether symmetrising actually wins) are in [the back pages](STATS.md).
 
 <!-- END LEADERBOARD -->
 
@@ -75,7 +75,7 @@ clause, is in [`RULES.md`](RULES.md).
    displayed in rank order but never take the record.
 3. **A sampled energy needs a stated error bar; a deterministic one does not.** A
    Monte-Carlo row without `sigma` is listed and is eligible for nothing, and `sigma`
-   must say how it was estimated — an error bar that ignores autocorrelation
+   must say how it was estimated: an error bar that ignores autocorrelation
    understates by about an order of magnitude, which is enough on its own to
    manufacture a record. DMRG at a stated bond dimension, statevector circuits and
    tensor-network contractions carry no statistical error, so there is no error bar to
@@ -94,7 +94,7 @@ computed and shown wherever the energy variance is available, and is never ranke
 The 16×16 Hubbard model at U = 8, n = 0.875 is the cleanest demonstration in the table.
 
 VarBench's 2023 VAFQMC entry stands at **−0.7586523(27)** per site, a strict variational
-bound. Recent work reports **−0.7583**, which is lower — and does not take the record,
+bound. Recent work reports **−0.7583**, which is lower, and does not take the record,
 because it is a fixed-node GFMC estimate on an ACE trial state: variational only within
 the nodal constraint, so it is not comparable to a strict bound and not comparable to a
 fixed-node number from a different trial state either. The same paper's strict
@@ -143,19 +143,19 @@ This is the row currently holding the 10×10 J1-J2 record, in full:
 ```
 
 `baseline: true` marks a row VarBench **computed itself** rather than collected from a
-paper — a reference calculation run across the instance set so the V-score would have
+paper: a reference calculation run across the instance set so the V-score would have
 something to measure against, not a published state-of-the-art claim. 369 of the 578
 imported rows are of this kind, and 96 of them currently hold a record, which means
 *no published result has ever beaten the benchmark's own reference run on those
 instances*. See [§8.2](RULES.md#82-baseline-collected-versus-computed).
 
 `energy` and `sigma` are stored in the instance's own convention; `v_score` is derived,
-never supplied. `verified` records where the number was read from and how — table
+never supplied. `verified` records where the number was read from and how: table
 parsed from arXiv HTML locally, never an LLM's summary of a table, after that was caught
 mangling columns and inventing electron counts. `defect` appears on a flagged row and
 carries the reason.
 
-**A missing field never excludes a row** — completeness is a property of the row, not an
+**A missing field never excludes a row**: completeness is a property of the row, not an
 admission gate, and only rules 3 and 5 above govern what can hold a record.
 
 ### Units and conventions
@@ -167,7 +167,7 @@ loader, never by hand.
 | | stored as | papers usually quote |
 |---|---|---|
 | Heisenberg, J1-J2 | total energy, **Pauli** (σ·σ) convention | `E/N` in `S·S`: divide by `4 * n_sites` |
-| TFIsing | total energy, **Pauli** | `E/N`: divide by `n_sites` — no `S·S` term to rescale |
+| TFIsing | total energy, **Pauli** | `E/N`: divide by `n_sites`; no `S·S` term to rescale |
 | Hubbard, t-V | total energy | per site: divide by `n_sites` |
 | Impurity | total energy | no meaningful per-site energy |
 
@@ -185,11 +185,11 @@ that says how converged the number is. Those rows are marked **&#9675;** in the 
 above and `o` in `scripts/records.mjs`.
 
 **The marker is about our search, not about the authors.** It records that we did not
-find an error metric in the source we read — and that figure may well exist in a
+find an error metric in the source we read, and that figure may well exist in a
 supplement, in a companion paper, or in the group's own records. So the number stays in
 the table and stays in the ranking; what the marker says is that the row still wants
 verification, and that a single message from the people who produced it would close the
-question. It is not a judgement on the work, and it is not a `defect` — that field means
+question. It is not a judgement on the work, and it is not a `defect`: that field means
 something specific here and withholds the record.
 
 If one of these is yours, see [Contributing](#contributing): the error bar, the
@@ -241,25 +241,25 @@ The one step that is **not** part of the build is `scripts/enrich_sources.mjs`, 
 resolves each row's paper identifier to authors, year, DOI, institutions and countries
 via [OpenAlex](https://openalex.org) and caches the result in `sources/openalex.json`.
 It is the only script that touches the network, it is run by hand, and its output is
-committed — so `build.sh` works offline and a fresh clone reproduces the same tables.
+committed, so `build.sh` works offline and a fresh clone reproduces the same tables.
 That cache is what turns a bare `[paper]` link into a citation you can read.
 
 ## Contributing
 
 **Corrections are the most valuable contribution** and are wanted more than new rows. If
-your work is in this table and the row is wrong — wrong sector, wrong convention, wrong
-`bound_type`, a number attributed to the wrong paper — open an issue against it. An
+your work is in this table and the row is wrong (wrong sector, wrong convention, wrong
+`bound_type`, a number attributed to the wrong paper), open an issue against it. An
 objection must be specific and technical; the admissible grounds are listed in
 [§10](RULES.md#10-pending-confirmed-objections), and rulings cite a clause rather than anyone's judgement about anyone's
 work.
 
 **If your row has no error bar, send the error bar.** A sampled energy without one is
 listed but ranks for nothing, and several such rows sit below their instance's current
-record — the count is in the [leaderboard](#leaderboard) section, which is regenerated
+record; the count is in the [leaderboard](#leaderboard) section, which is regenerated
 on every build.
 
 **If you have the trained state, we would rather have that than a number.** The energy
-variance almost nobody reports is a byproduct of a single sampling pass — in
+variance almost nobody reports is a byproduct of a single sampling pass: in
 [NetKet](https://github.com/netket/netket), `vstate.expect(H)` returns the mean, the
 error of the mean, the variance, `tau_corr` and `R_hat` in one call. With the checkpoint
 and the model code we can measure it, report `R_hat` and `tau_corr` so the measurement
@@ -278,15 +278,15 @@ faking by grouping on method names.
 Releases are archived on Zenodo, so a paper can cite a frozen comparison set rather than
 a moving table.
 
-- **Concept DOI — [10.5281/zenodo.22753734](https://doi.org/10.5281/zenodo.22753734)** always resolves to the
+- **Concept DOI: [10.5281/zenodo.22753734](https://doi.org/10.5281/zenodo.22753734)** always resolves to the
   latest release. Cite this one unless you need a specific snapshot.
-- **v0.1.0 — [10.5281/zenodo.22753735](https://doi.org/10.5281/zenodo.22753735)** (205 instances, 675 rows, 182
+- **v0.1.0: [10.5281/zenodo.22753735](https://doi.org/10.5281/zenodo.22753735)** (205 instances, 675 rows, 182
   records). Cite this to pin the exact comparison set your numbers were measured against.
 
-> T. Zerweck, *QMBL — the Quantum Many-Body Leaderboard*, v0.1.0, Zenodo (2026).
+> T. Zerweck, *QMBL: the Quantum Many-Body Leaderboard*, v0.1.0, Zenodo (2026).
 > [10.5281/zenodo.22753735](https://doi.org/10.5281/zenodo.22753735)
 
-Individual energies should cite **the primary paper named on the row**, not this dataset —
+Individual energies should cite **the primary paper named on the row**, not this dataset:
 QMBL is a compilation, and the people who produced a number are the ones a referee expects
 to see cited. Machine-readable metadata is in [`CITATION.cff`](CITATION.cff) and
 [`.zenodo.json`](.zenodo.json).

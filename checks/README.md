@@ -3,14 +3,14 @@
 Reruns that settle a specific claim about a row. Each one exists because
 `scripts/validate.mjs` flagged something that could not be resolved by reading.
 
-## `tfim_obc_ed.mjs` — is arXiv:2605.13807's variational column below its own exact column?
+## `tfim_obc_ed.mjs`: is arXiv:2605.13807's variational column below its own exact column?
 
 **Question.** The first TFIsing candidate the sweep ever produced came from
 arXiv:2605.13807 (parallel-scan recurrent NQS), whose transverse-field Ising chain table
 reports a `1D LRU` variational energy and an `e exact (N)` reference at each size. At
 N = 10, 24 and 32 the variational value sits *below* the exact one; at N = 6, 8, 12, 16,
 48, 64 and 96 it sits correctly above. Is that a real inversion, or did the harvester
-misread the columns — a fair suspicion, since a column-shift bug had just been fixed.
+misread the columns? A fair suspicion, since a column-shift bug had just been fixed.
 
 **Design.** Matrix-free Lanczos ground state of `H = -sum s^z s^z - h sum s^x` on an OPEN
 chain at h = 1, for N = 6…16, in the Pauli convention. Independent of the harvester and of
@@ -31,15 +31,15 @@ below as an optimization-trace minimum rather than a converged measurement. Two 
 groups making the same class of error on the same tiny instance is a pattern, not a
 coincidence, and it is an argument for reporting converged energies with their variance.
 
-**Reproduce.** `node checks/tfim_obc_ed.mjs` — seconds, no GPU.
+**Reproduce.** `node checks/tfim_obc_ed.mjs` (seconds, no GPU).
 
-## `tfising_rbm_check.py` — the three `RBM (alpha = 1)` rows below exact
+## `tfising_rbm_check.py`: the three `RBM (alpha = 1)` rows below exact
 
 **Question.** VarBench's TFIsing `RBM (alpha = 1)` rows sit below the exact ground state
 by 3.8 to 10.4 sigma. Is the energy wrong, or is the error bar wrong?
 
 **Design.** At N = 10 the Hilbert space is 1024, so the trained parameters can be evaluated
-by *full summation* — the RBM's true variational energy with zero Monte-Carlo error. The
+by *full summation*: the RBM's true variational energy with zero Monte-Carlo error. The
 variational principle then gives a hard answer instead of a statistical one. Three seeds per
 instance; the training trace is kept so its minimum can be compared against the published value.
 
@@ -55,7 +55,7 @@ instance; the training trace is kept so its minimum can be compared against the 
 | tau_corr / R_hat | ≤ 0.05 / 1.0000 | ≤ 0.05 / 1.0000 |
 
 **Conclusion.** The published values are minima of the optimization trace, not converged
-measurements — each lies between our converged energy and our trace minimum. The
+measurements: each lies between our converged energy and our trace minimum. The
 autocorrelation hypothesis is ruled out. Our ED reproduces both VarBench exact values to 1e-14,
 so the reference is sound and only the RBM rows are at fault.
 
