@@ -48,10 +48,10 @@ sampled energy with a variance but no error bar.
 Both rows stay in the table and in rank
 order; the marker is an open question regarding ambiguous information (see [error metrics](DATA.md#error-metrics)).
 
-### All 250 instances
+### All 300 instances
 
 <details>
-<summary><b>Heisenberg</b>: 36 instances, 31 with a record, energies as <code>E/N (S.S)</code></summary>
+<summary><b>Heisenberg</b>: 86 instances, 31 with a record, energies as <code>E/N (S.S)</code></summary>
 
 | instance | record | method | closest challenger |
 |---|---|---|---|
@@ -69,7 +69,20 @@ order; the marker is an open question regarding ambiguous information (see [erro
 | pyrochlore 3x3x3 (432 sites) | **-0.48847(3)** | mVMC (PP + 1st step Lanczos, spin-parity... [Pohle et al. (2023)](https://doi.org/10.48550/arxiv.2311.11561) | none |
 | pyrochlore 4x4x4 (256 sites) | **-0.48310(7)** | mVMC with SU(2) and symmetry projections [Astrakhantsev et al. (2021)](https://doi.org/10.1103/physrevx.11.041021) | none |
 | pyrochlore 4x4x4 (1024 sites) | **-0.48800(1)** | mVMC (PP + 1st step Lanczos, spin-parity... [Pohle et al. (2023)](https://doi.org/10.48550/arxiv.2311.11561) | none |
+| rectangular 10x20, periodic/open | no record | solved exactly | |
+| rectangular 12x24, periodic/open | no record | solved exactly | |
+| rectangular 14x28, periodic/open | no record | solved exactly | |
+| rectangular 16x32, periodic/open | no record | solved exactly | |
+| rectangular 18x36, periodic/open | no record | solved exactly | |
+| rectangular 20x40, periodic/open | no record | solved exactly | |
+| rectangular 24x48, periodic/open | no record | solved exactly | |
+| rectangular 32x64, periodic/open | no record | solved exactly | |
+| rectangular 48x96, periodic/open | no record | solved exactly | |
+| rectangular 4x8, periodic/open | no record | solved exactly | |
+| rectangular 64x128, periodic/open | no record | solved exactly | |
+| rectangular 6x12, periodic/open | no record | solved exactly | |
 | rectangular 6x8 | no record | solved exactly | |
+| rectangular 8x16, periodic/open | no record | solved exactly | |
 | shuriken, 24 sites | no record | solved exactly | |
 | shuriken, 96 sites | **-0.43826(1)** | mVMC with SU(2) and point group projection [Astrakhantsev et al. (2021)](https://doi.org/10.1103/physrevb.104.l220408) | none |
 | shuriken, 216 sites | **-0.4376(1)** | mVMC with SU(2) and point group projection [Astrakhantsev et al. (2021)](https://doi.org/10.1103/physrevb.104.l220408) | none |
@@ -78,10 +91,47 @@ order; the marker is an open question regarding ambiguous information (see [erro
 | square 6x6, open | **-0.6035218** | DMRG (bond dimension = 2048) [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/square_36_O/dmrg.sh), no paper cited | -0.5948382 Jastrow baseline [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/square_36_O/vmc_jastrow.sh), no paper cited |
 | square 6x6 | **-0.67887(2)** | 2D RNN wavefunction (best variational) [Moss et al. (2025)](https://doi.org/10.48550/arxiv.2502.17144) | -0.67887 RBM + Lanczos recursion [Chen et al. (2022)](https://doi.org/10.48550/arxiv.2206.14307) |
 | square, 50 sites | no record | solved exactly | |
+| square 8x8, open | no record | solved exactly | |
+| square 8x8 | no record | solved exactly | |
 | square 10x10, open | **-0.628656(9)** | 2D tensorized RNN (symmetry + annealing) [Hibat-Allah et al. (2022)](https://doi.org/10.48550/arxiv.2207.14314) | -0.628649 RNN + translational symmetry [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/square_100_O/vmc_rnn.sh), no paper cited |
 | square 10x10 | **-0.67155260(3)** | CNN + MinSR [Chen & Heyl (2023)](https://doi.org/10.48550/arxiv.2302.01941) | -0.67151900 RBM + Lanczos recursion [Chen et al. (2022)](https://doi.org/10.48550/arxiv.2206.14307) |
+| square 12x12, open | no record | solved exactly | |
+| square 12x12 | no record | solved exactly | |
+| square 14x14, open | no record | solved exactly | |
 | square 14x14 | **-0.668346(8)** | VMC with fermions (flux+neel+Jastrow) [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/square_196_P/vmc_gutzwiller.sh), no paper cited | -0.663805 RBM (alpha = 1) [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/square_196_P/vmc_rbm.sh), no paper cited |
 | square 16x16, open | **-0.643504(3)** | 2D minGRU (3 layers, c4v symmetry, parallel... [Merali et al. (2026)](https://doi.org/10.48550/arxiv.2605.13807) | -0.643448 PixelCNN (deep autoregressive) Sharir, Levine, Wies, Carleo & S |
+| square 16x16 | no record | solved exactly | |
+| square 18x18, open | no record | solved exactly | |
+| square 18x18 | no record | solved exactly | |
+| square 20x20, open | no record | solved exactly | |
+| square 20x20 | no record | solved exactly | |
+| square 22x22, open | no record | solved exactly | |
+| square 22x22 | no record | solved exactly | |
+| square 24x24, open | no record | solved exactly | |
+| square 24x24 | no record | solved exactly | |
+| square 26x26, open | no record | solved exactly | |
+| square 26x26 | no record | solved exactly | |
+| square 28x28, open | no record | solved exactly | |
+| square 28x28 | no record | solved exactly | |
+| square 30x30 | no record | solved exactly | |
+| square 32x32, open | no record | solved exactly | |
+| square 32x32 | no record | solved exactly | |
+| square 36x36 | no record | solved exactly | |
+| square 40x40 | no record | solved exactly | |
+| square 44x44 | no record | solved exactly | |
+| square 48x48, open | no record | solved exactly | |
+| square 48x48 | no record | solved exactly | |
+| square 52x52 | no record | solved exactly | |
+| square 56x56 | no record | solved exactly | |
+| square 60x60 | no record | solved exactly | |
+| square 64x64, open | no record | solved exactly | |
+| square 64x64 | no record | solved exactly | |
+| square 72x72 | no record | solved exactly | |
+| square 80x80 | no record | solved exactly | |
+| square 88x88 | no record | solved exactly | |
+| square 96x96, open | no record | solved exactly | |
+| square 96x96 | no record | solved exactly | |
+| square 128x128, open | no record | solved exactly | |
 | triangular 4x4 | **-0.5347197** | DMRG (bond dimension = 256) [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/triangular_16_P/dmrg.sh), no paper cited | -0.5340324 VQE (SR + symm. + 64 par) [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/triangular_16_P/vqe.sh), no paper cited |
 | triangular 6x6 | **-0.560313(3)** | Group CNN (deep, symmetry-projected) [Roth et al. (2022)](https://doi.org/10.48550/arxiv.2211.07749) | -0.560100 Lattice Convolutional Network [Fu et al. (2022)](https://doi.org/10.48550/arxiv.2206.07370) |
 | triangular, 48 sites | no record | solved exactly | |
@@ -348,8 +398,8 @@ order; the marker is an open question regarding ambiguous information (see [erro
 
 </details>
 
-Across the whole table: **182 of 250 instances have a record**, from 737 energies.
-Of the 68 instances without one, 61 are solved exactly and have nothing to compete
+Across the whole table: **182 of 300 instances have a record**, from 791 energies.
+Of the 118 instances without one, 111 are solved exactly and have nothing to compete
 for. Separately, **31 sampled variational energies across 26 instances carry no error bar**, so
 they are listed and rank for nothing, and 5 of them sit below their instance's current
 record. If one of those is your paper, the error bar is the only thing missing.

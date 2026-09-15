@@ -40,7 +40,7 @@ for itself, which beats any single paper's ablation.
 | ansatz | records (all) | records (contested) | records where both kinds were tried |
 |---|---:|---:|---:|
 | explicit symmetry projection | 39 | 8 | 8 |
-| no explicit projection | 143 | 28 | 7 |
+| no explicit projection | 143 | 30 | 7 |
 
 **The last column is the one that means anything**: on 15 instances both a symmetrised and an
 unsymmetrised ansatz have been published, so the record was taken with the alternative
@@ -109,12 +109,12 @@ answer has been settled for a decade. The contested column counts only instances
 
 | family | records (all instances) | records (contested only) |
 |---|---:|---:|
-| tensor network | 77 | 17 |
+| tensor network | 77 | 18 |
 | CNN / ResNet | 4 | 3 |
 | RNN | 4 | 3 |
 | RBM | 21 | 11 |
 | backflow / Pfaffian | 16 | 1 |
-| classic VMC | 13 | 0 |
+| classic VMC | 13 | 1 |
 | AFQMC / GFMC | 22 | 1 |
 | VQE / circuit | 19 | 0 |
 | other | 6 | 0 |
