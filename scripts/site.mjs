@@ -249,19 +249,23 @@ function citeHtml(row) {
   return r.note ? `${link}<span class="muted">, ${r.note}</span>` : link;
 }
 
-// What the instance page says about its own currency. The `coverage` block documented in
-// DATA.md is not yet populated on any instance, so this states only what the rows
-// themselves prove: when the newest number here was published, and whether anything has
-// been added since the VarBench snapshot. Neither sentence claims a search was run.
+// What the instance page says about its own currency: when the newest number here was
+// published, whether anything has been added since the VarBench snapshot, and - only where
+// an instance carries a `coverage` entry (DATA.md) - when its literature was last checked,
+// how, and whether that check found anything. No sentence claims a search that was not run.
 function coverage(inst) {
   const added = inst.rows.filter(r => r.source !== SNAPSHOT);
   const years = inst.rows.map(yearOf).filter(Boolean);
   const newest = years.length ? Math.max(...years) : null;
   const when = newest ? `Newest published number here: <strong>${newest}</strong>.` :
     "No row here carries a publication year.";
-  return added.length
+  const rows = added.length
     ? `${when} ${added.length} row${added.length === 1 ? "" : "s"} added from the 2026-09 literature sweep, on top of the VarBench snapshot of 2024-10-22.`
     : `${when} Nothing has been added to this instance since the VarBench snapshot of 2024-10-22.`;
+  const last = (inst.coverage ?? []).at(-1);
+  if (!last) return rows;
+  const n = last.screened?.length ?? last.screened_count;
+  return `${rows} Literature last checked <strong>${last.checked_on}</strong> (${last.method}): ${n} paper${n === 1 ? "" : "s"} read, ${last.found} of them with an energy on this page.`;
 }
 
 // Written out because an instance is only a claim if the Hamiltonian is stated. Couplings

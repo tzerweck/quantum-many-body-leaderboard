@@ -103,7 +103,8 @@ Per instance, not per row, and appended to rather than overwritten:
 reads as more authoritative than it is. This is the field the instance pages quote, and it
 is why "we looked, and there is nothing newer" is worth the same bookkeeping as a new row.
 `screened` names the papers when there are few, `screened_count` replaces it when there are
-many.
+many. `found` is how many of the screened papers the instance carries an energy from, read
+off its rows at build time, so it cannot disagree with the page.
 
 ## Units and conventions
 
