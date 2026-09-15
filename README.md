@@ -287,9 +287,11 @@ QMBL is a compilation, and the people who produced a number are the ones a refer
 to see cited. Machine-readable metadata is in [`CITATION.cff`](CITATION.cff) and
 [`.zenodo.json`](.zenodo.json).
 
-QMBL builds on **VarBench**, the dataset published with the V-score paper, which is the
-source of the imported rows and of many of the references they cite. If you use this
-data, cite that paper too:
+The imported rows, the instance set, the stored conventions and the V-score come from
+**VarBench**, the dataset published with the V-score paper. Its `baseline: true` rows are
+VarBench's own reference calculations and have no other source. QMBL departs from VarBench
+on bound classification and defect handling (see [RULES.md](RULES.md)). If you use an
+imported row, cite that paper too:
 
 > D. Wu *et al.*, *Variational benchmarks for quantum many-body problems*,
 > Science **386**, 296 (2024). [10.1126/science.adg9774](https://doi.org/10.1126/science.adg9774)
