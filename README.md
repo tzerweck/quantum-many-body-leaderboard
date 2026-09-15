@@ -318,7 +318,6 @@ longest, and whether symmetrising actually wins) are in [the back pages](STATS.m
 
 <!-- END LEADERBOARD -->
 
-
 How a record is decided, and why, is in [RULES.md](RULES.md). What a row contains, the
 stored units and conventions, the error-metric marker, and provenance and defect handling
 are in [DATA.md](DATA.md).
