@@ -14,7 +14,7 @@ const PDF = "arXiv PDF text extracted locally with pypdf in layout mode, no LLM 
 const HFPS = { ref: "Chen, Wan, Sengupta & Georges, Neural network-augmented Pfaffian wave-functions for scalable simulations of interacting fermions, Proc. Natl. Acad. Sci. U.S.A. 123, e2535288123 (2026), arXiv:2507.10705", pr: true };
 const RHB = { ref: "Zhou, Zhou & Liu, Locality-Induced Hierarchical Backflow Wavefunctions for Correlated Fermions, arXiv:2606.00924", pr: false };
 const TRF = { ref: "Gu et al., Nat. Commun. (2026), arXiv:2507.02644", pr: true };
-const HFDS = { ref: "Robledo Moreno, Carleo, Georges & Stokes, Fermionic wave functions from neural-network constrained hidden states, Proc. Natl. Acad. Sci. U.S.A. 119, e2122059119 (2022), arXiv:2111.10420", pr: true };
+const HFDS = { ref: "Robledo Moreno, Carleo, Georges & Stokes, Fermionic wave functions from neural-network constrained hidden states, Proc. Natl. Acad. Sci. U.S.A. 119, e2122059119 (2022), arXiv:2111.10420, doi:10.1073/pnas.2122059119", pr: true };
 const RVB = { ref: "Closely competing valence bond crystal orders in the ground state of the spin-1/2 antiferromagnetic Heisenberg model on the pyrochlore lattice: a large scale unrestricted variational study, arXiv:2509.13746", pr: false };
 
 const ADD = {

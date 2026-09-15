@@ -55,7 +55,7 @@ effect size for the projection itself.
 
 ## The records that have stood longest
 
-Computed over the **84 of 181 records whose source resolves to a year** — the rest cite a run
+Computed over the **85 of 181 records whose source resolves to a year** — the rest cite a run
 script with no paper, so they have no date to rank by.
 
 One line per paper — a single 2017 study holds seven impurity records, and listing them
@@ -71,7 +71,7 @@ all would say more about that paper's scope than about how long records last.
 | 2021 | [Vieijra & Nys (2021)](https://doi.org/10.1103/physrevb.104.045123) | `J1J2/square_64_P_0.55` (-0.4883500) | 1 |
 | 2022 | [Hibat-Allah et al. (2022)](https://doi.org/10.48550/arxiv.2207.14314) | `Heisenberg/square_100_O` (-0.6286560) | 3 |
 | 2022 | [Roth et al. (2022)](https://doi.org/10.48550/arxiv.2211.07749) | `Heisenberg/triangular_108_P` (-0.5531500) | 4 |
-| 2022 | [Moreno et al. (2022)](https://doi.org/10.1073/pnas.2122059119) | `Hubbard/square_16_P_5_3.5981` (-1.2431527) | 7 |
+| 2022 | [Moreno et al. (2022)](https://doi.org/10.1073/pnas.2122059119) | `Hubbard/square_16_P_5_3.5981` (-1.2431527) | 8 |
 | 2022 | [Chen et al. (2022)](https://doi.org/10.48550/arxiv.2206.14307) | `J1J2/square_100_P_0.4` (-0.5238800) | 8 |
 | 2023 | [Pohle et al. (2023)](https://doi.org/10.48550/arxiv.2311.11561) | `Heisenberg/pyrochlore-2x2x2_128_P` (-0.4922012) | 3 |
 | 2023 | [Chen & Heyl (2023)](https://doi.org/10.48550/arxiv.2302.01941) | `Heisenberg/square_100_P` (-0.6715526) | 1 |
@@ -83,7 +83,7 @@ Records by vintage:
 | 2017 | ████████████ 12 |
 | 2020 | █ 1 |
 | 2021 | █████████ 9 |
-| 2022 | ██████████████████████ 22 |
+| 2022 | ███████████████████████ 23 |
 | 2023 | ███████████████████████████ 27 |
 | 2024 | █████ 5 |
 | 2025 | ███ 3 |
@@ -136,12 +136,12 @@ the [VarBench paper](https://doi.org/10.1126/science.adg9774) has 33 authors acr
 its first author's institution would put half this table in one country on the strength
 of an author-list ordering.
 
-That leaves **85 records from independent papers, of which 84 resolve to a country** and
-1 do not.
+That leaves **85 records from independent papers, of which 85 resolve to a country** and
+0 do not.
 
 | country | records | first-author institutions |
 |---|---:|---|
-| US | 22 | Department of Physics and Astronomy; The University of Texas at Austin… |
+| US | 23 | Department of Physics and Astronomy; The University of Texas at Austin… |
 | IT | 22 | Scuola Internazionale Superiore di Studi Avanzati |
 | AT | 12 | Graz University of Technology |
 | CH | 10 | University of Zurich; Institute of Physics |
