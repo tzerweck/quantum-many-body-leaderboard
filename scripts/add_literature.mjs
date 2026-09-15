@@ -8,6 +8,8 @@ const CH  = { ref: "Chen & Heyl, Nat. Phys. 20, 1476 (2024), arXiv:2302.01941", 
 const NUT = { ref: "Nutakki, Shokry & Vicentini, Phys. Rev. Research 7, 043099 (2025), arXiv:2505.03466", peer_reviewed: true };
 const ACE = { ref: "Gu et al., arXiv:2604.25775 (2026-04-28)", peer_reviewed: false };
 const TRF = { ref: "Gu et al., Nat. Commun. (2026), arXiv:2507.02644", peer_reviewed: true };
+const RENDE = { ref: "Rende, Viteritti, Bardone, Becca & Goldt, A simple linear algebra identity to optimize large-scale neural network quantum states, Commun. Phys. 7, 260 (2024), arXiv:2310.05715", peer_reviewed: true };
+const TBF = { ref: "Investigating the Fermi-Hubbard model by the tensor-backflow method, arXiv:2507.01856", peer_reviewed: false };
 const LC  = { ref: "Loehr & Clark, arXiv:2510.26906 (2025-10-30)", peer_reviewed: false };
 
 // spin: VarBench stores Pauli (sigma.sigma) totals; papers quote S.S per site  -> x 4 N
@@ -19,7 +21,7 @@ const ADD = {
     { eps: -0.497715, eps_err: 9e-6, method: "ResNet2 MinSR, zero-variance extrapolation", bt: "extrapolated",
       src: CH, note: 'PDF text: "estimate the ground-state energy E_GS/N = -0.497715(9) by zero-variance extrapolation". NOT a variational bound.' },
     { eps: -0.497634, eps_err: 1e-6, method: "fViT (vision transformer, 2.7e5 params)", bt: "variational",
-      src: NUT, secondary: "Rende et al., cited as ref [16] of arXiv:2505.03466", note: "Read from Table 1 of the arXiv HTML of 2505.03466; primary source not checked." },
+      src: RENDE, note: "Primary located 2026-09-15: Table I of arXiv:2310.05715, last row, Deep ViT, 267720 parameters, marked present work (read from the PDF in reading order). Also quoted as fViT [16] in Table 1 of arXiv:2505.03466, where this row was first found." },
     { eps: -0.497583, eps_err: 6e-6, method: "ConvNext (6,3,3)[2,2], 2.6e5 params", bt: "variational",
       src: NUT, note: "Table 1 of arXiv:2505.03466, their own result. Paper states L=10, PBC, S.S per site." },
   ]},
@@ -45,10 +47,10 @@ const ADD = {
     { eps: -0.7573, eps_err: null, method: "ACE (16 conv layers), no symmetry projection", bt: "variational", src: ACE },
     { eps: -0.7563, eps_err: null, method: "Transformer backflow", bt: "variational", src: ACE, secondary: "ACE Table 1 row 'Transformer [13]' = arXiv:2507.02644" },
     { eps: -0.7560, eps_err: null, method: "SCALE (1 conv layer) trial state + fixed-node GFMC", bt: "projected", src: ACE },
-    { eps: -0.7552, eps_err: null, method: "Tensor-Backflow + Lanczos", bt: "variational", src: ACE, secondary: "ACE Table 1 row 'Tensor-Backflow+Lanczos [21]'" },
+    { eps: -0.7552, eps_err: null, method: "Tensor-Backflow + Lanczos", bt: "variational", src: TBF, note: "Primary located 2026-09-15: Table I of arXiv:2507.01856, n = 0.875, U = 8, 16x16 PBC, column Ep = 1 (one Lanczos step). First found quoted in Table 1 of arXiv:2604.25775 as Tensor-Backflow+Lanczos [21]." },
     { eps: -0.7529, eps_err: null, method: "SCALE (1 conv layer), no symmetry projection", bt: "variational", src: ACE },
     { eps: -0.7515, eps_err: 1e-4, method: "HFPS + symmetry projection", bt: "variational", src: ACE, secondary: "ACE Table 1 row 'HFPS+sym [31]'" },
-    { eps: -0.7509, eps_err: null, method: "Tensor-Backflow", bt: "variational", src: ACE, secondary: "ACE Table 1 row 'Tensor-Backflow [21]'" },
+    { eps: -0.7509, eps_err: null, method: "Tensor-Backflow", bt: "variational", src: TBF, note: "Primary located 2026-09-15: Table I of arXiv:2507.01856, n = 0.875, U = 8, 16x16 PBC, column Ep = 0. First found quoted in Table 1 of arXiv:2604.25775 as Tensor-Backflow [21]." },
   ]},
 };
 

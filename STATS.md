@@ -6,7 +6,7 @@ who holds a record. Where a view can only be computed over part of the table, it
 
 ## Records nobody has challenged
 
-**59 of 182 records stand on a single published number.**
+**55 of 182 records stand on a single published number.**
 One group computed an energy, and in the years since, nobody has published a second
 one to compare it against. That is not a criticism of the number; it is a statement
 about the coverage of this table, and of the literature it draws on.
@@ -29,7 +29,7 @@ about the coverage of this table, and of the literature it draws on.
 | `Hubbard/square_256_PA_107_8_t12_UV1V2` | 1.2591797 | mVMC with SU(2) and momentum projections | no paper cited |
 | `Hubbard/rectangular-14x16_224_P_98_8` | -0.7582990 | VAFQMC stripe length=7 | [Sorella (2023)](https://doi.org/10.1103/physrevb.107.115133) |
 
-…and 44 more.
+…and 40 more.
 
 ## Records held: symmetrised vs not
 
@@ -39,12 +39,12 @@ for itself, which beats any single paper's ablation.
 
 | ansatz | records (all) | records (contested) | records where both kinds were tried |
 |---|---:|---:|---:|
-| explicit symmetry projection | 39 | 8 | 8 |
-| no explicit projection | 143 | 30 | 7 |
+| explicit symmetry projection | 38 | 10 | 10 |
+| no explicit projection | 144 | 35 | 10 |
 
-**The last column is the one that means anything**: on 15 instances both a symmetrised and an
+**The last column is the one that means anything**: on 20 instances both a symmetrised and an
 unsymmetrised ansatz have been published, so the record was taken with the alternative
-already on the table. It stands at **8–7**.
+already on the table. It stands at **10–10**.
 
 It is deliberately *not* called a head-to-head, because nothing here is a controlled
 comparison: the two kinds were run at different times, by different groups, at wildly
@@ -55,7 +55,7 @@ effect size for the projection itself.
 
 ## The records that have stood longest
 
-Computed over the **86 of 182 records whose source resolves to a year**; the rest cite a run
+Computed over the **81 of 182 records whose source resolves to a year**; the rest cite a run
 script with no paper, so they have no date to rank by.
 
 One line per paper: a single 2017 study holds seven impurity records, and listing them
@@ -67,14 +67,14 @@ all would say more about that paper's scope than about how long records last.
 | 2020 | [Hibat-Allah et al. (2020)](https://doi.org/10.1103/physrevresearch.2.023358) | `TFIsing/square_144_O_3` (-3.1739018) | 1 |
 | 2021 | [Astrakhantsev et al. (2021)](https://doi.org/10.1103/physrevx.11.041021) | `Heisenberg/pyrochlore-2x2x2_32_P` (-0.5162656) | 3 |
 | 2021 | [Astrakhantsev et al. (2021)](https://doi.org/10.1103/physrevb.104.l220408) | `Heisenberg/shuriken_216_P` (-0.4375995) | 3 |
-| 2021 | [Nomura & Imada (2021)](https://doi.org/10.1103/physrevx.11.031034) | `J1J2/square_36_P_0.5` (-0.5038001) | 2 |
-| 2021 | [Vieijra & Nys (2021)](https://doi.org/10.1103/physrevb.104.045123) | `J1J2/square_64_P_0.55` (-0.4883500) | 1 |
+| 2021 | [Nomura & Imada (2021)](https://doi.org/10.1103/physrevx.11.031034) | `J1J2/square_64_P_0.5` (-0.4989635) | 1 |
 | 2022 | [Hibat-Allah et al. (2022)](https://doi.org/10.48550/arxiv.2207.14314) | `Heisenberg/square_100_O` (-0.6286560) | 3 |
 | 2022 | [Roth et al. (2022)](https://doi.org/10.48550/arxiv.2211.07749) | `Heisenberg/triangular_108_P` (-0.5531500) | 4 |
 | 2022 | [Moreno et al. (2022)](https://doi.org/10.1073/pnas.2122059119) | `Hubbard/square_16_P_5_3.5981` (-1.2431527) | 9 |
-| 2022 | [Chen et al. (2022)](https://doi.org/10.48550/arxiv.2206.14307) | `J1J2/square_100_P_0.4` (-0.5238800) | 8 |
+| 2022 | [Chen et al. (2022)](https://doi.org/10.48550/arxiv.2206.14307) | `J1J2/square_100_P_0.7` (-0.5188900) | 6 |
 | 2023 | [Pohle et al. (2023)](https://doi.org/10.48550/arxiv.2311.11561) | `Heisenberg/pyrochlore-2x2x2_128_P` (-0.4922012) | 3 |
 | 2023 | [Chen & Heyl (2023)](https://doi.org/10.48550/arxiv.2302.01941) | `Heisenberg/square_100_P` (-0.6715526) | 1 |
+| 2023 | [Sorella (2023)](https://doi.org/10.1103/physrevb.107.115133) | `Hubbard/rectangular-14x16_224_P_98_8` (-0.7582990) | 22 |
 
 Records by vintage:
 
@@ -82,11 +82,11 @@ Records by vintage:
 |---|---|
 | 2017 | ████████████ 12 |
 | 2020 | █ 1 |
-| 2021 | █████████ 9 |
-| 2022 | ████████████████████████ 24 |
+| 2021 | ███████ 7 |
+| 2022 | ██████████████████████ 22 |
 | 2023 | ███████████████████████████ 27 |
 | 2024 | █████ 5 |
-| 2025 | ███ 3 |
+| 2025 | ██ 2 |
 | 2026 | █████ 5 |
 
 ## What a record costs in parameters
@@ -109,15 +109,15 @@ answer has been settled for a decade. The contested column counts only instances
 
 | family | records (all instances) | records (contested only) |
 |---|---:|---:|
-| tensor network | 77 | 18 |
-| CNN / ResNet | 4 | 3 |
-| RNN | 4 | 3 |
-| RBM | 21 | 11 |
-| backflow / Pfaffian | 16 | 1 |
-| classic VMC | 13 | 1 |
+| tensor network | 79 | 21 |
+| CNN / ResNet | 5 | 4 |
+| RNN | 3 | 2 |
+| RBM | 18 | 10 |
+| backflow / Pfaffian | 16 | 2 |
+| classic VMC | 12 | 1 |
 | AFQMC / GFMC | 22 | 1 |
 | VQE / circuit | 19 | 0 |
-| other | 6 | 0 |
+| other | 8 | 4 |
 
 Families are matched by regular expression against the `method` string, so read them
 as indicative. A row describing both an architecture and its optimiser lands in the
@@ -129,29 +129,28 @@ first family that matches, in the order listed above.
 nationality**: a Chinese researcher at ETH counts here as Switzerland, and a paper
 with twelve authors across four countries counts once, for the first author.
 
-Of the 182 records, **96 are VarBench's own baseline runs**: their only reference is a
+Of the 182 records, **94 are VarBench's own baseline runs**: their only reference is a
 run script in `varbench/methods`, so the number came from the benchmark collaboration
 rather than from an independent paper. Those are excluded below and counted separately:
 the [VarBench paper](https://doi.org/10.1126/science.adg9774) has 33 authors across 8 countries, and filing all of them under
 its first author's institution would put half this table in one country on the strength
 of an author-list ordering.
 
-That leaves **86 records from independent papers, of which 86 resolve to a country** and
-0 do not.
+That leaves **88 records from independent papers, of which 81 resolve to a country** and
+7 do not.
 
 | country | records | first-author institutions |
 |---|---:|---|
-| US | 24 | Department of Physics and Astronomy; The University of Texas at Austin… |
+| US | 22 | Department of Physics and Astronomy; The University of Texas at Austin… |
 | IT | 22 | Scuola Internazionale Superiore di Studi Avanzati |
 | AT | 12 | Graz University of Technology |
 | CH | 10 | University of Zurich; Institute of Physics |
-| JP | 5 | Waseda Research Institute for Science and Engineering; RIKEN Center fo… |
-| CA | 5 | Vector Institute; University of Waterloo |
+| JP | 4 | Waseda Research Institute for Science and Engineering; RIKEN Center fo… |
+| CA | 4 | Vector Institute; University of Waterloo |
 | CN | 4 | State Key Laboratory of General Artificial Intelligence; Beijing Natio… |
 | FR | 2 | CPHT |
 | DE | 1 | University of Augsburg |
-| BE | 1 | Ghent University |
-| *VarBench collaboration* | *96* | *33 authors, 8 countries, not attributed to one* |
+| *VarBench collaboration* | *94* | *33 authors, 8 countries, not attributed to one* |
 
 Two things the table does not say. **It is not a ranking of who is ahead**: a record set
 in 2017 and one taken last month weigh the same, and a country total says nothing about

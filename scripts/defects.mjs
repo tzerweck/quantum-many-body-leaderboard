@@ -87,3 +87,23 @@ export const SHARED = {
     evidence: "checks/results-tfising-rbm.json, checks/tfising_rbm_check.py",
   },
 };
+
+// All-results pass, 2026-09-15: two finite-PEPS energies on the 6x6 open cluster that sit
+// below its exact ground state. Carried as published, flagged so neither can hold the record.
+DEFECTS.push(
+  { match: { instance: "Heisenberg/square_36_O", method: "PEPS, gradient optimization (GO) after SU initialization, D=8, Dc=16 (finite, open-boundary 6x6 cluster)", energy: -86.907312 },
+    flag: "below-exact",
+    finding: "Monte-Carlo estimate over a PEPS contracted at a truncated bond dimension (Dc = 2D); the quoted error is sampling only, and Appendix A of the paper puts the contraction systematic at ~8e-6 absolute at D = 8 on 10x10, the same order as the dip below the exact 6x6 energy. Not a strict variational bound as printed. arXiv:1611.09467 Table II, reported -0.603523(1) per site against the exact -0.6035218345." },
+  { match: { instance: "Heisenberg/square_36_O", method: "PEPS, gradient optimization (GO) after SU initialization, D=10, Dc=20 (finite, open-boundary 6x6 cluster)", energy: -86.90904 },
+    flag: "below-exact",
+    finding: "Monte-Carlo estimate over a PEPS contracted at a truncated bond dimension (Dc = 2D); the quoted error is sampling only, and Appendix A of the paper puts the contraction systematic at ~8e-6 absolute at D = 8 on 10x10, the same order as the dip below the exact 6x6 energy. Not a strict variational bound as printed. arXiv:1611.09467 Table II, reported -0.603535(1) per site against the exact -0.6035218345." },
+);
+
+// arXiv:2605.13807's own exact column reproduces this instance's exact row to seven digits,
+// and its 1D LRU energy sits below it (SWEEP.md, "a variational energy below its own exact
+// column"). Carried as published now that the all-results pass takes every row.
+DEFECTS.push(
+  { match: { instance: "TFIsing/chain_10_O_1", method: "1D LRU (linear recurrent unit) NQS, iterative retraining from cold start" },
+    flag: "below-exact",
+    finding: "E/N = -1.2381549(7) against the exact -1.2381490 printed in the same table (Table I, N = 10), about 8 sigma below. An independent matrix-free Lanczos ED (checks/tfim_obc_ed.mjs) reproduces the paper's exact column at N = 6-16, so the columns are read correctly; the inversion is in the published numbers. Same instance and same class of error as the VarBench RBM (alpha = 1) row." },
+);
