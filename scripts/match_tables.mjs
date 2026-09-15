@@ -37,6 +37,10 @@ for (const r of tsv("sweep-fulltext.tsv")) {
 // all labelled preprints. The candidate pool carries title and review status for every one.
 for (const r of tsv("sweep-candidates.tsv"))
   paperMeta[r.arxiv] ||= { pr: r.peer_reviewed, jr: r.journal_ref || "", ti: r.title || "" };
+// Papers citing VarBench or the FTPS paper, fetched for the Impurity screen, are in neither
+// file. A journal DOI (anything but arXiv's own 10.48550) marks a published version.
+for (const r of tsv("sweep-cites.tsv").filter(r => r.arxiv))
+  paperMeta[r.arxiv] ||= { pr: r.doi && !/^10\.48550\//i.test(r.doi) ? "yes" : "no", jr: r.venue || "", ti: r.title || "" };
 
 // Which lattice/model words must appear for a cell to be about this instance.
 const LATTICE_WORD = {
