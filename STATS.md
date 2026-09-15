@@ -39,12 +39,12 @@ for itself, which beats any single paper's ablation.
 
 | ansatz | records (all) | records (contested) | records where both kinds were tried |
 |---|---:|---:|---:|
-| explicit symmetry projection | 39 | 7 | 7 |
+| explicit symmetry projection | 39 | 8 | 8 |
 | no explicit projection | 143 | 28 | 7 |
 
-**The last column is the one that means anything**: on 14 instances both a symmetrised and an
+**The last column is the one that means anything**: on 15 instances both a symmetrised and an
 unsymmetrised ansatz have been published, so the record was taken with the alternative
-already on the table. It stands at **7–7**.
+already on the table. It stands at **8–7**.
 
 It is deliberately *not* called a head-to-head, because nothing here is a controlled
 comparison: the two kinds were run at different times, by different groups, at wildly
@@ -112,7 +112,7 @@ answer has been settled for a decade. The contested column counts only instances
 | tensor network | 77 | 17 |
 | CNN / ResNet | 4 | 3 |
 | RNN | 4 | 3 |
-| RBM | 21 | 10 |
+| RBM | 21 | 11 |
 | backflow / Pfaffian | 16 | 1 |
 | classic VMC | 13 | 0 |
 | AFQMC / GFMC | 22 | 1 |

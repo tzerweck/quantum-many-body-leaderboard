@@ -48,7 +48,7 @@ sampled energy with a variance but no error bar.
 Both rows stay in the table and in rank
 order; the marker is an open question regarding ambiguous information (see [error metrics](DATA.md#error-metrics)).
 
-### All 205 instances
+### All 250 instances
 
 <details>
 <summary><b>Heisenberg</b>: 36 instances, 31 with a record, energies as <code>E/N (S.S)</code></summary>
@@ -147,7 +147,7 @@ order; the marker is an open question regarding ambiguous information (see [erro
 </details>
 
 <details>
-<summary><b>Hubbard</b>: 92 instances, 75 with a record, energies as <code>E/site</code></summary>
+<summary><b>Hubbard</b>: 137 instances, 75 with a record, energies as <code>E/site</code></summary>
 
 | instance | record | method | closest challenger |
 |---|---|---|---|
@@ -190,7 +190,19 @@ order; the marker is an open question regarding ambiguous information (see [erro
 | square 4x4, U = 7.74264, n = 0.625 | **-1.1002331** | DMRG (MaxBondDim = 7000) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_hubbard/square_16_P_5_7.74264.jl), no paper cited | -1.1001250 VMC Hidden Fermion Determinant... [Moreno et al. (2022)](https://doi.org/10.1073/pnas.2122059119) |
 | square 4x4, U = 8, n = 0.625 | **-1.0943979** | DMRG (MaxBondDim = 7000) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_hubbard/square_16_P_5_8.jl), no paper cited | none |
 | square 4x4, U = 10, n = 0.625 | **-1.0564725** | DMRG (MaxBondDim = 7000) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_hubbard/square_16_P_5_10.jl), no paper cited | -1.0563644 VMC Hidden Fermion Determinant... [Moreno et al. (2022)](https://doi.org/10.1073/pnas.2122059119) |
+| square 4x4, U = 2, n = 1 | no record | solved exactly | |
+| square 4x4, U = 4, n = 1 | no record | solved exactly | |
+| square 4x4, U = 6, n = 1 | no record | solved exactly | |
+| square 4x4, U = 8, n = 1 | no record | solved exactly | |
+| square 4x4, periodic/antiperiodic, U = 2, n = 1 | no record | solved exactly | |
+| square 4x4, periodic/antiperiodic, U = 4, n = 1 | no record | solved exactly | |
+| square 4x4, periodic/antiperiodic, U = 6, n = 1 | no record | solved exactly | |
+| square 4x4, periodic/antiperiodic, U = 8, n = 1 | no record | solved exactly | |
 | square 6x6, U = 4, n &asymp; 0.6667 | no record | no variational row | |
+| square 6x6, U = 2, n = 1 | no record | solved exactly | |
+| square 6x6, U = 4, n = 1 | no record | solved exactly | |
+| square 6x6, U = 6, n = 1 | no record | solved exactly | |
+| square 6x6, U = 8, n = 1 | no record | solved exactly | |
 | square 6x6, U = 4, n &asymp; 1.3333 | no record | no variational row | |
 | square 6x6, periodic/antiperiodic, U = 2, n = 1 | **-1.2079(1)** | VMC Hidden Fermion Determinant State Ansatz... [Moreno et al. (2022)](https://doi.org/10.1073/pnas.2122059119) | none |
 | square 6x6, periodic/antiperiodic, U = 4, n = 1 | **-0.87173(2)** | VMC Hidden Fermion Determinant State Ansatz... [Moreno et al. (2022)](https://doi.org/10.1073/pnas.2122059119) | none |
@@ -209,7 +221,9 @@ order; the marker is an open question regarding ambiguous information (see [erro
 | square 8x8, U = 8, n = 0.875 | **-0.7458(6)** | Jastrow-backflow (JBf), 8x8 torus [Sharma et al. (2025)](https://doi.org/10.48550/arXiv.2510.11710) | -0.7454 Hidden-fermion determinant state... [Sharma et al. (2025)](https://doi.org/10.48550/arXiv.2510.11710) |
 | square 8x8, U = -8, n = 1 | no record | solved exactly | |
 | square 8x8, U = -4, n = 1 | no record | solved exactly | |
+| square 8x8, U = 2, n = 1 | no record | solved exactly | |
 | square 8x8, U = 4, n = 1 | **-0.859156(8)** | mVMC with SU(2) and momentum projections... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_64_P_32_4/mVMC/mVMC.sh), no paper cited | -0.856506 VMC with Neel AF (+Jastrow and... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_64_P_32_4/VMC-uniform/vmc_hubbard.sh), no paper cited |
+| square 8x8, U = 6, n = 1 | no record | solved exactly | |
 | square 8x8, U = 8, n = 1 | **-0.52459(1)** | mVMC with SU(2) and momentum projections... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_64_P_32_8/mVMC/mVMC.sh), no paper cited | none |
 | square 8x8, periodic/antiperiodic, U = 2, n = 1 | **-1.19003(9)** | VMC Hidden Fermion Determinant State Ansatz... [Moreno et al. (2022)](https://doi.org/10.1073/pnas.2122059119) | none |
 | square 8x8, periodic/antiperiodic, U = 4, n = 1 | **-0.8622(2)** | VMC Hidden Fermion Determinant State Ansatz... [Moreno et al. (2022)](https://doi.org/10.1073/pnas.2122059119) | none |
@@ -217,7 +231,31 @@ order; the marker is an open question regarding ambiguous information (see [erro
 | square 8x8, periodic/antiperiodic, U = 8, n = 1 | **-0.5245(2)** | VMC Hidden Fermion Determinant State Ansatz... [Moreno et al. (2022)](https://doi.org/10.1073/pnas.2122059119) | none |
 | square 8x8, periodic/open, U = 8, n = 1 | **-0.49944(4)** | VAFQMC [Sorella (2023)](https://doi.org/10.1103/physrevb.107.115133) | -0.49843 DMRG (MaxLinkDim=10000... [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_hubbard/square_64_PO_32_8.jl), no paper cited |
 | square 10x10, U = 4, n = 0.8 | no record | no variational row | |
+| square 10x10, U = 2, n = 1 | no record | solved exactly | |
+| square 10x10, U = 4, n = 1 | no record | solved exactly | |
+| square 10x10, U = 6, n = 1 | no record | solved exactly | |
+| square 10x10, U = 8, n = 1 | no record | solved exactly | |
+| square 10x10, periodic/antiperiodic, U = 2, n = 1 | no record | solved exactly | |
+| square 10x10, periodic/antiperiodic, U = 4, n = 1 | no record | solved exactly | |
+| square 10x10, periodic/antiperiodic, U = 6, n = 1 | no record | solved exactly | |
+| square 10x10, periodic/antiperiodic, U = 8, n = 1 | no record | solved exactly | |
 | square 12x12, U = 4, n &asymp; 0.8056 | no record | no variational row | |
+| square 12x12, U = 2, n = 1 | no record | solved exactly | |
+| square 12x12, U = 4, n = 1 | no record | solved exactly | |
+| square 12x12, U = 6, n = 1 | no record | solved exactly | |
+| square 12x12, U = 8, n = 1 | no record | solved exactly | |
+| square 12x12, periodic/antiperiodic, U = 2, n = 1 | no record | solved exactly | |
+| square 12x12, periodic/antiperiodic, U = 4, n = 1 | no record | solved exactly | |
+| square 12x12, periodic/antiperiodic, U = 6, n = 1 | no record | solved exactly | |
+| square 12x12, periodic/antiperiodic, U = 8, n = 1 | no record | solved exactly | |
+| square 14x14, U = 2, n = 1 | no record | solved exactly | |
+| square 14x14, U = 4, n = 1 | no record | solved exactly | |
+| square 14x14, U = 6, n = 1 | no record | solved exactly | |
+| square 14x14, U = 8, n = 1 | no record | solved exactly | |
+| square 14x14, periodic/antiperiodic, U = 2, n = 1 | no record | solved exactly | |
+| square 14x14, periodic/antiperiodic, U = 4, n = 1 | no record | solved exactly | |
+| square 14x14, periodic/antiperiodic, U = 6, n = 1 | no record | solved exactly | |
+| square 14x14, periodic/antiperiodic, U = 8, n = 1 | no record | solved exactly | |
 | square 16x16, U = 8, n &asymp; 0.8281 | **-0.83788(6)** | VAFQMC stripe length=8 [Sorella (2023)](https://doi.org/10.1103/physrevb.107.115133) | none |
 | square 16x16, U = 8, n &asymp; 0.8438 | **-0.81198(6)** | VAFQMC stripe length=8 [Sorella (2023)](https://doi.org/10.1103/physrevb.107.115133) | none |
 | square 16x16, U = 8, n &asymp; 0.8516 | **-0.79896(5)** | VAFQMC stripe length=8 [Sorella (2023)](https://doi.org/10.1103/physrevb.107.115133) | none |
@@ -239,9 +277,16 @@ order; the marker is an open question regarding ambiguous information (see [erro
 | square 16x16, U = 8, n = 0.9375 | **-0.64053(5)** | VAFQMC stripe length=8 [Sorella (2023)](https://doi.org/10.1103/physrevb.107.115133) | none |
 | square 16x16, U = -8, n = 1 | no record | solved exactly | |
 | square 16x16, U = -4, n = 1 | no record | solved exactly | |
+| square 16x16, U = 2, n = 1 | no record | solved exactly | |
+| square 16x16, U = 4, n = 1 | no record | solved exactly | |
+| square 16x16, U = 6, n = 1 | no record | solved exactly | |
+| square 16x16, U = 8, n = 1 | no record | solved exactly | |
 | square 16x16, periodic/antiperiodic, U = 8, n &asymp; 0.8359 | **-0.82333(3)** | VAFQMC stripe length 8 APBC along the stripe [Sorella (2023)](https://doi.org/10.1103/physrevb.107.115133) | -0.79875 mVMC with SU(2) and momentum... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_256_PA_107_8/mVMC/mVMC.sh), no paper cited |
 | square 16x16, periodic/antiperiodic, U = 8, n &asymp; 0.8359, t12 | **-0.79937(4)** | mVMC with SU(2) and momentum projections... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_256_PA_107_8_t12/mVMC/mVMC.sh), no paper cited | none |
 | square 16x16, periodic/antiperiodic, U = 8, n &asymp; 0.8359, t12, UV1V2 | **1.25918(3)** | mVMC with SU(2) and momentum projections... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_256_PA_107_8_t12_UV1V2/mVMC/mVMC.sh), no paper cited | none |
+| square 16x16, periodic/antiperiodic, U = 2, n = 1 | no record | solved exactly | |
+| square 16x16, periodic/antiperiodic, U = 4, n = 1 | no record | solved exactly | |
+| square 16x16, periodic/antiperiodic, U = 6, n = 1 | no record | solved exactly | |
 | square 16x16, periodic/antiperiodic, U = 8, n = 1 | **-0.52427(4)** | VAFQMC [Sorella (2023)](https://doi.org/10.1103/physrevb.107.115133) | -0.51898 mVMC with SU(2) and momentum... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_256_PA_128_8/mVMC/mVMC.sh), no paper cited |
 
 </details>
@@ -303,8 +348,8 @@ order; the marker is an open question regarding ambiguous information (see [erro
 
 </details>
 
-Across the whole table: **182 of 205 instances have a record**, from 681 energies.
-Of the 23 instances without one, 16 are solved exactly and have nothing to compete
+Across the whole table: **182 of 250 instances have a record**, from 737 energies.
+Of the 68 instances without one, 61 are solved exactly and have nothing to compete
 for. Separately, **31 sampled variational energies across 26 instances carry no error bar**, so
 they are listed and rank for nothing, and 5 of them sit below their instance's current
 record. If one of those is your paper, the error bar is the only thing missing.
