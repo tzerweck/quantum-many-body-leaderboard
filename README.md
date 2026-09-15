@@ -9,17 +9,15 @@
 [![records](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Ftzerweck%2Fquantum-many-body-leaderboard%2Fmain%2Fdata%2F_summary.json&query=%24.records.held&label=records&color=success)](data/_summary.json)
 
 **A record book of the best published ground-state energies in quantum many-body
-physics, with the bookkeeping that makes them comparable.**
+physics.**
 
-Every row is one published claim about one Hamiltonian instance, carrying the number,
-its error bar, the method, the primary reference, and — the field this table exists for —
-a declared `bound_type` saying what kind of quantity the number actually is. A strict
-variational bound, a fixed-node estimate and a zero-variance extrapolation are three
-different things, and a table that ranks them in one column manufactures records that
-no wave function ever achieved.
+This is the literature organised to serve fellow researchers and AI to see the works 
+of the wider research community at one glance.
 
-QMBL scores **calculations, not agents**. There is no model being evaluated here and
-nothing is re-run: this is the literature, organised.
+Every row is one published claim about a Hamiltonian instance, carrying the energy value,
+its error bar (uncertainty of last digit in brackets), the method, the primary reference, 
+and a declared `bound_type` saying what kind of quantity the number actually is (either a strict
+variational bound, a fixed-node estimate or a zero-variance extrapolation).
 
 ## Leaderboard
 
