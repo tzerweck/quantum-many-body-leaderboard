@@ -54,6 +54,10 @@ const instanceTokens = inst => {
     const k = Math.round(Math.sqrt(inst.n_sites / 3));
     if (3 * k * k === inst.n_sites) { t.add(`${k}x${k}`); t.add(`L=${k}`); }
   }
+  if (lat.includes("shuriken") && inst.n_sites % 6 === 0) { // shuriken: 6 sites per cell
+    const k = Math.round(Math.sqrt(inst.n_sites / 6));
+    if (6 * k * k === inst.n_sites) { t.add(`${k}x${k}`); t.add(`L=${k}`); }
+  }
   return t;
 };
 
@@ -144,6 +148,16 @@ const cells = tsv("sweep-tables.tsv").map(c => ({
   label: c.row_label, col: c.col_header,
 }));
 const hits = [];
+
+// Papers rejected as a whole in SWEEP.md: every energy in them is a thermodynamic-limit
+// value, so no cell can map onto a finite instance. They also keep resurfacing, because
+// iPEPS tables are indexed by bond dimension and the harvester reads a bare "4" row label
+// as a linear size - arXiv:2211.16932's chi_B = 4, 6, 8 rows match the 96-, 216- and
+// 384-site shuriken clusters. Suppressed here, but counted in the summary.
+const REJECTED = {
+  "2211.16932": "iPEPS/iPESS on the infinite shuriken lattice",
+  "2510.04907": "iPEPS on infinite triangular and kagome lattices",
+};
 
 for (const inst of instances) {
   const div = perSiteDivisor(inst);
@@ -239,10 +253,12 @@ for (const inst of instances) {
 
 // one line per (instance, paper, value); drop exact repeats of the same number
 const seen = new Set();
-const uniq = hits.filter(h => {
+const all = hits.filter(h => {
   const k = `${h.inst}|${h.arxiv}|${h.value}`;
   return seen.has(k) ? false : (seen.add(k), true);
 });
+const suppressed = all.filter(h => REJECTED[h.arxiv]);
+const uniq = all.filter(h => !REJECTED[h.arxiv]);
 uniq.sort((a, b) => (a.verdict === b.verdict ? a.rel - b.rel : a.verdict === "BEATS" ? -1 : 1));
 
 console.log(`${cells.length} harvested cells x ${instances.length} instances -> ${uniq.length} candidates\n`);
@@ -255,3 +271,9 @@ for (const h of uniq) {
 const byInst = {};
 uniq.forEach(h => (byInst[h.inst] ||= []).push(h.verdict));
 console.log(`\n${Object.keys(byInst).length} instances have at least one candidate; ${uniq.filter(h => h.verdict === "BEATS").length} cells sit below a current record.`);
+if (suppressed.length) {
+  const per = {};
+  suppressed.forEach(h => (per[h.arxiv] = (per[h.arxiv] || 0) + 1));
+  console.log(`${suppressed.length} candidates from rejected papers suppressed: ` +
+    Object.entries(per).map(([id, n]) => `arXiv:${id} x${n} (${REJECTED[id]})`).join("; "));
+}
