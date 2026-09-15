@@ -42,6 +42,14 @@ const ADD = {
       note: 'PNAS SI Table 5 (identical to arXiv SI Table V), "Variational energy per site in the L x L Hubbard model at half filling with periodic boundary conditions along one of the sides of the square and anti-periodic boundary conditions along the other side", row L = 6, column U = 2. SI Sec. 6: N_hidden = 8, alpha = 78 for 6x6; no projection or constraint stated, nor what the error bar is. Column alignment checked: the VarBench HFDS rows for 6x6 at U = 4, 6, 8 and 8x8 at U = 2, 4, 8 match the printed digits. As a total, -43.4844 sits 3.4e-4 (relative) above the sign-free AFQMC value -43.499(2) for this lattice (Qin, Shi & Zhang, PRB 94, 085103 (2016), Table IV, PBC-APBC) and above the non-interacting bound -59.712813.' },
   ]},
 
+  // VarBench's only row here sits 25 sigma below sign-free AFQMC (defect `below-exact`).
+  "Hubbard/square_64_PA_32_6": { fermion: true, rows: [
+    { eps: -0.6574, err: 2e-4, m: "VMC Hidden Fermion Determinant State Ansatz (N_hidden = 16, fully parametrized hidden sub-matrix, hidden-unit density alpha = 1)", bt: "variational", src: HFDS,
+      read: "PNAS supplementary PDF (via Europe PMC, PMC9371695) extracted locally, cross-read against the arXiv version; no LLM transcription",
+      reported: "-0.6574(2) per site, no variance",
+      note: 'PNAS SI Table 5 (identical to arXiv SI Table V), "Variational energy per site in the L x L Hubbard model at half filling with periodic boundary conditions along one of the sides of the square and anti-periodic boundary conditions along the other side", row L = 8, column U = 6. SI Sec. 6: N_hidden = 16, alpha = 1 for 8x8, the settings in the VarBench method string. Column alignment checked as for square_36_PA_18_2. As a total, -42.0736 sits 2.3e-3 (relative) above the sign-free AFQMC value -42.17(2) for this lattice (Qin, Shi & Zhang, PRB 94, 085103 (2016), Table IV, PBC-APBC), as a variational energy must, and fits the paper\'s size trend at U = 6 (-0.68135, -0.6609, -0.6574 for L = 4, 6, 8).' },
+  ]},
+
   "Heisenberg/pyrochlore-4x4x4_256_P": { rows: [
     { eps: -0.4855, err: null, m: "Generalized RVB ansatz, unrestricted VMC optimization (no quantum-number projection)", bt: "variational", src: RVB,
       reported: "E0 ~ -0.4855 J/site, approximate, no error bar",

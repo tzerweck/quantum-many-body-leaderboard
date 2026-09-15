@@ -85,6 +85,14 @@ for (const [id, label] of FRONTIER) {
   lines.push(`| ${label} | ${inst.rows.length} | **${q.text}**${marks(rec)} | ${shorten(rec.method, 46)} | ${citeCell(rec)} | ${challenger} |`);
 }
 
+// Tristan's wording, written into the block on GitHub on 2026-09-15; kept here so the build
+// does not erase it.
+lines.push("");
+lines.push("Every row is one published claim about a Hamiltonian instance, carrying the energy value,");
+lines.push("its error bar (uncertainty of last digit in brackets), the method, the primary reference, ");
+lines.push("and a declared `bound_type` saying what kind of quantity the energy value actually is (either a strict");
+lines.push("variational bound, a fixed-node estimate or a zero-variance extrapolation).");
+
 const spin = perSiteLabel(byId.get("J1J2/square_100_P_0.5"));
 const site = perSiteLabel(byId.get("Hubbard/square_256_P_112_8"));
 lines.push("");
