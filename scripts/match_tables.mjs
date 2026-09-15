@@ -191,12 +191,36 @@ const REJECTED = {
   "2604.01555": "SDP lower bounds and quoted references",
 };
 
+// ---------------------------------------------------------------- all-results mode
+// The 1% window answers "is this a record?". The database answers a second question -
+// what has anyone ever published on this instance - and for that a weaker energy is a
+// row like any other ("every published number gets a row"). Under --all nothing is
+// dropped for distance from the record; cells are banded instead, and a cell that misses
+// only by a unit convention (Pauli vs S.S is a factor 4, per-site vs total a factor N)
+// is rescued and labelled rather than written off as a different quantity. Every rescue
+// is a question for the reader, never an import: the label says which factor was applied.
+const ALL = process.argv.includes("--all");
+const TSV_OUT = (() => { const i = process.argv.indexOf("--tsv"); return i >= 0 ? process.argv[i + 1] : null; })();
+const conventionFactors = n => [
+  ["/4", 0.25], ["x4", 4],
+  [`/${n}`, 1 / n], [`x4/${n}`, 4 / n], [`/(4x${n})`, 1 / (4 * n)],
+  [`x${n}`, n], [`x${n}/4`, n / 4], [`x4x${n}`, 4 * n],
+];
+
 for (const inst of instances) {
   const div = perSiteDivisor(inst);
   if (div == null) continue;
-  const rec = [...inst.rows].sort((a, b) => a.energy - b.energy).find(recordEligible);
+  const sorted = [...inst.rows].sort((a, b) => a.energy - b.energy);
+  // An instance with no eligible record (solved exactly, or every variational row
+  // flagged) still takes rows, so under --all the reference is its best number.
+  const rec = sorted.find(recordEligible) ?? (ALL ? sorted[0] : null);
   if (!rec) continue;
   const recEps = rec.energy / div;
+  // Sector-resolved ED rows are lowest-in-sector energies, not ground states, and are
+  // excluded from the floor for the same reason validate.mjs excludes them.
+  const exactRow = sorted.find(r => r.bound_type === "exact" && !/[A-Z][0-9a-z]*\.[A-Z]/.test(r.method));
+  const exactEps = exactRow ? exactRow.energy / div : null;
+  const onInstance = inst.rows.map(r => r.energy / div);
   const fresh = inst.rows.some(r => r.source !== "varbench@2024-10-22");
   const toks = instanceTokens(inst);
   const lat = inst.lattice.toLowerCase();
@@ -273,13 +297,30 @@ for (const inst of instances) {
       if (j2.length && !j2.some(v => v === 0)) continue;
     }
 
-    const rel = (c.value - recEps) / Math.abs(recEps);
-    if (Math.abs(rel) > 0.01) continue;                                // different quantity
-    hits.push({ inst: inst.instance_id, fresh, recEps, rec: rec.method, ...c, rel,
+    let eps = c.value, conv = "";
+    let rel = (eps - recEps) / Math.abs(recEps);
+    if (ALL && Math.abs(rel) > 0.01) {
+      let best = null;
+      for (const [name, f] of conventionFactors(inst.n_sites)) {
+        const e = c.value * f, r = (e - recEps) / Math.abs(recEps);
+        if (Math.abs(r) <= 0.01 && (!best || Math.abs(r) < Math.abs(best.r))) best = { name, e, r };
+      }
+      if (best) { eps = best.e; rel = best.r; conv = ` convention?${best.name}`; }
+    }
+    // Under --all the cut is only where no reading of the number could be this instance;
+    // in record mode it stays the 1% window that asks about records alone.
+    if (Math.abs(rel) > (ALL ? 0.5 : 0.01)) continue;
+    // A value already carried on the instance is this table quoting a row we have.
+    const dup = onInstance.some(e => Math.abs(e - eps) <= Math.abs(e) * 1e-6);
+    hits.push({ inst: inst.instance_id, fresh, recEps, rec: rec.method, ...c, rel, eps, conv, dup,
+      exactEps,
       // classify from the row label and column header - the caption names every method in
       // the table, so it is consulted only for lower bounds and only as a fallback
       kind: cellKind(`${c.label} ${c.col}`, c.caption), fillNote: fillNote + coupNote,
-      verdict: c.value < recEps ? "BEATS" : "FILLS" });
+      verdict: !ALL ? (eps < recEps ? "BEATS" : "FILLS")
+        : exactEps != null && eps < exactEps ? "SUB-EXACT"
+        : eps < recEps ? "BEATS"
+        : Math.abs(rel) <= 0.01 ? "FILLS" : "WEAKER" });
   }
 }
 
@@ -295,6 +336,40 @@ const uniq = all.filter(h => !REJECTED[h.arxiv] && !h.kind.startsWith("lower bou
 uniq.sort((a, b) => (a.verdict === b.verdict ? a.rel - b.rel : a.verdict === "BEATS" ? -1 : 1));
 
 console.log(`${cells.length} harvested cells x ${instances.length} instances -> ${uniq.length} candidates\n`);
+if (ALL) {
+  // The worklist is grouped by PAPER, because the paper is what a reader opens: the
+  // convention, the boundary condition and whether a column is the authors' own result
+  // or a quote of someone else's are settled once per paper, not once per cell.
+  const keep = uniq.filter(h => !h.dup);
+  const cols = ["arxiv", "peer_reviewed", "title", "instance", "verdict", "eps", "err", "rel_pct",
+    "kind", "convention", "src", "table", "row_label", "col_header", "sizes", "note",
+    "record_eps", "record_method", "exact_eps", "caption"];
+  const line = h => [h.arxiv, paperMeta[h.arxiv]?.pr || "", (paperMeta[h.arxiv]?.ti || "").replace(/\s+/g, " "),
+    h.inst, h.verdict, h.eps, h.err ?? "", (h.rel * 100).toFixed(3), h.kind, h.conv.replace(" convention?", ""),
+    h.src, h.table, h.label, h.col, h.sizes, h.fillNote.trim(),
+    h.recEps, h.rec, h.exactEps ?? "", (h.caption || "").slice(0, 300)]
+    .map(v => String(v).replace(/[\t\n]+/g, " ")).join("\t");
+  if (TSV_OUT) {
+    fs.writeFileSync(TSV_OUT, [cols.join("\t"), ...keep.map(line)].join("\n") + "\n");
+    console.log(`worklist -> ${TSV_OUT}`);
+  }
+  const byPaper = {};
+  for (const h of keep) (byPaper[h.arxiv] ||= []).push(h);
+  const verdicts = v => keep.filter(h => h.verdict === v).length;
+  console.log(`${keep.length} cells on ${new Set(keep.map(h => h.inst)).size} instances from ${Object.keys(byPaper).length} papers` +
+    ` (${uniq.length - keep.length} dropped as values already on the instance)`);
+  console.log(`  SUB-EXACT ${verdicts("SUB-EXACT")}  BEATS ${verdicts("BEATS")}  FILLS ${verdicts("FILLS")}  WEAKER ${verdicts("WEAKER")}` +
+    `  |  rescued by a unit convention: ${keep.filter(h => h.conv).length}`);
+  for (const [id, hs] of Object.entries(byPaper).sort((a, b) => b[1].length - a[1].length)) {
+    const meta = paperMeta[id] || {};
+    const per = {};
+    hs.forEach(h => (per[h.verdict] = (per[h.verdict] || 0) + 1));
+    console.log(`${String(hs.length).padStart(4)}  arXiv:${id} ${meta.pr === "yes" ? "PEER" : "prep"}  ` +
+      `${Object.entries(per).map(([k, n]) => `${k} ${n}`).join(", ")}  ${new Set(hs.map(h => h.inst)).size} instances`);
+    console.log(`      ${(meta.ti || "").slice(0, 100)}`);
+  }
+  process.exit(0);
+}
 for (const h of uniq) {
   const meta = paperMeta[h.arxiv] || {};
   console.log(`${h.verdict}  ${h.inst.padEnd(34)} ${h.value.toFixed(7)}${h.err ? `(${h.err})` : ""}  vs record ${h.recEps.toFixed(7)}  ${(h.rel * 100).toFixed(3)}%  [${h.kind}]${h.fillNote}`);

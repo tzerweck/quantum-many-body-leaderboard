@@ -54,6 +54,57 @@ carries the reason.
 admission gate, and only [RULES.md §6](RULES.md#6-records-and-ties) and
 [§6.1](RULES.md#61-a-flagged-row-cannot-hold-a-record) govern what can hold a record.
 
+## What a number cost: the `compute` block
+
+Optional, per row. It is what makes the accuracy-versus-cost view possible: an energy is
+only half of a result, and the field argues informally about the other half.
+
+```json
+"compute": {
+  "parameters": 267000,
+  "gpu_hours": 1920,
+  "device": "NVIDIA A100 40GB",
+  "n_devices": 20,
+  "samples": null,
+  "wall_clock": "4 days",
+  "reported_as": "20 A100 GPUs for 4 days, 2.7e5 parameters",
+  "source": "Methods, arXiv:xxxx.xxxxx"
+}
+```
+
+Three rules, and they are the whole design:
+
+- **No normalisation.** GPU-hours are stored raw, next to the device model. There is no
+  H100-equivalent column and there will not be one: a conversion factor between hardware
+  generations is an argument, not a measurement, and it would be the first thing disputed.
+  The validator rejects any field that looks normalised.
+- **Self-reported and unfalsifiable.** Nothing here is checked against a run. `reported_as`
+  carries the authors' own words so a reader can see what was claimed, and is required.
+- **Never estimated.** A field nobody stated is `null`, not a guess from the ansatz size.
+
+A missing `compute` block excludes nothing, exactly like a missing variance.
+
+## When the literature was last checked: `coverage`
+
+Per instance, not per row, and appended to rather than overwritten:
+
+```json
+"coverage": [
+  { "checked_on": "2026-09-15", "method": "table harvest of 44 cached sources",
+    "screened": ["arXiv:2507.01856", "arXiv:2606.00924"], "found": 2, "note": "" },
+  { "checked_on": "2026-09-15", "method": "citation screen of the originating paper",
+    "screened_count": 61, "found": 0,
+    "note": "Nobody has published a second energy for this Hamiltonian since Sorella (2023)." }
+]
+```
+
+**A check that found nothing is a result and is recorded as one** (`found: 0`). Only 13 of
+205 instances have any 2025-26 row, so a site that says nothing about its own currency
+reads as more authoritative than it is. This is the field the instance pages quote, and it
+is why "we looked, and there is nothing newer" is worth the same bookkeeping as a new row.
+`screened` names the papers when there are few, `screened_count` replaces it when there are
+many.
+
 ## Units and conventions
 
 Stored conventions follow VarBench and are asserted per instance, not per row. The

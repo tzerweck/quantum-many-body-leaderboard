@@ -1,6 +1,6 @@
 import fs from "node:fs"; import path from "node:path";
 import { expectedDof, expectedEinf, vScore, perSiteDivisor } from "./units.mjs";
-const issues = [], rounding = []; let rows = 0, checkedD = 0, checkedE = 0, checkedV = 0;
+const issues = [], rounding = []; let rows = 0, checkedD = 0, checkedE = 0, checkedV = 0, checkedC = 0, checkedCov = 0;
 for (const m of fs.readdirSync("data")) {
   const dir = path.join("data", m);
   if (!fs.statSync(dir).isDirectory()) continue;
@@ -30,6 +30,37 @@ for (const m of fs.readdirSync("data")) {
           (realViolation ? issues : rounding).push(
             `BOUND ${at}: variational ${o.energy} below exact ${r.energy} (rel ${rel.toExponential(1)}) "${o.method.slice(0,38)}"`);
         }
+      }
+      // `compute` is self-reported and unfalsifiable, so what the validator can check is
+      // that it says where it came from and that nothing normalised has crept in: an
+      // "H100-equivalent" column would be an argument, not a measurement (DATA.md).
+      if (r.compute != null) {
+        checkedC++;
+        const c = r.compute;
+        if (typeof c !== "object" || Array.isArray(c)) issues.push(`COMPUTE ${at}: not an object`);
+        else {
+          if (!c.reported_as) issues.push(`COMPUTE ${at}: no reported_as, so the number cannot be checked against the paper`);
+          for (const k of ["parameters", "gpu_hours", "n_devices", "samples"])
+            if (c[k] != null && !(typeof c[k] === "number" && c[k] > 0)) issues.push(`COMPUTE ${at}: ${k} is ${c[k]}`);
+          if (c.gpu_hours != null && !c.device) issues.push(`COMPUTE ${at}: gpu_hours without a device model`);
+          for (const k of Object.keys(c))
+            if (/normali[sz]ed|equivalent|h100_eq/i.test(k)) issues.push(`COMPUTE ${at}: normalised field ${k}; DATA.md forbids normalisation`);
+        }
+      }
+    }
+    // `coverage` is instance level: when its literature was last checked and by what.
+    // A check that found nothing is as real as one that added a row, so `found: 0` is
+    // valid and is what an instance page needs in order not to read as authoritative.
+    if (inst.coverage != null) {
+      if (!Array.isArray(inst.coverage)) issues.push(`COVERAGE ${inst.instance_id}: not an array`);
+      else for (const [j, c] of inst.coverage.entries()) {
+        checkedCov++;
+        const at = `${inst.instance_id}.coverage[${j}]`;
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(c.checked_on || "")) issues.push(`COVERAGE ${at}: checked_on ${c.checked_on}`);
+        if (!c.method) issues.push(`COVERAGE ${at}: no method`);
+        if (!Number.isInteger(c.found) || c.found < 0) issues.push(`COVERAGE ${at}: found ${c.found}`);
+        if (!Array.isArray(c.screened) && !Number.isInteger(c.screened_count))
+          issues.push(`COVERAGE ${at}: neither a screened list nor a screened_count`);
       }
     }
   }
@@ -67,5 +98,6 @@ for (const f of fs.readdirSync(path.join("data", "TFIsing"))) {
 }
 
 console.log(`rows=${rows}  dof_checked=${checkedD}  einf_checked=${checkedE}  vscore_checked=${checkedV}  tfising_exact_checked=${checkedT}`);
+console.log(`compute_blocks=${checkedC}  coverage_entries=${checkedCov}`);
 console.log(`within-rounding bound violations (rel < 1e-8, ignored): ${rounding.length}`);
 console.log(issues.length ? `\n${issues.length} ISSUES:\n` + issues.slice(0, 25).join("\n") : "\nall checks pass");
