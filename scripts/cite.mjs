@@ -33,14 +33,24 @@ export const citeUrl = s =>
       ? `https://arxiv.org/abs/${s.resolved_via.replace("10.48550/arXiv.", "")}`
       : s.openalex;
 
-// Markdown for the source cell. Falls back to the raw reference when the row names no
-// paper, so nothing is ever silently dropped.
-export function citeCell(row, cache = sources()) {
+// The source of a row as text + url, before any markup. Falls back to the raw reference
+// when the row names no paper, so nothing is ever silently dropped. The README renders
+// this as markdown and the site as HTML; splitting it here is what keeps the citation
+// under a number identical in both.
+export function citeRef(row, cache = sources()) {
   const s = sourceOf(row, cache);
-  if (s) return `[${citeText(s)}](${citeUrl(s)})`;
+  if (s) return { text: citeText(s), url: citeUrl(s) };
   const ref = row.reference || "";
   const code = ref.match(/\[code\]\((https?:\/\/[^\s)]+)\)/);
-  if (code) return `[run script](${code[1]}), no paper cited`;
+  if (code) return { text: "run script", url: code[1], note: "no paper cited" };
   const link = ref.match(/\((https?:\/\/[^\s)]+)\)/);
-  return link ? `[source](${link[1]})` : (ref.slice(0, 32) || "n/a");
+  if (link) return { text: "source", url: link[1] };
+  return { text: ref.slice(0, 32) || "n/a", url: null };
+}
+
+// Markdown for the source cell.
+export function citeCell(row, cache = sources()) {
+  const r = citeRef(row, cache);
+  const link = r.url ? `[${r.text}](${r.url})` : r.text;
+  return r.note ? `${link}, ${r.note}` : link;
 }
