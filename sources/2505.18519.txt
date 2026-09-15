@@ -1,0 +1,963 @@
+                                    Implementing advanced trial wave functions
+                         in fermion quantum Monte Carlo via stochastic sampling
+
+                                                        Zhi-Yu  Xiao  and  Tao  Xiang
+                   Institute  of  Physics,  Chinese  Academy  of  Sciences,  P.O.  Box  603,  Beijing  100190,  China ∗
+
+                                                                    Zixiang  Lu
+                                   University  of  Illinois  Urbana-Champaign,  Champaign,  IL,  USA
+
+                                                                   Yixiao  Chen
+                                                Princeton  University,  Princeton,  NJ,  USA
+
+                                                                  Shiwei  Zhang
+                  Center  for  Computational  Quantum  Physics,  Flatiron  Institute,  New  York,  NY  10010,  USA †
+                                                          (Dated:  September 9, 2025)
+                   We introduce an efficient approach to implement correlated many-body trial wave functions in
+                auxiliary-field quantum Monte Carlo (AFQMC). To control the sign/phase problem in AFQMC, a
+                constraint is derived from an exact gauge condition but is typically imposed approximately through
+                a trial wave function or trial density matrix, whose quality can affect the accuracy of the method.
+                Furthermore,  the  trial  wave  function  can  also  affect  the  efficiency  through  importance  sampling.
+                The most natural form of the trial wave function has been single Slater determinants or their linear
+                combinations.   More  sophisticated  forms,  for  example,  with  the  inclusion  of  a  Jastrow  factor  or
+                other explicit correlations, have been challenging to use and their implementation is often assumed
+                to require a quantum computer.  In this work, we demonstrate that a large class of correlated wave
+                functions, written in the general form of multi-dimensional integrals over hidden or auxiliary vari-
+                ables times Slater determinants, can be implemented as trial wave function by coupling the random
+                walkers to a generalized Metropolis sampling.  We discuss the fidelity of AFQMC with stochastically
+                sampled  trial  wave  functions,  which  are  relevant  to  both  quantum  and  classical  algorithms.   We
+                illustrate the method and show that an efficient implementation can be achieved which preserves
+                the low-polynomial computational scaling of AFQMC. We test our method in molecules under bond
+                stretching and in transition metal diatomics.  Significant improvements are seen in both accuracy
+                and efficiency over typical trial wave functions, and the method yields total ground-state energies
+                systematically  within  chemical  accuracy.   The  method  can  be  useful  for  incorporating  other  ad-
+                vanced wave functions, for example, neural quantum state wave functions optimized from machine
+                learning techniques, or for other forms of fermion quantum Monte Carlo.
+
+
+                    I.    INTRODUCTION                                        quantum systems.
+                                                                                 Quantum Monte Carlo (QMC) methods [1–4], as one
+  The  study  of  interacting  quantum  many-body  sys-                       of  the  main  many-body  techniques,  are  widely  used  in
+tems  is  a  major  challenge  across  diverse  fields  such  as              the  study  of  quantum  many-body  systems.   In  equilib-
+condensed  matter  physics,  nuclear  physics,  cold  atoms                   rium state QMC, the many-body wave function or den-
+physics, quantum chemistry, and materials science.  Due                       sity matrix is sampled within a chosen basis.  Depending
+to  the  high  degree  of  complexity  and  the  interplay  be-               on factors such as the form of the Hamiltonian, the com-
+tween the various degrees of freedom in quantum many-                         putation’s objective (e.g., finite-temperature vs.  ground-
+body  systems,  no  universal  approach  exists  at  present                  state  properties),  and  the  chosen  basis,  QMC  methods
+that can fully address the complexity of interacting quan-                    can vary significantly.  These variations give rise to dif-
+tum systems while providing systematically accurate re-                       ferent ”flavors” of Monte Carlo sampling,  each tailored
+sults across a wide range of many-body models and mate-                       to specific needs.  For most non-trivial quantum systems,
+rials.  Different methods have been developed, each spe-                      achieving adequate sampling efficiency requires extensive
+cializing in particular types of systems or aspects of the                    customization of the Monte Carlo technique.
+same  system.   Continued  development  of  more  general                        Implementations of QMC are typically based on one of
+and precise numerical techniques is crucial to overcom-                       two primary sampling algorithmss: Markov Chain Monte
+ing  the  challenges,  and  to  accelerating  progress  in  un-               Carlo  (MCMC)  or  branching  random  walks  (BRW).  A
+derstanding and predicting the properties of interacting                      QMC  calculation  then  will  follow  one  of  these  frame-
+                                                                              works.   In  some  cases,  the  distinction  between  the  two
+                                                                              methods  is  primarily  a  matter  of  efficiency  or  conve-
+                                                                              nience,  while  in  others,  the  difference  is  more  funda-
+∗ zxiaoMain@outlook.com                                                       mental.  For instance, in auxiliary-field quantum Monte
+† szhang@flatironinstitute.org
+                                                                              Carlo  (AFQMC),  MCMC  is  often  employed  within  a
+                                                                                                                                                    2
+
+path-integral formalism when there is no sign problem,                       pear  in  ratios,⟨Ψ      T|ϕ′⟩/⟨Ψ  T|ϕ⟩,  where|ϕ     ′⟩and|ϕ⟩are
+or when an acceptable average sign or phase can be main-                     connected  by  one  step  in  the  random  walk.   The  ratio
+tained to yield meaningful results.  This approach is com-                   drives  importance  sampling,  and  its  sign  or  phase  im-
+monly used in lattice quantum chromodynamics [5] and                         poses the gauge condition that controls the sign or phase
+condensed  matter  systems  [6],  for  example  in  determi-                 problem.  The ratio is well-behaved, changes slowly, and
+nantal quantum Monte Carlo (DQMC). When the sign                             scales gracefully with system size in the simulation.  In
+or phase problem becomes more severe, a class of algo-                       contrast, even in a calculation of modest system size, the
+rithms referred to as constrained path [7, 8] or phaseless                   overlap  itself  can  vary  by  50  orders  of  magnitude  [35].
+[9] AFQMC are designed to control these issues by impos-                     Thus any calculation based on direct evaluations of the
+ing sign or gauge conditions.  These methods require the                     overlap itself would have fundamental difficulty to scale
+use of BRW along the imaginary-time paths because the                        up properly with system size.  Even if the overlap could
+introduction of constraints renders the MCMC sampling                        be measured,  an important question would be how the
+exponentially inefficient to achieve ergodicity [4].                         fidelity of the constraint depends on any noise incurred in
+  AFQMC with constraints have enabled a wide range                           the measurement, for example, from stochastic sampling.
+of applications where sign-problem-free computations are                        We  realize  the  evaluation  of  the  ratios  by  stochasti-
+not feasible, including strongly correlated models in con-                   cally  sampling  the  trial  wave  function.    More  specifi-
+densed  matter  [10,  11],  bulk  solids  [12,  13],  and  quan-             cally, we show that any|Ψ  T⟩written in the form|Ψ     T⟩=
+tum chemistry [14, 15].  These methods are approximate,                      R pT (Y)     ˆBT (Y)dY|ϕ    T⟩(where|ϕ       T⟩is a single (or finite
+and their accuracy can be affected by the quality of trial                   number of) Slater determinant,Yis a multi-dimensional
+wave function or trial density matrix.  Typically AFQMC                      variable,p      T (Y)  is  a  probability  density  function,  and
+employs Slater determinant wave functions or some vari-                       ˆBT (Y)  consists  of  exponentials  of  one-body  operators)
+ants of the Slater determinant, for example, orthogonal                      can be used as a trial wave function in AFQMC. Exam-
+or non-orthogonal linear combinations of Slater determi-                     ples of this form include Slater-Jastrow, coupled-cluster
+nants  [14,  16–18],  symmetry-projected  mean-field  solu-                  with singles and doubles (CCSD) [36], or certain neural
+tions [19], projected BCS [20, 21] or pseudo-BCS [22] as                     quantum state forms with hidden variables, such as that
+trial wave functions.  In a variety of correlated fermion                    from variational AFQMC [37–39].
+systems, this framework has been shown to be systematic                         The  algorithm  takes  the  form  of  BRWs  coupled  to
+across multiple benchmark studies [12, 15, 23].  For cer-                    MCMC, with each random walker in AFQMC tethered
+tain systems, however, it has been necessary to go beyond                    to a number of MCMC paths inY-space which are dy-
+simple Slater determinants, by use of multi-determinant                      namically  updated  as  the  random  walk  proceeds.   We
+trial  wave  functions  [16,  18,  24–26].   In  extended  sys-              show  that  the  ratio  can  be  estimated  by  a  small  num-
+tems,  scaling up the trial wave function in a configura-                    ber  of  samples  for⟨Ψ   T| to  achieve  sufficient  fidelity  in
+tion interaction type of approach does not lead to size-                     the constraint and high accuracy in the importance sam-
+consistency.  In strongly correlated models, the most ef-                    pling.  Crucial to the algorithm is that the samples are
+fective  approach  for  improving  the  constraint  has  been                not  static  or  frozen  but  rather  move  by  MCMC  as  the
+through the use of self-consistency [11, 27, 28].                            random  walkers  evolve.   This  is  also  to  be  contrasted
+  Using  other  more  correlated  trial  wave  functions  has                with an “on-demand” approach which provides samples
+been  more  challenging.   The  difficulty  can  be  summa-                  from the trial wave function without any “prior” or “con-
+rized in simple terms as that of evaluating the overlap of                   ditioning”  from  the  current  position  of  the  walker,|ϕ⟩,
+a  Slater  determinant  (a  random  walker  in  the  BRW),                   which would suffer from large fluctuations from random
+|ϕ⟩,  with  a  general  trial  wave  function|Ψ          T⟩which  is         noise and would not scale properly with system size.
+in  an  explicitly  correlated  form,  for  example,  a  Slater                 The  method  paves  the  way  for  many  types  of  corre-
+determinant  times  a  Jastrow  function  (Slater-Jastrow),                  lated  trial  wave  functions  to  be  employed  in  AFQMC.
+coupled-clusterwave  function,  or  matrix  product  state,                  Our specific choice in this work has been a class of wave
+etc.  There have been various attempts to overcome this                      functions  that  can  be  represented  as  multi-dimensional
+difficulty [26, 29–31].  An interesting proposal, under the                  integrals  times  Slater  determinants,  which  can  be  ob-
+name QC-AFQMC [32], of using a quantum computer in                           tained variationally.  As we show, even the simplest wave
+the evaluation of the overlap⟨Ψ     T|ϕ⟩has garnered consid-                 functions  in  this  class  can  enable  significant  improve-
+erable attention [33, 34].  However,  a general algorithm                    ments in accuracy in strongly correlated molecules.  Our
+is still not available which allows the use of sufficiently                  results  are  also  relevant  to  much  of  the  discussion  sur-
+general, size-extensive, correlated trial wave functions in                  rounding the discussion on quantum-classical hybrid im-
+large systems with demonstrated computational scalabil-                      plementations [32, 34] of AFQMC. This paper introduces
+ity and high fidelity.                                                       the conceptual framework for our method, describes the
+  In this work, we show that it is possible to realize an ef-                algorithm for integrating MCMC into the BRW frame-
+ficient implementation of a large class of correlated trial                  work of AFQMC, presents details for practical implemen-
+wave  functions  in  AFQMC  with  “classical”  algorithms.                   tation,  demonstrates  the  effect  in  prototypical  systems
+A key pivot is to consider ratios of overlaps rather than                    (N2  bond stretching,  transition metal oxide molecules),
+the  overlaps  themselves.   In  AFQMC  overlaps  only  ap-                  and discusses scaling and efficiency considerations.  Our
+                                                                                                                                                         3
+
+approach  can  be  generalized  to  many  other  types  of                      where  ˆLγ  denote sets of one-body operators, whose ma-
+trial wave functions, for example neural quantum states                         trix  elements  depend  on  details  of  the  “factorization”
+(NQS) in orbital space, or to other flavors of QMC.                             transformation (a modified Cholesky [40], density-fitting
+   The rest of this paper is organized as follows. In Sec. II,                  [41],  etc)  but  are  explicitly  specified  from{V     ijkl},  and
+we  provide  as  background  an  overview  of  the  AFQMC                       Γ∼O(10)N.  Applying a Hubbard-Stratonovich trans-
+formalism,  brief  discussion  on  the  correlated  trial  wave                 formation [42, 43] we can obtain
+functions  we  use,  and  an  introduction  to  MCMC  and                                                      Z
+BRW samplings in the context of auxiliary-fields to fa-                                            e−τ    ˆH2 .=   dxp(x)           ˆBV (x),                 (4)
+cilitate  their  integration.   In  Sec.  III,  we  introduce  the
+formalism  for  implementing  the  new  method,  and  pro-                      wherex, called auxiliary fields, denotes a series of{x        γ}
+vide an outline of the algorithm to help the reader with
+implementations.  In Sec. IV, we present illustrative re-                       withx    γ∈R, andp(x) =      QΓγ    1√2π e−x    2γ/2   and related one-
+sults in atoms/molecules, before concluding and making                                                                   P
+a few general remarks in Sec. V.  Additional details are                        body propagator  ˆBV (x) = exp               γxγ√−τ    ˆLγ     .  (In  ˆBV
+provided in the APPENDIX.                                                       the subscriptVindicates that it came from{V           ijkl.)
+                                                                                   Putting the above together, the short imaginary-time
+                                                                                propagator can be written as
+                     II.     BACKGROUND                                                                        Z
+                                                                                                    e−τ    ˆH .=   dxp(x)           ˆB(x),                   (5)
+                        A.    Preliminaries
+                                                                                where  ˆB(x) =e   −τ    ˆT/2   ˆBV (x)e  −τ    ˆT/2  .  This provides the
+   In  this  section,  we  introduce  preliminaries  and  no-                   basic ingredient for AFQMC.
+tations  which  will  facilitate  the  discussions  below  of                      The  above  discussion  is  more  general.   For  example,
+AFQMC, the trial wave functions we consider,  and the                           e ˆT1, where  ˆT1 denotes single excitations, satisfies Eq. (2)
+new  algorithm.    Any  many-fermion  Hamiltonian  with                         as well; similarly for any mean-field operators. Two-body
+one- and two-body terms can be written in second quan-                          operators, for example double excitations  ˆT2  in coupled
+tization as (suppressing spin index for brevity)                                cluster, or the exponents in two-body Jastrow factors  ˆJ2,
+
+                         NX                   NX                                can be treated as in Eq. (3) so thate         ˆT2  ore     ˆJ2  is written
+  ˆH=     ˆH1 +  ˆH2 =       Tijc†                 Vijklc†                      in the form of Eq. (4).
+                                  icj + 12                ic†jckcl, (1)
+                         i,j                i,j,k,l
+whereNis  the  size  of  the  one-particle  basis  set.   For                                B.    Outline of standard AFQMC
+quantum chemistry basis sets (Gaussian type orbitals, or
+GTOs),  the  matrix  elements  are  conveniently  available                        We outline the AFQMC method in this section, build-
+and are all real.                                                               ing  on  the  notation  above  and  setting  up  the  discus-
+   The exponential of any one-body operator has a spe-                          sions  on  algorithms  below.    In  this  paper,  we  focus
+cial role throughout this discussion, thanks to Thouless                        on  ground-state  calculations,  although  our  discussion
+theorem:                                                                        can be easily generalized to finite temperature AFQMC
+                   exp Xc†                                                      [8, 28].  To reach the ground state, AFQMC simulates an
+                               iUijcj|ϕ⟩=|ϕ   ′⟩,                 (2)          “imaginary-time evolution”:
+                          ij
+where|ϕ⟩and|ϕ       ′⟩are Slater determinants.  The action                                            |Ψ 0⟩∝limβ→∞ e−β    ˆH|Ψ I⟩,                     (6)
+of any operator which is the exponential of a one-body                          which  propagates  the  given  initial  state|Ψ     I⟩ to  the
+operator on a Slater determinant leads to another Slater
+determinant.  The orbitals of|ϕ ′⟩can be easily obtained                        ground  state|Ψ           0⟩of  the  Hamiltonian    ˆH,  if  their  over-
+by matrix products involving the matrix elements of the                         lap⟨Ψ        0|Ψ I⟩is non-zero.  Numerically, the propagation is
+one-body operator,{U      ij}, and the orbitals of|ϕ⟩[4].  We                   performed with “short-time” steps:
+will often denote the exponential of one-body operators
+by  ˆBor     ˆB.  For example,e      −τ    ˆH1  is in this form (whereτ                                  e−β    ˆH = (e−τ    ˆH)n,                         (7)
+is a number).                                                                   wheren=β/τdenotes the number of time slices, with a
+   The exponential of a two-body operator can be writ-                          sufficiently small time-stepτ.  .
+ten as a many-dimensional integral over the exponential                            Throughout this paper, we will use|ϕ⟩(with sub- and
+one-body operators [4].  The two-body operator can be                           superscripts as needed) to denote single Slater determi-
+expressed in “Monte Carlo form” [16]:                                           nant wave functions, and|Ψ⟩to denote correlated many-
+
+                                       ΓX                                       body wave functions beyond a single Slater determinant.
+                            ˆH2 .= 12     ˆL2γ,                           (3)      In  AFQMC,  to  control  the  sign/phase  problem,  an
+                                       γ                                        importance-sampled BRW algorithm is used to simulate
+                                                                                                                                                            4
+
+the “imaginary-time evolution” in Eq. 6 [7, 9], by turning                       path approximation [4, 7] in the presence of a sign prob-
+it into an iterative propagation of                                              lem.  However, when there is a phase problem, e.g., with
+                                                                                 general  electronic  Hamiltonians  as  in  Eq.  (3)  and  thus
+                        e−τ    ˆH|Ψ i⟩→|Ψ i+1⟩,                       (8)        complex auxiliary fields as in Eq. (4), an additional ingre-
+with a single Slater determinant, a linear combination of                        dient is necessary to complete the phase-free or phaseless
+Slater determinants,  or determinants sampled from the                           approximation [4, 9, 16]:
+trial wave function, to initialize|Ψ                  0⟩=|Ψ   I⟩.  The wave         Iph(x,   xik,ϕik) =I(x,    xik,ϕik)∗max(0,cos(∆θ))   (17)
+function|Ψ       i⟩at stepiof the BRW is represented by an                       with
+ensemble of random walkers,{|ϕ    ik⟩,W ik}:
+                                                                                                         ∆θ= Arg ⟨Ψ T|ϕ i+1k ⟩
+                     |Ψ i⟩∝XWik |ϕ ik⟩⟨Ψ T|ϕ ik⟩,                    (9)                                                ⟨Ψ T|ϕ ik⟩ .                    (18)
+                                k                                                The  implementation  details  can  vary  depending  on  the
+whereklabels the walker, andW         ik is the weight of walker                 approach (e.g., local energy vs.  hybrid methods [45], re-
+k, and the denominator comes from importance sampling                            moving the absolute value in Eq. (17) by preserving the
+[4].  This is achieved by taking a dynamic shift                 xin the         overall phase during long projection times [9, 46], or us-
+integration over auxiliary fields in Eq. (5):                                    ing cosine projection vs.  the half-plane method or other
+                          Z                                                      techniques  to  eliminate  the  finite  density  at  the  origin
+               e−τ    ˆH =    dxp(x−       x)    ˆB(x−  x),           (10)       in  the  complex  plane  [16]).    In  cases  where  all  auxil-
+                                                                                 iary  fields  are  real  (such  as  for  Hubbard  interactions),
+with  which  each  step  of  propagation  can  be  performed                     the phaseless formalism reduces to the constrained path
+as:                                                                              approach [7], ∆θ= 0, and the zero values in the impor-
+                                                                                 tance function prevent the random walk from encounter-
+                                                                                 ing the sign problem.  The implementation of constraints
+    e−τ    ˆH XWik |ϕ ik⟩                  Wi+1          k ⟩                     introduces  a  systematic  bias  that  depends  on  how  well
+                      ⟨Ψ T|ϕ ik⟩→X            k  |ϕ i+1⟨Ψ T|ϕ i+1
+              k                         k                  k ⟩      (11)         the trial wave function⟨Ψ        T|can characterize the ground
+that advances the walker                                                         state.  Extensive benchmark studies have demonstrated
+                                                                                 that  AFQMC,  under  this  formalism  and  theory  [7,  9],
+                     ˆB(x−    xik)|ϕ ik⟩→|ϕ i+1                                  achieves high accuracy, both in model systems and real
+                                                k ⟩,                    (12)     materials [23, 24].
+and assigns the weight
+
+                     I(x,  xik,ϕik)W ik→W  i+1k                       (13)         C.    Explicitly correlated trial wave functions|Ψ         T⟩
+
+with                                                                                In this section we describe the form of the correlated
+                                 xik) ⟨Ψ T| ˆB(x−     xik)|ϕ ik⟩                 wave functions considered in this work.  We will be con-
+    I(x,  xik,ϕik) = p(x−p(x)                ⟨Ψ T|ϕ ik⟩    .     (14)            crete and explicit in defining the wave functions.  This is
+                                                                                 not meant to imply that the algorithm is limited to the
+The vector shift      xik is chosen to minimize the fluctuation                  specific form,  but rather to make the ensuing technical
+of the weights and the optimal choice for each component                         discussions more easily accessible.
+is given, at smallτ, by [44]:                                                       A large class of explicitly correlated wave functions can
+                                                                                 be represented by the general form
+
+                                                                                                                   mY
+                     xik,γ =− √τ⟨Ψ T|ˆLγ|ϕ ik⟩⟨Ψ T|ϕ ik⟩  .                  (15)                      |Ψ T⟩=         e−t j ˆHjT|Ψ 0T⟩,                  (19)
+
+                                                                                                                 j=1
+With walkers propagated by the above procedure to the
+n-th  step  that  reach  equilibrium  (i.e.,  withβ           eq≡n   eqτ         where  the  operator   ˆHjT  can  be  thought  of  aseffective
+large enough to reach the ground state in Eq. (6) within                         Hamiltonians.  For example, if|Ψ    0T⟩is chosen as a mean-
+the  targeted  statistical  accuracy),  the  measurement  of                     field solution, a Slater determinant,m= 1, and        ˆH1T  is a
+ground-state energy can be taken by the mixed estima-                            density-density two-body operator (e.g., following a vari-
+tor [9, 14] for alln≥n           eq                                              ational optimization), then|Ψ    T⟩is a Slater-Jastrow wave
+                                    P                                            function. Somewhat more generally but still keepingm=
+                                              ⟨Ψ T| ˆH|ϕ  nk⟩                    1, if we choose|Ψ       0T⟩to be the Hartree-Fock (HF) solu-
+               ⟨Ψ T| ˆH|Ψ  n⟩          kWnkP    ⟨Ψ T|ϕ nk⟩                       tion, and set the operator−t               1 ˆHj
+                 ⟨Ψ T|Ψ n⟩    =              kWnk    .           (16)             ˆT2  are  the  corresponding  single-  and  double-excitationT  =  ˆT1+ ˆT2, where  ˆT1 and
+
+   The  importance  sampling  formalism  above  together                         operators respectively, we recover the CCSD wave func-
+with the force bias automatically imposes the constrained                        tion.   The  general  form  in  Eq.  (19)  also  represents  the
+                                                                                                                                                       5
+
+wave  function  in  variational  AFQMC  (VAFMQC)  [37–                         whereY={y        j}.  Note that, as in the initial wave func-
+39],  where   ˆHjT   is  an  effective  two-body  Hamiltonian                  tion  of  AFQMC,  it  is  straightforward  to  incorporate  a
+whose one-body and two-body parts are variationally op-                        multi-reference  initial  wave  function|Ψ                 0T⟩in  Eq.  (21),
+timized, as further summarized in the Appendix. VII A.                         by for example directly sampling a linear combination of
+   As discussed at the end of Sec. II A, all of these wave                     Slater determinants [16].
+function forms can be cast in the form
+
+                       mY  Z
+            |Ψ T⟩=            pT (y j) ˆBjT (y j)dy  j|Ψ 0T⟩,       (20)            D.    BRW and MCMC sampling in AFQMC
+                      j=1
+where, as in Eqs. (4) and (5),y   j are auxiliary-fields from                     In  this  section,  we  summarize  the  two  kinds  of  sam-
+decoupling any two-body terms in  ˆHj                                          pling  algorithms  which  have  been  used  for  auxiliary-
+                                               T , and we have com-            field  calculations,  namely  MCMC  with  the  generalized
+bined  successive  products  and  used   ˆBto  denote  expo-                   Metropolis  algorithm,  and  BRW  with  a  population  of
+nentials of one-body operators.  (We use  ˆBfor trial wave                     walkers in branching random walks.  The purpose is to
+function and  ˆBfor those in AFQMC, which come from                            help illustrate their connection and difference, and estab-
+the actual Hamiltonian  ˆH.)  When convenient we will use                      lish a framework for describing the new algorithm which
+the following more compact form to represent the above:                        uses a combination of the two.
+                         Z                                                        For concreteness, let us consider the evaluation of the
+               |Ψ T⟩=        pT (Y)    ˆBT (Y)dY|Ψ          0T⟩,           (21)following
+
+
+                                              RQm
+                 ⟨ ˆH⟩=  ⟨Ψ T| ˆH|Ψ     0⟩     RQmj=1dy jQni=1dx i⟨ϕ T|Qmj=1pT (y j) ˆBjT (y j)  ˆH Qni=1p(x  i) ˆB(x  i)|ϕ I⟩
+                            ⟨Ψ T|Ψ 0⟩    =          j=1dy jQni=1dx i⟨ϕ T|Qmi=1pT (y j) ˆBjT (y j)Qni=1p(x  i) ˆB(x  i)|ϕ I⟩ ,                 (22)
+
+
+
+where we have used the notations introduced in Secs. II A                      Fig. 1(a) depicts the sampling in VAFQMC [38, 39].  On
+and II C and, for simplicity, chosen|Ψ     I⟩in Eq. (6) and                    the  other  hand,  if  we  take  ˆBjT  =   ˆB,  then  Fig.  1(a)  il-
+|Ψ 0T⟩in  Eq.  (19)  to  both  be  single  Slater  determinant                 lustrates  the  usual  path-integral  or  projector  AFQMC
+wave functions,  denoted by|ϕ  I⟩and|ϕ    T⟩,  respectively.                   formulation.   Under  this  choice,  Fig.  1(b)  depicts  the
+(It should be understood here and below that a† is im-                         AFQMC algorithm in Sec. II B, with⟨ϕ    T|as trial wave
+plied as needed when a propagator, such as  ˆBjT  above, is                    function.  In the latter case,  the squares can be viewed
+non-hermitian and is written in bra form.)                                     as back-propagation [46].  In both cases, any observable
+   The two flavors of Monte Carlo to evaluate Eq. (22),                        ˆOcan be inserted in place of     ˆHto compute the expec-
+from a high-level algorithmic standpoint, can be summa-                        tation⟨O⟩.  As mentioned,  the BRW approach [4, 7, 9]
+rized as                                                                       is  necessary  because  it  is  otherwise  difficult  to  impose
+    •Metropolis or Markov chain Monte Carlo (MCMC),                            a constraint without incurring a global ergodicity prob-
+       illustrated  in  Fig.  1(a).    In  this  approach,  the                lem.  In Ref. [47], a method was introduced to interface
+       Monte  Carlo  sampling  is  performed  on  a  “chain”                   BRWs with Metropolis sampling to realize constraint re-
+       of auxiliary-fields (Y,X), whereX≡{x          n···,x  1}.               lease.  That approach can be understood with the help
+       This  chain  has  fixed  lengthm+n,  moves  with                        of Fig. 1(b).  The BRW sampling is first performed, in-
+       updates  proposed  (Y,X)→(Y    ′,X′),   and  ac-                        cluding  the  “square”  portion,  as  if  in  an  AFQMC  cal-
+       cepted/rejected  by  the  generalized  Metropolis  al-                  culation  with  back-propagation.    This  leaves  us  with
+       gorithm.  Typically, one sweeps through the chain                       {|ϕ nk⟩,W nk}and paths{Y   k}.  We then sample the paths
+       (e.g., from right to left and then left to right) for                   {Y k}by Metropolis with respect to the probability func-
+       these moves.                                                            tion ⟨ϕ T|p(Y  k) ˆB(Y  k)|ϕ nk⟩.   Inclusion  of  the  sign/phase
+    •BRW,  illustrated  in  Fig.  1(b).   In  this  approach,                  factor  in  computation  of⟨    ˆO⟩ (inserted  next  to|ϕ    nk⟩)
+       the Monte Carlo sampling typically carries a pop-                       achieves constraint release [47].
+
+       ulation  indexed  byk,  and  the  branching  random
+       walk proceeds from right to left to advance the ran-                       The use of a trial wave function which is itself written
+       dom walker via the sequential sampling of the AFs:                      as  an  integral  over  auxiliary  or  hidden  variables,  how-
+
+                        k−→{|ϕ i+1                                             ever, requires a significant, additional step in the method.
+       {|ϕ ik⟩,W ik}  xi       k ⟩,W i+1k }···.                                Naive sampling of the trial wave function would lead to
+   We make a few remarks to help connect the above to                          loss  of  fidelity  and  large  bias.   This  is  the  focus  of  the
+broader contexts.  If we take  ˆB=     ˆBjT  andϕ   I =ϕ T , then              present work, and the rest of the discussion.
+                                                                                                                                                                 6
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+FIG.  1.   Illustration  of  (a)  the  MCMC  and  (b)  the  BRW
+algorithms  to  evaluate  Eq.  22.   The  figures  depictm=  2
+andn=  2.   Circle  and  rectangular  denote  one-body  oper-                       FIG. 2.  Illustration of the structure of our Monte Carlo sam-
+ators  ˆB(x) and         ˆBjT (y), respectively.  Blue/red indicates cur-           pling algorithm.  One random walker and its tethered MCMC
+rent/updated state in the MC. In (a), paths of auxiliary-fields,                    paths are shown, during one leapfrog update step.  The colors
+{y j,x i}, and sampled by the Metropolis algorithm. In the fig-                     blue/red/orange have the same meaning as in Fig. 1, and cir-
+ure, a schematic is shown for one path.  In (b), a population                       cle and rectangular again denote  ˆBand     ˆBT , respectively.  (0)
+of walkers{|ϕ    ik⟩}(with weight) are propagated from right to                     current state of the walker|ϕ  ik⟩and the|Ψ    T⟩paths attached
+left.   In  the  figure,  the  trajectory  of  one  walker  (labeled  by            to it.  (Taken literally, this picture depictsi= 2, withm= 3
+k) is shown.  The rectangular box shaded orange grows from                          andPgiven  by  the  number  of  rows  on  the  left.)   (1).   the
+right to left, indicating that often in ground-state calculations                   walker is propagated one step,|ϕ    ik⟩→|ϕ i+1
+only the current walker state is kept and the AF path history                       updatedW     ik→W  i+1                               k ⟩and its weight
+can be discarded.                                                                   importance function and constraint.  (2).  MCMC sweeps arek    , using the current samples of⟨Ψ  T|as
+
+                                                                                    performed to update each path (eachp,  represented by one
+     III.     CONSTRAINT AND IMPORTANCE                                             row of squares),Y        ik[p]→Y    i+1k    [p],  according to the walker’s
+                    SAMPLING BY MCMC                                                new position,|ϕ      i+1k ⟩.
+
+
+                            A.    Formalism                                         with normalizationN(ϕ)≡          R⟨Ψ  0T|p T (Y)    ˆBT (Y)|ϕ⟩   dY
+
+   As discussed in Sec. II B, the trial wave functipon|Ψ   T⟩                       (which is not known or needed).  Then we have a Monte
+appears in the realization of BRW sampling and the im-                              Carlo estimate of the⟨Ψ   T|given in Eq. (21):
+plementation of constraints in AFQMC only in the ratio                                                                   PX     ⟨ϕ T| ˆBT (Y[p])
+of  overlaps  and  “local”  quantities  (force  bias  and  local                         ⟨Ψ T| .=⟨   ¯ΨT|= N(ϕ)              ⟨ϕ T| ˆBT (Y[p])|ϕ⟩    .     (24)
+energy).  This is a key that makes it possible to devise an                                                      P     p=1
+efficient and reliable implementation of|Ψ  T⟩by stochas-
+tic sampling.                                                                       Here and below we use the “bar” as an explicit indica-
+   Our algorithm consists of a population of random walk-                           tion  of  particular  Monte  Carlo  estimate  of⟨Ψ  T|.   (For
+ers{|ϕ    ik⟩,W ik}(as in standard AFQMC), but addition-                            simplicity we will consider the case where⟨Ψ             0T|is a sin-
+ally with each walker tethered to a set ofPpaths{Y         ik[p]},                  gle Slater determinant, hence the replacement by⟨ϕ  T|in
+withp= 1,2,···,P.  The walker and its paths are moved                               Eq. (24) and below.  The discussion below can be general-
+stochastically in a leapfrog pattern,  with the walker by                           ized straightforwardly to the case of a linear combination
+BRW  and  the  paths  by  MCMC.  The  structure  of  this                           of  Slater  deterimnants  following  the  usual  procedures.)
+“composite  walker”,  the  random  walker  plus  its  con-                          The overlap ratio can then be estimated by:
+nected paths, and how the leapfrog move is executed, is
+illustrated in Fig. 2.  We next discuss the leapfrog sam-                                                  PP       ⟨ϕ T| ˆBT (Y[p])|ϕ                    ′⟩
+pling in detail, by focusing on one walker, labeledk, and                                   ⟨ ¯ΨT|ϕ′⟩          p=1   ⟨ϕ T| ˆBT (Y[p])|ϕ⟩     S(Y[p])PP
+one  step  fromitoi+ 1.   To  simplify  the  notation  be-                                  ⟨ ¯ΨT|ϕ⟩     =               p=1 S(Y[p])         ,       (25)
+low, we will omit these indices, using|ϕ⟩,W, andY[p]
+to  describe  the  corresponding  objects  ati,  and  primed                        where
+quantities|ϕ   ′⟩,W ′, andY ′[p] fori+ 1, i.e., unprimed for
+the blue objects and primed for red in Fig. 2.                                                         S(Y[p])≡    ⟨ϕ T| ˆBT (Y[p])|ϕ⟩⟨ϕ T| ˆBT (Y[p])|ϕ⟩(26)
+   Step 1 of the leapfrog move is|ϕ⟩→|ϕ  ′⟩.  Suppose we
+havePpaths{Y[p]}which are sampled from the proba-
+bility density function
+                                                                                    is a phase factor for each of thePpaths associated with
+        P(Y;ϕ) =    ⟨Ψ  0T|p T (Y)    ˆBT (Y)|ϕ⟩   /N(ϕ),        (23)           the walker|ϕ⟩.  Any local expectation of|ϕ⟩can also be
+                                                                                                                                                             7
+
+estimated as                                                                      tests,  but  the  former  yielded  somewhat  smaller  statis-
+                       PP       ⟨ϕ T| ˆBT (Y[p])        ˆO|ϕ⟩                     tical uncertainties.  One could combine Eq. (29) with the
+     ⟨ ¯ΨT| ˆO|ϕ⟩   .=    p=1    ⟨ϕ T| ˆBT (Y[p])|ϕ⟩     S(Y[p])                  AFQMC projection with ∆θin leapfrog step 1, by adding
+       ⟨ ¯ΨT|ϕ⟩                   PP                                              the two angles and performing one “cosine projection”,
+                                     p=1 S(Y[p])          .     (27)              which is equivalent in the small angle limit (sufficiently
+This  allows  us  to  compute  the  force  bias  in  Eq.  (15),                   smallτand large enoughP).  Most of the data presented
+with which the propagation in Eq. (12) can be completed.                          below are obtained using this variant.  We comment that
+The  weight  updateW→W     ′  is  accomplished  through                           yet another way to suppress the influence of the noise can
+the functionI                ph in Eq. (17).  In the hybrid formalism of          be the penalty method in Ref. [48], which should lead to
+ph-AFQMC,Ias written in Eq. (14) can be computed                                  similar results.
+using the overlap ratio formula in Eq. (25).  In the local                           A key to the success of sampling|Ψ        T⟩is the severity of
+energy  formalism,Iis  given  bye       −τE L(ϕ)   ,  in  which  the              the phase or sign fluctuations in the trial wave function.
+local  energyE     L(ϕ)  can  be  computed  by  Eq.  (27).   In                   The mean ofS(Y[p]) in Eq. (26) will determine the vari-
+either case, ∆θis given by the overlap ratio.                                     ance in our calculation and how severe the noise will be,
+   Step  2  of  the  leapfrog  move  is  to  update  the  paths                   including  the  phase  fluctuation  of  ∆θ  T .   The  precursor
+{Y[p]} → {Y    ′[p]},  conditional  on  the  new  walker  po-                     for  this  can  be  found  in  the  variational  calculation  us-
+sition|ϕ   ′⟩which  has  now  been  obtained  following  step                     ing|Ψ   T⟩.  If the sign/phase problem is severe there, the
+1.  The goal is to generate the new set of paths,{Y    ′[p]},                     ensuing AFQMC calculation will be more noisy and will
+distributed according toP(Y   ′;ϕ′), as defined in Eq. (23).                      require more samples (e.g., largerP).
+For each of thePpaths, denoted byY    ′, we start from the                           As  a  technical  remark,  the  structure  of  the  compos-
+initial state inherited from|ϕ⟩.  We use the generalized                          ite walker provides considerable flexibility for optimizing
+Metropolis algorithm to sample a newY  ′ by MCMC for                              computational efficiency. For example, the mixed estima-
+Msteps.  In each step a new stateY    ′prop is proposed.  For                     tor for the energy at stepiis normally computed with the
+example, if no force bias is used, one could propose from                         trial wave function⟨             ¯ΨiT,k|, using thePpaths tethered to
+the probability density functionp       T (Y ′prop), in which case                the walker|ϕ  ik⟩.  However, if a higher accuracy is desired
+the  probability  to  acceptY    ′prop  as  the  newY  ′  is  given               in  the  measurement,  we  could  sample  additional  paths
+by min{1,    ⟨ϕ T| ˆBT (Y ′prop)|ϕ ′⟩/⟨ϕ T| ˆBT (Y ′)|ϕ ′⟩}.  Alter-      with more MCMC sweeps, to obtain⟨           ¯Ψ′iT,k|to evaluate
+natively, force bias or hybrid Monte Carlo, or any other                          the local energy.  All that is needed is an additional cor-
+sampling  schemes  one  might  use  in  VAFQMC,  can  be                          rection factorR(            ¯ΨiT,k→  ¯Ψ′iT,k;ϕ ik) in the numerator and
+applied.   Since|ϕ⟩is  close  to|ϕ      ′⟩,  to  re-equilibrate  or               denominator in Eq. (16).
+re-thermalize the paths fromP(Y    ′;ϕ) toP(Y    ′;ϕ′) only                          In the APPENDIX. VII B, we include a detailed out-
+requires a smallM.  At the end of the MCMC, the paths                             line of our algorithm in the form of a pseudo-code.
+{Y ′[p]}sampleP(Y       ′;ϕ′).
+   In  the  above  (leapfrog  step  2),  a  “hand-off”  occurs                                        B.    Illustrative example
+between  two  stochastic  samples  of  the  trial  wave  func-
+tion,|        ¯Ψ′T⟩and|        ¯ΨT⟩.  Viewed in terms of the importance              Before  discussing  realistic  applications  and  present-
+sampling transformation, an extra ratio of overlaps is in-                        ing  results,  we  first  study  a  toy  problem  to  help  illus-
+serted prior to the beginning of the next AFQMC step:                             trate some of the characteristics and behavior of the new
+(|ϕ ′⟩→|ϕ′′⟩):                                                                    method.   In  this  test,  we  consider  a  more  straightfor-
+                                                                                  ward choice of the trial wave function given in the gen-
+                  R(   ¯ΨT→  ¯Ψ′T ;ϕ′) =⟨ ¯Ψ′T|ϕ′⟩⟨ ¯ΨT|ϕ′⟩.              (28)    eral  form  of  Eq.  (19),  by  letting   ˆHjT  =   ˆHandt     j  =τ
+                                                                                  (withj= 1,...,m), and taking|Ψ                                0T⟩=|ϕ      RHF⟩, the re-
+The  ratio  in  Eq.  (28)  should  of  course  be  unity  when                    stricted  Hartree-Fock  (RHF)  solution.   This  leads  to  a
+evaluated  explicitly.   However,  the  statistical  sampling                     trial wave function|Ψ      T⟩=e −β T ˆH|ϕ RHF⟩withβ    T  =mτ,
+of⟨Ψ  T|introduces noise, including a possible phase fac-                         which can be viewed as the wave function produced by
+tor.  If the overlap⟨Ψ     T|ϕ′⟩is small, there can even be a                     the  same  AFQMC  projection,  without  constraint.   As
+sign change.  To suppress this noise and prevent it from                          mis increased,|Ψ          T⟩is improved by a longer projection,
+destabilizing  the  calculation,  we  apply  a  step  following                   and eventually approaches the exact ground state.  This
+the  philosophy  of  the  phaseless  constraint.   We  modify                     allows  us  to  study  the  convergence  of  our  method  sys-
+the weight of the walker|ϕ ′⟩by the cosine projection:                            tematically by varyingβ     T .
+                                                                                     The result is presented in Fig. 3 for the F atom, where
+                 W′→W ′·max(0,cos(∆θ           T )),             (29)             we  show  the  computed  ground  state  energy  vs.  the  in-
+                                                                                  verse of the projection timeβ    T  in|Ψ  T⟩.  Withm= 0,
+where ∆θ  T  = Arg[R(          ¯ΨT →  ¯Ψ′T ;ϕ′)].  Alternatively,  we             we haveβ T  = 0, and our algorithm reduces to standard
+can  apply  the  “half-plane”  version  [9],  i.e.,  if|∆θ   T|>                  phaseless AFQMC with the RHF trial wave function.  A
+π/2,  the  walker|ϕ ′⟩is  eliminated  (W ′  =  0).   The  two                     constraint bias of∼2.5 mHa is observed, which reflects
+approaches  did  not  show  noticeable  difference  in  our                       the deficiency of the RHF trial wave function for open-
+                                                                                                                                                   8
+
+shell systems and is consistent with previous results [49].                  Sec. IV B we study five transition metal oxide molecules
+Asβ  T  is increased with increasingm, the systematic er-                    TiO, VO, CrO, FeO, and CuO.
+ror is reduced accordingly.  Withβ    T∼0.2, the computed                       We  perform  VAFQMC  to  provide  trial  wave  func-
+total energy is already within chemical accuracy of the                      tions for our AFQMC. Here, we directly utilize the same
+exact result (obtained from full configuration interaction                   VAFQMC  algorithm  as  described  in  previous  Hybrid
+(FCI) with PySCF [50]).  The trial wave function is fur-                     AFQMC work [38] (but without any additional “free pro-
+ther improved asβ  T  is further increased, and approaches                   jection” as was often done there).  A brief introduction to
+the exact result.                                                            this algorithm can be found in APPENDIX. VII A.  We
+                                                                             use  the  simplest  form  of|Ψ  T⟩in  the  rest  of  this  work,
+                                                                             with only a single “time slice:m= 1 in Eq. (19),  and
+                                                                             will refer to the resulting|Ψ        T⟩by VAFQMC throughtout.
+                                                                             More explicitly,
+                                                                                                     Z Y      dx γ                √
+                                                                             ⟨Ψ T|=⟨ϕ   T|e−t    0 ˆT0       √         2x2γe−t   ˆTe−s  PNγγ  xγ ˆLγ,
+                                                                                                          γ     2π e− 1
+                                                                                                                                                (30)
+                                                                             where all coefficients and⟨ϕ    T|are optimized to minimize
+                                                                             the energy while maintaining a significant sign ratio.
+                                                                                All VAFQMC and AFQMC calculations here are per-
+                                                                             formed  in  a  “black  box”  manner  (i.e.,  without  tuning
+                                                                             parameters for specific systems).  In VAFQMC, the min-
+FIG. 3.  Ground state energy systematic errors for AFQMC                     imum sign ratio is set as 0.7. The VAFQMC optimization
+with different trial wave functions on the F atom.  The trial                process is iterated for 10000 steps to ensure the conver-
+wave function is|Ψ  T⟩=e −mτ     ˆH|ϕ RHF⟩withτ= 0.01.  The                  gence of the energy.  In our AFQMC, we use a time step
+cc-pVDZ basis is used.  The error is given byE  AFQMC−E   FCI                τ= 0.01, 2000 thermal steps, 100∼200 measurements
+andβ   T  =mτis  also  given  in  atomic  units.   The  AFQMC                with 50 steps between each measurement and 240 walkers
+systematic  error  with  the  RHF  itself  as  trial  wave  function         for each run.  The VAFQMC calculations are carried out
+is  presented  as  the  “shaded  blue  background”  whose  width             on a single NVIDIA A100 GPU. All AFQMC calculations
+indicates  the  statistical  errorbar.    “Orange  star”  denotes            are executed on the “Intel Xeon CPU E5@2.5GHz” CPU
+AFQMC  results,  and  related  trial  energy  is  specified  with            platform, with 120 cores for N2 and 240 cores for tran-
+“black square”.
+                                                                             sition metal oxide molecules.  Additional details specific
+  Although the above “imaginary-time evolved”|Ψ   T⟩is                       to the new algorithm are discussed below.
+
+useful for a systematic study in simple systems,  it also
+highlights  the  main  challenges  in  producing  correlated                                     A.    N2 bond breaking
+trial  wave  functions  which  scale  properly  with  system
+size.  To achieve consistent results in larger systems, the                     Our calculations focus on the N2 molecule at different
+βT  required would need to increase.  An additional tech-                    bond lengths.  We use the cc-pVDZ basis, for which there
+nical difficulty is that the use of the “physical” Hamilto-                  is  a  wealth  of  benchmark  results  from  previous  studies
+nian  ˆHand “realistic” time-step are both non-optimal for                   [51,  52].   To  present  our  results  systematically,  we  first
+producing a good trial wave function.  Many time-slices                      illustrate  the  whole  process  of  our  AFQMC/VAFQMC
+are  involved  and  typically  a  significant  phase  problem                calculations  on  the  ground  state  energy,  and  then  we
+arises even for relatively short projection time (same as                    elucidate how different parameters in the application of
+in the free projection method [9]).  The general form in                     Metropolis constraint can affect our calculations. Finally,
+Eq. (19) allows better choices, one of which is variational                  we  summarize  the  results  for  all  bond-breaking  cases.
+AFQMC  [37–39].   Below  we  will  use  the  particular  of                  Our study spans from weakly correlated to strongly cor-
+variational wave function from Ref. [38] as our trial wave                   related regimes, consistently showing highly accurate re-
+function.                                                                    sults with scalable computational costs.
+                                                                                The AFQMC/VAFQMC computational workflow be-
+                         IV.    RESULTS                                      gins with the execution of VAFQMC to generate the trial
+                                                                             wave  function⟨Ψ        T|.  Subsequently,  we  chose  the  initial
+                                                                             wave function|Ψ       I⟩in Eq. (6) to be a set of determinants
+  In this section, we test the algorithm on more strongly                    sampled  from|Ψ    T⟩through  the  Metropolis  algorithm.
+correlated molecules, where the error from AFQMC with                        The VAFQMC estimation (i.e., Metropolis sampling) of
+single Slater determinent trial wave functions is typically                  ⟨Ψ T|then can be seamlessly adopted into the AFQMC
+more pronounced.  We consider two representative situ-                       initialization.  That is, atβ= 0, the energy measurement
+ations for static and dynamic correlations.  In Sec. IV A                    within the AFQMC framework reduces to the Metropo-
+we study bond breaking in the N2 molecule, and then in                       lis evaluation of the VAFQMC trial energy.  We illustrate
+                                                                                                                                                      9
+
+this by starting the measurement in Eq. (16) at the very                      change, andP= 20 is more than enough for all cases.
+beginning of the AFQMC projection, i.e., withβ         eq = 0.                   In  Fig.  5,  we  take  again  the  worst  case  scenario  in
+The results are shown in Fig. 4, where the initial AFQMC                      N2,  atR=  3.6 Bohr,  to  illustrate  the  computational
+energyE(β= 0) is seen to agree with the VAFQMC en-                            efficiency  and  scaling  of  the  method.     In  panel  (a),
+ergy shown in the shaded bar.  Asβincreases, the energy                       we  show  the  energy  convergence  with  respect  toP.
+decreases and approaches the ground state statistically.                      AFQMC/VAFQMC withP= 5 yields a slightly worse
+For a sufficiently largeβ(> β              eq),  the energyE(β) will          result than the final converged answer for this wave func-
+converge, and AFQMC measurements are performed to                             tion, but it essentially reaches chemical accuracy already.
+estimate a final ground state energy together with statis-                    In the inset, we show results from AFQMC calculations
+tical uncertainty.  This AFQMC estimated ground state                         with  multi-determinants  (MD)  truncated  from  a  com-
+energy is presented as the shaded orange line.  The small                     plete active space self-consistent field (CASSCF) calcu-
+deviation  between  AFQMC  estimated  ground  state  en-                      lation, with 12 active orbitals and 5 active electrons.  We
+ergy and the exact results comes from the constraint bias                     then truncate the CASSCF wave function according to
+introduced by the single-time-slice VAFQMC trial wave                         the absolute value of the CI configuration, with cut-off:
+function in Eq. (30).  This energy deviation of∼1.2mHa                        0.1,0.01,0.001, and 0.0005, respectively.  We see that the
+is the worst case in our N2 tests.                                            AFQMC/MD calculation requires∼6000 determinants
+                                                                              to reach convergence.  It should be noted that there is a
+                                                                              great deal of speedup available, because of the structrue
+                                                                              of a CI trial wave function [16–18],  to reduce the com-
+                                                                              putational cost of the AFQMC/MD calculations.  Never-
+                                                                              theless, the very large reduction in the number of deter-
+                                                                              minants that the new sampling algorithm allows is sig-
+                                                                              nificant.
+                                                                                 In panel (b), we show the behavior of statistical error
+                                                                              bar  and  related  computational  cost  as  a  function  ofP
+                                                                              in  the  AFQMC/VAFQMC  algorithm.   All  calculations
+                                                                              here are performed with the same parameters except for
+                                                                              differentP.  AsPincreases, we observe a decrease of the
+                                                                              statistical error, with a linear increase in computational
+FIG.  4.    The  energy  trajectory  of  the  AFQMC  propaga-                 cost.
+tion with the VAFQMC trial wave function of Eq. (30),  la-                       In Fig. 6, we summarize the ground state energy com-
+beled AFQMC/VAFQMC, in the N2 molecule at a stretched                         puted by AFQMC/VAFQMC for differentRbeyond the
+bondlength ofR= 3.6 Bohr.  The ground-state energyE(β)                        equilibrium  bondlengthR                   eq  =  2.118 Bohr.   The  varia-
+is evaluated along the AFQMC imaginary-time propagation                       tional  energy  from  our  trial  wave  function  is  shown  as
+with increasedβ, and plotted asE(β)−E                                     DMRG, relative theVAFQMC. For reference, the AFQMC/MD result is also
+the  near-exact  value  from  DMRG  [52].   The  converged  and               shown,  and  MD  is  selected  from  multi-configurational
+final AFQMC ground state energy is shown as the shaded or-                    self-consistent  field  (MCSCF)  with  weight  cutoff  0.01.
+ange line whose width indicates the estimated statistical un-                 All  AFQMC/VAFQMC  calculations  were  run  for  24
+certainty.  The variational energy of the VAFQMC trial wave                   hours to reach a statistical error of around 0.2 mHa. (The
+function itself is given as the shaded blue line, again with the              run  time  can  be  reduced  to  less  than  1  hour  if  we  tar-
+width indicating statistical error.
+                                                                              get a statistical accuracy of 1 mHa, or roughly chemical
+  Our  trial  wave  function⟨Ψ        T| is  approximated  by                 accuracy.)   Additional  optimization  can  further  reduce
+the  Metropolis  samples⟨             ¯ΨT|.   The  parameters  for  the       the computational cost in AFQMC with Metropolis con-
+Metropolis sampling, and what statistical accuracy and                        straint, which we will leave for future work.
+fidelity it achieves, will affect the scaling of the algorithm.
+As introduced in Sec. III.A, these parameters are primar-                                B.    Transition metal oxide molecules
+ily the number of Metropolis samples,P, the number of
+“chains” tethered to each walker|ϕ⟩, and the number of
+thermalization sweeps,Mfor Metropolis to reach equi-                             This   section   focuses   on   transition   metal   oxide
+librium.  To monitor this behavior, calculations are per-                     molecules,   which  are  prototypical  systems  exhibiting
+formed with differentPandM.  Our tests show that the                          strong correlations that illustrate some of the challenges
+thermalization equilibrium can be reached very quickly.                       with standard quantum chemistry methods.  A number
+Indeed oftenM= 1 is sufficient; this reflects how related                     of  benchmark  studies  involving  AFQMC  exist  on  these
+|ϕ i+1k ⟩is to|ϕ   ik⟩, and there is an interplay with the choice             molecules  [24,  53].   Here  we  directly  compare  with  the
+ofτ.  The number of Metropolis samples that requested                         near-exact semistochastic heat-bath configuration inter-
+to describe⟨Ψ  T|well is also very small.  Though our N2                      action (SHCI) energies from Ref. [24], using identical set-
+bond-breaking  cases  ranging  from  weakly  correlated  to                   tings (bondlengths, pseudo-potential, and basis sets).
+strongly correlated systems, the requiredPshows little                           In Fig. 7, we summarize the ground state energy mea-
+                                                                                                                                                     10
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                              FIG.  6.    Deviations  in  the  computed  ground-state  energy
+                                                                              from VAFQMC and AFQMC/VAFQMC, for the N2 molecule
+                                                                              at  different  bondlengths,   in  the  cc-pVDZ  basis.     Ener-
+                                                                              gies  are  compared  with  near-exact  DMRG  results  [51,  52].
+                                                                              AFQMC/MD, with|Ψ    T⟩from truncated MCSCF, was taken
+                                                                              from Ref. [51] and shown for reference.  The dashed black line
+                                                                              represents the chemical accuracy (1 kcal/mol).
+
+
+
+
+                                                                                 For  comparison,  we  have  also  included  in  Fig.  7  the
+                                                                              AFQMC/MD results from Ref. [24].  Similar to what is
+FIG.  5.    Fidelity  and  convergence  of  the  stochastic  sam-             seen in N2, the new method outperforms AFQMC/MD
+pling of|Ψ  T⟩, and computational efficiency.  (a) Energy com-                with multiple-determinant CI-type trial wave functions,
+puted from AFQMC (relative to the near-exact DMRG results                     in this case obtained from truncated CASSCF. As men-
+[51, 52]) as a function ofP, the number of paths tethered to                  tioned  earlier,  these  CI-type  multi-determinant|Ψ T⟩’s
+each walker in the Metropolis sampling of the VAFQMC|Ψ     T⟩.                lend themselves to speedup algorithms which allow a very
+The thin dashed black line indicates chemical accuracy.  The                  large  number  of  determinants,  so  these  AFQMC/MD
+inset  shows,  for  comparison,  results  from  AFQMC  using  a               results  can  be  improved  without  necessarily  incurring
+multi-determinant trial wave function taken from CASSCF,                      high  cost.   So  direct  comparisons  of  the  number  of  de-
+truncated toPdeterminants according to the absolute value                     terminants  is  not  very  meaningful.   However,  the  MD
+of the CI coefficient.  The converged results of AFQMC/MD                     trial  wave  functions  used  in  these  were  reasonably  ad-
+and AFQMC/VAFQMC (in their respective limit of largeP)                        vanced,  withO(1000)  determinants.   That  simple  one-
+are shown by a thick line shaded in the corresponding color,                  slice  VAFQMC  trial  wave  functions  can  lead  to  such  a
+with the line width indicating statistical errors (b) The com-                clear improvement over them is thus very encouraging.
+putational accuracy and efficiency of AFQMC/VAFQMC as a
+function ofP.  The statistical accuracy is shown as stars (left
+scale),  with the dashed orange curve to guide the eye.  The
+computational cost (normalized to that ofP= 5) is shown as
+squares (right scale).
+
+
+sured  by  AFQMC  with  VAFQMC  trial  wave  functions
+for five diatomics.  VAFQMC is executed to provide trial
+wave functions of the form in Eq. (30).  The variational
+energies of the VAFQMC|Ψ     T⟩are presented in the figure.
+It is seen that these single-time-slice trial wave functions
+are  in  themselves  limited,  giving  energy  errors  as  large
+as∼20 mHa.  AFQMC using these trial wave functions,
+with  Metropolis  sampling,  yields  results  systematically
+within chemical accuracy, indicated by the dashed line).                      FIG. 7.  Energy deviations for VAFQMC and AFQMC on five
+In these calculations, we usedP= 20 paths which was                           transition metal diatomics.  Calculations are performed in the
+verified to be sufficient for sampling|Ψ        T⟩(see study in               vdz basis, with identical setup as in Ref. [24], where the refer-
+Sec.  IV A).   Our  AFQMC/VAFQMC  calculations  were                          ence SHCI energies and AFQMC/MD results are taken The
+executed for 24 hours (using 240 cores as mentioned ear-                      dashed black line represents chemical accuracy (1 kcal/mol).
+lier),  resulting in statistical errors of approximately 0.9
+mHa.
+                                                                                                                                                 11
+
+         V.     SUMMARY AND DISCUSSION                                      in Sec. IV, take a large number of determinants explicitly.
+                                                                            Instead  of  using  a  deterministic,  preset  sequence,  one
+  This work introduces a way to sample advanced many-                       could imagine approximating these wave functions with
+body  trial  wave  functions  in  fermion  quantum  Monte                   a small number of samples and incorporating them into
+Carlo when the trial wave function cannot be computed                       each propagation/measurement procedure.  It could also
+straightforwardly.   We  have  in  particular  focused  on  a               be useful to apply a|Ψ T⟩derived from a density matrix
+scalable algorithm for AFQMC to implement a wide class                      renormalization  group  (DMRG)  or  tensor  network  cal-
+of many-body wave functions as trial wave function. This                    culations, by sampling it in CI space [30].  Additionally,
+is  accomplished  by  interfacing  the  branching  random                   other forms of variational Monte Carlo (VMC) or neural
+walks of AFQMC with Metropolis sampling of the trial                        network wave functions could also be considered.  Indeed
+wave function.  We discussed the mathematical and the-                      the single-time-slice trial wave function we have consid-
+oretical basis for the method, and outlined the algorithm                   ered in this work for N2  and transition metal diatomics
+to  execute  it.   Test  results  are  presented  in  atoms  and            are very similar to a Slater-Jastrow wave function which
+molecules, including strongly correlated molecules under                    is traditional in VMC. (Our VAFQMC contains beyond
+bond stretching or containing transition metal elements.                    density-density correlations and are thus more general.)
+The method consistently reaches chemical accuracy and                          Our algorithm as currently implemented scales propor-
+demonstrates good scaling with moderate computational                       tionally  to  the  number  of  Metropolis  samples  (roughly
+cost.                                                                       P×M),  essentially  giving  a  prefactor  to  the  cost  of
+  Key  elements  in  the  new  method  include  the  miti-                  a standard AFQMC with single determinant trial wave
+gation of systematic errors by computing overlap ratios                     function.   As  mentioned,  the  number  of  paths  tethered
+with correlated samples and keeping the trial wave func-                    to  each  walker  is  ofO(10)  and  the  number  of  update
+tions tethered to the random walkers to avoid or mini-                      sweeps  is  ofO(1).   Since  the  quality  of  the  trial  wave
+mize  re-equilibration  in  the  MCMC.  Without  these  in-                 function  actually  leads  to  a  reduction  in  the  variance
+gredients it would be impractical to achieve an efficient                   (as seen in Fig. 5), the additional cost has not been too
+implementation of any stochastic sampling approach, in-                     onerous.   As  a  first  demonstration  of  the  approach  for
+cluding  proposals  on  quantum  computers.   Even  in  an                  AFQMC with stochastically sampled constraint, our im-
+AFQMC calculation of modest system size, the overlap                        plementation  here  has  not  really  focused  on  speedups,
+itself can vary by 50 orders of magnitude [35].  Any cal-                   acceleration, or computational efficiency.  Opportunities
+culation based on direct evaluations of the overlap itself                  clearly  exist  to  optimize  and  improve.   It  will  be  valu-
+would  have  fundamental  difficulty  to  scale  up  properly               able  to  incorporate  many  of  the  ideas  which  have  lead
+with system size.  Similarly, without the ability to gener-                 to great efficiency gain and optimization in determinis-
+ate samples of|Ψ  T⟩with importance sampling tethered                       tic trial wave functions [16–18, 26].  Additionally, we can
+to  the  walker,  it  would  be  difficult  to  maintain  fidelity          optimize with respect to the interplay between time step
+of the constraint due to large fluctuations from random                     sizeτand how to optimally mix and match step 1 and
+sampling.                                                                   step 2 in the leapfrog update.
+                                                                               Interfacing  BRW  with  Metropolis  is  not  limited  to
+  Our results provide interesting insight to the behavior                   ground-state  AFQMC.  Extension  to  finite  temperature
+of  noisy  constraints  in  AFQMC.  Even  with  very  mod-                  AFQMC [8, 28] is straightforward.  This method is also
+est number of samples, with proper importance sampling                      not limited to auxiliary-field space.  It can similarly be
+via tethering and the leapfrog approach, a rather modest                    applied  in  coordinate-space  QMC,  for  example,  inter-
+number of samples (P∼5) yield good fidelity and sta-                        facing diffusion Monte Carlo (DMC) with path-integral
+tistical  accuracy  in  a  realistic  molecular  calculation,  as           methods  or  some  other  form  to  sample  a  VMC/neural
+shown in Fig. 5.  These observations suggest a promising                    network wave function.
+prospect  for  the  efficient  implementation  of  noisy  con-
+straints in AFQMC, provided efficient sampling schemes.
+  Though our algorithm is presented for trial wave func-                                  VI.     ACKNOWLEDGMENTS
+tions  in  the  form  of  Eq.  19,  any  wave  function  ansatz
+can be implemented to AFQMC as constraint if its over-                         Authors  thank  Ryan  Levy  and  Kang  Wang  for  pro-
+lap with given determinants can be evaluated effectively                    viding useful data.  Z.X. is grateful for the support and
+through  Monte  Carlo  sampling.   While  we  have  formu-                  hospitality  of  the  Center  for  Computational  Quantum
+lated the trial wave function as integrals over auxiliary-                  Physics (CCQ) during early part of this work.  The Flat-
+fields,  this  is  certainly  not  a  requirement.   For  exam-             iron  Institute  is  a  division  of  the  Simons  Foundation.
+ple, to date applications of CI-like trial wave functions,                  Computing  was  carried  out  through  the  support  from
+such as the truncated MCSCF wave function illustrated                       Institute of Physics, Chinese Academy of Sciences.
+
+
+
+
+
+ [1]F.              Becca              and              S.              Sorella,  (Cambridge University Press, 2017).
+     Quantum Monte Carlo approaches for correlated systems
+                                                                                                                                                                12
+
+ [2]W. Foulkes, L. Mitas, R. Needs, and G. Rajagopal, Quan-                         [17]M.  A.  Morales,   J.  McMinis,   B.  K.  Clark,   J.  Kim,
+     tum monte carlo simulations of solids, Reviews of Modern                             and  G.  E.  Scuseria,  Multideterminant  wave  functions
+     Physics73, 33 (2001).                                                                in  quantum  monte  carlo,  Journal  of  Chemical  The-
+ [3]J. Carlson, S. Gandolfi, F. Pederiva, S. C. Pieper, R. Schi-                          ory and Computation8, 2181 (2012), pMID: 26588949,
+     avilla,  K.  E.  Schmidt,  and  R.  B.  Wiringa,  Quantum                            https://doi.org/10.1021/ct3003404.
+     monte  carlo  methods  for  nuclear  physics,  Rev.  Mod.                      [18]A.  Mahajan,   J.  Lee,  and  S.  Sharma,  Selected  con-
+     Phys.87, 1067 (2015).                                                                figuration   interaction   wave   functions   in   phaseless
+ [4]S.       Zhang,       Auxiliary-field       quantum       monte                       auxiliary   field   quantum   Monte   Carlo,   The   Jour-
+     carloat        zero-        and        finite-temperature,        in                 nal    of    Chemical    Physics156,    10.1063/5.0087047
+     Many-Body Methods for Real Materials,      edited      by                            (2022),    174111,    https://pubs.aip.org/aip/jcp/article-
+     E.  Erik  Koch  and  Shiwei  Zhang  (eds.)  (Verlag  des                             pdf/doi/10.1063/5.0087047/16542558/174111                   1  online.pdf.
+     Forschungszentrum J¨ulich, 2019).                                              [19]H. Shi and S. Zhang, Symmetry in auxiliary-field quan-
+ [5]M.  Oertel,  M.  Hempel,  T.  Kl¨ahn,  and  S.  Typel,  Equa-                         tum monte carlo calculations, Phys. Rev. B88, 125132
+     tions  of  state  for  supernovae  and  compact  stars,  Rev.                        (2013).
+     Mod. Phys.89, 015007 (2017).                                                   [20]J.  Carlson,  S.  Gandolfi,  K.  E.  Schmidt,  and  S.  Zhang,
+ [6]R.  Blankenbecler,  D.  J.  Scalapino,  and  R.  L.  Sugar,                           Auxiliary-field quantum monte carlo method for strongly
+     Monte  carlo  calculations  of  coupled  boson-fermion  sys-                         paired fermions, Phys. Rev. A84, 061602 (2011).
+     tems. i, Phys. Rev. D24, 2278 (1981).                                          [21]E.  Vitali,   P.  Rosenberg,  and  S.  Zhang,  Calculating
+ [7]S. Zhang, J. Carlson, and J. E. Gubernatis, Constrained                               ground-state  properties  of  correlated  fermionic  systems
+     path  monte  carlo  method  for  fermion  ground  states,                            with bcs trial wave functions in slater determinant path-
+     Phys. Rev. B55, 7464 (1997).                                                         integral approaches, Phys. Rev. A100, 023621 (2019).
+ [8]S. Zhang, Finite-temperature monte carlo calculations for                       [22]Z.-Y. Xiao, H. Shi, and S. Zhang, Pseudo-bcs wave func-
+     systems with fermions, Physical review letters83, 2777                               tion from density matrix decomposition:  Application in
+     (1999).                                                                              auxiliary-field quantum monte carlo, Phys. Rev. Research
+ [9]S. Zhang and H. Krakauer, Quantum monte carlo method                                  3, 013065 (2021).
+     using phase-free random walks with slater determinants,                        [23]J. P. F. LeBlanc, A. E. Antipov, F. Becca, I. W. Bulik,
+     Phys. Rev. Lett.90, 136401 (2003).                                                   G. K.-L. Chan, C.-M. Chung, Y. Deng, M. Ferrero, T. M.
+[10]B.-X.   Zheng,   C.-M.   Chung,   P.   Corboz,   G.   Ehlers,                         Henderson, C. A. Jim´enez-Hoyos, E. Kozik, X.-W. Liu,
+     M.-P.   Qin,   R.   M.   Noack,   H.   Shi,   S.   R.   White,                       A.  J.  Millis,  N.  V.  Prokof’ev,  M.  Qin,  G.  E.  Scuseria,
+     S.   Zhang,   and   G.   K.-L.   Chan,   Stripe   order   in                         H.  Shi,  B.  V.  Svistunov,  L.  F.  Tocchio,  I.  S.  Tupitsyn,
+     the    underdoped    region    of    the    two-dimensional                          S. R. White, S. Zhang, B.-X. Zheng, Z. Zhu, and E. Gull
+     hubbard      model,      Science358,      1155      (2017),                          (Simons Collaboration on the Many-Electron Problem),
+     https://science.sciencemag.org/content/358/6367/1155.full.pdf.                       Solutions of the two-dimensional hubbard model: Bench-
+[11]H.   Xu,    C.-M.   Chung,    M.   Qin,    U.   Schollw¨ock,                          marks and results from a wide range of numerical algo-
+     S.   R.   White,   and   S.   Zhang,   Coexistence   of   su-                        rithms, Phys. Rev. X5, 041041 (2015).
+     perconductivity   with   partially   filled   stripes   in   the               [24]K. T. Williams, Y. Yao, J. Li, L. Chen, H. Shi, M. Motta,
+     hubbard    model,    Science384,    eadh7691    (2024),                              C. Niu, U. Ray, S. Guo, R. J. Anderson, J. Li, L. N. Tran,
+     https://www.science.org/doi/pdf/10.1126/science.adh7691.                             C.-N. Yeh, B. Mussard, S. Sharma, F. Bruneval, M. van
+[12]M.  Motta,  C.  Genovese,  F.  Ma,  Z.-H.  Cui,  R.  Sawaya,                          Schilfgaarde,  G.  H.  Booth,  G.  K.-L.  Chan,  S.  Zhang,
+     G.  K.  Chan,  N.  Chepiga,  P.  Helms,  C.  Jimenez-Hoyos,                          E. Gull, D. Zgid, A. Millis, C. J. Umrigar, and L. K. Wag-
+     A. J. Millis,    et al., Ground-state properties of the hydro-                       ner (Simons Collaboration on the Many-Electron Prob-
+     gen  chain:   insulator-to-metal  transition,  dimerization,                         lem),  Direct  comparison  of  many-body  methods  for  re-
+     and  magnetic  phases,  arXiv  preprint  arXiv:1911.01618                            alistic electronic hamiltonians, Phys. Rev. X10, 011041
+     (2019).                                                                              (2020).
+[13]R.   Bistritzer   and   A.   H.   MacDonald,   Moir´e   bands                   [25]J.   Shee,    J.   L.   Weber,    D.   R.   Reichman,    R.   A.
+     in    twisted    double-layer    graphene,    Proceedings    of                      Friesner,   and   S.   Zhang,   On   the   potentially   trans-
+     the  National  Academy  of  Sciences108,  12233  (2011),                             formative    role    of    auxiliary-field    quantum    Monte
+     https://www.pnas.org/doi/pdf/10.1073/pnas.1108174108.                                Carlo   in   quantum   chemistry:     A   highly   accurate
+[14]M.    Motta    and    S.    Zhang,    Ab    initio    computa-                        method  for  transition  metals  and  beyond,  The  Jour-
+     tions   of   molecular   systems   by   the   auxiliary-field                        nal    of    Chemical    Physics158,    10.1063/5.0134009
+     quantum     monte     carlo     method,     WIREs     Com-                           (2023),    140901,    https://pubs.aip.org/aip/jcp/article-
+     putational     Molecular     Science8,     e1364     (2018),                         pdf/doi/10.1063/5.0134009/16824716/140901                   1  5.0134009.pdf.
+     https://wires.onlinelibrary.wiley.com/doi/pdf/10.1002/wcms.1364.[26]A.   Mahajan,   J.   H.   Thorpe,   J.   S.   Kurian,   D.   R.
+[15]J. Lee, H. Q. Pham, and D. R. Reichman, Twenty years                                  Reichman,   D.   A.   Matthews,   and   S.   Sharma,   Be-
+     of auxiliary-field quantum monte carlo in quantum chem-                              yond  ccsd(t)  accuracy  at  lower  scaling  with  auxiliary
+     istry:  An overview and assessment on main group chem-                               field  quantum  monte  carlo,  Journal  of  Chemical  The-
+     istry  and  bond-breaking,  Journal  of  Chemical  Theory                            ory  and  Computation0,  null  (0),  pMID:  39907123,
+     and  Computation18,  7024  (2022),  pMID:  36255074,                                 https://doi.org/10.1021/acs.jctc.4c01314.
+     https://doi.org/10.1021/acs.jctc.2c00802.                                      [27]M.  Qin,   H.  Shi,  and  S.  Zhang,  Coupling  quantum
+[16]H.  Shi  and  S.  Zhang,  Some  recent  developments  in                              monte carlo and independent-particle calculations:  Self-
+     auxiliary-field  quantum  monte  carlo  for  real  materials,                        consistent constraint for the sign problem based on the
+     The  Journal  of  Chemical  Physics154,  024107  (2021),                             density or the density matrix, Phys. Rev. B94, 235119
+     https://doi.org/10.1063/5.0031024.                                                   (2016).
+                                                                                                                                                                13
+
+[28]Y.-Y.  He,  M.  Qin,  H.  Shi,  Z.-Y.  Lu,  and  S.  Zhang,                     [44]W.  Purwanto  and  S.  Zhang,  Quantum  monte  carlo
+     Finite-temperature auxiliary-field quantum monte carlo:                              method  for  the  ground  state  of  many-boson  systems,
+     Self-consistent constraint and systematic approach to low                            Phys. Rev. E70, 056702 (2004).
+     temperatures, Phys. Rev. B99, 045108 (2019).                                   [45]W.  Purwanto,  H.  Krakauer,  and  S.  Zhang,  Pressure-
+[29]C.-C.  Chang,  B.  M.  Rubenstein,  and  M.  A.  Morales,                             induced  diamond  toβ-tin  transition  in  bulk  silicon:  A
+     Auxiliary-field-based  trial  wave  functions  in  quantum                           quantum  monte  carlo  study,  Phys.  Rev.  B80,  214116
+     monte carlo calculations, Phys. Rev. B94, 235144 (2016).                             (2009).
+[30]T. Jiang, B. O’Gorman, A. Mahajan, and J. Lee, Unbi-                            [46]M.  Motta  and  S.  Zhang,  Computation  of  ground-state
+     asing fermionic auxiliary-field quantum monte carlo with                             properties in molecular systems:  Back-propagation with
+     matrix product state trial wavefunctions, Phys. Rev. Res.                            auxiliary-field  quantum  monte  carlo,  Journal  of  Chem-
+     7, 013038 (2025).                                                                    ical  Theory  and  Computation13,  5367  (2017),  pMID:
+[31]Z.  Yu,  S.  Zhang,  and  Y.  Khoo,  Re-anchoring  quan-                              29053270, https://doi.org/10.1021/acs.jctc.7b00730.
+     tum  monte  carlo  with  tensor-train  sketching  (2025),                      [47]Z.-Y.    Xiao,    H.    Shi,    and    S.    Zhang,    Interfacing
+     arXiv:2411.07194 [math.NA].                                                          branching    random    walks    with    metropolis    sam-
+[32]W.  J.  Huggins,  B.  A.  O’Gorman,  N.  C.  Rubin,  D.  R.                           pling:      Constraint   release   in   auxiliary-field   quan-
+     Reichman, R. Babbush, and J. Lee, Unbiasing fermionic                                tum  monte  carlo,  Journal  of  Chemical  Theory  and
+     quantum monte carlo with a quantum computer, Nature                                  Computation19,    6782    (2023),    pMID:    37661928,
+     603, 416 (2022).                                                                     https://doi.org/10.1021/acs.jctc.3c00521.
+[33]B. Huang,  Y.-T. Chen,  B. Gupt,  M. Suchara,  A. Tran,                         [48]D.    M.    Ceperley    and    M.    Dewing,    The    penalty
+     S. McArdle, and G. Galli, Evaluating a quantum-classical                             method    for    random    walks    with    uncertain    en-
+     quantum  monte  carlo  algorithm  with  matchgate  shad-                             ergies,    The    Journal    of    Chemical    Physics110,
+     ows,  Physical  Review  Research6,  10.1103/physrevre-                               9812      (1999),      https://pubs.aip.org/aip/jcp/article-
+     search.6.043063 (2024).                                                              pdf/110/20/9812/19139023/9812               1  online.pdf.
+[34]M.  Kiser,  M.  Beuerle,  and  F.  I.       ˇSimkovic,  Contextual              [49]W.    Purwanto,     W.    A.    Al-Saidi,     H.    Krakauer,
+     subspace auxiliary-field quantum monte carlo:  Improved                              and    S.    Zhang,    Eliminating    spin    contamination
+     bias with reduced quantum resources, Journal of Chem-                                in    auxiliary-field    quantum    Monte    Carlo:       Real-
+     ical  Theory  and  Computation21,  2256  (2025),  pMID:                              istic    potential    energy    curve    of    F2,    The    Jour-
+     39976529, https://doi.org/10.1021/acs.jctc.4c01280.                                  nal    of    Chemical    Physics128,    10.1063/1.2838983
+[35]H. Shi and S. Zhang, Infinite variance in fermion quan-                               (2008),    114309,    https://pubs.aip.org/aip/jcp/article-
+     tum monte carlo calculations, Phys. Rev. E93, 033303                                 pdf/doi/10.1063/1.2838983/13398664/114309                   1  online.pdf.
+     (2016).                                                                        [50]Q. Sun, X. Zhang, S. Banerjee, P. Bao, M. Barbry, N. S.
+[36]J.       ˇC´ıˇzek, On the use of the cluster expansion and the tech-                  Blunt,  N.  A.  Bogdanov,  G.  H.  Booth,  J.  Chen,  Z.-H.
+     nique of diagrams in calculations of correlation effects in                          Cui, J. J. Eriksen, Y. Gao, S. Guo, J. Hermann, M. R.
+     atoms  and  molecules,  in        Advances in Chemical Physics                       Hermes,  K.  Koh,  P.  Koval,  S.  Lehtola,  Z.  Li,  J.  Liu,
+     (John    Wiley    &    Sons,     Ltd,    1969)    pp.    35–89,                      N. Mardirossian, J. D. McClain, M. Motta, B. Mussard,
+     https://onlinelibrary.wiley.com/doi/pdf/10.1002/9780470143599.ch2.H.  Q.  Pham,  A.  Pulkin,  W.  Purwanto,  P.  J.  Robin-
+[37]S.  Sorella,  Systematically  improvable  mean-field  varia-                          son,  E.  Ronca,  E.  R.  Sayfutyarova,  M.  Scheurer,  H.  F.
+     tional  ansatz  for  strongly  correlated  systems:  Applica-                        Schurkus,  J. E. T. Smith,  C. Sun,  S.-N. Sun,  S. Upad-
+     tion  to  the  hubbard  model,  Phys.  Rev.  B107,  115133                           hyay,  L.  K.  Wagner,  X.  Wang,  A.  White,  J.  D.  Whit-
+     (2023).                                                                              field, M. J. Williamson, S. Wouters, J. Yang, J. M. Yu,
+[38]Y.   Chen,    L.   Zhang,    W.   E,   and   R.   Car,   Hy-                          T.  Zhu,  T.  C.  Berkelbach,  S.  Sharma,  A.  Y.  Sokolov,
+     brid  auxiliary  field  quantum  monte  carlo  for  molec-                           and  G.  K.-L.  Chan,  Recent  developments  in  the  pyscf
+     ular    systems,    Journal    of    Chemical    Theory    and                       program package, The Journal of Chemical Physics153,
+     Computation19,    4484    (2023),    pMID:    37071815,                              024109 (2020), https://doi.org/10.1063/5.0006074.
+     https://doi.org/10.1021/acs.jctc.3c00038.                                      [51]W. A. Al-Saidi, S. Zhang, and H. Krakauer, Bond break-
+[39]R.  Levy,  M.  A.  Morales,  and  S.  Zhang,  Automatic  or-                          ing with auxiliary-field quantum monte carlo., The Jour-
+     der detection and restoration through systematically im-                             nal of chemical physics127 14, 144101 (2007).
+     provable variational wave functions, Phys. Rev. Res.6,                         [52]G.  K.-L.  Chan,   M.  K´allay,  and  J.  Gauss,  State-of-
+     013237 (2024).                                                                       the-art   density   matrix   renormalization   group   and
+[40]W.  Purwanto,  H.  Krakauer,  Y.  Virgus,  and  S.  Zhang,                            coupled  cluster  theory  studies  of  the  nitrogen  bind-
+     Assessing    weak    hydrogen    binding    on    Ca+    cen-                        ing   curve,   The   Journal   of   Chemical   Physics121,
+     ters:      An   accurate   many-body   study   with   large                          6110      (2004),      https://pubs.aip.org/aip/jcp/article-
+     basis   sets,   The   Journal   of   Chemical   Physics135,                          pdf/121/13/6110/10859343/6110               1  online.pdf.
+     164105    (2011),    https://pubs.aip.org/aip/jcp/article-                     [53]J.   Shee,   B.   Rudshteyn,   E.   J.   Arthur,   S.   Zhang,
+     pdf/doi/10.1063/1.3654002/15444035/164105                   1  online.pdf.           D.  R.  Reichman,  and  R.  A.  Friesner,  On  achieving
+[41]A. G. Anderson, W. A. Goddard, and P. Schr¨oder, Quan-                                high   accuracy   in   quantum   chemical   calculations   of
+     tum monte carlo on graphical processing units, Computer                              3d  transition  metal-containing  systems:    A  compari-
+     Physics Communications177, 298 (2007).                                               son  of  auxiliary-field  quantum  monte  carlo  with  cou-
+[42]J.  Hubbard,  Calculation  of  partition  functions,  Phys.                           pled  cluster,  density  functional  theory,  and  experiment
+     Rev. Lett.3, 77 (1959).                                                              for  diatomic  molecules,  Journal  of  Chemical  Theory
+[43]R. L. Stratonovich, On a Method of Calculating Quan-                                  and  Computation15,  2346  (2019),  pMID:  30883110,
+     tum  Distribution  Functions,  Soviet  Physics  Doklady2,                            https://doi.org/10.1021/acs.jctc.9b00083.
+     416 (1957).                                                                    [54]E.  Vitali,  H.  Shi,  M.  Qin,  and  S.  Zhang,  Computation
+                                                                                          of dynamical correlation functions for many-fermion sys-
+                                                                                                                                                              14
+
+     tems  with  auxiliary-field  quantum  monte  carlo,  Phys.                    defining the local energyE:
+     Rev. B94, 085140 (2016).                                                                                     D ˜ψI ˜U†(x′) ˜U(x)  ˜ψIE,          (34)
+                                                                                                 D(x,x   ′) =
+                                                                                                                   D ˜ψI ˜U†(x′) ˜U(x) ˜ψIE
+
+                                                                                                  S(x,x  ′) =      D ˜ψI ˜U†(x′) ˜U(x) ˜ψIE,         (35)
+
+                         VII.    APPENDIX                                                                         D ˜ψI ˜U†(x′) ˆH ˜U(x) ˜ψIE
+
+                  A.    Summary of VAFQMC                                                         E(x,x  ′) =      D ˜ψI ˜U†(x′) ˜U(x)  ˜ψIE .         (36)
+
+
+   We  briefly  discuss  the  VAFQMC  ansatz  used  in  this                       The energy is then given by:
+work.      For   more   details   please   refer   to   Ref.   [38].                          R dxdx  ′D(x,x   ′)E(x,x   ′)S(x,x   ′)
+VAFQMC  method  variationally  optimizes  a  finite-time                              Eθ =         R dxdx  ′D(x,x   ′)S(x,x   ′)       =⟨ES⟩D
+propagator in AFQMC to approximate the ground state.                                                                                            ⟨S⟩D .  (37)
+It  allows  the  propagator  to  vary  at  different  imaginary
+times and optimizes the initial Slater determinant, lead-                          A one-sided restraint on the average signS   θ = Re [⟨S⟩D]
+ing to the variational ansatz:                                                     is used to mitigate the sign problem:
+                                Z τ                  ˜ψI                                              h
+                                                          E                                         minθ   Eθ +λ(max{B−S           θ,0})      2i,           (38)
+                |ψ θ⟩= exp                                  ,           (31)
+                                   0 − ˜H(s)ds                                     where we take hyperparametersλ= 1 andB= 0.7 . This
+                                                                                   restraint avoids systematic bias and maintains a sufficient
+whereθdenotes  all  parameters.   After  time  discretiza-                         average sign.
+tion and the Hubbard-Stratonovich transformation, the
+ansatz becomes:
+                                                                                          B.    Summary for AFQMC with Metropolis
+               Z Y      dx γl                                                                                      constraint
+     |ψ θ⟩=             √         2x2γl
+                   γ,l    2π e− 1                                                     In  this  section,  we  elaborate  on  the  details  of  imple-
+                                                  NγX                            menting AFQMC with Metropolis constraint.  Main pro-
+               NlY      h        i
+                   exp    −t l ˜Tl exp   √−s l         xγl ˜Lγ                   cedures are summarized in Fig. 8, which can be divided
+                l                                   γ                   (32)       into  three  main  steps:   initialization,  propagation,  and
+                    h         i ˜ψIE                                            measurement.
+               exp    −t   0 ˜T0
+               Z               ˜ψIE
+            ≡      dx   ˜U(x)        ,                                                                         1.    Initialization
+
+                                                                                      The implementation of AFQMC with Metropolis con-
+wheret     l ands   l are optimizable step sizes, andx={x       γl}.               straint can start from a standard Metropolis algorithm
+The sign problem is addressed practically by using fewer                           that  estimates⟨                ˆO⟩ with  trial  wave  function  Eq.  19
+projection steps and a soft restraint.  Since the ansatz is                        through
+optimized variationally, we no longer suffer from Trotter                                                                  P    P
+error, which allows us to use larger time steps and lower                             ⟨ ˆO⟩ T  =⟨Ψ T| ˆO|Ψ  T⟩     Metro−→    kP    k′eiθk′,k⟨O⟩  k′,kP
+order  Taylor  expansion  of  the  matrix  exponential.   In                                        ⟨Ψ T|Ψ T⟩                      k     k′eiθk′,k          (39)
+this work, we limit the ansatz to a single step (l= 1) to
+further speedup the optimization procedure.                                        where we define a local estimation of  ˆOaccording to a
+   The optimization of the ansatz is done by minimizing                            given  sample  of  auxiliary  fields  (i.e.,Y    k,Y k′)  that  are
+the energy expectation value:                                                      labeled bykandk   ′ respectively:
+
+                              R dxdx  ′D ˜ψI ˜U†(x′) ˆH ˜U(x)     ˜ψIE           ⟨O⟩  k′,k =⟨ϕ T|p T (Y k′) ˆBT (Y k′) ˆOpT (Y k) ˆBT (Y k)|ϕ T⟩
+                                                  ˜U†(x′) ˜U(x) ˜ψIE ,                           ⟨ϕ T|p T (Y k′) ˆBT (Y k′)p T (Y k) ˆBT (Y k)|ϕ T⟩
+  Eθ = ⟨ψ θ| ˆH|ψ  θ⟩⟨ψ θ|ψ θ⟩    =R dxdx  ′D ˜ψI                                                                                                           (40)
+                                                                                   and complex phase
+                                                                        (33)
+which  is  computed  via  Monte  Carlo  by  separating  the                                       eiθk′,k = ⟨ϕ T| ˆBT (Y k′) ˆBT (Y k)|ϕ T⟩
+overlap amplitude into magnitudeDand phaseS,  and                                                              |⟨ϕ T| ˆBT (Y k′) ˆBT (Y k)|ϕ T⟩|.
+                                                                                                                                                                 15
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+FIG. 8.  AFQMC with a stochastically sampled trial wave function.  Filled rectangles/circles denote Metropolis/BRW sampled
+operators.  Monte Carlo sampling is performed on objects highlighted with dashed (Metropolis) or solid (BRW) rectangular
+boxes.   The  panel  “Metropolis”  on  the  left  shows  the  estimation  of  trial  energy ⟨Ψ T| ˆH|Ψ  T⟩⟨Ψ T|ΨT⟩    with  sampled  Metropolis  paths.
+The Metropolis paths can be reformulated to form the composite walker (i.e., in the bottom dashed red rectangle) to initialize
+AFQMC,  as  the  panel  “AFQMC  initialization”  shows.   In  “AFQMC  propagation”,  the  composite  walker  is  propagated  by
+inserting operators  ˆB(x) from right to left as the red arrow demonstrates, through the “leap-frog” way demonstrated in Fig. 2.
+The auxiliary fieldsxare fixed once sampled by BRW (i.e., absorbed into determinants implied by “orange background”) while
+auxiliary fieldsyare updated by Metropolis continuously.  During “AFQMC measurement”, more Metropolis samples can be
+sampled to provide a better estimation of⟨Ψ  T|(i.e.,⟨         ˜ΨnT,k|with filled red blocks) than those in the propagation to facilitate
+the numerical efficiency.
+
+
+As presented in Eq. 39, the Metropolis estimation of⟨    ˆO⟩                                     •sample a fieldxwith probabilityp(x) ,
+can be understood as a weighted average of⟨O⟩    k′,k with                                       •evaluate dynamic shift
+weighte iθk′,k.
+   To interface BRW with Metropolis, we initialize                                                        xik,γ =− √τ⟨Ψ iT,k|ˆLγ|ϕ ik⟩
+
+                              PX                                                                                              ⟨Ψ iT,k|ϕ ik⟩
+                ⟨Ψ  0T,k|=            ⟨ϕ T| ˆBT (Y[p])
+                             p=1   |⟨ϕ T| ˆBT (Y[p])|ϕ            0k⟩|,            (41)             and
+with                                                                                       I(x,   xik,ϕik) = p(x−        xik) ⟨Ψ iT,k| ˆB(x−     xik)|ϕ ik⟩
+                                                                                                                    p(x)              ⟨Ψ iT,k|ϕ ik⟩    .
+                          |ϕ 0k⟩=   ˆBT (Y k)|ϕ T⟩,                        (42)
+                                                                                                 •advance walker
+and change notationsk    ′→pand       ˆBT (Y k′)→   ˆBT (Y[p]) to                                           |ϕ i+1                xik)|ϕ ik⟩
+consist with Eq. 24 whereplabels the path tethered to                                                          k ⟩=   ˆB(x−
+walkerk.  It is straightforward to see that the Metropolis                                       •assign  weightW  i+1
+sampling Eq. 39 can be smoothly adopted to the initial-                                             proximation:           k     under  the  phaseless  ap-
+ization of AFQMC:                                                                                                                                                 !
+                                    P         ⟨Ψ  0T,k| ˆH|ϕ     0k⟩                 Wi+1                     xik,ϕik)∗max[0,cos          Arg⟨Ψ iT,k|ϕ i+1k ⟩     ].
+                         AFQMC−→       kW 0k    ⟨Ψ  0T,k|ϕ nk⟩           (43)           k     =W  ik∗I(x,                                        ⟨Ψ iT,k|ϕ ik⟩
+                 ⟨ ˆO⟩ T                   P
+                                               kW 0k
+with                                                                                     2.Metropolis updateY[p] according to|ϕ          i+1k ⟩:
+                           W 0k  =Xeiθk′,k.                                                      •sampleY     ′[p] with probabilityp(Y   ′[p]).
+
+                                      k′                                                         •accept sampledY     ′[p] according to ratio
+
+                                                                                                         α= |⟨ϕ T| ˆBT (Y ′[p])|ϕ   i+1k ⟩|
+                             2.    Propagation                                                                  |⟨ϕ T| ˆBT (Y[p])|ϕ     i+1k ⟩|.
+
+   Basic  theories  for  the  propagation  are  discussed  in                                       IfY ′[p]  is  accepted,  setY[p]  =Y     ′[p]  or  set
+Sec. III A.  Here, we provide the implementation details                                            Y′[p] =Y[p].
+in the form of a pseudo-code:                                                                    •iterate above to reach equilibrium.
+    1.BRW advance walkers to|ϕ    i+1k ⟩from|ϕ     ik⟩according                          3.Evaluate ∆θ   T  and update weightW i+1k     =W  i+1k ∗
+        to⟨Ψ  iT,k|:                                                                         max[0,cos(∆θ          T )] according to Eq. 29.
+                                                                                                                                                                16
+
+                            3.    Measurement                                          When doing the measurement described in Eq. 44, we
+                                                                                    can  again  apply  Metropolis  update  on  auxiliary  fields
+   Suppose we restore the lastmprojectors           ˆB(x) in our                    Y[p]  in⟨Ψ     n+mT,k | to  sample  a  set  of  new  auxiliary  fields
+propagation, the measurement of observables  ˆO, includ-                            Y′[p] and related⟨              ˜Ψn+mT,k |.  The measurements in Eq. 44
+ing dynamic correlations [54] that do not commute with                              then can be updated through
+Hamiltonian, can be achieved by inserting related opera-
+tors directly into the middle of sampled Metropolis paths                                                     ⟨Ψ n+m
+that determined by (Y k,Xk):                                                                                      T,k |→⟨ ˜Ψn+mT,k |                       (46)
+
+
+                m                                    P                    m
+⟨Ψ T|[e − ˆHτ]   2  ˆO[e − ˆHτ]n+ m2|Ψ T⟩AFQMC−→         kWn+mk  ⟨O⟩     k2,n+  m2  and
+
+                 m                                           P
+ ⟨Ψ T|[e − ˆHτ]   2 [e− ˆHτ]n+ m2|Ψ T⟩                          kWn+mk  (44)
+with                                                                                                                          PP ′
+                                                                                                   Wn+m                        PPp′=1S(Y  ′[p′])
+                                                                                                      k  →W  n+mk  ∗
+     m                                                        2i=n+1       ˆB(x  ik)]|ϕ  nk⟩                                       p=1 S(Y[p])                     (47)
+     2,n+  m2        T,k |[Qn+mi=n+   m2   ˆB(x  ik)] ˆO[ Qn+ m
+⟨O⟩  k         =⟨Ψ n+m         ⟨Ψ n+m
+                                  T,k |Qn+mi=n+1       ˆB(x  ik)|ϕ nk⟩       .
+                                                                         (45)       withS(Y    ′[p′]) andS(Y[p]) to specify related sign ratio.

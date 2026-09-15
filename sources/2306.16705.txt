@@ -1,0 +1,768 @@
+   NNQS-Transformer: an Efficient and Scalable Neural Network
+     Quantum States Approach for Ab initio Quantum Chemistry
+
+                   Yangjun Wu                                               Chu Guo∗                                                 Yi Fan
+     Institute of Computing Technology,                           Hunan Normal University                        University of Science and Technology
+    Chinese Academy of Sciences, UCAS                                   Changsha, China                                              of China
+                    Beijing, China                                 guochu604b@gmail.com                                           Hefei, China
+            wuyangjun21s@ict.ac.cn                                                                                         fanyi@mail.ustc.edu.cn
+                                             Pengyu Zhou                                          Honghui Shang∗
+                                Institute of Computing Technology,                    University of Science and Technology
+                               Chinese Academy of Sciences, UCAS                                         of China
+                                               Beijing, China                                          Hefei, China
+                                  zhoupengyu19@mails.ucas.ac.cn                              shanghui.ustc@gmail.com
+ABSTRACT                                                                                1    INTRODUCTION
+Neural network quantum state (NNQS) has emerged as a promising                          Electronic structure calculation based on first-principle quantum
+candidate for quantum many-body problems, but its practical ap-                         mechanics is an elementary tool for predicting the chemical and
+plications are often hindered by the high cost of sampling and local                    physical properties of matter. The grand challenge of ab initio elec-
+energy calculation. We develop a high-performance NNQS method                           tronic structure calculations is to solve the Schr¥odinger equation
+for ab initio electronic structure calculations. The major innova-                      𝐻𝜓 =𝐸𝜓 of an interacting many-body system of𝑛 electrons and𝑚
+tions include: (1) A transformer based architecture as the quantum                      nuclei, whose Hamiltonian𝐻  can be written as (under the Born-
+wave function ansatz; (2) A data-centric parallelization scheme for                     Oppenheimer approximation to freeze the nuclear degrees of free-
+the variational Monte Carlo (VMC) algorithm which preserves data                        dom),
+locality and well adapts for different computing architectures; (3) A
+parallel batch sampling strategy which reduces the sampling cost                                               𝑛∑︁ 1        𝑛∑︁  𝑚∑︁ 𝑍𝐴      𝑛∑︁  𝑛∑︁ 1
+and achieves good load balance; (4) A parallel local energy evalua-                                   𝐻 =−         2∇2𝑖−             𝑟𝑖𝐴+            𝑟𝑖𝑗,               (1)
+tion scheme which is both memory and computationally efficient;                                               𝑖=1          𝑖=1  𝐴=1         𝑖=1  𝑗>𝑖
+(5) Study of real chemical systems demonstrates both the superior                       where𝑟𝑖𝑗 =|𝑟𝑖−𝑟𝑗| denotes the distance between two electrons at
+accuracy of our method compared to state-of-the-art and the strong                      positions𝑖 and 𝑗,𝑟𝑖𝐴 denotes the distance between an electron at
+and weak scalability for large molecular systems with up to 120                         position𝑖 and a nucleus at position𝐴, and𝑍𝐴 is the atomic number
+spin orbitals.                                                                          of the nucleus at position𝐴. The state of interest is the ground state
+KEYWORDS                                                                                |𝜓⟩ that minimizes the energy:𝐸 =⟨𝜓|𝐻|𝜓⟩.
+Quantum chemistry, many-body Schr¥odinger equation, neural net-                            However, the exact solution for the ground state is generally
+work quantum state, transformer based architecture, autoregressive                      impossible since the dimension of the state space for wave func-
+sampling                                                                                tions grows exponentially with the number of electrons. As a result,
+                                                                                        the full configuration interaction (FCI) method, which takes into
+ACM Reference Format:                                                                   account all the possible states, is currently limited within 24 elec-
+Yangjun Wu, Chu Guo, Yi Fan, Pengyu Zhou, and Honghui Shang. 2023.                      trons and 24 orbitals even with the best supercomputer [1]. In order
+NNQS-Transformer: an Efficient and Scalable Neural Network Quantum                      to deal with this problem, various approximation techniques have
+States Approach for Ab initio Quantum Chemistry. In The International Con-              been developed, such as the Hartree-Fock (HF) theory and density
+ference for High Performance Computing, Networking, Storage and Analysis                functional theory (DFT), which are able to scale up to thousands
+(SC ’23), November 12–17, 2023, Denver, CO, USA. ACM, Denver, CO, USA,                  (or even more) of electrons by reducing the problem to a single-
+12 pages. https://doi.org/10.1145/3581784.3607061                                       electron problem instead, but they could introduce errors in the
+
+∗Corresponding authors                                                                  calculation of physical properties of the system, and may be inac-
+                                                                                        curate for certain types of systems. The truncated configuration
+Permission to make digital or hard copies of all or part of this work for personal or   interaction (CI) [2] considers only excitations above the HF ref-
+classroom use is granted without fee provided that copies are not made or distributed
+for profit or commercial advantage and that copies bear this notice and the full citationerence state up to a fixed order, while the coupled cluster (CC)
+on the first page. Copyrights for components of this work owned by others than the      methods consider certain nonlinear combinations of the excitation
+author(s) must be honored. Abstracting with credit is permitted. To copy otherwise, or  operators up to a fixed order. In particular, the CC methods could
+republish, to post on servers or to redistribute to lists, requires prior specific permission
+and/or a fee. Request permissions from permissions@acm.org.                             often give reasonable solutions with a limited computational cost,
+SC ’23, November 12–17, 2023, Denver, CO, USA                                           thus referred to as the gold standard. However, they could still fail
+© 2023 Copyright held by the owner/author(s). Publication rights licensed to ACM.       in presence of strong static correlations [3]. The density matrix
+ACM ISBN 979-8-4007-0109-2/23/11. . . $15.00
+https://doi.org/10.1145/3581784.3607061                                                 renormalization group (DMRG) method [4, 5] could give solutions
+SC ’23, November 12–17, 2023, Denver, CO, USA                                     Yangjun Wu, Chu Guo, Yi Fan, Pengyu Zhou, and Honghui Shang
+
+
+with comparable precision to FCI and has been used to study molec-                      2) The chemical bonding in molecular systems can be very different
+ular systems with up to 30 electrons (108 orbitals) [6, 7], however                     in nature and of very different strengths, while for practical appli-
+it is mainly limited by the expressivity of the underlying matrix                       cations it is important to use a model which is easily extensible to
+product state ansatz which can only efficiently parameterize finitely                   deep architectures for better expressivity and thus can be versatilely
+correlated states [8]. DMRG is also very unfriendly for large-scale                     used for different molecular systems; 3) For molecular systems in
+parallelization. The conventional quantum Monte Carlo (QMC)                             the second quantized formalism, the number of Pauli strings after
+methods [9–11], including the variational Monte Carlo (VMC) and                         the JW transformation often scales as𝑂(𝑁 4) for𝑁 qubits, therefore
+diffusion Monte Carlo (DMC), can directly deal with real space cal-                     in large applications, evaluation of the local energy in VMC could
+culations by using an anti-symmetric wave function ansatz which                         be very time-consuming. For example 3) is the major limiting factor
+accounts for the Pauli exclusion principle of electrons (the first                      for Ref. [26] to go beyond 30 qubits.
+quantized formalism). However high precision calculations using                             In view of these challenges, we believe a highly efficient and
+first quantized QMC methods in real space are still quite limited                       scalable NNQS method is in need, which is an important step to-
+due to the high computational cost. Prominent approaches in this                        wards large-scale applications in electronic structure calculations
+direction include the FermiNet [12] and PauliNet [13] which are                         and also acts as a powerful tool for cross validation with existing
+currently limited within 30 electrons.                                                  methods.
+   In 2017, Carleo and Troyer propose the neural network quantum                            The major innovations of this work can be summarized as fol-
+state (NNQS) algorithm for many-spin systems, which parame-                             lows.
+terizes the wave function as a neural network and uses the VMC
+algorithm to optimize the parameters [14]. In particular they demon-
+strate that using a very simple neural network ansatz, namely the
+restricted Boltzmann machine (RBM) that is essentially a dense                                •  A  deep  neural  network  wave  function  ansatz  (Qiankun-
+layer plus a nonlinear activation, could already achieve competi-                                Net [30]) is used for VMC optimization, which consists of a
+tive accuracy to existing tensor network algorithms. Till now the                                transformer made of stacked decoders for the amplitude and
+performance of NNQS has been demonstrated in a wide variety                                      a multilevel perceptron (MLP) for the phase, inspired by the
+of many-spin problems [14–19] as well as many-fermion prob-                                      enormous success of transformer based architectures in nat-
+lems [20]. NNQS is a promising alternative for quantum many-body                                 ural language processing (NLP) and other classical machine
+problems since 1) there is no fundamental limit on the expressive                                learning tasks [31–33].
+power of (deep) neural network ansatz for many-body quantum                                   •  A data-centric parallelization scheme based on MPI com-
+state [21–24]; 2) the computational cost scales polynomially in gen-                             munication for VMC algorithms using autoregressive wave
+eral and 3) it often allows transparent large-scale parallelization                              function ansatz, which maximally preserves the data locality
+as a general feature of Monte Carlo methods. In 2020, RBM was                                    and well adapts to different computing architectures. The
+first introduced for electronic structure calculations by converting                             total amount of data communication in this scheme only
+the fermionic problem in the second quantized formalism into a                                   scales as𝑂(𝑁𝑢) for𝑁𝑢 the total number of unique samples
+many-spin problem using Jordan-Wigner (JW) transformation [25],                                  and𝑂(𝑀) for𝑀 parameters.
+where it is demonstrated that RBM could achieve higher accuracy                               •  A parallel batch sampling strategy which makes use of the
+than CC with excitations up to second order (CCSD) and third order                               autoregressive property of our wave function ansatz and
+(CCSD(T)) for a wide variety of molecular systems within 24 spin                                 achieves low sampling cost and good load balance.
+orbitals (qubits). Two later works pushed the simulation scale to 30                          •  A local energy calculation scheme parallelized over batches
+qubits [26] and 76 qubits [27] respectively by using autoregressive                              of samples, powered by a highly compressed data structure
+neural network ansatz to reduce the sampling cost.                                               for the Hamiltonian together with a fused design of nonzero
+   Despite the polynomial scaling of the computational cost of                                   Hamiltonian entry evaluation and local energy calculation to
+NNQS, for electronic structure calculations, it is still extremely dif-                          reduce memory cost, and a sample-aware evaluation scheme
+ficult to scale up the application size to 100 qubits or more (while                             together with an efficient storage of the unique samples as a
+maintaining comparable or higher accuracy than CC or DMRG)                                       lookup table to reduce the computational cost.
+up to date. The challenge is mainly threefold: 1) For conventional                            •  Study of real chemical systems shows that our method could
+neural networks such as RBM or the convolutional neural network                                  reach superior accuracy compared to state-of-the-art NNQS
+(CNN), a Markov chain (MC) sampling algorithm is used to gen-                                    methods, and achieve both strong and weak scaling for the
+erate samples for energy and gradient estimation, which could be                                 benzene molecular system with 120 qubits.
+very inefficient in certain situations with low acception rate. More-
+over, for these neural networks one also has to use the stochastic
+reconfiguration (SR) technique [28, 29] for stable convergence to
+global minimum, for which one needs to (approximately) compute                          Our parallelized implementation of the transformer based NNQS
+the inverse of the𝑀×𝑀 SR matrix for a neural network with𝑀                              can be easily transplanted to different high-performance computing
+parameters, thus greatly prohibiting the usage of very deep neural                      architectures as long as the pytorch library [34] is supported and the
+networks as well as the scalability to a large number of processes.                     local energy evaluation function is implemented on each process.
+As an example a recent application of NNQS on the new Sunway su-                        Our work opens a verge of applying state-of-the-art transformer
+percomputer used a CNN with only around 50, 000 parameters [19];                        based architectures for large-scale electronic structure calculations.
+NNQS-Transformer: an Efficient and Scalable Neural Network
+Quantum States Approach for Ab initio Quantum Chemistry                                              SC ’23, November 12–17, 2023, Denver, CO, USA
+
+                                                                                          Defining the local energy𝐸𝑙𝑜𝑐(x) as∑︁
+                                                                                                               𝐸𝑙𝑜𝑐(x) =
+                                                                                                                            x′ 𝐻xx′𝜓ﬁ𝜃(x′)/𝜓ﬁ𝜃(x),                       (4)
+                                                                                          and the (unnormalized) probability𝑝ﬁ𝜃(x) =|𝜓ﬁ𝜃(x)|2, Eq.(3) can be
+                                                                                          rewritten as              ˝
+                                                                                                          𝐸(ﬁ𝜃) =     x𝐸𝑙𝑜𝑐(x)𝑝ﬁ𝜃(x)˝
+
+                                                                                                                           y𝑝ﬁ𝜃(y)       = E𝑝[𝐸𝑙𝑜𝑐(x)].                 (5)
+                                                                                          It is impossible to exactly evaluate Eq.(5) in general as there ex-
+                                                                                          ists an exponential number of different bitstrings. However, one
+                                                                                          could approximately evaluate Eq.(5) by sampling from the proba-
+                                                                                          bility distribution𝑝ﬁ𝜃(x) to obtain a set of𝑁𝑠 samples, denoted as
+                                                                                          {x1, x2,..., x𝑁𝑠}, and then averaging over them
+                                                                                                                                   𝑁𝑠∑︁
+                                                                                                                     ˜𝐸(ﬁ𝜃) =   1𝑁𝑠    𝐸𝑙𝑜𝑐(x𝑖),                              (6)
+                                                                                                                                   𝑖=1
+                                                                                          where we have used  ˜𝐸(ﬁ𝜃) instead of𝐸(ﬁ𝜃) to stress that the former is
+                                                                                          only an approximation of the latter. To this end, we can see that as
+                                                                                          long as one can efficiently sample from𝑝ﬁ𝜃(x) (which is the case if we
+                                                                                          can evaluate𝜓ﬁ𝜃(x) efficiently for each x), and efficiently find those
+                                                                                          nonzero entry𝐻xx′ together with x′, then Eq.(6) can be efficiently
+                                                                                          evaluated. To speed up the calculation, it is often advantageous to
+                                                                                          use a gradient-based optimizer instead of gradient-free ones. With
+                                                                                          the obtained samples, one could compute the approximate gradient
+Figure 1: Schematic of the workflow for the serial NNQS                                   of Eq.(5) using automatic differentiation [26]: h 𝐸𝑙𝑜𝑐(x)− E𝑝[𝐸𝑙𝑜𝑐(x)]∇ﬁ𝜃 ln  i
+calculation.                                                                                 ∇ﬁ𝜃  ˜𝐸 = 2Re  E𝑝                                           Ψ∗           .    (7)
+2    BACKGROUND                                                                                                                                             ﬁ𝜃(x)
+In this section, we review the basic ideas of the VMC algorithm,                          Similarly,∇ﬁ𝜃  ˜𝐸 is used to approximate the exact gradient∇ﬁ𝜃𝐸. After
+autoregressive neural networks, typical quantum chemistry Hamil-                          that, the parametersﬁ𝜃 can be updated based on∇ﬁ𝜃  ˜𝐸 and the opti-
+tonians, as well as state-of-the-art NNQS approaches for electronic                       mizer, finishing one iteration of the VMC algorithm. The workflow
+structure calculations.                                                                   of the serial NNQS algorithm is demonstrated in Fig. 1.
+2.1    Variational Monte Carlo algorithm                                                  2.2    Autoregressive neural networks
+Assuming that one has chosen a variational ansatz for the ground                          A high-dimension probability distribution𝜋(x) is said to be autore-
+state denoted as|𝜓ﬁ𝜃⟩, withﬁ𝜃 the parameters to be optimized, then                        gressive if it can be evaluated as follows:
+the energy of the system can be written as a function ofﬁ𝜃:                                                  𝜋(x) =𝜋𝑥1𝜋𝑥2|𝑥1···𝜋𝑥𝑁|𝑥𝑁−1,...,𝑥1,                     (8)
+                                                                                          where𝑁 is the length of x and𝑥𝑖 the𝑖-th element of x,𝜋𝑥𝑖|𝑥𝑖−1,...,𝑥1
+                             𝐸(ﬁ𝜃) =⟨𝜓ﬁ𝜃|𝐻|𝜓ﬁ𝜃⟩                                           denotes the conditional probability distribution of𝑥𝑖  on the ob-
+                                        ⟨𝜓ﬁ𝜃|𝜓ﬁ𝜃⟩ ,                                  (2)  served  sequence  from 𝑥1  to 𝑥𝑖−1.  The  autoregressive  property
+                                                                                          makes it very easy to sample from𝜋(x): one can first sample from
+where the denominator indicates that the ansatz|𝜓ﬁ𝜃⟩ may not be                           the single-variate probability distribution𝜋(𝑥) and get an outcome
+normalized in general. The ground state can be approached by                              𝑥1, then one can sample from another single-variate probability dis-
+minimizing𝐸(ﬁ𝜃) againstﬁ𝜃. Expanding Eq.(2) in the computational                          tribution𝜋(𝑥|𝑥1) and get an outcome𝑥2, following this procedure
+basis, we obtain                                                                          one can obtain one sample x ={𝑥1,...,𝑥𝑁} from𝜋(x) by only
+                      ˝                                                                   performing𝑁  local samplings from𝑁  single-variate probability
+             𝐸(ﬁ𝜃) =    x,x′⟨𝜓ﬁ𝜃|x⟩⟨x|𝐻|x′⟩⟨x′|𝜓ﬁ𝜃⟩˝                                      distributions. This sampling algorithm will be referred to as the
+                           ˝   y⟨𝜓ﬁ𝜃|y⟩⟨y|𝜓ﬁ𝜃⟩                                            autoregressive sampling (demonstrated in Fig. 3(a)).
+                      ˝                                   |𝜓ﬁ𝜃(x)|2                          The advantage of using autoregressive neural networks based
+                        x     x′𝐻xx′𝜓ﬁ𝜃(x′)/𝜓ﬁ𝜃(x)                                        NNQS is at least two-fold: 1) It is efficient in the sense that only local
+                   =                 ˝                                                    samplings are required (the local state space size is only 2 for spin
+                                        y|𝜓ﬁ𝜃(y)|2        ,             (3)
+                                                                                          systems); 2) The obtained samples are exact in the sense that they
+where x, x′, y denote specific bitstrings. We have written𝐻xx′ =                          are free from sampling inaccuracies such as the auto-correlation
+⟨x|𝐻|x′⟩ and𝜓ﬁ𝜃(x) =⟨x|𝜓ﬁ𝜃⟩ as the probability amplitude of the                           problem of the MC sampling, and importantly, we observe in prac-
+wave function ansatz|𝜓ﬁ𝜃⟩ in basis|x⟩ in the second line of Eq.(3).                       tice that we can often easily converge to the ground state without
+SC ’23, November 12–17, 2023, Denver, CO, USA                                     Yangjun Wu, Chu Guo, Yi Fan, Pengyu Zhou, and Honghui Shang
+
+
+using the SR technique, thus one can use very deep neural networks
+with a large number of parameters and scale up the algorithm to a
+large number of processes.
+2.3    Quantum Chemistry Hamiltonians
+Once a finite single-electron basis set has been chosen, one can ex-
+pand the continuous Hamiltonian in this basis and obtain a second
+quantized Hamiltonian in the following form:
+                      ∑︁                  ∑︁
+               𝐻𝑒 =       ℎ𝑝𝑞 ˆ𝑎†𝑝 ˆ𝑎𝑞+ 12      𝑔𝑝,𝑞𝑟,𝑠  ˆ𝑎†𝑝 ˆ𝑎†𝑞 ˆ𝑎𝑟 ˆ𝑎𝑠,                (9)
+                      𝑝,𝑞                𝑝,𝑞,𝑟,𝑠
+
+withℎ𝑝𝑞  and𝑔𝑝,𝑞𝑟,𝑠  the one- and two-electron integrals,  ˆ𝑎†𝑝  and  ˆ𝑎𝑞
+the creation and annihilation operators. For convenience of using
+arbitrary neural networks, the JW transformation can be used to
+convert𝐻𝑒 into a many-spin Hamiltonian, which generally takes
+the form
+                                       𝑁ℎ∑︁
+                                𝐻𝑠 =       𝑐𝑖𝑃𝑖,                                     (10)
+                                       𝑖=1
+where each𝑃𝑖 is the tensor product of Pauli spin operators{𝐼,𝑋,𝑌,𝑍}
+of length𝑁 , referred to as a Pauli string, and𝑐𝑖 is a real coefficient.
+𝑁ℎ  denotes the total number of Pauli strings. We note that the
+integrals in Eq.(9) can be calculated using the package PySCF [35]
+while the JW transformation can be done using the package Open-
+Fermion [36]. For quantum chemistry Hamiltonians,𝑁ℎ often scales
+as𝑂(𝑁 4), which means that for each input bitstring x, there could
+exist𝑂(𝑁 4) x′s with nonzero𝐻𝑠xx′. As a result for large𝑁 , evaluat-
+ing the local energy in Eq.(4) can be very expensive and storing all
+the x′s that are nontrivially coupled to x could use a large amount
+of memory. In this work, we only use the spin Hamiltonian𝐻𝑠, and
+we will denote it as𝐻 for simplicity in the following.                                  Figure 2: QiankunNet: The transformer based architecture
+2.4    Current state of the art                                                         for the wave function ansatz, where the transformer is used
+                                                                                        for the amplitude and the multilevel perception is used for
+Electronic structure calculation using NNQS in the second quan-                         the phase.
+tized formalism is still in its early stage. The RBM was first in-                          To summarize, for electronic structure calculations using NNQS [26]
+troduced for electronic structure calculations in 2020, where the                       in the second quantized formalism, NAQS gives the most accurate
+largest molecular system studied is the H2O molecular system in                         results up to date, but the simulation scale is currently limited
+the 6-31G basis (26 qubits) due to the high sampling cost [25]. The                     within 30 qubits. MADE [27] with GPU optimized local energy
+autoregressive neural network is first introduced as the wave func-                     calculation reaches the largest simulation scale (52 electrons, 76
+tion ansatz in NNQS to study quantum many-spin systems also                             qubits), but is not as accurate as NAQS.
+in 2020 [16], and a parallel implementation of autoregressive neu-
+ral network for many-spin systems is demonstrated in 2021 [37].
+Autoregressive neural network is first introduced for electronic
+structure calculations in 2022, which uses a multilevel perceptron                      3    INNOVATIONS
+(MLP) with hard-coded pre- and postprocessing to ensure the au-                         3.1    QiankunNet: Transformer based deep
+toregressive property and is referred to as neural autoregressive                                neural network as wave function ansatz
+quantum state (NAQS) [26]. It is demonstrated that NAQS can reach
+superior accuracy for all the molecular systems studied with up to                      The difficulty of solving quantum many-body problems originates
+30 qubits compared to CC methods and RBM. A parallel implemen-                          from the fact that quantum states live in exponentially large Hilbert
+tation of an autoregressive neural network named MADE (masked                           spaces (2𝑁  for𝑁  qubits). To tackle this difficulty we borrow ideas
+autoencoder for distribution estimation [38]), with optimized local                     from classical machine learning, where there also exist many prob-
+energy calculation on GPU, pushed the simulation scale to 76 qubits                     lems for which the solutions live in exponentially large state spaces.
+(the CNa2O3 molecular system) [27]. However in the last work the                        As an example, in NLP a sentence could contain many words, each
+accuracy is about the same or only mildly improved against CCSD                         of which may be taken from a vocabulary of size 30522. If one sets
+results for all the test cases, and is worse than Ref. [26] for molecular               a maximal sentence length to be 512, then the possible sentences
+systems within 30 qubits.                                                               constitute a state space of size 30522512 [39], which is larger than
+NNQS-Transformer: an Efficient and Scalable Neural Network
+Quantum States Approach for Ab initio Quantum Chemistry                                              SC ’23, November 12–17, 2023, Denver, CO, USA
+
+
+the sizes of most quantum many-body problems that can be numer-
+ically solved. Nevertheless, the patterns that different sentences can
+appear are usually limited by a few (unknown) grammatical rules,
+and with state-of-the-art language modeling techniques using the
+transformer-based architectures (e.g. ChatGPT) [32, 33], these rules
+can already be learned with high precision.
+   In the context of NLP, the language models are often designed
+such that they are generative models which are able to accept
+variable-length inputs and/or generate variable-length outputs, and
+they are also designed to be autoregressive with a natural interpre-
+tation: given a sequence of observed words, the model tries to guess
+the next word by sampling from the estimated probability distri-
+bution of it conditioned on the observed ones (“given the text so
+far, what should the next word be?”). From the measurement point
+of view, a quantum state is similar to a language model: one could
+obtain a sample (bitstring) from the quantum state by measuring
+each qubit of it sequentially, and in general, the𝑖-th measurement                      Figure 3: (a) The autoregressive sampling algorithm which
+outcome will be dependent on all the previous observed outcomes                         generates one sample per run. (b) The batch autoregressive
+because of quantum correlations.                                                        sampling algorithm which generates 𝑁𝑠  samples per run.
+   It is known that the transformer is able to learn distant correla-                  We have assumed that two qubits are sampled in each local
+tions with a constant number of operations [31], while in compari-                      sampling step, thus a quadtree. Each circle in (b) corresponds
+son for other neural networks such as CNN the number of required                        to a particular local sampling outcome, and the number on
+operations grows linearly with the distance [40]. Inspired by the                       the edge pointing to the circle means the weight.𝑁𝑠 can be
+enormous successes made by the transformer based architectures in                       chosen to be any number (𝑁𝑠 = 1000 is used as an example).
+NLP and other machine learning tasks, we use a customized trans-                        In this way, one can generate𝑁𝑠 samples at the𝑁 -th step, stored
+former based deep neural network as the wave function ansatz.                           as𝑁𝑢 unique samples with their weights.
+Concretely, we decompose the amplitude part and phase part of                              The autoregressive sampling and the BAS are demonstrated in
+the wave function ansatz                                                                Fig. 3. For transformer based architectures, calculating the con-
+
+                           Ψ(x) =|Ψ(x)|𝑒i𝜙(x),                               (11)       ditional probability distribution𝜋(𝑥|𝑥𝑖−1,...,𝑥1) has a computa-
+                                                                                        tional cost that roughly scales as𝑂(𝑖2). As a result the cost of the
+and then we use transformer to represent the probability|Ψ(x)|2,                        autoregressive sampling for𝑁𝑠 samples is𝑂(𝑁𝑠𝑁 3/3). For the BAS,
+and use MLP to represent the phase𝜙(x). In comparison, Refs. [26,                       assuming that there are𝑁𝑢,𝑖 unique samples generated at the𝑖-th
+27] have used MLP based neural networks for both the amplitude                          step (which is the width of the𝑖-th layer in Fig. 3(b)), then the
+and the phase. Our wave function ansatz is demonstrated in Fig. 2.                      total computational cost is ˝𝑁𝑛=1𝑖2𝑁𝑢,𝑖. If we assume that𝑁𝑢,𝑖  is
+In comparison with the general transformer, we have only used de-                       roughly a constant, denoted as𝑁𝑢 (𝑁𝑢 is usually less than 106 even
+coders since our problem is unsupervised. Our model can be easily                       for molecular systems with𝑁  > 100), then the cost of BAS is only
+made very deep by stacking a large number of decoders. In addition,                    𝑂(𝑁𝑢𝑁 3/3), which is independent of𝑁𝑠. Existing researches on
+our ansatz is autoregressive since only the amplitude contributes                       the acceleration of training [41] and inference [42, 43] for Trans-
+to the probability|Ψ(x)|2 and the amplitude part is autoregressive                      former models on GPU platforms can be leveraged to design the
+by design, therefore we can use very efficient sampling algorithms                      GPU-accelerated implementation for the sampling algorithm.
+designed for autoregressive models.
+   The autoregressive sampling returns one sample per run, dur-                         3.2    Data-centric parallelization strategy for
+ing which 𝑁  local samplings are performed. For autoregressive                                  NNQS
+wave function ansatz Ref. [26] proposes a batch autoregressive
+sampling (BAS) algorithm which is much more efficient than the                         We propose a customized data-centric parallelization scheme for
+autoregressive sampling. The basic idea of BAS is that in each local                    the VMC algorithm which is valid for all autoregressive neural
+sampling step of the autoregressive sampling, one generates a batch                     networks, as demonstrated in Fig. 4 and in comparison with the
+of samples instead of a single one. Concretely, one first generates                     serial scheme in Fig. 1. Our parallelization scheme contains two
+𝑁𝑠  samples (𝑁𝑠  could easily be as large as 1012) from the first lo-                   levels. In the first level parallelization, we divide all the unique
+cal sampling step (namely sampling from𝜋(𝑥)), and only stores                           samples (𝑁𝑢) into𝑁𝑝  batches and parallelize the sampling, local
+the unique samples with their weights. Then in the𝑖-th step, one                        energy and gradient calculation (backward propagation) over those
+computes the probability distribution𝜋𝑥|𝑥𝑖−1,...,𝑥1 for each unique                     batches, such that each functions processes𝑁𝑢/𝑁𝑝 unique samples
+sample𝑥𝑖−1···𝑥1 generated in the previous step (assuming that                          (instead of𝑁𝑠/𝑁𝑝 samples). In the second level parallelization, the
+𝑤𝑥𝑖−1,...,𝑥1  is the corresponding weight), and performs local sam-                     sampling and backward propagation functions for each batch are
+plings from𝜋𝑥|𝑥𝑖−1,...,𝑥1 to obtain exactly𝑤𝑥𝑖−1,...,𝑥1 samples. The                    further parallelized using pytorch multi-threading, while for local
+intermediate samples with zero weights are pruned in each layer.                        energy we use our parallel local energy evaluation scheme (see
+SC ’23, November 12–17, 2023, Denver, CO, USA                                     Yangjun Wu, Chu Guo, Yi Fan, Pengyu Zhou, and Honghui Shang
+
+                                                                                      3.3    Parallel batch autoregressive sampling
+                                                                                               algorithm
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                                      Figure 5: The parallel batch autoregressive sampling algo-
+                                                                                      rithm. The tasks are divided at the𝑘-th local sampling step
+Figure 4: Schematic of the data-centric parallelization scheme                        (𝑘-th layer of the tree) such that the number of samples on
+for NNQS using autoregressive wave function ansatz. Each                              each process are approximately equal. Pruning is done in
+process in the first level parallelization takes charge of a                          each step to remove leaves with zero occurrence and which
+number of unique samples with their weights throughout                                break the number conservation constrain.
+the computation.                                                                          The first challenge in NNQS is the sampling process. Autoregres-
+Sec. 3.4) over𝑁𝑡  threads by further divide the𝑁𝑢/𝑁𝑝 samples into                     sive neural networks allow one to generate exact samples without
+𝑁𝑡  smaller batches.                                                                  the need of a pre-thermalization step and throwing away intermedi-
+   More concretely, our parallelization scheme contains 6 stages in                   ate samples (to avoid auto-correlations) necessary for MC sampling,
+each VMC iteration: 1) We use a customized parallel BSA strategy                      thus are more efficient than MC sampling in general. Moreover,
+(see Sec.3.3) over a total of𝑁𝑝 processes to obtain approximately                     the batch sampling algorithm can output a large number of unique
+𝑁𝑢/𝑁𝑝 unique samples in each process; 2) We use MPI_Allgather to                      samples together with their occurrences in a single run (see Fig. 3).
+synchronize all the samples on each process, with𝑁𝑢𝑁𝑝(⌈𝑁/8⌉+                          However paralleling the BSA on distributed architectures is not
+16) Byte data communication; 3) Each process takes a chunk of                         straightforward, mainly because 1) in BSA the calculation in one
+𝑁𝑢/𝑁𝑝 unique samples and performs the parallel local energy eval-                     local sampling step is dependent on all the previous steps and 2)
+uation scheme; 4) Collecting all the local energies together into the                 the positions and the total number of the unique samples in each
+main process, computing the average therein and then broadcast-                       step are not known before hand.
+ing it to all the processes using MPI_Allreduce, with 16𝑁𝑝  Byte                          To solve this issue, we propose a heuristic parallelization strategy
+data communication; 5) Performing backward propagation on each                        for BSA that proves to be effective in practice, which is shown in
+process independently; 6) Collecting all the local gradients from                     Fig. 5. We represent the whole BSA process as a tree where each
+each process into the main process and calculating the weighted                       layer corresponds to a local sampling step. We sample two qubits
+average, then updating the parameters using the gradient-based                        each time (thus a quadtree) since they correspond to the same spatial
+optimizer and send the new parameters to all the processes using                      orbital. We also sample in the reverse order of the qubits after the
+MPI_Allreduce, with 8𝑀𝑁𝑝 Byte for𝑀 parameters data communi-                           JW transformation as in Ref. [27]. We first perform the serial BSA
+cation. Importantly, during the whole process of our parallel VMC                     on each process using the same random seed (such that we get
+iteration, only steps 2), 4), 6) involve very minimal data communi-                   exactly the same samples on each process) for the first𝑘 steps, and
+cation (Typically C2 with STO-3G basis set,𝑁 = 20,𝑁𝑢 = 2.7× 104,                      then we divide the unique samples (nodes in Fig. 5) at the𝑘-th
+𝑁𝑝 = 64 and𝑀 = 2.7× 105, the total data communication volume                          step into𝑁𝑝 processes such that each process gets approximately
+is about 173 MB in our one iteration calculations), and the unique                    the same number of samples (instead of unique samples) in this
+samples are always kept in their processes until all calculations                     step. This does not guarantee that each process generates the same
+finish (therefore data-centric).                                                      number of unique samples in the end (thus achieving good load
+                                                                                      balance since the later calculations are directly determined by the
+                                                                                      number of unique samples), but from our numerical experiments
+                                                                                      we observe that approximate load balance can be achieved with this
+NNQS-Transformer: an Efficient and Scalable Neural Network
+Quantum States Approach for Ab initio Quantum Chemistry                                              SC ’23, November 12–17, 2023, Denver, CO, USA
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 6: (a) Hamiltonian for the H2 molecular system with 4 qubits and 2 electrons stored as a list of Pauli strings. (b) The scheme
+used in Ref. [27] to store the Hamiltonian in memory. (c) Our compressed data structure to store the complete information of
+the Hamiltonian. The data inside the dashed red boxes are the information stored in memory in both (b) and (c).
+
+
+strategy if𝑘 is chosen properly. In our implementation we use a                          take a large amount of memory and be inefficient for later calcula-
+simple strategy to dynamically determine𝑘: we set a threshold𝑁∗𝑢                         tions. In Ref. [27] a compressed data structure is used to represent
+and choose𝑘 to be the first local sampling step such that the current                    the Hamiltonian, where each Pauli string is represented by three
+number of unique samples (𝑁𝑢,𝑘) is larger than𝑁∗𝑢 . We note that in                      components: two boolean tuples of length𝑁  where the first one
+this strategy the calculations from the 1 to𝑘− 1-th steps are simply                     stores the occurrence of𝑋 or𝑌 and is used to calculate the states x′
+repeated on each process, however, this will not significantly affect                    coupled to each x, while the second one stores the occurrence of𝑌
+the overall computational cost since the computational cost of the                       or𝑍 and is used to calculate the coefficient, plus an integer to store
+local sampling grows as𝑖2 against step𝑖.                                                 the occurrence of𝑌 used to calculate the sign. This data structure is
+   During each step, we prune the leaves with 0 occurrence. In                           shown in Fig. 6(b). We propose a more memory-efficient scheme as
+addition, there is a number conserving constrain which can be used                       shown in Fig. 6(c), where we only store the unique ones of the first
+to reduce the sample space size: the total number of spin up and                         list of boolean tuples and reorganize the second list accordingly.
+spin down electrons, denoted as𝑛↑ and𝑛↓, are conserved separately.                       The coefficient is precomputed using the occurrence of𝑌  and up-
+During the JW transformation, the𝑖-th spatial orbital is mapped to                       dated in-place. The computational cost of the reorganization step
+the two qubits at positions 2𝑖− 1 and 2𝑖, corresponding to the two                       can be neglected since it only needs to be done once and can be
+spin orbitals with up and down spins. Denoting each𝑥𝑖 =𝑦2𝑖𝑦2𝑖−1                          pre-computed. The memory reduction of our scheme in Fig. 6(c)
+with𝑦𝑗 ∈{0, 1} (since we sample two qubits in each step), this                           compared to the scheme in Fig. 6(b) is around 40% in general (see
+number conservation constrain can be imposed by regularizing                             Fig. 9 in Sec. 4.3). In addition, for each input x, all the Pauli strings
+the local conditional probability distributions 𝜋(𝑥𝑖|𝑥𝑖−1,...,𝑥1)                        with the same first boolean tuple will couple x to the same bitstring
+as [27]:                                                                                 x′, therefore our data structure naturally allows one to calculate
+                                                                                         each unique x′ only once (the coefficients for duplicate x′ are sim-
+                              0, if ˝𝑖𝑗=1𝑦2𝑗−1 >𝑛↑                                  ply summed over as shown in Fig. 7(b)). Algorithm 1 meticulously
+     ˜𝜋(𝑥𝑖|𝑥𝑖−1,...,𝑥1) =       0, if ˝𝑖𝑗=1𝑦2𝑗  >𝑛↓                    ,      (12)       delineates the aforementioned optimizations, the initial step entails
+                                                                                     the parsing of inputted Pauli strings, which serves to construct
+                                𝜋(𝑥𝑖|𝑥𝑖−1,...,𝑥1), otherwise                             Pauli matrices XY and YZ. Simultaneously, occurrences of Y are
+and then using  ˜𝜋(𝑥𝑖|𝑥𝑖−1,...,𝑥1)/˝                                                     enumerated to compute the new coefficients. Following this, a dic-
+                                            𝑥𝑖  ˜𝜋(𝑥𝑖|𝑥𝑖−1,...,𝑥1) instead.              tionary data structure (Dict) and state encoding are employed to
+                                                                                         eliminate redundant states. Lastly, continuous memory space is
+3.4    Accelerating local energy calculation on                                          allocated. The dictionary-type data is compressed into this continu-
+        GPU                                                                              ous space for storage, and corresponding ranges are retained using
+The second challenge in NNQS for electronic structure calculations                       an index array (idxs).
+is to evaluate the local energy in Eq.(4). For molecular systems this                       (2) A fused nonzero Hamiltonian entry evaluation and local
+step could be very expensive due to the𝑂(𝑁 4) scaling of the total                       energy calculation design. That is, when evaluating𝐸𝑙𝑜𝑐(x) using
+number of Pauli strings. This could also lead to a memory issue                          Eq.(4), instead of finding all the different x′  with nonzero 𝐻xx′
+since there are𝑂(𝑁 4) possible x′ coupled to an input x. We have                         (together with their coefficients) and then using them to evaluate
+used several techniques to parallelize the computation on a GPU                          𝐸𝑙𝑜𝑐(x), we directly calculate the contribution of each unique x′
+while at the same time limit the memory usage and reduce the                             to𝐸𝑙𝑜𝑐(x) (namely𝐻xx′Ψﬁ𝜃(x′)/Ψﬁ𝜃(x) which is a scalar) as soon
+computational cost, such that we can scale up our calculations to                        as it is found, and then sum over them. In this approach we can
+more than 100 qubits. These techniques are shown as follows.                             calculate𝐸𝑙𝑜𝑐(x) by only storing two bitstrings in memory.
+   (1) A highly compressed data structure to store the Hamiltonian                          (3) Parallelizing the calculation of local energies over unique
+in memory. For large molecular systems storing the Hamiltonian                           samples on a GPU. Each GPU is responsible for all the calculations
+as a list of symbolic Pauli strings (or integers, see Fig. 6(a)) would
+SC ’23, November 12–17, 2023, Denver, CO, USA                                     Yangjun Wu, Chu Guo, Yi Fan, Pengyu Zhou, and Honghui Shang
+
+
+ Algorithm 1: Preprocess: Hamiltonian data structure opti-
+ mizations
+   Input: pauliStrings, n_qubits
+   Result: idxs, pmXY_buf, pmYZ_buf, coeffs_buf
+ 1 𝑁,𝐾← n_qubits, length(pauliStrings)
+
+ 2  pmXY, pmYZ← zeros(𝑁,𝐾), zeros(𝑁,𝐾)
+
+ 3  for (𝑖, (coeff, pauliStr)) in enumerate(pauliStrings) do
+ 4   𝑌𝑜𝑐𝑐← 0 //occurrence  for  Y
+        /*Construct  Pauli  mat  XY  and  Pauli  mat  YZ   */
+
+ 5       for (𝑝, pauli) in pauliStr do
+ 6             if pauli == ”𝑋 ” then
+ 7                    pmXY[𝑝,𝑖]← 1
+
+ 8             else if pauli == ”𝑌 ” then
+ 9                    pmXY[𝑝,𝑖]← pmYZ[𝑝,𝑖]← 1
+
+10        𝑌𝑜𝑐𝑐←𝑌𝑜𝑐𝑐+ 1
+
+11             else
+12                    pmYZ[𝑝,𝑖]← 1
+
+        /*New  coefficients:  fuse  const  calculation  */
+
+13        coeff← real(𝑐𝑜𝑒𝑓𝑓)× real((−𝑖)𝑌𝑜𝑐𝑐)
+        /*Compressed  Pauli  mat  XY  using  Dict             */                         Figure 7: (a) Parallelizing the calculation of local energies
+
+14        sid = _encode2id(pmXY[:,𝑖])                                                    over the samples. (b) Calculating the local energy for a given
+
+15       if not haskey(coeffs_dict, sid) then                                            input sample.
+16              pmXY_dict[sid]← pmXY[:,𝑖]
+                                                                                         the sample-aware local energy evaluation, since the integers can
+17        coeffs_dict[sid].append(coeff)                                                 be naturally ordered according to their values.
+
+18        pmYZ_dict[sid].append([pmYZ[:,𝑖]])                                                Algorithm 2 includes optimization techniques (2)-(5), each of
+   /*Compacting  data  into  new  continuous  buffer   */                                which assigns a subset of samples to a single GPU thread. The
+19  for (𝑖, (sid, pm23)) in enumerate(pmYZ_dict) do                                      computation process prioritizes coupled states. Within the iden-
+20   𝑙← length(pm23)                                                                     tification lookup table (id_lut), a binary search is conducted. If a
+21        pmYZ_buf[:,𝑗  : 𝑗+𝑙]← pm23                                                     matching state exists, the computation proceeds to calculate the
+22        pmXY_buf[:,𝑖]← pmXY_dict[sid]                                                  coupling coefficients. By accessing the wavefunction lookup table
+                                                                                         (wf_lut), the necessity for forward inference in the neural network
+23        coeffs_buf[𝑗:𝑗+𝑙]← coeffs_dict[sid]                                            is bypassed, allowing for immediate contributions to be aggregated.
+
+24   𝑗← 𝑗+𝑙; idxs[𝑖]← 𝑗                                                                  In practical implementation, complex numbers are separated into
+related to a batch of𝑙  unique samples (𝑙  = 𝑁𝑢/𝑁𝑝). GPU paral-                          their real and imaginary components for independent computa-
+lelization is implemented by dividing the𝑙  unique samples into                          tion, and the resultant values are subsequently written into their
+𝑁𝑡  smaller batches (each containing𝑙/𝑁𝑡  unique samples) and cal-                       respective positions.
+
+culating the local energies of each batch on one thread, which is                        4    EVALUATION
+shown in Fig. 7.
+   (4) A sample-aware scheme for evaluating𝐸𝑙𝑜𝑐(x). During the                           4.1    Experimental setup
+local energy calculation, all the unique samples, denoted asS =                          The wave function ansatz used in all the simulations in this work is
+{x1, x2,···, x𝑁𝑢}, are stored on each GPU (see Sec. 3.2). When                           set as follows. For the amplitude part, we have used two decoders
+evaluating𝐸𝑙𝑜𝑐(x), we calculate the coefficient𝐻xx′ only if x′∈S,                        with𝑑𝑚𝑜𝑑𝑒𝑙  =  16 (embedding size) and𝑛ℎ𝑒𝑎𝑑𝑠  =  4 (number of
+as illustrated in Fig 7(b) (see Fig. 10 in Sec. 4.3 for actual speedup                   heads). For the phase part, we have used three dense layers in the
+using this technique).                                                                   MLP with sizes𝑁× 512× 512× 1. We achieved optimal outcomes
+   (5) Efficient storage of the unique samplesS as a lookup table.                       exploring MLP layers (3-5), hidden layers (256-1024), and decoder
+The𝑙 samples generated on each GPU are stored as boolean lists                           layers (2-4) with a𝑑𝑚𝑜𝑑𝑒𝑙 range of 16-64. We have used the gradient
+for computational efficiency as can be seen from Fig. 7(b). However,                     descent optimizer AdamW for training with the learn rate schedule
+when synchronizing the unique samples on all the GPUs, a memory
+efficient storage scheme is preferable to reduce data communication,                                     𝛼𝑖 =𝑑−0.5𝑚𝑜𝑑𝑒𝑙× min(𝑖−0.5,𝑖×𝑆−1.5𝑤𝑎𝑟𝑚𝑢𝑝),                (13)
+therefore we simply encode the boolean tuple into the bits of a 64-
+bit integer (in case 64≤𝑁  < 128, we use two integers). This storage                     where𝛼𝑖 is the learn rate of the𝑖-th training epoch and we set the
+format also allows us to use the very efficient binary search during                     warm up steps as𝑆𝑤𝑎𝑟𝑚𝑢𝑝 = 4000. The maximum number of VMC
+                                                                                         iterations is set to 105. All our simulations are performed on AMD
+NNQS-Transformer: an Efficient and Scalable Neural Network
+Quantum States Approach for Ab initio Quantum Chemistry                                              SC ’23, November 12–17, 2023, Denver, CO, USA
+
+
+ Algorithm 2: Optimizations of local energy calculation                                  later stage, only a smaller number of unique samples will be gener-
+   Input: n_qubits,𝑁𝐾, idxs, coeffs, pmXY, pmYZ,                                         ated). The efficacy of the model is assessed based on convergence
+            batch_size_cur_rank,𝑖𝑠𝑡, states, id_lut, wf_lut                              precision.
+   Result: res_elocs                                                                     4.2    Simulation Validation
+   /*Initialization  of  power  of  two  table               */
+ 1  tbl_pow2[0...63]←{1, 2,..., 263}                                                     To demonstrate the precision of our transformer-based NNQS method,
+   /*Partition  for  CUDA  kernel                                     */                 we first compute the ground state energies of several small-scale
+ 2  index← blockIdx.x× blockDim.x+ threadIdx.x                                           molecular systems and compare them to existing results using
+ 3  stride← gridDim.x× blockDim.x                                                        NNQS, which are shown in Table. 1. The mean absolute error (MAE)
+                                                                                         are listed for each method. We can see that our method can reach
+ 4  for𝑖𝑖← index to batch_size_cur_rank step stride do                                   about the same precision as NAQS (for N2 we are more precise)
+ 5        eloc_real, eloc_imag← 0                                                        and is generally more accurate than MADE.
+
+ 6       for𝑘← 0 to𝑁𝐾 do
+            /*Fuse  coupled  states  and  state2id           */
+
+ 7              id← 0
+
+ 8             for 𝑗← 0 to𝑁 do
+ 9                    id+ = xor(states[𝑖𝑖×𝑁+𝑗], pmXY[𝑘×𝑁+𝑗])
+                   × tbl_pow2[𝑗]
+
+10             end
+            /*Binary  find  id  among  the  lookup  table  */
+11              idx← binary_find(id_lut, id)                                             Figure 8: (a) Potential energy surface of the BeH2 molecular
+12             if idx does not exist then                                                system in the STO-3G basis set calculated by our method
+13                  continue                                                             (green circles), compared to the HF, CCSD and FCI energies.
+14             end                                                                       (b) The absolute errors with respect to FCI results.
+            /*Calculate  coupled  coef                               */                      We also apply our method to calculate the potential energy
+15              coef← 0.0                                                                surface of the BeH2 molecular system in the STO-3G basis set (14
+                                                                                         qubits), which is shown in Fig. 8. We can see that chemical accuracy
+16             for𝑖← idxs[k] to idxs[k+ 1] do                                            (within an absolute error of 1.6× 10−3 Hartree compared to FCI)
+17                    sum← 0                                                             can be reached in the potential energy surface simulation.
+
+18                  for 𝑗← 0 to𝑁 do
+19                          sum+ = states[𝑖𝑖×𝑁+𝑗] & pmYZ[𝑖×𝑁+𝑗]                          4.3    Memory saving and speedup of local energy
+
+20                  end
+                                                                                                  calculation
+21                    coef+ = ( (sum & 1)?1 :−1)× coeffs[𝑖]
+
+22             end
+            /*Accumulation                                                   */
+
+23              eloc_real+ = coef× wf_lut[idx×2]
+
+24              eloc_imag+ = coef× wf_lut[idx×2+ 1]
+
+25       end
+        /*Store  the  result  number  as  return               */
+
+26        a, b← eloc_real, eloc_imag
+27        c, d← wf_lut[(𝑖𝑠𝑡+𝑖𝑖)× 2], wf_lut[(𝑖𝑠𝑡+𝑖𝑖)× 2+ 1]
+
+28        c2_d2← c2 + d2
+
+29        res_elocs[𝑖𝑖× 2]← (a× c + b× d)/ c2_d2
+                                                                                         Figure  9:  Memory  reduction  using  our  compressed  data
+30        res_elocs[𝑖𝑖× 2+ 1]←−(a× d− b× c)/ c2_d2                                       structure to store the Hamiltonian compared to the origi-
+
+31  end                                                                                  nal scheme from Ref. [27] for several exemplary molecular
+EPYC 7742 CPU and NVIDIA A100 PCIe 80GB for CPU and GPU                                  systems in the STO-3G basis set.
+computation environment respectively.                                                        Now we show the memory reduction of using our compressed
+   During the training process, we start from a wave function ansatz                     data structure for the Hamiltonian (see Fig. 6(c) and Sec. 3.4), com-
+with randomly initialized parameters. In the pre-training stage, we                      pared to the scheme proposed in Ref. [27] (see Fig. 6(b)), which is
+observe that a large number of unique samples will be generated                          plotted in Fig. 9 for a wide variety of molecular systems. We can
+since the wavefunction is far from exact, thus we set a lower thresh-                    see that generally there is a more than 40% memory reduction.
+old𝑁𝑠 (𝑁𝑠 = 105 in the first 100 VMC iterations) for the number of                           In Fig. 10, we show the speedups of the local energy calcula-
+samples to increase efficiency. In the later stage we set the threshold                  tion induced by different optimization techniques, for the C2, LiCl,
+(gradually increase𝑁𝑠 until it reaches the maximum value of 1012)                        C2H4O molecular systems. Taking C2 as an example, first, the sam-
+to be very large for accurate calculation (we observe that in the                        ple aware evaluation scheme (reducing the computational cost) plus
+SC ’23, November 12–17, 2023, Denver, CO, USA                                     Yangjun Wu, Chu Guo, Yi Fan, Pengyu Zhou, and Honghui Shang
+
+
+                  Molecule    𝑁  𝑁𝑒   𝑁ℎ             HF             CCSD       NAQS [26]    MADE [27]    QiankunNet                               FCI
+                     H2O             14     10      1390  −74.964       -75.0154        -75.0155         -75.0155          -75.0155            -75.0155
+                      N2               20     14      2239 −107.4990    -107.6560      -107.6595       -107.6567         -107.6601            -107.6602
+                      O2               20     16      2879 −147.6319    -147.7027      -147.7500       -147.7499         -147.7501            -147.7502
+                     H2S             22     18      9558 −394.3114    -394.3545      -394.3546       -394.3545         -394.3546              -394.3546
+                     PH3             24     18     24369 −338.6341    -338.6981      -338.6984       -338.6981         -338.6982              -338.6984
+                     LiCl             28     20     24255 −460.8273    -460.8475      -460.8496       -460.8481         -460.8494             -460.8496
+                     Li2O             30     14     20558 −87.7956      -87.8855        -87.8909         -87.8856          -87.8907            -87.8927
+              MAE (Hartree)                                                                              3.8× 10−4      1.8× 10−3       3.7× 10−4
+Table 1: Ground state energies (in Hartree) calculated by our method. The conventional HF and CCSD results, FCI results as
+well as existing NNQS results including NAQS [26] and MADE [27] are shown for comparison.𝑁 is the number of qubits,𝑁𝑒
+the total number of electrons (including spin up and spin down) and𝑁ℎ the total number of Pauli strings of the Hamiltonian.
+The mean absolute errors (MAE) for various methods compared with FCI are also listed.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 10: The runtimes for local energy calculation by inte-
+grating different optimization techniques, for the C2, LiCl                             Figure 11: Strong scaling of the computation for the benzene
+and C2H4O molecular systems in the STO-3G basis set with                                molecular system in the 6-31G basis set (120 qubits). The
+𝑁 = 20, 28, 38. The total number of unique samples produced                             green line shows the strong parallelization efficiency. Three
+in these simulations are𝑁𝑢 = 10553, 9271, 25622 respectively.                           functions (sampling, local energy calculation, backpropaga-
+SA means the sample-aware evaluation scheme (Sec. 3.4,                                  tion) are profiled in the computation time.
+method (4)), FUSE means the fused design of nonzero Hamil-
+tonian entry evaluation and local energy calculation (Sec. 3.4,                         number of unique samples in each iteration becomes more or less
+method (2)), LUT means to store the unique samples as an effi-                          stable. We have used𝑁∗𝑢 = 16384𝑛 for𝑛 GPUs in the parallel BAS
+cient lookup table (Sec. 3.4, method (5)), GPU means the local                          for both the strong and weak scaling test.
+energy calculation implemented on GPU (Sec. 3.4, method                                    Fig. 11 shows the strong scaling performance of our method,
+(2)). The baseline is a bare CPU version without using the op-                          where we have used𝑁𝑠  =  1.6× 106 and obtain𝑁𝑢 ≈  6.5× 105.
+timization techniques mentioned here. The other techniques                              As the number of used GPUs increases from 4 to 32, the strong
+in Sec. 3.4 which are not mentioned here are used in all tests.                         parallelization efficiency is still higher than 84%. While when in-
+the fused design of nonzero Hamiltonian entry evaluation and local                      creased to 64 GPUs, the efficiency decreases to 67.7%. This slightly
+energy calculation (increasing data locality and reducing memory                        lower parallel efficiencies can be attributed to two factors: First the
+usage), yields a performance gain of 24x. Second, by storing the                        relatively small number of unique samples (≈ 104) that is allocated
+unique samples as an ordered integer list, which reduces memory                         on each GPU when distributing 6.5× 105 unique samples over 64
+usage and increases search efficiency, the performance gain further                     GPUs, the parallelization efficiency of GPU is not well utilized at
+increases to 103x. Third, by using GPU parallelization, the overall                     this scale; Second, during the parallel BAS process, the imbalance
+performance gain becomes 3768x compared to the baseline CPU                             of the number of unique samples generated on each GPU could hap-
+version where none of these optimizations are used. Overall, imple-                     pen due to the pruning of the samples with physical constrains. We
+menting our parallel local energy calculation scheme on GPU gives                       note that the later the parallel BAS is performed, the more evenly
+us around 4, 000x speed up compared to the baseline CPU version,                        distributed the unique samples will be, yet the time for prior serial
+which is essential to scale up the simulation scale.                                    sampling process will increase.
+                                                                                           Fig. 12 shows the weak scaling performance of our method. We
+                                                                                        time the computation time with an increasing number of GPUs
+4.4    Scalability Results                                                              from 4 to 64, with each GPU calculating an approximately equal
+We use the benzene molecular system in the 6-31G basis set with                         number of unique samples (2.04×104). Our results show good weak
+120 qubits for the scalability test, for which 𝑁ℎ  =  2434919. We                       scaling performance. Taking 32 GPUs as a reference, we achieve a
+measure the performance after the pre-training stage such that the
+NNQS-Transformer: an Efficient and Scalable Neural Network
+Quantum States Approach for Ab initio Quantum Chemistry                                              SC ’23, November 12–17, 2023, Denver, CO, USA
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figure 12: Weak scaling of the runtime for the benzene molec-
+ular system in the 6-31G basis set. To ensure that a approx-
+imately equal number of unique samples (≈  2.04× 104) is
+generated on each GPU, we have set𝑁𝑠 = 5𝑛× 104 for𝑛 GPUs.                              Figure 13: Potential energy surfaces of the H2  molecular
+The green line shows the weak parallelization efficiency.                              system in the cc-pVTZ (a) and aug-cc-pVTZ (c) basis sets cal-
+weak parallelization efficiency of approximately 93% compared to                       culated by our method, compared to the HF, CCSD and FCI
+4 GPUs.                                                                                energies. The energies calculated in the complete basis set
+   The batched sampling algorithm we adopted takes advantage of                        limit (the blue dashed lines) are also plotted for comparison.
+the autoregressive properties to greatly reduce sampling overhead.                     The corresponding absolute errors with respect to FCI results
+But it could sacrifice parallelization due to the tree structure of our                are shown in (b,d) respectively.
+sampling process. The non-exact equivalence between the number                         6    CONCLUSION
+of unique samples and the computational cost in our algorithm                          In summary, we have demonstrated a high-performance NNQS
+will generally affect both the strong and weak scaling at a larger                     method using the transformer-based wave function ansatz for ab
+scale when the fluctuations of the number of samples on GPUs                           initio electronic structure calculations. To our knowledge, this is
+become larger. For even larger scale parallelization in the future                     the first work which introduces transformer based architectures
+implementation, one could still take advantage of the conventional                     into NNQS to solve quantum chemistry problems. To scale up the
+Monte Carlo sampling by simply implementing several independent                        NNQS method on distributed computing architectures, we pro-
+the batch sampling algorithm, which will be effective as long as a                     pose a parallel batch autoregressive sampling strategy which works
+larger number of unique samples are going to be important for that                     on multiple GPUs and a highly efficient local energy evaluation
+problem (the latter approach will have computational overhead if                       scheme which is parallelized on each GPU using multi-threading.
+the number of unique samples is not large enough).                                     The overall parallelization is designed to be data centric, namely
+                                                                                       each GPU manages a batch of unique samples and is responsible
+                                                                                       for all the calculations related to this batch throughout the compu-
+                                                                                       tation, therefore minimizing data communications among different
+5    IMPLICATIONS                                                                      processes. The strong and weak scaling of our method up to 64
+                                                                                       GPUs demonstrate the good scalability of our method. Our work
+Finally, we apply our method to calculate the potential energy                         paves the way of using NNQS to study strongly correlated quantum
+surfaces of the hydrogen molecular system in very large basis set:                     chemistry systems with more than 100 qubits.
+the cc-pVTZ (56 qubits) and aug-cc-pVTZ (92 qubits) basis sets.                           Our method is mostly based on the pytorch framework and is
+The results are shown in Fig. 13. This system is chosen because it                     applicable for all autoregressive wave function ansatz. It can also be
+can demonstrate the scalability of our method while being exactly                      easily portable to other high-performance computing architectures
+solvable by FCI (in our method we have not used the knowledge                          as long as the local energy calculation function is implemented on
+that only a small number of determinants are necessary for this                        each process.
+system, thus the computational cost for each VMC iteration is
+almost as difficult as for other large systems). For both the two                      ACKNOWLEDGMENTS
+large basis sets our results are in excellent agreement with the FCI                   This work was supported by the National Natural Science Foun-
+results, and chemical accuracies are reached in all these simulations.                 dation of China (Grant No. T2222026, 22003073, 11805279). The
+We also show results obtained with FCI in the complete basis set                       corresponding authors of this paper are Honghui Shang
+limit, which can be considered as the ground truth for the potential                   (shanghui.ustc@gmail.com) and Chu Gu (guochu604b@gmail.com).
+energy curve of the hydrogen molecule. We can see that in these
+larger basis sets the potential energy curve already well agree the                    REFERENCES
+exact dissociation limit (the mean errors of our calculations with                      [1]  Konstantinos D. Vogiatzis, Dongxia Ma, Jeppe Olsen, Laura Gagliardi, and Wibe A.
+respect to the ground truth are 2.27× 10−3 Hartree for 56 qubits                            de Jong.   Pushing configuration-interaction to the limit: Towards massively
+and 2.34× 10−3 Hartree for 92 qubits).                                                      parallel mcscf calculations. The Journal of Chemical Physics, 147(18):184111, 2017.
+SC ’23, November 12–17, 2023, Denver, CO, USA                                     Yangjun Wu, Chu Guo, Yi Fan, Pengyu Zhou, and Honghui Shang
+
+
+ [2]  C. David Sherrill and Henry F. Schaefer. The configuration interaction method:                            [30]  Honghui Shang, Chu Guo, Yangjun Wu, Zhenyu Li, and Jinlong Yang. Solving
+      Advances in highly correlated approaches. volume 34 of Advances in Quantum                                       schrodinger equation with a language model. arXiv: 2307.09343 [quant-ph].
+      Chemistry, pages 143–269. Academic Press, 1999.                                                           [31]  Ashish  Vaswani,  Noam  Shazeer,  Niki  Parmar,  Jakob  Uszkoreit,  Llion  Jones,
+ [3]  Ireneusz W Bulik, Thomas M Henderson, and Gustavo E Scuseria. Can single-                                        Aidan N Gomez, Ł ukasz Kaiser, and Illia Polosukhin. Attention is all you need. In
+      reference coupled cluster theory describe static correlation? Journal of chemical                                I. Guyon, U. Von Luxburg, S. Bengio, H. Wallach, R. Fergus, S. Vishwanathan, and
+      theory and computation, 11(7):3171–3179, 2015.                                                                   R. Garnett, editors, Advances in Neural Information Processing Systems, volume 30.
+ [4]  Steven R. White.   Density matrix formulation for quantum renormalization                                        Curran Associates, Inc., 2017.
+      groups.  Physical Review Letters, 69:2863–2866, Nov 1992.                                                 [32]  Alec Radford, Karthik Narasimhan, Tim Salimans, Ilya Sutskever, et al. Improving
+ [5]  Steven R. White. Density-matrix algorithms for quantum renormalization groups.                                   language understanding by generative pre-training. 2018.
+      Physical Review B, 48:10345–10356, Oct 1993.                                                              [33]  Alec Radford, Jeffrey Wu, Rewon Child, David Luan, Dario Amodei, Ilya Sutskever,
+ [6]  Jiri Brabec, Jan Brandejs, Karol Kowalski, Sotiris Xantheas, Örs Legeza, and Libor                               et al. Language models are unsupervised multitask learners.  OpenAI blog, 1(8):9,
+      Veis. Massively parallel quantum chemical density matrix renormalization group                                   2019.
+      method.  Journal of Computational Chemistry, 42(8):534–544, 2021.                                         [34]  Adam Paszke, Sam Gross, Francisco Massa, Adam Lerer, James Bradbury, Gregory
+ [7]  Henrik R Larsson, Huanchen Zhai, Cyrus J Umrigar, and Garnet Kin-Lic Chan.                                       Chanan, Trevor Killeen, Zeming Lin, Natalia Gimelshein, Luca Antiga, Alban
+      The chromium dimer: closing a chapter of quantum chemistry.  Journal of the                                      Desmaison, Andreas Köpf, Edward Yang, Zach DeVito, Martin Raison, Alykhan
+      American Chemical Society, 144(35):15932–15937, 2022.                                                            Tejani, Sasank Chilamkurthy, Benoit Steiner, Lu Fang, Junjie Bai, and Soumith
+ [8]  D. Perez-Garcia, F. Verstraete, M. M. Wolf, and J. I. Cirac. Matrix product state                                Chintala. PyTorch: An Imperative Style, High-Performance Deep Learning Library.
+      representations.  Quantum Information Computation, 7(5):401–430, jul 2007.                                       Curran Associates Inc., Red Hook, NY, USA, 2019.
+ [9]  W. M. C. Foulkes, L. Mitas, R. J. Needs, and G. Rajagopal. Quantum monte carlo                            [35]  Qiming Sun, Timothy C. Berkelbach, Nick S. Blunt, George H. Booth, Sheng
+      simulations of solids.  Reviews of Modern Physics, 73:33–83, Jan 2001.                                           Guo, Zhendong Li, Junzi Liu, James D. McClain, Elvira R. Sayfutyarova, Sandeep
+[10]  R J Needs, M D Towler, N D Drummond, and P López Ríos. Continuum variational                                     Sharma, Sebastian Wouters, and Garnet Kin-Lic Chan. Pyscf: the python-based
+      and diffusion quantum monte carlo calculations.  Journal of Physics: Condensed                                   simulations of chemistry framework. WIREs Computational Molecular Science,
+      Matter, 22(2):023201, dec 2009.                                                                                  8(1):e1340, 2018.
+[11]  Brian M. Austin, Dmitry Yu. Zubarev, and William A. Jr. Lester. Quantum monte                             [36]  Jarrod R McClean, Nicholas C Rubin, Kevin J Sung, Ian D Kivlichan, Xavier
+      carlo and related approaches.  Chemical reviews, 112(1):263–288, 2012.                                           Bonet-Monroig, Yudong Cao, Chengyu Dai, E Schuyler Fried, Craig Gidney, Bren-
+[12]  David Pfau, James S. Spencer, Alexander G. D. G. Matthews, and W. M. C. Foulkes.                                 dan Gimby, Pranav Gokhale, Thomas Häner, Tarini Hardikar, Vojtěch Havlíček,
+      Ab initio solution of the many-electron schrödinger equation with deep neural                                    Oscar Higgott, Cupjin Huang, Josh Izaac, Zhang Jiang, Xinle Liu, Sam McArdle,
+      networks.  Physical review research, 2:033429, Sep 2020.                                                         Matthew Neeley, Thomas O’Brien, Bryan O’Gorman, Isil Ozfidan, Maxwell D
+[13]  Jan Hermann, Zeno Schätzle, and Frank Noé. Deep-neural-network solution of                                       Radin, Jhonathan Romero, Nicolas P D Sawaya, Bruno Senjean, Kanav Setia,
+      the electronic schrödinger equation.  Nature Chemistry, 12(10):891–897, 2020.                                    Sukin Sim, Damian S Steiger, Mark Steudtner, Qiming Sun, Wei Sun, Daochen
+[14]  Giuseppe Carleo and Matthias Troyer. Solving the quantum many-body problem                                       Wang, Fang Zhang, and Ryan Babbush. Openfermion: the electronic structure
+      with artificial neural networks.  Science, 355(6325):602–606, 2017.                                              package for quantum computers.  Quantum Science and Technology, 5(3):034014,
+[15]  Kenny Choo, Titus Neupert, and Giuseppe Carleo. Two-dimensional frustrated                                       jun 2020.
+      𝐽1−𝐽2 model studied with neural network quantum states.  Physical Review B,                               [37]  Tianchen Zhao, Saibal De, Brian Chen, James Stokes, and Shravan Veerapa-
+      100:125124, Sep 2019.                                                                                            neni.  Overcoming barriers to scalability in variational quantum monte carlo.
+[16]  Or Sharir, Yoav Levine, Noam Wies, Giuseppe Carleo, and Amnon Shashua.                                           In Proceedings of the International Conference for High Performance Computing,
+      Deep autoregressive models for the efficient variational simulation of many-body                                 Networking, Storage and Analysis, SC ’21, New York, NY, USA, 2021. Association
+      quantum systems.  Physical Review Letters, 124:020503, Jan 2020.                                                 for Computing Machinery.
+[17]  Markus Schmitt and Markus Heyl.  Quantum many-body dynamics in two di-                                    [38]  Mathieu Germain, Karol Gregor, Iain Murray, and Hugo Larochelle. Made: Masked
+      mensions with artificial neural networks.  Physical Review Letters, 125:100503,                                  autoencoder for distribution estimation. In Francis Bach and David Blei, editors,
+      Sep 2020.                                                                                                        Proceedings of the 32nd International Conference on Machine Learning, volume 37
+[18]  Dong Yuan, He-Ran Wang, Zhong Wang, and Dong-Ling Deng.  Solving the                                             of Proceedings of Machine Learning Research, pages 881–889, Lille, France, 07–09
+      liouvillian gap with artificial neural networks. Physical Review Letters, 126:160401,                            Jul 2015. PMLR.
+      Apr 2021.                                                                                                 [39]  Jacob Devlin, Ming-Wei Chang, Kenton Lee, and Kristina Toutanova.   BERT:
+[19]  Xuncheng Zhao, Mingfan Li, Qian Xiao, Junshi Chen, Fei Wang, Li Shen, Meijia                                     Pre-training of deep bidirectional transformers for language understanding. In
+      Zhao, Wenhao Wu, Hong An, Lixin He, and Xiao Liang.  Ai for quantum me-                                          Proceedings of the 2019 Conference of the North American Chapter of the Association
+      chanics: High performance quantum many-body simulations via deep learning.                                       for Computational Linguistics: Human Language Technologies, Volume 1 (Long and
+      In SC22: International Conference for High Performance Computing, Networking,                                    Short Papers), pages 4171–4186, Minneapolis, Minnesota, June 2019. Association
+      Storage and Analysis, pages 1–15, 2022.                                                                          for Computational Linguistics.
+[20]  Javier Robledo Moreno, Giuseppe Carleo, Antoine Georges, and James Stokes.                                [40]  John F. Kolen and Stefan C. Kremer. Gradient Flow in Recurrent Nets: The Difficulty
+      Fermionic wave functions from neural-network constrained hidden states.  Pro-                                    of Learning LongTerm Dependencies, pages 237–243. 2001.
+      ceedings of the National Academy of Sciences, 119(32):e2122059119, 2022.                                  [41]  Xiaohui Wang, Yang Wei, Ying Xiong, Guyue Huang, Xian Qian, Yufei Ding,
+[21]  Dong-Ling Deng, Xiaopeng Li, and S. Das Sarma.  Quantum entanglement in                                          Mingxuan Wang, and Lei Li.  Lightseq2: Accelerated training for transformer-
+      neural network states.  Physical Review X, 7:021021, May 2017.                                                   based models on gpus.  In Proceedings of the International Conference on High
+[22]  Ivan Glasser, Nicola Pancotti, Moritz August, Ivan D. Rodriguez, and J. Ignacio                                  Performance Computing, Networking, Storage and Analysis, SC ’22. IEEE Press,
+      Cirac. Neural-network quantum states, string-bond states, and chiral topological                                 2022.
+      states.  Physical Review X, 8:011006, Jan 2018.                                                           [42]  Xiaohui Wang, Ying Xiong, Yang Wei, Mingxuan Wang, and Lei Li. LightSeq: A
+[23]  Or Sharir, Amnon Shashua, and Giuseppe Carleo.  Neural tensor contractions                                       high performance inference library for transformers. In Proceedings of the 2021
+      and the expressive power of deep neural quantum states.  Physical Review B,                                      Conference of the North American Chapter of the Association for Computational
+      106:205136, Nov 2022.                                                                                            Linguistics: Human Language Technologies: Industry Papers (NAACL-HLT), pages
+[24]  Xun Gao and Lu-Ming Duan. Efficient representation of quantum many-body                                          113–120. Association for Computational Linguistics, June 2021.
+      states with deep neural networks.  Nature communications, 8(1):662, 2017.                                 [43]  Jiarui Fang, Yang Yu, Chengduo Zhao, and Jie Zhou.  Turbotransformers: An
+[25]  Kenny Choo, Antonio Mezzacapo, and Giuseppe Carleo.   Fermionic neural-                                          efficient gpu serving system for transformer models. In Proceedings of the 26th
+      network  states  for  ab-initio  electronic  structure.     Nature  communications,                              ACM SIGPLAN Symposium on Principles and Practice of Parallel Programming,
+      11(1):2368, 2020.                                                                                                PPoPP ’21, page 389–402, New York, NY, USA, 2021. Association for Computing
+[26]  Thomas D Barrett, Aleksei Malyshev, and AI Lvovsky.  Autoregressive neural-                                      Machinery.
+      network wavefunctions for ab initio quantum chemistry.  Nature Machine Intelli-
+      gence, 4(4):351–358, 2022.
+[27]  Tianchen Zhao, James Stokes, and Shravan Veerapaneni. Scalable neural quan-
+      tum states architecture for quantum chemistry.  Machine Learning: Science and
+      Technology, 4(2):025034, jun 2023.
+[28]  Sandro Sorella and Luca Capriotti. Green function monte carlo with stochastic
+      reconfiguration: An effective remedy for the sign problem.  Physical Review B,
+      61:2599–2612, Jan 2000.
+[29]  Sandro Sorella, Michele Casula, and Dario Rocca.  Weak binding between two
+      aromatic rings: Feeling the van der waals attraction by quantum monte carlo
+      methods.  The Journal of Chemical Physics, 127(1):014105, 2007.

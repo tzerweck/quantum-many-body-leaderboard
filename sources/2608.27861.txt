@@ -1,0 +1,1616 @@
+ SciPost Physics                                                                      Submission
+
+  Implementations for GPU-Accelerated Variational MonteVectorized Symmetric and Fermionic Tensor Network
+                                                    Carlo
+              Si-Jing Du1,∗  , Johnnie Gray2,∗  , Ao Chen2, Garnet Kin-Lic Chan2,†
+
+    1 Division of Engineering and Applied Science, California Institute of Technology,
+                                         Pasadena, CA 91125, USA
+ 2 Division of Chemistry and Chemical Engineering, California Institute of Technology,
+                                         Pasadena, CA 91125, USA
+                                    ∗These authors contributed equally
+                               †Corresponding author:  gkc1000@gmail.com
+                                                    Abstract
+
+    Variational Monte Carlo (VMC) calculations based on tensor networks (TN) have re-
+cently achieved competitive accuracy in ground-state calculations of strongly correlated
+spin  and  fermionic  systems.   However,  existing  tensor  network  VMC  (TN-VMC)  algo-
+rithms  have  not  been  formulated  in  a  manner  that  can  fully  utilize  GPU  acceleration.
+We tackle the key missing ingredient, namely, the vectorized evaluation of tensor network
+amplitudes and tensor network operations.  This ensures high GPU utilization by batching
+over computations with identical structure.  In particular,  we show how to achieve vec-
+torization for the practically relevant case of abelian symmetric tensor networks (which
+includes fermionic tensor networks) by developing a “flat” tensor network formalism for
+block-sparse  tensor  representation  and  contraction.   Using  this,  we  construct  a  GPU-
+adapted symmetric TN-VMC workflow with batched tensor network computation.  In the
+two-dimensional Fermi–Hubbard model, we demonstrate a GPU speedup of up to 300×
+over single core CPU implementations, for fermionic TN variational wavefunctions.
+
+
+Contents
+
+1   Introduction                                                                                    2
+
+2   Variational Monte Carlo                                                                    3
+    2.1    VMC formulation                                                                                      3
+    2.2    Parallelism in VMC                                                                                     4
+    2.3    Vectorized amplitude evaluation in GPU-adapted VMC                             5
+
+3   Vectorized tensor-network amplitude evaluation                           6
+    3.1    Tensor networks and amplitudes                                                         6
+    3.2    Requirements for vectorized tensor-network amplitude evaluation         6
+    3.3    Dense tensor-network amplitudes                                                       7
+    3.4    Symmetric tensor network amplitudes                                                8
+           3.4.1    Symmetry-resolved  block-sparse  tensors  and  configuration  depen-
+                     dence in amplitude evaluation                                                     8
+           3.4.2    Flat symmetric tensor formalism                                              9
+
+4   Numerical results for fermionic TN-VMC                                 14
+    4.1    Single GPU wall-time reduction                                                          14
+           4.1.1    Tensor network functions                                                          14
+           4.1.2    Standard fPEPS with boundary-MPS reuse                                   15
+
+
+                                                          1
+ SciPost Physics                                                                      Submission
+
+
+    4.2    Multi-GPU throughput scaling                                                                         16
+    4.3    End-to-end speedup in production-scale VMC runs                                    17
+    4.4    Backend portability of vectorized fTN amplitudes                            17
+    4.5    Application:  NN-fTNS with deep neural networks                                      18
+
+5   Software implementation                                                                 19
+
+6   Summary and outlook                                                                           20
+
+A  Example:  contraction  of  two  rank-five  tensors  withZ           2  symmetry  in
+    flat representation                                                                            20
+
+B  Vectorizing standard fPEPS-VMC with boundary-MPS environment
+    reuse                                                                                                          23
+
+References                                                                                     25
+
+
+
+
+1  Introduction
+
+Variational Monte Carlo (VMC) is a powerful approach for ground-state calculations of
+quantum many-body systems [1–3].  Among the variational ans¨atze proposed for VMC,
+tensor network states (TNS) [4–10] have achieved competitive accuracy in ground-state
+calculations of two-dimensional strongly correlated systems [11–13], including for fermionic
+problems [14–16].
+    Despite this progress, large-scale tensor network VMC (TN-VMC) calculations have
+remained predominantly CPU-based [11,14,15,17].  This contrasts with other large-scale
+tensor network workloads that already benefit substantially from GPU acceleration,  in-
+cluding quantum-circuit simulation [18–25] and tensor network calculations of partition
+functions [24–28].  Enabling TN-VMC to efficiently utilize GPUs, however, requires more
+than  simply  offloading  the  tensor  contractions  to  GPUs.   A  VMC  calculation  repeat-
+edly evaluates wavefunction amplitudes for a large number of physical configurations, and
+these evaluations are mutually independent at each sampling step.  To exploit the high-
+throughput parallelism of modern GPUs,  these amplitudes must therefore be evaluated
+concurrently.  Such parallelization is typically realized through vectorization of the wave-
+function evaluation.  In standard TN-VMC, evaluating the wavefunction for a given con-
+figuration involves constructing and contracting a single-layer amplitude tensor network.
+An efficient GPU implementation must therefore construct and contract such amplitude
+networks, vectorized over batches of configurations.
+    In  this  work,  we  describe  how  this  can  be  achieved.   For  TNS  without  symmetry,
+where all tensors are dense arrays, vectorization is straightforward.  However, many TN
+calculations either benefit from symmetry (to reduce storage and speedup computation),
+or  intrinsically  require  symmetry  in  their  formulation.   A  key  example  of  the  latter  is
+the  fermionic  TNS  (fTNS)  formalism,  where  every  tensor  is  chosen  to  beZ  2  symmet-
+ric to locally implement fermionic anticommutation rules. [4–7,29,30] The block-sparse
+tensor network structure associated with the symmetries introduces obstacles to efficient
+vectorization.
+    To tackle this problem, we describe aflat symmetric tensor computational formalism
+
+
+                                                         2
+ SciPost Physics                                                                      Submission
+
+
+that supports vectorization for finite cyclic symmetries (e.g.  theZ       2 symmetry associated
+with fermions), and thus, an efficient GPU-accelerated TN-VMC workflow.  Our idea is
+related  to  previous  work  by  some  of  us  on  theSymtensorlibrary  [31],  but  generalizes
+that work (which was limited to tensor contractions) to the full set of operations required
+for VMC, and in particular,  the additional complications arising from tensor slicing for
+amplitude evaluation.
+    To demonstrate the performance of our approach, particularly for symmetric tensors,
+we  use  the  two-dimensional  Fermi–Hubbard  model,  where  we  assess  GPU  speedups  for
+two  classes  of  fTNS:  standard  fermionic  projected  entangled-pair  states  (fPEPS)  and  a
+tensor network function ansatz based on approximate fPEPS contraction (TNF-fPEPS).
+Our  results  demonstrate  that  the  GPU  implementation  achieves  considerable  speedups
+over conventional MPI-parallelized CPU implementations in production-scale VMC cal-
+culations.  Beyond these performance gains, the GPU-accelerated TN-VMC workflow also
+enables the efficient optimization of the recently introduced neuralized fermionic tensor
+network state (NN-fTNS) [15], which incorporates a deep neural-network component.  Our
+preliminary  results  show  that  a  deep  NN-fTNS  can  achieve  ground-state  energies  com-
+petitive with recently reported results from large-scale fermionic neural quantum states
+(NQS) [32] and conventional fPEPS with substantially larger bond dimensions [14].
+    The calculations in this work utilized several libraries.  General tensor network con-
+struction,  algorithms,  and  operations  are  orchestrated  byquimb[33];  the  flat  symmet-
+ric  tensor  formalism  is  implemented  in  a  new  librarysymmray[29,34];  and  the  VMC
+calculations  were  carried  out  usingvmc           torch[35],  a  PyTorch-based  library  [36],  and
+Quantax[37], a GPU-optimized VMC framework based on JAX [38].
+    The remainder of this paper is organized as follows.  In Section2, we briefly review the
+variational Monte Carlo method and explain the role of vectorized amplitude evaluation
+in  GPU-accelerated  VMC.  Section3presents  the  vectorized  tensor  network  amplitude
+formulation.  We first discuss the dense tensor network case and then introduce the flat
+symmetric tensor formalism, which enables vectorized amplitude evaluation for abelian-
+symmetric  TN,  such  as  fTNS.  In  Section4,  we  present  numerical  benchmarks  on  the
+two-dimensional  Fermi–Hubbard  model.   Section5briefly  describes  the  software  stack.
+Finally, we summarize our work and future directions in Section6.
+
+2  Variational Monte Carlo
+
+2.1VMC formulation
+We briefly review the VMC framework and establish the notation used in the rest of the
+paper. In a typical ground-state VMC calculation, a parameterized trial wavefunction|Ψ         θ⟩
+is optimized to minimize the variational energy and approximate the ground state of a
+many-body HamiltonianH.  ConsiderHrepresented in a product-state basis{|σ⟩}, where
+σ= (σ     1,...,σN) labels a physical configuration.  The variational energy is calculated as
+
+                                 E(θ) =  ⟨Ψ θ|H|Ψ   θ⟩⟨Ψ θ|Ψ θ⟩    =E  σ∼p  θ [E loc(σ)],                                   (1)
+
+where configurationsσare sampled from the Born distribution
+
+                                          pθ(σ) =  |Ψ θ(σ)|      2P
+                                                        σ′|Ψ θ(σ ′)|  2,                                               (2)
+
+
+
+                                                        3
+ SciPost Physics                                                                      Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+     Figure  1:Parallelization  schemes  for  TN-VMC  sampling.(a)  In  tradi-
+     tional TN-VMC, an MPI-parallelized program assigns one Markov chain to each
+     MPI  rank,  and  amplitudes  are  evaluated  sequentially  along  each  chain.   (b)  A
+     naive  GPU  port  keeps  the  same  one-chain-per-rank  structure,  exposing  only  a
+     single-configuration amplitude evaluation to the GPU at each Markov move.  (c)
+     The vectorized GPU scheme assignsBchains to each GPU rank and evaluates
+     the corresponding amplitudes at each move stage as a batched-amplitude evalu-
+     ation with a shared computational graph and a leading batch axis.
+
+
+and the local energy is
+                                        Eloc(σ) =  X      Hσσ′ Ψθ(σ ′)Ψθ(σ)  .                                            (3)
+                                                      σ′
+Here Ψθ(σ) =⟨σ|Ψ      θ⟩is the wavefunction amplitude in the chosen basis.
+    In practice, configurations are commonly generated by sampling fromp    θ via Markov-
+chain Monte Carlo based on the Metropolis–Hastings algorithm [39,40].  For symmetric
+proposal moves, a proposed configurationσ       ′ is accepted with probability
+                                                           "              2#
+                                    A(σ→σ    ′) = min       1,  Ψθ(σ ′)       .                                       (4)
+                                                                 Ψθ(σ)
+
+    To minimize the variational energyE(θ), the wavefunction parametersθare iteratively
+updated using gradient descent methods.  At each VMC step, we compute the derivatives
+of  the  sampled  wavefunction  amplitudes  with  respect  toθ.   From  these  derivatives,  we
+obtain the parameter updateδθdirection via optimization algorithms based on stochastic
+reconfiguration (SR) [41,42], and the parameters are updated asθ←θ+η·δθwhereη>0
+is the update step size.
+    For sampling, the acceptance probability in Eq. (4) has the form of a ratio between
+the amplitude of the proposed configuration and current configuration.  For local-energy
+evaluation,  Eq.  (3)  requires  the  amplitudes  Ψ  θ(σ ′)  of  configurations  connected  to  each
+sampled configurationσby the Hamiltonian.  Therefore, the main parts of the VMC loop
+involve repeated calls to the amplitude function Ψθ(σ).
+
+2.2Parallelism in VMC
+The large number of wavefunction-amplitude evaluations typically constitutes the dom-
+inant  computational  cost  in  VMC.  This  cost  can  be  reduced  through  parallel  and  dis-
+tributed computing.
+
+
+
+                                                        4
+ SciPost Physics                                                                      Submission
+
+
+    VMC naturally inherits the embarrassingly parallel structure of Monte Carlo sampling.
+Independent Markov chains can be distributed across MPI processes for parallel config-
+uration sampling, while local observables measured on different chains can be combined
+through MPI collective operations.  Within each individual Markov chain,  however,  the
+sampling procedure is inherently sequential: the chain evolves through a sequence of local-
+move proposals, and each accept–reject decision depends on the current configuration of
+that chain.
+    In   conventional   CPU-based   TN-VMC   implementations   on   computing   clusters
+[Fig.1(a)],  one  typically  assigns  a  single  Markov  chain  to  each  MPI  rank,  with  each
+rank mapped to a hardware compute unit consisting of, for example, a small number of
+CPU  cores.   This  coarse-grained  MPI  parallelism  has  been  the  standard  parallelization
+strategy adopted in previous TN-VMC studies [11,14].
+    However,  the  one-chain-per-rank  strategy  described  above  becomes  inefficient  when
+VMC is executed on GPUs.  On GPU clusters, an MPI-parallel program typically assigns
+one entire GPU device to each MPI rank.  Within a single Markov chain, each proposed
+move requires only one amplitude evaluation for the proposed configuration in order to
+perform the accept–reject test.  If only one chain is assigned to each GPU, amplitudes on
+that GPU are evaluated for individual configurations one at a time as the chain evolves
+sequentially.  For the tensor network ans¨atze considered in this work, the computational
+work  for  the  contraction  associated  with  a  single-configuration  amplitude  evaluation  is
+typically too small to saturate a modern GPU [Fig.1(b)].  Consequently, a direct GPU
+port of a conventional TN-VMC implementation does not by itself ensure efficient GPU
+utilization.
+    A GPU-efficient VMC implementation must instead assign multiple Markov chains to
+each GPU [Fig.1(c)], as is standard in modern GPU-oriented VMC frameworks with other
+kinds of wavefunctions [43,44].  For a batch sizeB, a single GPU advancesBindependent
+chains concurrently.  Although the Markov updates within each individual chain remain
+sequential, the same update stage is performed across allBchains in parallel.  Specifically,
+the  proposed  configurations  from  theBchains  are  assembled  into  a  batch,  and  their
+amplitudes are evaluated in a single vectorized operation.  This fine-grained parallelization
+increases the computational workload of each GPU operation and thereby enables more
+effective use of the device’s parallel throughput.
+    More generally, whenever amplitudes must be evaluated for a large number of config-
+urations, a GPU can process them efficiently in batches of sizeB.  In the ideal limit of
+perfect parallel scaling, this batched evaluation can provide a speedup of up to a factor
+ofBrelative to sequential evaluation, although the actual speedup is generally limited by
+hardware utilization, memory traffic, and vectorization overhead.
+
+2.3Vectorized amplitude evaluation in GPU-adapted VMC
+The discussion above shows that GPU-adapted VMC requires a wavefunction ansatz that
+supports  batched  amplitude  evaluation.   For  an  individual  physical  configuration,  the
+wavefunction defines the scalar map
+
+                                             Ψθ :σ7−→Ψ    θ(σ).                                                   (5)
+
+Vectorized wavefunction evaluation replaces this scalar map with the batched map
+                            ⃗Ψθ: (σ        1,...,σB)7−→(Ψ   θ(σ  1),...,Ψ θ(σ B)),                              (6)
+
+whereBis the leading batch dimension that denotes the number of configurations pro-
+cessed in a single vectorized amplitude-evaluation call.
+
+                                                       5
+ SciPost Physics                                                                      Submission
+
+
+    For efficient GPU execution, the batched map in Eq. (6) should be implemented as a
+dense batched tensor computation.  This requires allBamplitude evaluations to execute
+thesame computational graph, such that after vectorization, each intermediate tensor
+only needs to carry an extra leading batch dimensionBand each operation is replaced by
+its batched counterpart.  If the computational graph or intermediate tensor shapes depend
+on the physical configuration, the batch must instead be partitioned into smaller groups
+or processed sequentially, thereby reducing GPU efficiency.
+
+3  Vectorized tensor-network amplitude evaluation
+
+3.1Tensor networks and amplitudes
+A tensor network state represents a many-body wavefunction by assigning local tensors
+to the sites of a lattice and contracting them along shared auxiliary bonds [45,46].  In a
+product basis|σ⟩=|σ                     1,...,σN⟩, the state is written as
+
+                                              |Ψ⟩=  X      Ψ(σ)|σ⟩.                                                  (7)
+                                                        σ
+We will assume that each site is associated with a single tensor (although the analysis can
+be generalized to cases where there are extra tensors not associated with sites).  Conse-
+quently, every tensor has a physical index associated with its site, and the tensor network
+defining the amplitude can be viewed as a ‘single-layer’.
+    For a given physical configurationσ= (σ                                1,...,σN), the amplitude Ψ(σ) =⟨σ|Ψ⟩is
+obtained by fixing the physical index of each site tensor to the corresponding local valueσ    i
+and contracting the resulting tensor network.  Schematically, the amplitude can be written
+as
+                                                             NY
+                                        Ψ(σ) =    X              T [i],σ  i{α e:e∋i}  ,                                           (8)
+                                                   {α e}e∈E i=1
+whereEdenotes  the  set  of  auxiliary  bonds  in  the  tensor  network  andα          e  denotes  the
+auxiliary index associated with bonde.  The notation{α            e :e∋i}denotes the collection
+of  auxiliary  indices  attached  to  sitei,  while  the  sum  over{α      e}e∈E     contracts  all  shared
+auxiliary indices.  The auxiliary bond dimensions control both the number of variational
+parameters and the expressive power of the ansatz.  Matrix product states (MPS) in one
+dimension  and  projected  entangled-pair  states  (PEPS)  in  two  dimensions  are  standard
+examples of tensor network states [46–50].
+    The discussion below applies to any definition of the tensor-network amplitude map
+
+                                                   σ7−→Ψ(σ)                                                         (9)
+
+that includes tensor network contraction.  Besides conventional tensor network states, this
+also includes more general tensor network functions (TNFs) [17] that allow for non-linear
+operations in the definition of the map.  We consider a representative fermionic TNF, the
+NN-fTNS [15], later in this work.
+
+3.2Requirements for vectorized tensor-network amplitude evaluation
+
+Consider a batch of physical configurations{σ           (1),...,σ(B) }.  For each configurationσ        (a)   ,
+the tensor network amplitude is evaluated by first selecting, at every sitei, the tensor slice
+
+
+
+                                                          6
+  SciPost Physics                                                                      Submission
+
+
+corresponding to the local physical indexσ           (a)i    and then contracting the resulting single-
+layer amplitude network to a scalar.  The batched amplitude-evaluation problem therefore
+consists of theBmaps
+
+                                    σ(a) 7−→Ψ        σ(a)   ,   a= 1,...,B.                                  (10)
+
+    TheseBamplitude evaluations can be combined into a single vectorized tensor-network
+computation only if they admit a common computational graph.  Here, a common compu-
+tational graph for tensor network amplitudes means that, after fixing the physical indices,
+all single-layer tensor networks in the batch are contracted using the same sequence of ten-
+sor operations, with compatible intermediate tensor shapes and an identical contraction
+path [24].
+    The  common-graph  condition  is  automatically  satisfied  for  conventional  tensor  net-
+works composed of dense tensors, as we briefly explain in Sec.3.3.  For symmetric tensor
+networks (such as fermionic tensor networks) represented by block-sparse tensors,  how-
+ever, the situation is more subtle, and in general, symmetric TNS do not share a common
+amplitude  computational  graph  for  different  input  configurations,  which  we  explain  in
+Sec.3.4.
+
+3.3Dense tensor-network amplitudes
+For tensor networks composed of dense tensors, vectorized amplitude evaluation follows
+directly from the dense tensor representation. Consider a local tensorT             [i]   with one physical
+index of dimensiondandz          i auxiliary bond indices with dimensionsD                       1,...,Dzi,
+
+                                               T [i] ∈C D1×···×D    zi×d ,                                               (11)
+
+wherez     i is the number of auxiliary bonds incident to sitei.  For a single configurationσ,
+projecting the physical leg at siteiamounts to selecting the slice
+
+                                       A[i]  (σ i) =T    [i]:,...,:,σ   i∈C D1×···×D    zi.                                      (12)
+
+The amplitude Ψ(σ) is then obtained by contracting the single-layer network formed from
+the projected tensors{A                 [i]  (σ i)} Ni=1 .
+    For a batch of configurations{σ                                (1),...,σ(B) }, the corresponding projected site tensors
+can be collected into a batched tensor
+
+                                A[i]B  = stackBa=1 A[i]  (σ  (a)i   )∈C  B×D        1×···×D    zi.                              (13)
+
+Thus,  batching  introduces  only  a  leading  batch  dimension,  while  the  auxiliary  tensor
+shapes and the contraction pattern remain identical across all configurations.
+    The  original  single-configuration  contraction  can  therefore  be  lifted  directly  to  a
+batched  contraction.   Each  projected  site  tensor  carries  the  same  leading  batch  dimen-
+sion, which is preserved throughout all tensor contractions.  The final contraction yields
+the vector of amplitudes
+                                         ⃗Ψ =     Ψ(σ      (1)),...,Ψ(σ         (B)   ).                                        (14)
+
+Hence, amplitude evaluation for dense tensor networks is naturally vectorizable.
+
+
+
+
+
+
+
+                                                            7
+  SciPost Physics                                                                      Submission
+
+
+3.4Symmetric tensor network amplitudes
+3.4.1Symmetry-resolved block-sparse tensors and configuration dependence
+          in amplitude evaluation
+For states that transform as irreps (‘fixed charge’) under a global symmetry, it is standard
+to choose a symmetric tensor network ansatz where the individual tensors are charge con-
+serving.  This induces a block-sparse structure in the tensors following charge conservation,
+which leads to new considerations.
+    More specifically, we will restrict ourselves to abelian symmetry and adopt the notation
+of  Ref.  [31]  to  describe  block-sparse  tensors  with  such  symmetry.   Each  tensor  index  is
+decomposed into a charge-sector label and an intra-sector index.  We write such an index
+asiI,  where  the  uppercase  labelIdenotes  the  charge  sector  and  the  lowercase  labeli
+indexes the degeneracy space within that sector.  A rank-ktensor is therefore written as
+Ti1I1,...,ikIk.
+    For an abelian symmetry groupG, a tensor element is nonzero only when its charge
+labels satisfy a conservation rule.  Assign to each legℓan orientationϵ        ℓ∈{+1,−1}, with
+a leg and its dual carrying opposite orientations.  We then write
+                     Ti1I1,...,ikIk = 0       unlessϵ            1I1 +···+ϵ    kIk =Q inG,              (15)
+whereQis the total charge of the tensor and the addition denotes the group operation, with
+ϵℓIℓ denoting eitherI     ℓ or its group inverse according to the leg orientation.  Equivalently,
+the tensor decomposes into charge-sector blocks,
+                                      T=     M                       T (I  1,...,Ik),                                      (16)
+                                                     I1,...,Ik
+                                             ϵ1I1+···+ϵ    kIk=QinG
+where each blockT   (I  1,...,Ik) is a dense tensor over the corresponding intra-sector indices,
+                                             T (I  1,...,Ik)i1,...,ik ≡T  i1I1,...,ikIk.                                             (17)
+    This block-sparse structure can render symmetric tensor-network amplitude evaluation
+configuration dependent.  In tensor-network amplitude evaluation,  the physical index of
+each  site  tensor  is  fixed  according  to  the  corresponding  local  configurationσ           i.   Since  a
+symmetry-resolved  tensor  index  is  written  asiI,  fixing  the  physical  index  selects  both
+a  physical  charge  sectorI     m  and  an  intra-sector  indexi     m  on  the  physical  legm.   The
+projected tensor is therefore obtained in two steps:  one first retains only the charge-sector
+blocks satisfying
+              ϵ1I1 +···+ϵ    m−1  Im−1      +ϵ  mIm +ϵ  m+1 Im+1   +···+ϵ    kIk =Q inG,       (18)
+and then slices the corresponding dense blocks along them-th intra-sector axis ati      m.
+    The  crucial  point  is  that  different  local  physical  states  may  carry  different  physical
+chargesI     m.   ChangingI        m  changes  the  set  of  allowed  charge  tuples  on  the  remaining
+auxiliary legs through Eq. (18). Moreover, if the intra-sector dimensionD                            (ℓ)Iℓ  of an auxiliary
+legℓdepends on its charge labelI     ℓ, then the dense shape of an allowed projected block,
+                               D(1)I1 ×···×D    (m−1)Im−1  ×D    (m+1)Im+1 ×···×D    (k)Ik ,                             (19)
+also depends on the selected physical chargeI     m.  Consequently, two configurations with
+different  local  physical  states  can  produce  projected  tensors  containing  different  sets  of
+charge-sector blocks and different dense block shapes.  The resulting single-layer amplitude
+networks  therefore  need  not  share  compatible  tensor  shapes  or  a  common  contraction
+computational graph, as required in Sec.3.2.  This configuration dependence obstructs the
+direct vectorization of amplitude evaluation.
+
+                                                           8
+                                   SciPost Physics                                                                      Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                       Figure 2:Flat representation of a symmetry-resolved tensor.The exam-
+                                       ple shows a two-legZ          2-symmetric tensor with total chargeQ= 0 and a uniform
+                                       intra-sector dimensiond= 4 on each leg.Left:In the block-sparse representa-
+                                       tion, each tensor index is written as a pairiI, whereIlabels the charge sector
+                                       andilabels the corresponding intra-sector degree of freedom.  Charge conserva-
+                                       tion permits only the blocks with (I  1,I2) = (0,0) and (1,1), while the remaining
+                                       two  sector  combinations  are  forbidden  and  therefore  absent.Right:The  two
+                                       symmetry-allowed 4×4 blocks are stacked along a new leading axis to form a
+                                       single flat tensor eTof shape (2,4,4).  The leading indexα∈{0,1}enumerates
+                                       the allowed charge tuples, withI(0) = (0,0) andI(1) = (1,1) in this example.
+
+
+                                 3.4.2Flat symmetric tensor formalism
+                                 Flat  representation  of  uniform-shape  tensor  blocks  The  obstruction  identified
+                                 above  originates  from  the  charge  dependence  of  the  dense  block  shapes.   We  eliminate
+                                 this  dependence  by  first  imposing  a  uniform  intra-sector  dimension  on  each  tensor  leg.
+                                 Specifically, for legℓ, we require
+
+                                                                         D(ℓ)0   =D    (ℓ)1   =···=D         (ℓ)g−1 ≡d  ℓ.                                      (20)
+
+                                 Under this constraint, the dense shape of a symmetry-allowed block no longer depends on
+                                 its charge labels.  Every block of a rank-ktensor has the common shape
+
+                                                                                     d1×···×d  k.                                                    (21)
+
+                                 The symmetry-allowed blocks can therefore be stacked along an additional sector axis and
+                                 represented as a single dense tensor.  We refer to this dense representation of the original
+                                 block-sparse tensor as itsflat representation.
+                                      Whilst fixing a uniform initial sector dimension allows the initial configuration projec-
+                                 tion to be vectorized, for a general symmetry,G, subsequent contractions may generate
+                                 intermediate tensor sectors with sizes that still depend dynamically on the initial configu-
+                                 ration,σ.  This dependence can be eliminated by restricting ourselves to a cyclic symmetry
+                                 group of any orderg,
+ Symmetry-resolved sparse tensor                                Flat tensor eT           G=Z   g.                                                         (22)
+
+            I2 = 0       I2 = 1  The charge sectors on each legℓare then labeled byI(0) = (0,0)
+                                                                                 I(1) = (1,1)
+                                                            i1     α= 1         Iℓ∈{0,1,...,g−1},                                              (23)
+I1 = 0      T (0,0)         0                                            T (1,1)
+                                     stack allowed blocks    α= 0
+                                                                T (0,0)                 α
+                                                                                              9
+I1 = 1        0           T (1,1)                                             i2
+
+                                                                eT∈C      2×4×4
+                full legi      2I2
+  SciPost Physics                                                                      Submission
+
+
+and the charge-conservation rule is evaluated modulog.  For a rank-ktensor with total
+chargeQ∈Z        g, the allowed charge-sector tuples form the set
+                            n                         ϵ1I1 +···+ϵ    kIk≡Q (modg)               o
+                   QT  =      (I  1,...,Ik)∈Z  kg                                                     .               (24)
+
+The setQ  T  contains
+                                                     |QT|=g  k−1                                                          (25)
+charge-sector tuples, since any choice ofk−1 charge labels uniquely determines the re-
+maining label through the conservation rule modulog.  Crucially, if the complete set of
+sectors is present in the initial tensors,  then all intermediate contractions will similarly
+besector completewith shapeg        k−1 ×d    1×···×d  k, even as the specificQandQ         T  values
+depend on configuration.
+    It is worth noting that this restriction to finite cyclic symmetryZ         g  does not include
+the U(1) symmetry group commonly used in tensor network simulations (e.g.  to enforce
+particle-number  symmetry  in  fermionic  simulations).   However,  projection  of  a  tensor
+network state to a fixed U(1) charge can easily be enforced during sampling, by restricting
+the sampled configurations to a fixed charge sector [11,14].
+    To  retain  the  charge-sector  information  required  for  aligning  contractions  and  eval-
+uating fermionic signs,  we assign each charge-sector tuple inQ  T  a leading sector index
+α∈{0,...,g   k−1 −1}and define the corresponding charge table
+
+                                       I(α) =   I1(α),...,I   k(α) ∈QT.                                      (26)
+
+In  practice,  we  storeIas  a  two-dimensional  integer  array  of  shapeg      k−1 ×k,  enabling
+efficient vectorized sorting, indexing, and manipulation of the sector metadata.  The cor-
+responding symmetry-allowed blocks are then stacked into the flat tensor
+
+                                                eT∈C  gk−1 ×d    1×···×d    k,                                               (27)
+
+whose components are defined by
+
+                                   eTα;i     1,...,ik =T    I(α)i1,...,ik =T  i1I1(α),...,i  kIk(α) .                                 (28)
+
+The charge tableI(α) and the dense block stack share the leading indexα, preserving the
+correspondence between each block and its charge tuple.  The remaining indicesi    1,...,ik
+label the dense intra-sector degrees of freedom.  Figure2illustrates this packing procedure
+for a two-legZ          2-symmetric tensor.
+    The central advantage of the flat representation is that the charge table can be used
+to  reorder  the  sectors  and  corresponding  flat  blocks  alongα,  bringing  a  tensor  into  an
+equivalent representation in which projection, contraction, and other primitives can each
+be expressed as a single, fixed-shape operation.
+    Consider  projecting  the  physical  legmof  a  rank-kflat  tensor  onto  the  symmetry-
+resolved  physical  valuei  m  =p, I  m  =P.   First,  the  sectors  and  corresponding  dense
+blocks are sorted by the chargeI     m(α) carried by legm, producing a new orderα       ′, shown
+in Fig.3(a)-(b).  Sector completeness ensures that each of thegpossible charges occurs
+exactlyg      k−2      times,  so  the  sorted  sector  axisα  ′  can  be  reshaped  into  two  sub-indices
+consisting  of  a  new  leading  charge  axis  of  dimensiongfor  values  ofI           m  followed  by  a
+residual sector axis,β, of dimensiong              k−2     for values of (I  1,...,Im−1  ,Im+1 ,...,Ik):
+
+                                          eT sort∈C   (g×g   k−2    )×d      1×···×d    k .                                         (29)
+
+
+
+                                                           10
+  SciPost Physics                                                                      Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      Figure  3:  An  example  of  sorting,  reshaping,  and  projecting  the  sector  charge
+      table,I,  for  ak=  4  rank  tensor  ofZ                      2  symmetry  and  chargeQ=  1,  with
+      legmprojected  onto  chargeP=  1.   (a)  The  array  is  initially  indexed  byα
+      andℓ.   (b)  Sorting  by  the  entries  onmyields  a  new  indexα      ′.   (c)  This  can
+      be  reshaped  into  two  sub-indices:I        m,  which  indexes  the  charge  of  legm,  and
+      β,  which indexes the remaining charge tuples.  (d) Finally we project onto the
+      desired valueI    m =P= 1 and drop legm, yielding a new charge table indexed
+      byβandℓ   ′.  (e) The corresponding leading axis transformation and projection
+      of the flat blocks, eT, depicted graphically.
+
+
+This is shown for the corresponding sectors in Fig.3(b)-(c).  The projection ontoi      m  =
+p, Im  =Pis  then  a  single  indexing  operation  that  selects  both  the  symmetry  charge
+Im =Pon the new leading axis and the intra-sector indexi       m =pon legm:
+                        eT(m=pP)
+
+                                      β;i    1,...,im−1  ,im+1 ,...,ik = eT sortP,β;i    1,...,im−1  ,p,im+1 ,...,ik.                   (30)
+
+This is shown in Fig.3(c)-(d) and (e).  Hereβ= 0,...,g           k−2 −1 becomes the new sector
+index which labels the remaining allowed charge tuples after fixingI     m =P.  The remaining
+charge tuples automatically satisfy the charge conservation rule:
+
+             ϵ1I1 +···+ϵ    m−1  Im−1      +ϵ  m+1 Im+1   +···+ϵ    kIk≡Q−ϵ     mP  (modg)         (31)
+
+The resulting tensor has shapeg k−2 ×d    1×···×d  m−1  ×d  m+1 ×···×d  k, independent of
+the selected physical index value.
+     For a site tensor eT [i]  , write the local physical state asσ  i =pP.  We denote the resulting
+projected tensor by
+                          eA[i]  (σ i)≡ eT [i](phys=σ   i)∈C gk−2 ×d    1×···×d    m−1  ×d m+1 ×···×d    k.                      (32)
+
+Because eA[i]  (σ i) has the same shape for every local stateσ    i, the projected tensors for a
+batch of configurations can be stacked along a leading batch dimension:
+                    eA[i]
+                      B  = stackBa=1 eA[i]  σ(a)i       ∈C B×g   k−2 ×d    1×···×d    m−1  ×d m+1 ×···×d    k.               (33)
+
+This allows the initial configuration projection step in an amplitude computation to be
+vectorized.
+
+                                                             11
+  SciPost Physics                                                                      Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      Figure 4:  An example of sorting and reshaping the sector charge tableIof a flat
+      tensor eXwithZ             2  symmetry and chargeQ= 1 to prepare for contraction.  (a)
+      The array is initially indexed by sector indexαand leg indexℓ. I            L denotes the
+      charge columns of legs to be kept,I   C those to be contracted away.  (b) Sorting the
+      rows lexicographically by qC,I L,I C yields a new sector indexα   ′.  (c) This can
+      be reshaped into three sub-indices:q          c,  which indexes thecombinedcontracted
+      charge (row-sum ofℓ∈C);λ, which indexes the possible charge sectors on the
+      kept legs; andγ, which indexes the remaining charge sectors on the contracted
+      legs.  (d) The corresponding leading axis transformation on the flat blocks, eX,
+      depicted graphically.  (e) Once in such form, two arrays can be directly contracted
+      using Eq. (39), shown here graphically.
+
+
+Direct flat contraction.The flat representation also allows tensor contraction to be
+performed  as  a  single  dense  operation  after  suitably  sorting  and  reshaping  the  sector
+axesαof the two tensors.  Consider contracting two sector-complete flat tensors    eXand
+eYof  ranksk      X  andk   Y  with  finite  cyclic  symmetryZ         g  overnpaired  legs.   Write  their
+kept legs as the ordered tuplesLandR, and their contracted legs as the ordered tuples
+C= (c     1,...,cn) andC ′ = (c ′1,...,c′n), wherec  j  is contracted withc   ′j.  For a sector index
+αof the charge table and an ordered set of legsS= (s                1,...,sm), define its charge tuple
+byI S(α) = (I   s1(α),...,I   sm(α)) and its effective charge relative to the orientation of its
+first leg by                                         mX
+                                    qS(α) =ϵ    s1       ϵsjIsj(α)    (modg).                                   (34)
+                                                    j=1
+We suppress the dependence on the sector index below.  We useq   C to denote the effective
+charge of the contracted legs.  For everyj, the paired legsc       j andc  ′j carry the same charge
+label and opposite orientations, thusI  C  =I  C′  andq   C  =q  C′  and the charge tables of  ˜X
+and  ˜Ycan be sorted independently, with the elements remaining appropriately aligned for
+the contraction.
+    The charge table of eXis sorted lexicographically by
+                                                     qC,I L,I C,                                                     (35)
+
+
+while that of eYis sorted by        qC,I R,I C′,                                                     (36)
+
+
+                                                           12
+  SciPost Physics                                                                      Submission
+
+
+with the earlier entries serving as the more significant sort keys.  An example is shown in
+Fig.4(a)-(b).  After sorting,  the first key groups blocks which have the same combined
+charges of the contracted legs.  The second key further groups blocks by their eventual
+output sector.  The third key finally aligns charge-tuples of the contracted legs such that
+they are summed pairwise in inner-product fashion.
+    Sector completeness then allows the sorted sector axes to be reshaped as
+
+                                 αX7−→(q   C,λ,γ),   α  Y7−→(q   C,ρ,γ).                               (37)
+
+This  is  shown  in  Fig.4(b)-(c)  and  (d).    Hereq        C ∈Z g,λ=  0,...,g  |L|−1  −1,ρ=
+0,...,g |R|−1  −1,  andγ=  0,...,g       n−1 −1.   Likewise,  leti    S  =  (i ℓ)ℓ∈S     denote  the  or-
+dered intra-sector multi-index onS.  For the paired contracted legs, we use the common
+multi-indexi        C on both tensors.  Writing (d  (X)1 ,...,d(X)kX ) and (d  (Y)1 ,...,d(Y)kY  ) for the dense
+block dimensions of the two tensors, the reshaped blocks can be written as
+
+                                eXqC,λ,γ;i   L,iC∈C g×g |L|−1  ×g n−1 ×d    (X)1 ×···×d            (X)kX,
+                                                                                                                  (38)
+                                eYqC,ρ,γ;i   C,iR∈C g×g |R|−1  ×g n−1 ×d    (Y)1 ×···×d            (Y)kY .
+
+    The complete block-sparse contraction can then be evaluated as the single dense con-
+traction         eZqC,λ,ρ                                eXqC,λ,γ
+                                    ;i   L,iR =X             ;i   L,iCeYqC,ρ,γ;i   C,iR.                             (39)
+                                                   γ,iC
+This is depicted graphically in Fig.4(e).  The labelsq       C,λ,  andρare flattened to form
+the  sector  axisα   Z  of  the  result,  which  containsg   |L|+|R|−1             uniform-shape  blocks.   Thus
+a  flat  tensor  is  directly  produced.   All  array  shapes  and  the  sequence  of  operations  are
+configuration-independent,  so the whole process is readily vectorized.  This operation is
+analogous to the reduced-form contraction described in Ref. [31].  We provide a concrete
+example of the direct flat contraction in AppendixA.
+    We  also  note  here  that  leg  fusion,  needed  to  put  tensors  into  matrix  form  for  SVD
+and other linear-algebra decompositions, uses a very similar sort-and-reshape procedure,
+except that the analogous subsector labelγiscombinedwith the intra-sector index of the
+fused leg rather than summed over.
+
+Fermionic tensor networks and branchless sign tracking.Fermionic tensor net-
+works are constructed from fermionic tensors that obey aZ  2-graded algebra which encodes
+fermion parity and anticommutation relations; we refer the reader to Ref. [29,30] for more
+technical  details.   Consequently,  fermionic  tensors  are  necessarily  symmetric  under  the
+Z2 fermion-parity symmetry.  Computations with fermionic tensor networks can therefore
+naturally use the symmetry tensor network operations defined above.
+    However,  fermionic  tensors  also  include  an  ordering  of  the  tensor  network  legs  [29],
+and additional parity-dependent signs appear when the tensor legs are reordered.  In the
+flat representation, the charge tuple associated with blockαis stored in the charge table
+I(α).  The sign produced by exchanging legsrandsis therefore
+
+                                         ηrs(α) = (−1)    p(I  r(α))p(I     s(α)) ,                                         (40)
+
+wherep(I)∈{0,1}is the fermion parity of chargeI.  A general permutation composed
+of such swaps produces a vector of signs,ϕ(α),  computed solely from the charge table.
+This can be retained separately to accumulate signs from other operations, and multiplied
+into the data blocks when necessary, for example prior to contraction, via a broadcasted
+multiplyT    ′α,i1,...,ik =ϕ(α)T      α,i1,...,ik.
+
+                                                          13
+ SciPost Physics                                                                      Submission
+
+
+    Signs associated with general permutations, fusions, decompositions, and contractions
+are all obtained from this elementary swap operation.  Although their values may depend
+on the current charge sectors, they are computed through fixed-shape algebraic operations
+on the charge metadata and applied element-wise to the flat blocks, without inspecting
+their  numerical  entries  or  introducing  configuration-dependent  control  flow.   Together
+with  the  uniform  flat  layout  and  cyclic  symmetry,  this  branchless  sign  tracking  yields
+a static computational graph suitable for vectorized fermionic tensor-network amplitude
+evaluation.
+
+4  Numerical results for fermionic TN-VMC
+
+The   flat   symmetric   tensor   formalism   developed   above   provides   the   configuration-
+independent  amplitude-evaluation  primitive  required  to  realize  the  GPU-adapted  sym-
+metric TN-VMC workflow illustrated in Fig.1(c).  In this section, we use fermionic TN
+as the example of a symmetric TN, and examine how this primitive performs in practical
+VMC calculations for the two-dimensional Fermi–Hubbard model.
+    We  first  consider  two  representative  variational  functions  based  on  fermionic  tensor
+networks withZ         2  symmetry:  TNF-fPEPS, whose amplitudes are defined by a fixed ap-
+proximate contraction procedure, and standard fPEPS, for which efficient VMC requires
+boundary-MPS environment reuse.  These two cases test, respectively, direct vectorization
+of a fixed amplitude graph and vectorization of a finite set of geometry-dependent graphs.
+We then examine multi-GPU scaling and production-scale wall times, test the portabil-
+ity  of  the  vectorized  fTN  amplitude  construction  across  independent  tensor  backends,
+and demonstrate its application to a deep NN-fPEPS. In our calculations, the variational
+parameters and the wavefunction amplitudes are restricted to be real-valued,  such that
+Ψθ(σ)∈Rfor all physical configurationsσ.  The variational parameters are represented
+in single precision.
+    All CPU runs use Intel Xeon Platinum 8352Y (Ice Lake) processors, and all GPU runs
+use NVIDIA A100 GPUs with 80 GB of memory.
+
+4.1Single GPU wall-time reduction
+We first analyze the single GPU (single MPI rank) performance gain obtained from vec-
+torized fTN amplitude evaluation.  The GPU uses a batched Markov chain withBcon-
+figurations.  To reflect a baseline that uses a standard implementation of tensor networks,
+we compare against a single CPU core executing a single Markov chain.
+
+4.1.1Tensor network functions
+We begin with TNF-fPEPS, which provides the most direct realization of the vectorized
+fTN amplitude construction.  In a TNF, the amplitude is defined by a fixed prescribed
+tensor-network contraction procedure, including the truncations used during the contrac-
+tion.  The resulting function therefore need not coincide with the exact contraction of an
+underlying tensor-network state,  but it must define a unique amplitude for every input
+configuration.
+    We  choose  as  the  underlying  state  an  open-boundary  fPEPS  with  bond  dimension
+D.  For a physical configurationσ,  the single-layer amplitude network is approximately
+contracted using the boundary-MPS method [49,51] with bond dimensionχ.  We fix the
+row-absorption direction and contraction ordering for all configurations, so that the con-
+traction procedure defines a single configuration-independent computation which gives the
+
+
+                                                     14
+ SciPost Physics                                                                      Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      (a) TNF-fPEPS on an 8×8 lattice.                        (b) Standard fPEPS on a 16×8 lattice.
+
+     Figure 5:Single-rank VMC step time as a function of the sample batch
+     sizeB.  (a)  TNF-fPEPS  with  bond  dimensionD=  12  and  boundary-MPS
+     bond dimensionχ= 12.  (b) Standard fPEPS with bond dimensionD= 8 and
+     boundary-MPS bond dimensionχ= 32, using boundary-MPS environment reuse.
+     CPU timings use one MPI rank with a single CPU core and sequential amplitude
+     evaluation.  GPU timings use one MPI rank controlling one GPU and batched
+     amplitude evaluation with batch sizeB.
+
+
+amplitude functionσ→Ψ(σ).  The flat fermionic representation further ensures that the
+projected tensor layouts and fermionic sign operations within this graph are independent
+ofσ.   The  resulting  TNF-fPEPS  amplitudes  can  therefore  be  evaluated  directly  as  one
+dense vectorized batch.
+    Figure5ashows the wall time per VMC step for the 2D Fermi–Hubbard model on an
+8×8 lattice, using a TNF-fPEPS with bond dimensionD= 12 and boundary-MPS bond
+dimensionχ= 12.  Here the total number of VMC samples generated per step is equal
+to the sample batch sizeB.  The GPU workflow timings are measured for different batch
+sizesB, both with and without GPU just-in-time (JIT) compilation.  The CPU reference
+uses a single Markov chain to collect the same number ofBsamples.  AtB= 512, the
+compiled  GPU  workflow  is  approximately  307×faster  than  the  CPU  reference.   Even
+without  compilation,  the  batched  GPU  implementation  already  provides  more  than  an
+order-of-magnitude reduction in wall time.
+
+4.1.2Standard fPEPS with boundary-MPS reuse
+We  next  consider  standard  fPEPS  where  the  goal  is  to  contract  the  TN  amplitude  ac-
+curately  (approximating  the  exact  contraction  limit)  rather  than  the  amplitude  being
+intrinsically defined through approximate contraction as for TNF. This is the variational
+ansatz used in standard fPEPS-VMC calculations [14].  A standard fPEPS-VMC calcula-
+tion reuses intermediate boundary-MPS environments during sampling and local-energy
+evaluation, reducing the cost of a VMC step fromO(N                2) toO(N) in the number of lat-
+tice sitesN=L       xLy  [11,12].  A meaningful GPU benchmark must therefore employ this
+environment-reuse strategy.
+    The  flat  fermionic  representation  removes  the  configuration  dependence  of  the  local
+tensor layouts and fermionic sign operations,  as in the TNF-fPEPS case.  Environment
+reuse  introduces  an  additional  algorithmic  structure:  the  amplitudes  required  during  a
+VMC step are assembled from different cached boundary environments and therefore do
+not  all  share  one  global  contraction  graph.   They  instead  form  a  finite  set  of  geometry
+classes.  Within each class, the residual amplitude networks have common tensor shapes
+and a shared contraction computational graph and can be evaluated as a vectorized batch.
+
+
+                                                      15
+ SciPost Physics                                                                      Submission
+
+
+The construction is detailed in AppendixB.
+    Figure5breports the wall time per VMC step (the VMC sample size is the sample
+batch sizeB) for standard fPEPS on a 16×8 lattice with bond dimensionD= 8 and
+boundary-MPS bond dimensionχ= 32.  (χhere is large enough to remove the contraction
+error in amplitudes within the variational accuracy of the fPEPS [14]).  AtB= 800, the
+GPU  pipeline  is  approximately  138×faster  than  the  single  core  CPU  reference.   The
+speedup is smaller than in the TNF-fPEPS benchmark, primarily because we did not use
+JIT compilation, which for large lattices can require long compile times due to the number
+of different computational graphs (coming from the many boundary environments).
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+     Figure 6:Multi-GPU throughput scaling of batched TN-VMC.Standard
+     fPEPS-VMC on an 8×8 Fermi–Hubbard lattice with bond dimensionD= 8 and
+     boundary-MPS  bond  dimensionχ=  32.   Each  MPI  rank  controls  one  GPU
+     and carries a fixed batch ofB= 500 walkers.  The main panel shows the total
+     number of Monte Carlo samples processed per second of VMC-step wall time as a
+     function of the number of MPI ranks/GPUs; the dashed line indicates ideal linear
+     throughput scaling.  The inset shows the VMC-step wall time remains constant
+     as the number of GPUs is increased.
+
+
+4.2Multi-GPU throughput scaling
+We  next  examine  the  performance  of  the  batched  TN-VMC  GPU  implementation  as  a
+function of the number of GPUs.  Here we keep the per-GPU sample batch size fixed and
+increase the total number of samples by adding more GPUs.  This setting corresponds to
+the typical production use case where larger Monte Carlo sample sizes are used to reduce
+statistical  uncertainty.   For  the  calculations,  we  use  a  multi-GPU  parallelization  using
+MPI.
+    Figure6reports the throughput of a standard fPEPS-VMC calculation on an 8×8
+Fermi–Hubbard lattice with bond dimensionD= 8 and boundary-MPS bond dimension
+χ= 32.  Each MPI process controls one GPU and carries a fixed batch ofB= 500 walkers.
+
+
+                                                     16
+ SciPost Physics                                                                      Submission
+
+
+The number of GPUs, which is equivalent to the total number of MPI ranks, is varied from
+1 to 20.  The throughput is measured as the number of Monte Carlo samples processed
+per second of VMC-step wall time.
+    The total throughput increases nearly linearly with the number of GPUs.  The inset
+shows the corresponding wall time per VMC step asN    GPU is increased at fixed per-GPU
+batch  size;  this  time  remains  nearly  constant  over  the  measured  range.   These  results
+indicate  that  the  collective-communication  overhead  is  small  compared  with  the  local
+batched  tensor  contractions  in  this  regime.   Thus,  for  the  system  sizes  and  batch  sizes
+considered here, larger VMC sample sizes can be efficiently handled by adding more GPUs,
+without substantially increasing the wall time per VMC step.  We note that this near-ideal
+scaling relies on each GPU carrying a batch size large enough to saturate the device; for
+afixedtotal sample budget, distributing the samples over more GPUs eventually shrinks
+the per-GPU batch size into the underutilization regime characterized in Sec.4.1, so the
+useful number of GPUs is bounded by the per-GPU batch size required for efficient device
+utilization.
+
+4.3End-to-end speedup in production-scale VMC runs
+In the following, we demonstrate the end-to-end VMC wall-time reduction using multiple
+GPUs in representative large-scale calculations.  We consider VMC runs using standard
+fPEPS on a 16×8 Hubbard lattice and TNF-fPEPS on an 8×8 Hubbard lattice, each with
+20,000  Monte  Carlo  samples  per  VMC  step.   We  use  two  hardware  configurations  that
+reflect  a  possible  real-life  computational  cluster  setup:  20  GPUs  versus  800  CPU  cores
+(consistent  with  a  40:1  CPU  core  to  GPU  ratio  hardware  build).   The  CPU  allocation
+used 800 MPI processes, i.e.  1 CPU core per process.  The GPU allocation used 20 MPI
+processes, i.e.  1 GPU per process.
+    Table1reports the resulting wall time per VMC step.  For standard fPEPS, the GPU
+run  completes  one  VMC  step  in  0.33  h,  compared  with  0.94  h  on  the  CPU  allocation.
+This is a 3×reduction, or equivalently, a 120×speedup over the single CPU core.  For
+TNF-fPEPS, the GPU run completes one VMC step in 0.16 h, compared with 1.21 h on
+the CPU allocation, corresponding to an approximately 8×speedup, or∼300×the single
+CPU core performance.  These results show that the multi-GPU throughput on a typical
+cluster translates into a considerable speedup in production-scale TN-VMC calculations.
+
+    Ansatz / system                                       CPU (800 cores)    GPU (20)    Speedup
+    Standard fPEPS, 16×8,D= 8,χ= 32            0.94 h               0.33 h  ∼3×
+    TNF-fPEPS, 8×8,D= 12,χ= 12                   1.21 h               0.16 h  ∼8×
+
+     Table 1:Wall time per VMC step in production-scale runs.Each VMC
+     step uses 20,000 Monte Carlo samples.  The CPU allocation uses 800 MPI ranks
+     with 1 CPU core per rank, for 800 CPU cores in total.  The GPU allocation uses
+     20 GPUs.
+
+
+4.4Backend portability of vectorized fTN amplitudes
+The vectorized tensor network amplitude formalism developed in Sec.3is not tied to a
+specific tensor library or computational backend.
+    We  demonstrate  this  backend  portability  using  two  independent  VMC  implementa-
+tions:vmc    torch[35], based on PyTorch [36], andQuantax[37], based on JAX [38].  We
+measured the wall-clock time for batched amplitude evaluation of a 16×4 TNF-fPEPS
+
+                                                      17
+ SciPost Physics                                                                      Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+     Figure 7:Backend independence of vectorized tensor network amplitude
+     evaluation.Amortized  amplitude-evaluation  wall  time  per  configuration  for
+     a  16×4  TNF-fPEPS  with  bond  dimensionD=  4  and  boundary  MPS  bond
+     dimensionχ=∞(exact contraction).  The two curves correspond to independent
+     implementations usingvmc           torchandQuantax.  The calculation is performed on
+     a single GPU.
+
+
+with bond dimensionD= 4, using exact contraction, over a range of batch sizesBon a
+single GPU, as shown in Fig.7.
+    The PyTorch and JAX implementations exhibit comparable wall-clock times and sim-
+ilar  dependence  on  the  batch  size.   In  both  cases,  the  amortized  cost  per  configuration
+decreases approximately as 1/Bat small and intermediate batch sizes and eventually sat-
+urates once the available GPU parallelism is fully utilized.  The close agreement between
+the two independent implementations indicates that the observed batching behavior is an
+intrinsic property of the vectorized fTN amplitude construction rather than a backend-
+specific feature.
+
+4.5Application:  NN-fTNS with deep neural networks
+We  finally  apply  the  vectorized  fTN  amplitude  algorithm  to  a  VMC  optimization  of  a
+NN-fTNS  [15].   An  NN-fTNS  augments  an  fTNS  with  a  neural  network  that  maps  the
+physical  configurationσto  configuration-dependent  tensor  parameters.   Its  amplitude
+is  then  obtained  by  contracting  the  resulting  amplitude  tensor  network.   This  hybrid
+construction  combines  the  structured  fermionic  many-body  representation  of  an  fTNS
+with the additional expressivity of a neural network.
+    Previous NN-fTNS calculations relied on conventional CPU-based TN-VMC workflows
+and were limited to relatively shallow neural networks because of the cost of sequential
+amplitude evaluation [15].  In the present workflow,  both the neural-network evaluation
+and  the  subsequent  flat  fermionic  tensor-network  contraction  are  performed  in  batches
+on GPUs.  This fully vectorized GPU implementation makes the efficient optimization of
+NN-fTNS with substantially deeper neural networks computationally practical.
+    As an illustrative example, Fig.8shows the optimization of a neuralized fPEPS (NN-
+fPEPS)  incorporating  a  deep  convolutional  neural  network  with  16  hidden  layers.   We
+consider the two-dimensional Fermi–Hubbard model atU/t= 8 and hole dopingδ= 1/8
+on  a  16×4  square  lattice  with  open  boundary  conditions.   Despite  its  small  tensor-
+
+                                                      18
+ SciPost Physics                                                                      Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+     Figure 8:Ground-state VMC optimization of a deep NN-fPEPS for a
+     16×4Hubbard model.The Hamiltonian is defined on a square lattice with
+     open boundary conditions with the parametersU/t= 8 and hole dopingδ= 1/8.
+     The  relative  energy  error  is  calculated  with  respect  to  the  extrapolated  exact
+     DMRG  ground  state  energy  [14].   The  NN-fPEPS  has  bond  dimensionD=  4
+     and is coupled to a deep neural network with 16 hidden layers.  We see that after
+     ∼14000 optimization steps, the NN-fPEPS energy surpasses the accuracy of the
+     prior reported fPEPS [14] energy that uses a substantially larger bond dimension
+     (D= 20).  The energy is also competitive with the recent neural quantum state
+     result  based  on  a  Transformer  NN-backflow  architecture  [32].   The  NN-fPEPS
+     optimization is performed usingvmc              torchon 8 GPUs with a total Monte Carlo
+     sample size of 2048 per step.  We reduce the optimization learning rate (LR) at
+     step 9600 for faster convergence.
+
+
+network  bond  dimensionD=  4,  the  deep  NN-fPEPS  achieves  a  ground-state  energy
+comparable  to  those  obtained  with  a  conventional  fPEPS  of  substantially  larger  bond
+dimensionD= 20 [14], as well as state-of-the-art fermionic neural quantum states [32].
+We  present  this  result  as  a  representative  demonstration  of  the  capabilities  enabled  by
+the GPU-accelerated workflow; a systematic investigation of deep NN-fTNS is deferred to
+future work.
+
+5  Software implementation
+
+The  methods  developed  in  this  work  were  implemented  in  a  software  stack  combining
+quimb[33],symmray[29,34], and a VMC backend (eithervmc                         torch[35], used in most of
+the calculations, orQuantax[37], used also in Sec.4.4). This structure separates the tensor-
+network representation (quimb), fermionic tensor algebra (symmray), and VMC workflow
+(vmc  torchandQuantax).   Note  that  while  the  batched  support  for  symmetric  tensors
+insymmrayis limited to finite cyclic symmetry groups,symmrayitself can handle general
+abelian  symmetries,  such  as  U(1)  symmetry,  with  charge  dependent  sector  dimensions.
+This  functionality  is  also  compatible  with  the  CPU  version  ofvmc                torch,  allowing  for
+
+
+                                                       19
+ SciPost Physics                                                                      Submission
+
+
+(non-batched) CPU-based VMC calculations with general abelian symmetric tensors.
+
+6  Summary and outlook
+
+We have developed a vectorized formulation of symmetric tensor network operations.  By
+combining  a  flat  symmetric  tensor  formalism  with  a  uniform-shape  tensor  layout,  with
+branchless fermionic sign tracking, we achieved vectorized amplitude evaluation for fTNs
+with finite cyclic symmetries, such asZ  g.  Based on this vectorized formulation, we im-
+plemented  a  GPU-adapted  TN-VMC  formulation,  which  we  benchmarked  on  the  two-
+dimensional  Fermi–Hubbard  model  using  both  TNF-fPEPS  and  standard  fPEPS.  The
+implementation exhibited near-linear multi-GPU throughput scaling, and achieved up to
+300×end-to-end  wall-time  speedup  over  a  single  CPU  core  for  both  TNF-fPEPS  and
+standard fPEPS.
+    This  level  of  GPU  acceleration  will  enable  substantially  larger  TNS  and  NN-fTNS
+ans¨atze to be used.  As an example, we trained an NN-fPEPS with a deep neural network
+and obtained an energy accuracy competitive with a much larger bond dimension fPEPS
+and a state-of-the-art fermionic NQS.
+    Beyond VMC for quantum many-body ground states, vectorized tensor-network com-
+putation  may  also  be  useful  in  applications  where  many  tensor  networks  of  the  same
+structure  must  be  contracted  repeatedly.   One  example  is  tensor  network  Monte  Carlo,
+where vectorized tensor-network computation combined with GPU may accelerate paral-
+lel configuration sampling for statistical-physics models such as spin glasses [28,52] and
+continuous-space systems [53].
+
+Acknowledgments
+
+S.D.  acknowledges  useful  discussions  with  Jielun  Chen  during  the  preparation  of  this
+manuscript.  This work was supported by the US Department of Energy, Office of Science,
+via grant no.  DE-SC0019374.  We used the computing resources of the National Energy
+Research Scientific Computing Center (NERSC), a Department of Energy User Facility,
+using NERSC award ERCAP-38682.
+
+A Example:  contraction  of  two  rank-five  tensors  withZ                2
+       symmetry in flat representation
+
+Consider two rank-five block-sparse tensors ofZ    2 symmetry andZ        2 chargeQ= 0, written
+in the flat representation,      eXabcuv,   eYuvdef,                                                (41)
+
+
+The two shared indices (u,v) are contracted to obtain a rank-sixZ                     2 tensor eZabc,def  with
+Z2  chargeQ= 0.  The goal is to perform the block-sparse tensor contraction as a dense
+tensor contraction in the flat representation, and directly obtain the output tensor eZin
+its flat representation.
+    Both eXand  eYcontain 2   5−1     = 16 symmetry-allowed dense tensor blocks of equal shape.
+In the flat representation, we stack them into a dense tensor with leading axisαas defined
+in Eq. (26) of dimension 16.  The charge tuplesI= (I                       1,...,I5) as defined in Eq. (24) and
+the corresponding sector indexαin the flat representation are listed in Table2.
+
+
+                                                      20
+  SciPost Physics                                                                      Submission
+
+
+
+     α    I1    I2    I3    I4    I5      α    I1    I2    I3    I4    I5
+     0          0          0          0          0          0              8          1          0          0          0          1
+     1          0          0          0          1          1              9          1          0          0          1          0
+     2          0          0          1          0          1             10          1          0          1          0          0
+     3          0          0          1          1          0             11          1          0          1          1          1
+     4          0          1          0          0          1             12          1          1          0          0          0
+     5          0          1          0          1          0             13          1          1          0          1          1
+     6          0          1          1          0          0             14          1          1          1          0          1
+     7          0          1          1          1          1             15          1          1          1          1          0
+
+      Table 2:  Charge tuples of the 16 symmetry-allowed blocks of eXand  eY.  For  eX,
+      (I  1,...,I5) = (I a,Ib,Ic,Iu,Iv); for eY, (I     1,...,I5) = (I u,Iv,Id,Ie,If).
+
+
+Rearranging tensor blocks by sortingDuring contraction of block-sparse tensors,
+only the dense tensor blocks of eXand  eYwith matching charge tuples on the contracted
+legs (u,v) are contracted to produce the output tensor blocks.  In order to perform the
+block-sparse  contraction  in  terms  of  dense  tensor  contraction,  we  align  the  blocks  with
+matching charge tuples on the contracted legs, and rearrange the blocks in groups by the
+charge tuple of the outer (uncontracted) legs.
+     We first calculate the effective chargeq     C  (as defined in Eq. (34)) on the contracted
+legs for each block from their charge tuple,
+
+                                   qC≡I  u +I  v    (mod 2),   q  C∈{0,1}.                               (42)
+
+     We group the blocks by theirq    C and further factorize their charge tuples into outer-leg
+and contracted-leg charge tuples,
+
+                               QX|qC =L  qC×CqC,  Q Y|qC =R  qC×CqC.                           (43)
+
+as shown in Table3.
+
+                  qC          LqC  (R  qC)           C  qC
+
+                   0        {000, 011, 101, 110}        {00, 11}
+                   1        {001, 010, 100, 111}        {01, 10}
+
+      Table  3:  Decomposition  of  the  charge  tuples  into  outer-leg  and  contracted-leg
+      charge tuples for differentq C  of the contracted legs.
+
+     We then arrange the blocks in lexicographic ordering according to the charge tuples
+                                            qC,I L,I C,    qC,I R,I C,                                        (44)
+
+
+whereI     L∈L,I  R∈RandI     C∈Care charge tuples on the left, right outer legs and the
+contracted legs.  For example as shown in Table.4, for    eX, after the rearrangement, the
+blocks with the sameq    C are contiguous and in order (q C = 0 appears beforeq    C = 1), then
+within eachq C sector the blocks with the sameI    L are contiguous, and finally within each
+IL group the blocks are in order according toI  C.  The reordered sector axis has the nested
+structure
+                                                     2|{z}×4|{z}   ×2|{z}    .                                                (45)
+                                                    qC        IL        IC
+
+                                                               21
+  SciPost Physics                                                                      Submission
+
+
+For example, the first two consecutive blocks have (q C,I L) = (0,000) and differ only in
+IC = 00,11, while the next two have (q   C,I L) = (0,011) and again differ only inI    C = 00,11.
+Therefore the reordered linear sector index ˜αcan be reshaped directly into the multi-index
+(q C,λ,γ) of shape 2×4×2.
+
+             sorted index  ˜α        q  C                 IL                 IC                  originalα
+                       0                              0                   000                  00                         0
+                       1                              0                   000                  11                         1
+                       2                              0                   011                  00                         6
+                       3                              0                   011                  11                         7
+                       4                              0                   101                  00                        10
+                       5                              0                   101                  11                        11
+                       6                              0                   110                  00                        12
+                       7                              0                   110                  11                        13
+
+                       8                              1                   001                  01                         2
+                       9                              1                   001                  10                         3
+                      10                             1                   010                  01                         4
+                      11                             1                   010                  10                         5
+                      12                             1                   100                  01                         8
+                      13                             1                   100                  10                         9
+                      14                             1                   111                  01                        14
+                      15                             1                   111                  10                        15
+
+       Table 4: Charge sectors of eXarranged lexicographically according to the compos-
+       ite key (q C,I L,I C).  The new sector index  ˜αlabels positions along the reordered
+       sector axis, whileαdenotes the sector index in the original ordering of Table2.
+
+     For eXand  eY, we have
+
+                                     eα X←→(q   C,λ,γX),  eα  Y←→(q   C,ρ,γY ),                            (46)
+
+where
+                             qC∈{0,1},   λ,ρ∈{0,...,3},   γ          X,γY∈{0,1}.                    (47)
+Hereλenumerates the four tuples inL       qC,ρenumerates the four tuples inR   qC, andγ   X
+andγ   Y  enumerate the two tuples inC  qC.
+     For eX, the blocks withq     C = 0 are arranged as a 4×2 matrix:
+                                                                  eX(000,00)    eX(000,11)      
+                                              eX(q C=0) =      eX(011,00)    eX(011,11)      ,                                    (48)
+                                                                   eX(101,00)    eX(101,11)
+                                                                   eX(110,00)    eX(110,11)
+
+where each element corresponds to the dense tensor block eX(I L,IC), and the row and column
+index correspond toλandγ      X, respectively.  Likewise, the blocks of eYafter transposition,
+displayed with theγ   Y  as the row index andρas the column index, are arranged as a 2×4
+matrix:      eY (q C=0) T =                         eY(00,000)   eY(00,011)   eY(00,101)   eY(00,110)               !
+                                                      eY(11,000)   eY(11,011)   eY(11,101)   eY(11,110)                .                  (49)
+
+
+
+                                                                        22
+ SciPost Physics                                                                      Submission
+
+
+Block-sparse tensor contraction as dense tensor contraction in the flat repre-
+sentation.Since the tensor blocks are arranged according to (q       C,I L,I C) before reshap-
+ing the leading sector axis into (q C,λ,γ), a target output block eZqC,λ,ρ and its contribut-
+ing input blocks eXqC,λ,γ  and eYqC,ρ,γ  can be selected directly through slicing the indices
+(q C,λ,ρ), with the contraction performed by summing overγ, as illustrated in Fig.4(e).
+Suppressing the dense intra-sector indices, the contraction to obtain blocks in eZis written
+as:                                              1X    eX(q C)
+                                     eZ(q C)λρ    = C      λγ ,( eY (q C)ργ    )T .                                     (50)
+
+                                               γ=0
+whereC(·,·) denotes contraction over the intra-sector indices of the dense tensor block.
+Each  tuple  of  (q C,λ,ρ)  uniquely  maps  to  a  valid  tensor  block  of eZwith  charge  tuple
+(I L,I R).   For  example,  (q C  =  0,λ=  1,ρ=  2)  corresponds  to  the  output  tensor  block
+with  charge  tuple  (I L,I R)  =  (011,101)  and  is  obtained  by  the  following  dense  tensor
+contraction:
+                    eZ(011,101)       =C eX(011,00)    ,eY T(00,101)  eX(011,11)    ,eY T(11,101)
+                                                                +C                             .                 (51)
+
+    For each value ofq  C, the contraction is equivalent to multiplying the 4×2 dense tensor
+block matrix Eq. (48) by the 2×4 dense tensor block matrix Eq. (49), giving a total of
+4×4 = 16 output tensor blocks.  Combining the blocks for bothq     C  = 0 andq   C  = 1, we
+obtain 2×4×4 = 32 = 2            6−1     output blocks, as required for a sector-complete rank-sixZ                 2
+tensor with total charge zero.
+    Therefore, the contraction of two block-sparse tensors eXand  eYto obtain the output
+tensor eZcan be directly performed as the dense tensor contraction of  eXand  eYin the flat
+representation,  and the output tensor eZis also automatically in the flat representation
+suitable for subsequent block-sparse tensor operations represented as dense operations.
+
+B Vectorizing standard fPEPS-VMC with boundary-MPS
+       environment reuse
+
+We describe how boundary-MPS environment reuse in standard fPEPS-VMC can be com-
+bined with vectorized amplitude evaluation.  A projected PEPS amplitude is computed
+by absorbing the PEPS rows of bond dimensionDsequentially into a boundary MPS of
+bond dimensionχ.  After each row is absorbed, the boundary-MPS with increased bond
+dimensionDχis compressed back to a smaller MPS of bond dimensionχ, as illustrated
+in Fig.9a.
+    In a VMC calculation, many amplitudes correspond to configurations that differ from
+a reference configuration only through local changes.  These include trial configurations
+generated during Metropolis sampling and configurations connected to a sampled configu-
+ration by local Hamiltonian terms in the local-energy evaluation.  Because the (fermionic)
+PEPS is composed of local site tensors, changing the physical configuration modifies only
+the corresponding projected tensors in the amplitude network.  The remaining parts of the
+network can therefore be represented by cached boundary environments.
+    For example, when the modified sites lie in row 2, the rows above and below can be
+contracted into the cached environments⟨E      1|and|E          3,4 ⟩, respectively.  The amplitude is
+then obtained from contracting the residual tensor network
+
+                                              Ψ =⟨E      1| ˆO2|E 3,4 ⟩,                                                 (52)
+
+
+                                                        23
+ SciPost Physics                                                                      Submission
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        (a) Boundary-MPS contraction.                          (b) Boundary-MPS environment reuse.
+
+     Figure 9:Boundary-MPS contraction and environment reuse for stan-
+     dard fPEPS amplitude evaluation. (a)Boundary-MPS contraction proceeds
+     row by row.  Absorbing a PEPS row with virtual bond dimensionDinto a bound-
+     ary MPS with bond dimensionχtemporarily increases the boundary-MPS bond
+     dimension toχD; the boundary MPS is then compressed back to bond dimension
+     χ. (b)For amplitudes that differ from a reference configuration only within a
+     local region, the boundary environments outside the active region can be reused.
+     In the example shown, the amplitude is written as Ψ =⟨E      1| ˆO2|E 3,4 ⟩, where⟨E                1|
+     and|E         3,4 ⟩are cached environments and   ˆO2 is the active row.  Configurations with
+     the same active-row geometry share the same residual contraction computational
+     graph and can therefore be evaluated in a single vectorized batch, with the envi-
+     ronments and active-row tensors supplied as batched data.
+
+
+where  ˆO2  denotes  the  active  row  (Fig.9b).   Combined  with  a  deterministic  sequential
+update scheme in the sampler, this environment-reuse strategy reduces the cost per VMC
+step  fromO(N                2)  toO(N)  for  standard  PEPS-VMC  [11,12],  whereN=L                   xLy  is  the
+number of lattice sites.
+    For vectorization over the physical configurationsσ, the relevant observation is that
+the residual contraction graph is determined by the position of the modified sites rather
+than by the configuration values on the modified sites.  Configurations whose changes are
+confined to the same active row therefore produce residual tensor networks with the same
+geometry.  Their amplitudes can be evaluated as a single batch by stacking the cached top
+and bottom environments and the active-row tensors along a leading batch dimension and
+applying the shared contraction computational graph.
+    Unlike in the TNF-fPEPS case, boundary-MPS reuse therefore does not produce one
+global common contraction computational graph for all amplitude evaluations.  Instead, it
+yields a finite collection of computational graphs indexed by the geometry of the residual
+tensor network.  With row-environment reuse, the graph is indexed by the modified row,
+resulting inO(L    x) possible geometries.  If intra-row left and right environments are also
+reused, the residual network can be localized around a few consecutive sites, resulting in
+O(L  xLy) =O(N) possible geometries.
+    Within each geometry class, however, all amplitude evaluations share the same com-
+putational  graph  and  can  be  vectorized  as  described  in  the  main  text.   The  standard
+fPEPS-VMC workflow with boundary-MPS reuse is therefore implemented by grouping
+amplitude evaluations according to their residual network geometry and evaluating each
+group as a vectorized tensor-network contraction.
+
+
+
+                                                      24
+ SciPost Physics                                                                      Submission
+
+References
+
+ [1]W.  L.  McMillan,Ground  state  of  liquidhe                        4,    Phys.  Rev.138,  A442  (1965),
+      doi:10.1103/PhysRev.138.A442.
+
+ [2]D.  Ceperley,  G.  V.  Chester  and  M.  H.  Kalos,Monte  carlo  simulation  of  a  many-
+      fermion study,  Phys. Rev. B16, 3081 (1977),  doi:10.1103/PhysRevB.16.3081.
+
+ [3]W. M. C. Foulkes, L. Mitas, R. J. Needs and G. Rajagopal,Quantum  monte  carlo
+      simulations of solids, Rev. Mod. Phys.73, 33 (2001), doi:10.1103/RevModPhys.73.33.
+
+ [4]I.  Piˇzorn  and  F.  Verstraete,Fermionic  implementation  of  projected  entangled  pair
+      states algorithm,  Physical Review B81(24) (2010),  doi:10.1103/physrevb.81.245110.
+
+ [5]C. V. Kraus, N. Schuch, F. Verstraete and J. I. Cirac,Fermionic projected entangled
+      pair states,  Physical Review A81(5) (2010),  doi:10.1103/physreva.81.052338.
+
+ [6]P. Corboz, R. Or´us, B. Bauer and G. Vidal,Simulation of strongly correlated fermions
+      in  two  spatial  dimensions  with  fermionic  projected  entangled-pair  states,   Physical
+      Review B81(16) (2010),  doi:10.1103/physrevb.81.165104.
+
+ [7]Z.-C. Gu,  F. Verstraete and X.-G. Wen,Grassmann  tensor  network  states  and  its
+      renormalization  for  strongly  correlated  fermionic  and  bosonic  states(2010), 1004.
+      2563.
+
+ [8]S.   Singh,   R.   N.   C.   Pfeifer   and   G.   Vidal,Tensor   network   decompositions
+      in   the   presence   of   a   global   symmetry,       Physical   Review   A82(5)   (2010),
+      doi:10.1103/physreva.82.050301.
+
+ [9]S.  Singh,  R.  N.  C.  Pfeifer  and  G.  Vidal,Tensor  network  states  and  algorithms
+      in  the  presence  of  a  global  u(1)  symmetry,    Physical  Review  B83(11)  (2011),
+      doi:10.1103/physrevb.83.115125.
+
+[10]B. Bauer, P. Corboz, R. Or´us and M. Troyer,Implementing  global  abelian  symme-
+      tries in projected entangled-pair state algorithms,  Physical Review B83(12) (2011),
+      doi:10.1103/physrevb.83.125106.
+
+[11]W.-Y.  Liu,  S.-J.  Dong,  Y.-J.  Han,  G.-C.  Guo  and  L.  He,Gradient  optimiza-
+      tion  of  finite  projected  entangled  pair  states,    Physical  Review  B95(19)  (2017),
+      doi:10.1103/physrevb.95.195154.
+
+[12]W.-Y.  Liu,  Y.-Z.  Huang,  S.-S.  Gong  and  Z.-C.  Gu,Accurate  simulation  for  finite
+      projected entangled pair states in two dimensions,  Phys. Rev. B103, 235155 (2021),
+      doi:10.1103/PhysRevB.103.235155.
+
+[13]C. Fan, B. Zhan, Y. Gu, T. Liu, Y. Wu, M. Qin, D. Lv and T. Xiang,Disentangling
+      tensor network states with deep neural network(2026),2603.14425.
+
+[14]W.-Y. Liu, H. Zhai, R. Peng, Z.-C. Gu and G. K.-L. Chan,Accurate  simulation  of
+      the  hubbard  model  with  finite  fermionic  projected  entangled  pair  states,  Phys. Rev.
+      Lett.134, 256502 (2025),  doi:10.1103/r4q9-4yvj.
+
+[15]S.-J.  Du,  A.  Chen  and  G.  K.-L.  Chan,Neuralized  fermionic  tensor  networks  for
+      quantum  many-body  systems,  Phys. Rev. B113,  085134 (2026),  doi:10.1103/x8vl-
+      qf14.
+
+                                                         25
+ SciPost Physics                                                                      Submission
+
+
+[16]J. Robledo Moreno, G. Carleo, A. Georges and J. Stokes,Fermionic wave functions
+      from neural-network constrained hidden states, Proceedings of the National Academy
+      of Sciences119(32) (2022),  doi:10.1073/pnas.2122059119.
+
+[17]W.-Y.  Liu,  S.-J.  Du,  R.  Peng,  J.  Gray  and  G.  K.-L.  Chan,Tensor  network  com-
+      putations  that  capture  strict  variationality,  volume  law  behavior,  and  the  efficient
+      representation  of  neural  network  states,   Physical  Review  Letters133(26)  (2024),
+      doi:10.1103/physrevlett.133.260404.
+
+[18]T. Beguˇsi´c, J. Gray and G. K.-L. Chan,Fast and converged classical simulations of
+      evidence for the utility of quantum computing before fault tolerance, Science Advances
+      10(3) (2024),  doi:10.1126/sciadv.adk4321.
+
+[19]F. Pan, H. Gu, L. Kuang, B. Liu and P. Zhang,Efficient quantum circuit simulation
+      by tensor network methods on modern gpus(2024),2310.03978.
+
+[20]F.   Pan   and   P.   Zhang,Simulation   of   quantum   circuits   using   the   big-
+      batch    tensor    network    method,         Phys.    Rev.    Lett.128,    030501    (2022),
+      doi:10.1103/PhysRevLett.128.030501.
+
+[21]F. Pan, K. Chen and P. Zhang,Solving the sampling problem of the sycamore quantum
+      circuits, Physical Review Letters129(9) (2022), doi:10.1103/physrevlett.129.090502.
+
+[22]C. Huanget al.,Efficient parallelization of tensor network contraction for simulating
+      quantum computation, Nature Computat. Sci.1, 578 (2021), doi:10.1038/s43588-021-
+      00119-7.
+
+[23]F. Pan, P. Zhou, S. Li and P. Zhang,Contracting arbitrary tensor networks:  General
+      approximate algorithm and applications in graphical models and quantum circuit sim-
+      ulations, Physical Review Letters125(6) (2020), doi:10.1103/physrevlett.125.060503.
+
+[24]J. Gray and S. Kourtis,Hyper-optimized  tensor  network  contraction,  Quantum5,
+      410 (2021),  doi:10.22331/q-2021-03-15-410.
+
+[25]J.  Gray  and  G.  K.-L.  Chan,Hyperoptimized  approximate  contraction  of  ten-
+      sor   networks   with   arbitrary   geometry,       Phys.   Rev.   X14,   011009   (2024),
+      doi:10.1103/PhysRevX.14.011009.
+
+[26]J.-G. Liu, L. Wang and P. Zhang,Tropical tensor network for ground states of spin
+      glasses,  Physical Review Letters126(9) (2021),  doi:10.1103/physrevlett.126.090506.
+
+[27]J.-G.  Liu,  X.  Gao,  M.  Cain,  M.  D.  Lukin  and  S.-T.  Wang,Computing  so-
+      lution  space  properties  of  combinatorial  optimization  problems  via  generic  tensor
+      networks,    SIAM  Journal  on  Scientific  Computing45(3),  A1239–A1270  (2023),
+      doi:10.1137/22m1501787.
+
+[28]T. Chen, J. Zhang, J. Liu, Y. Deng and P. Zhang,Batchtnmc:  Efficient sampling of
+      two-dimensional spin glasses using tensor network monte carlo(2025),2509.19006.
+
+[29]Y. Gao, H. Zhai, J. Gray, R. Peng, G. Park, W.-Y. Liu, E. F. Kjønstad and G. K.-L.
+      Chan,Fermionic  tensor  network  contraction  for  arbitrary  geometries,   Phys.  Rev.
+      Res.7, 023193 (2025),  doi:10.1103/PhysRevResearch.7.023193.
+
+[30]Q.  Mortier,  L.  Devos,  L.  Burgelman,  B.  Vanhecke,  N.  Bultinck,  F.  Verstraete,
+      J.  Haegeman  and  L.  Vanderstraeten,Fermionic  tensor  network  methods,   SciPost
+      Physics18(1) (2025),  doi:10.21468/scipostphys.18.1.012.
+
+                                                        26
+ SciPost Physics                                                                      Submission
+
+
+[31]Y.  Gao,  P.  Helms,  G.  K.-L.  Chan  and  E.  Solomonik,Automatic  transformation
+     of  irreducible  representations  for  efficient  contraction  of  tensors  with  cyclic  group
+     symmetry, SciPost Phys. Codebases p. 10 (2023), doi:10.21468/SciPostPhysCodeb.10.
+
+[32]Y. Gu, W. Li, H. Lin, B. Zhan, R. Li, Y. Huang, D. He, Y. Wu, T. Xiang, M. Qin,
+     L. Wang and D. Lv,Solving  the  hubbard  model  with  neural  quantum  states(2025),
+     2507.02644.
+
+[33]J. Gray, quimb:  A Python package for quantum information and many-body calcula-
+     tions,  J. Open Source Softw.3, 819 (2018).
+
+[34]https://github.com/jcmgray/symmray.
+
+[35]S.-J.  Du,vmc         torch:   Flexible  Variational  Monte  Carlo  for  Quantum  Many-Body
+     Systems with PyTorch(2026).
+
+[36]A. Paszke, S. Gross, F. Massa, A. Lerer, J. Bradbury, G. Chanan, T. Killeen, Z. Lin,
+     N. Gimelshein, L. Antiga, A. Desmaison, A. K¨opfet al.,Pytorch:  An imperative style,
+     high-performance deep learning library, CoRRabs/1912.01703(2019),1912.01703.
+
+[37]A. Chen and C. Roth,Quantax:  Flexible neural quantum states in jax(2024).
+
+[38]J. Bradbury, R. Frostig, P. Hawkins, M. J. Johnson, Y. Katariya, C. Leary, D. Maclau-
+     rin, G. Necula, A. Paszke, J. VanderPlas, S. Wanderman-Milne and Q. Zhang,JAX:
+     composable transformations of Python+NumPy programs(2018).
+
+[39]N.  Metropolis,  A.  W.  Rosenbluth,  M.  N.  Rosenbluth,  A.  H.  Teller  and  E.  Teller,
+     Equation of state calculations by fast computing machines,  The Journal of Chemical
+     Physics21(6),  1087  (1953),   doi:10.1063/1.1699114,  https://pubs.aip.org/aip/
+     jcp/article-pdf/21/6/1087/18802390/1087_1_online.pdf.
+
+[40]W. K. Hastings,Monte carlo sampling methods using markov chains and their appli-
+     cations,  Biometrika57(1), 97 (1970).
+
+[41]S. Sorella,Green function  monte carlo  with stochastic  reconfiguration,  Physical Re-
+     view Letters80(20), 4558–4561 (1998),  doi:10.1103/physrevlett.80.4558.
+
+[42]A.  Chen  and  M.  Heyl,Empowering  deep  neural  quantum  states  through  efficient
+     optimization,  Nat. Phys.20,  1476 (2024),  doi:10.1038/s41567-024-02566-1,  2302.
+     01941.
+
+[43]F. Vicentini, D. Hofmann, A. Szab´o, D. Wu, C. Roth, C. Giuliani, G. Pescia, J. Nys,
+     V. Vargas-Calder´on, N. Astrakhantsev and G. Carleo,NetKet 3:  Machine Learning
+     Toolbox  for  Many-Body  Quantum  Systems,   SciPost  Phys.  Codebases  p.  7  (2022),
+     doi:10.21468/SciPostPhysCodeb.7.
+
+[44]M.  Schmitt  and  M.  Reh,jvmc:   Versatile  and  performant  variational  monte  carlo
+     leveraging automated differentiation and gpu acceleration, SciPost Physics Codebases
+     (2022),  doi:10.21468/scipostphyscodeb.2.
+
+[45]S.-J. Ran, E. Tirrito, C. Peng, X. Chen, L. Tagliacozzo, G. Su and M. Lewenstein,
+     Tensor  Network  Contractions:   Methods  and  Applications  to  Quantum  Many-Body
+     Systems,  Springer International Publishing,  ISBN 9783030344894,  doi:10.1007/978-
+     3-030-34489-4(2020).
+
+
+
+                                                       27
+ SciPost Physics                                                                      Submission
+
+
+[46]R.  Or´us, A   practical   introduction   to   tensor   networks:    Matrix   product   states
+      and   projected   entangled   pair   states,     Annals  of  Physics349,   117–158  (2014),
+      doi:10.1016/j.aop.2014.06.013.
+
+[47]S. R. White,Density matrix formulation for quantum renormalization groups,  Phys.
+      Rev. Lett.69, 2863 (1992),  doi:10.1103/PhysRevLett.69.2863.
+
+[48]U. Schollw¨ock,The density-matrix renormalization group in the age of matrix product
+      states,  Annals of Physics326(1), 96–192 (2011),  doi:10.1016/j.aop.2010.09.012.
+
+[49]F.  Verstraete  and  J.  I.  Cirac,Renormalization  algorithms  for  quantum-many  body
+      systems in two and higher dimensions(2004),cond-mat/0407066.
+
+[50]J. I. Cirac, D. P´erez-Garc´ıa, N. Schuch and F. Verstraete,Matrix product states and
+      projected entangled pair states:  Concepts, symmetries, theorems,  Reviews of Modern
+      Physics93(4) (2021),  doi:10.1103/revmodphys.93.045003.
+
+[51]P.  Corboz,Variational  optimization  with  infinite  projected  entangled-pair  states,
+      Physical Review B94(3) (2016),  doi:10.1103/physrevb.94.035133.
+
+[52]T. Chen, J. Liu, Y. Deng and P. Zhang,Tensor network markov chain monte carlo:
+      Efficient sampling of three-dimensional spin glasses and beyond(2025),2509.23945.
+
+[53]G. Park, T. Beguˇsi´c, S.-J. Du, J. Gray and G. K.-L. Chan,Statistical mechanics in
+      continuous space with tensor network methods(2026),2604.25060.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                        28

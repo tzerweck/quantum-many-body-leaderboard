@@ -1,0 +1,733 @@
+Waveflow: boundary-conditioned normalizing flows applied to fermionic
+wavefunctions
+           Luca Thiede,1, 2, a) Chong Sun,1, a) and Alán Aspuru-Guzik1, 2, 3, 4, 5, 6, 7
+           1)Department of Computer Science, University of Toronto, Toronto, Ontario M5S 2E4, Canada
+           2)Vector Institute for Artificial Intelligence, Toronto, Ontario M5G 1M1, Canada
+           3)Department of Chemistry, University of Toronto, Toronto, Ontario M5S 3H6, Canada
+           4)Department of Chemical Engineering & Applied Chemistry, University of Toronto, Toronto, Ontario M5S 3E5, Canada
+           5)Department of Materials Science & Engineering, University of Toronto, Toronto, Ontario M5S 3E4, Canada
+           6)Acceleration Consortium, Toronto, Ontario M5S 3H6, Canada
+           7)Lebovic Fellow, Canadian Institute for Advanced Research (CIFAR), Toronto, Ontario M5G 1M1, Canada
+
+           (*Electronic mail: alan@aspuru.com)
+           (*Electronic mail: chongs0419@gmail.com)
+           (Dated: 12 November 2024)
+           An efficient and expressive wavefunction ansatz is key to scalable solutions for complex many-body electronic struc-
+           tures.  While Slater determinants are predominantly used for constructing antisymmetric electronic wavefunction an-
+           sätze,  this construction can result in limited expressiveness when the targeted wavefunction is highly complex.   In
+           this work, we introduce Waveflow, an innovative framework for learning many-body fermionic wavefunctions using
+           boundary-conditioned normalizing flows.  Instead of relying on Slater determinants, Waveflow imposes antisymmetry
+           by defining the fundamental domain of the wavefunction and applying necessary boundary conditions.  A key chal-
+           lenge in using normalizing flows for this purpose is addressing the topological mismatch between the prior and target
+           distributions. We propose using O-spline priors and I-spline bijections to handle this mismatch, which allows for flex-
+           ibility in the node number of the distribution while automatically maintaining its square-normalization property.  We
+           apply Waveflow to a one-dimensional many-electron system,  where we variationally minimize the system’s energy
+           using variational quantum Monte Carlo (VQMC). Our experiments demonstrate that Waveflow can effectively resolve
+           topological mismatches and faithfully learn the ground-state wavefunction.
+
+
+I.  INTRODUCTION                                                                 titative  description  of  the  entanglement  in  one-dimensional
+                                                                                 systems  and  can  be  systematically  simplified  by  iteratively
+   Scalable solutions to quantum chemistry are actively pur-                     truncating the less-entangled parts using methods such as the
+sued through numerical modeling1–3, quantum computing4,5,                        density matrix renormalization group (DMRG)13.  However,
+and   machine   learning6–8.       While   the   electronic   struc-             these traditional quantum chemistry methods face significant
+tures  in  chemical  systems  are  governed  by  the  many-body                  accuracy-efficiency tradeoffs.  Additionally, they rely heavily
+Schrödinger equation,  exact solutions to it are feasible only                   on physical intuition,  which can limit the expressiveness of
+for small systems due to the exponential growth of the com-                      the wavefunctions and the ability to achieve accurate results
+putational complexity with the number of electrons.   Tradi-                     for complex systems.
+tional quantum chemistry methods use an ab initio approach,                         The recent development of neural network quantum states
+making no approximations other than the Born-Oppenheimer                         (NNQS) has opened new horizons for designing many-body
+approximation to the Hamiltonian, which separates the elec-                      wavefunction ansätze and corresponding algorithms8,16.  Un-
+tronic  and  nuclear  motion.    Numerical  approximations  are                  like  the  traditional  quantum  chemistry  ansätze,  neural  net-
+made  by  selecting  a  function  that  describes  the  electronic               works  possess  high  expressiveness  and  thus  can  potentially
+structure,  known as the wavefunction.   A proposed form of                      capture complex correlations in many-body systems.   Addi-
+wavefunctions is called an ansatz, which usually comes with                      tionally,  the  structures  of  neural  networks  provide  efficient
+a set of adjustable parameters. Throughout this paper, we use                    high-dimensional optimization and massive parallelization us-
+the term ansätze (the plural form of ansatz) to refer to mul-                    ing GPUs.  Initial NNQS trials focused on spin systems17–19.
+tiple trial functions or models.  Well-known ansätze include                     However, expanding NNQS from spin systems to electronic
+the Hartree-Fock (HF), configuration interaction (CI)9,10, cou-                  systems is challenging.   Unlike spins,  which commute with
+pled  cluster  (CC)11,12,  and  matrix  product  state  (MPS)13–15               each other, electrons are spin- 12  fermions governed by Fermi-
+ansätze.   Different numerical algorithms are then developed                     Dirac statistics and thus anticommute. This requires the elec-
+based  on  the  choice  of  the  ansatz.   For  example,  using  the             tronic wavefunction to gain a minus sign upon the exchange
+HF ansatz reduces the two-electron interaction into an effec-                    of  two  electrons,  resulting  in  electronic  wavefunctions  be-
+tive one-electron potential, which can be solved by the self-                    ing  antisymmetric.   One  approach  to  treating  an  electronic
+consistent field (SCF) method. The MPS ansatz offers a quan-                     Hamiltonian involves transforming it into a spin Hamiltonian
+                                                                                 using  fermion-to-spin  transformations  such  as  the  Jordan-
+                                                                                 Wigner (JW) transformation20 and the Bravyi-Kitaev transfor-
+                                                                                 mation21. However, these transformations typically introduce
+a)These authors contributed equally.
+                                                                                 higher-order and long-range interactions.  Another approach
+                                                                                                                                                             2
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  FIG. 1: Learning the ground-state fermionic wavefunction using Waveflow and variational quantum Monte Carlo (VQMC).
+
+
+is to use Slater determinants as the building blocks of elec-                     equivariant  transformations35–37,   while  direct  applications
+tronic wavefunctions. A Slater determinant is an uncorrelated                     to  many-electron  wavefunctions  remain  largely  unexplored.
+many-body wavefunction that satisfies antisymmetry.  A cor-                       One challenge in employing normalizing flows for electronic
+related wavefunction can be written as a linear combination of                    wavefunctions is managing the number of nodes that separate
+many Slater determinants and maintains antisymmetry.  One                         the positive and negative amplitudes of the wavefunction. Due
+can enhance the flexibility of Slater determinants to some ex-                    to the intricate nature of electronic structures, it is impractical
+tent by correlating the single-particle orbitals using methods                    to determine the number of nodes a priori. On the other hand,
+such  as  the  backflow  neural  networks22–24  and  the  hidden-                 if one starts from a prior distribution with a different number
+fermion determinant states25.  Nevertheless, requiring Slater                     of nodes compared to the ground-truth distribution, normaliz-
+determinants to be the building blocks can sometimes restrict                     ing flows fail to bridge the two distributions due to topological
+the choice of ansätze and thus limit its expressiveness.   For                    mismatches.
+example, most quantum chemistry methods start from a refer-                          In this work, we present Waveflow, a boundary-conditioned
+ence Slater determinant and add low-excitation determinants.                      normalizing flow that can learn a complicated antisymmetric
+If the reference determinant is not optimal, this approach can                    wavefunction in real space.  To encode antisymmetry, we de-
+lead  to  poor  accuracy  or  slow  convergence,  known  as  the                  fine the fundamental domain of the permutation operators. We
+single-reference problem.  In this work, we offer a different                     learn the wavefunction within this fundamental domain and
+perspective by bypassing the requirement of using Slater de-                      enforce  necessary  boundary  conditions38.   These  boundary
+terminants.  Instead, we directly encode antisymmetry into a                      conditions ensure compliance with the Pauli exclusion princi-
+boundary-conditioned normalizing flow ansatz, aiming to pro-                      ple and maintain the continuity of the wavefunction through-
+vide a more flexible alternative.                                                 out  the  entire  space.   To  address  the  topological  mismatch
+   An  electronic  wavefunction  can  be  conceptualized  as  a                   problem, we introduce spline priors that are updated through-
+square-normalized probability distribution.  In the context of                    out the training process.  In addition, we use a spline flow to
+non-relativistic  Hamiltonians,  the  wavefunction  can  always                   transform the distribution.  This allows us to make the bijec-
+be  chosen  to  be  real.    A  natural  candidate  for  generating               tion finite but arbitrarily differentiable, as well as to enforce
+complicated  distributions  are  normalizing  flows26–33,  which                  the boundary conditions.  We use variational quantum Monte
+transform a simple prior distribution to a more complex dis-                      Carlo (VQMC) to evaluate the system energy and energy gra-
+tribution  through  diffeomorphic  coordinate  transformations.                   dient to train the Waveflow ansatz. In VQMC, the sampling is
+Normalizing flows ensure efficient sampling and exact like-                       usually performed with Markov chain Monte Carlo (MCMC),
+lihood  estimation  of  complicated  distributions.   In addition,                which can lead to biased sampling.  In contrast, normalizing
+(square)  normalization  is  automatically  fulfilled  by  defini-                flows enable efficient exact sampling from the target distribu-
+tion,  which  simplifies  implementation  and  avoids  numeri-                    tion, removing any bias.  This makes the Waveflow ansatz a
+cal  instabilities  caused  by  diminishing  or  exploding  wave-                 natural fit for VQMC. The methodology is detailed in Sec-
+function  norms.    While  most  applications  of  normalizing                    tion II.
+flows  focused  on  non-negative  distributions,  one  can  eas-                     We demonstrate the performance of Waveflow by reproduc-
+ily  adapt  these  methods  to  handle  square-normalized  dis-                   ing disconnected distributions and evaluating the ground state
+tributions  by  computing  the  square  root  of  the  Jacobian                   of a one-dimensional helium-like system.   One-dimensional
+determinant34.    Previous  applications  of  normalizing  flows                  electronic  systems  have  served  as  the  early  test  beds  for
+to  physical  and  chemical  systems  focused  on  permutation-                   various  well-known  electronic  structure  methods  such  as
+                                                                                                                                                               3
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                   (a) Target distribution                        (b) Affine coupling flow                               (c) Waveflow
+
+  FIG. 2: Topological mismatch with reproducing the double-circle distribution. (a) The target double-circle distribution. (b)
+           Distribution learned by a normalizing flow using affine coupling layers. (c) Distribution learned by Waveflow.
+
+
+DMRG13 and quantum Monte Carlo (QMC)39. They are also                              A.  Electronic wavefunction
+actively studied in laboratories, including thin wires40, carbon
+nanotubes41, and edge states of two-dimensional topological                           A   many-electron   wavefunction  Ψ(r0,r1,...,rn−1)   is   a
+materials42,43.  One-dimensional systems often exhibit intrin-                     complex   function   that   describes   the   quantum   state   of
+sically  different  properties  compared  to  higher-dimensional                   n   electrons   in   a   system.       The   square   of   its   norm,
+systems and have the potential for unique industrial applica-                      |Ψ(r0,r1,...,rn−1)|2,  represents  the  probability  density  of
+tions44–46.  In the experiments, we show that starting from a                      finding electron-0 at r0, electron-1 at r1, and so on. The wave-
+prior with an arbitrary number of nodes, Waveflow can cor-                         function must satisfy the normalization condition:
+rectly identify the topology of the ground state wavefunction.                               Z
+Therefore,  our  work  not  only  addresses  the  topological  is-                               |Ψ(r0,r1,...,rn−1)|2dr0dr1 ...drn−1 = 1,         (1)
+sues  associated  with  normalizing  flows  but  also  provides  a
+framework  for  faithfully  learning  complex  electronic  wave-                   which ensures that Ψ(r0,r1,...,rn−1) is square-normalized.
+functions. The details of the experiments are provided in Sec-                     In quantum chemistry,  square normalization and normaliza-
+tion III.                                                                          tion are often used interchangeably to indicate Eq. (1).  Here,
+                                                                                   we differentiate between the two definitions, as we will dis-
+                                                                                   cuss both normalizing flows and square-normalizing flows in
+                                                                                   subsequent sections.
+                                                                                      Electrons are spin- 12  fermions47,48, meaning each electron
+                                                                                   has two spin freedoms: spin-up and spin-down. Therefore, ri
+II.  METHODS                                                                       should include both the spatial and spin coordinates.   How-
+                                                                                   ever, since we can decouple the wavefunctions into different
+                                                                                   spin components, in this work, we will focus only on the spa-
+   In  this  section,  we  outline  the  key  components  for  con-                tial coordinates xi  and assume all electrons are of the same
+structing  Waveflow.   We  begin  with  introductions  to  many-                   spin.  We use ψ(x0,x1,...,xn−1) to represent a wavefunction
+electron  wavefunctions  and  ground-state  energy  estimation                     that  depends  only  on  the  spatial  coordinates,  often  referred
+using  variational  quantum  Monte  Carlo  (VQMC)  in  Sec-                        to as a spinless fermionic wavefunction. This wavefunction is
+tions II A and II B. Next, in Section II C, we summarize nor-                      antisymmetric with respect to exchanging the positions of two
+malizing and square-normalizing flows, with detailed discus-                       electrons:
+sions  on  the  choices  of  priors  and  bijections.   We  then  ad-
+dress the topological mismatch problem and present our so-                            ψ(...,xi,...,x j,...) =−ψ(...,x j,...,xi,...), i̸= j.     (2)
+lution  using  the  spline  priors  and  spline  bijections  in  Sec-
+tion II D. Following this, we describe how to enforce bound-                       A consequence of antisymmetry is the Pauli exclusion princi-
+ary conditions and antisymmetry in normalizing flows in Sec-                       ple, which prohibits two electrons from occupying the same
+tion  II E.  Finally,  we  construct  the  Waveflow  algorithm  for                quantum state. This results in the wavefunction ψ being zero
+one-dimensional many-electron systems in Section II F. Fig. 1                      when two electrons coincide. For simplicity, we use x to rep-
+provides an overview of our approach depicted visually.   In                       resent  the  collective  spatial  positions  of  all  electrons  in  the
+this work, we use the term "Waveflow" to represent our con-                        following.
+struction for both normalizing flows and square-normalizing                           An ansatz is a specific form of functions defined by a set
+flows, unless specified differently.                                               of parameters θ, and is represented by ψθ(x).  The electronic
+                                                                                                                                                            4
+
+ground state determines the static properties of a system, and
+it can be approximated by varying θ to minimize the ground-
+state energy.  In the next subsection, we present formulations
+for variationally approaching the best ground-state approxi-
+mation given an ansatz ψθ(x).
+
+
+B.  Energy and gradient evaluation
+
+   The  energy  of  a  quantum  system  described  by ψθ(x)  is
+evaluated as
+              Z
+    E(θ) =       ψ∗θ(x)Hψθ(x) dx
+              Z                               Z                         (3)
+           =     |ψθ(x)|2 Hψθ(x)ψθ(x)  dx =      ρθ(x)ELθ(x)dx,
+                                                                                   FIG. 3: An example illustrating the node number mismatch
+where H  is the Hamiltonian, ρθ(x) =|ψθ(x)|2  is the proba-                                     between prior and target distributions.
+bility density, and ELθ(x) =  Hψθ(x)ψθ(x)   is called the local energy.
+We have assumed that ψθ(x) is square-normalized, which is                            It is important to choose a proper form of the inverse co-
+always satisfied with the Waveflow ansatz.  The final form is                     ordinate  transformation  g−1  such  that  the  evaluation  of  the
+interpreted as the expectation value of ELθ(x) under the distri-                  Jacobian is tractable.  In this work, we adopt autoregressive
+bution ρθ(x), and can thus be approximated by Monte Carlo                         flows26,49, where Eq. (6) takes the form
+integration.  In the VQMC approach, sampling is performed
+using Markov chains, resulting in Markov chain Monte Carlo                                           n−1∏
+(MCMC).  However,  MCMC  can  often  lead  to  biased  sam-                                px(x) =        pz(g−1(xi|θB,i))·∂xig−1(xi|θB,i),       (7)
+pling, while using normalizing flows allows us to draw exact                                          i=0
+samples from the distribution.                                                    where θB,i = θB(x0:i−1) are parameters of the bijection, and
+   Let Eexact  be the exact ground-state energy.  According to                    i = 0,...,n− 1 denotes each dimension of x. θB(x0:i−1) indi-
+the variational principle, Eexact≤ E(θ). Therefore, the global                    cates that the parameters for zi only depend on (x0,...,xi−1).
+minimum of E(θ) is the best approximation of Eexact  under                        θB  can  be  predicted  by  a  neural  network,  called  the  condi-
+the ansatz ψθ(x).  We define the ground-state energy corre-                       tioner.   Here,  we choose the masked autoencoder for distri-
+sponding to ψθ(x) as                                                              bution estimation (MADE)28,50  as the neural network archi-
+                            E0 = minθ   E(θ).                                (4)  tecture to predict θB.  Each bijection is composed of L lay-
+                                                                                  ers:  g−1(·|θB,i) = g−1(·|θLB,i)◦ ...◦ g−1(·|θ1B,i), where θlB,i =
+   The above minimization requires the evaluation of the gra-                     θlB(x0:i−1) are the parameters of the lth layer. We choose θlB,0
+dient                                                                             to be a constant vector.  Since xi only depends on the dimen-
+                          ∂ log(ρθ(x))                                            sions x0:i−1, the Jacobian J g−1(x) is a lower triangular ma-
+    ∂E(θ)                                                                         trix, whose determinant is simply the product of the diagonal
+      ∂θ    = Eρθ(x)             ∂θ         ELθ(x) + ∂ELθ(x)∂θ     ,      (5)     elements. In Appendix A, we provide the algorithms for eval-
+                                                                                  uating and sampling with normalizing flows.
+which can also be evaluated with sampling.                                           Equivalently, we can define a square-normalizing flow:
+                                                                                                                    q
+                                                                                         ψx(x) = ψz(g−1(x))·            |detJ(g−1(x))|
+C.  Normalizing flows                                                                               n−1∏                       q                          (8)
+                                                                                                 =      ψz(g−1(xi|θB,i))·         |∂xig−1(xi|θB,i)|,
+   Normalizing  flows  transform  a  prior  distribution  pz(z) :                                   i=0
+Rn→ R into a new distribution px(x) : Rn→ R via a learned                         where we used ψx(x) to denote a square-normalized distribu-
+continuous coordinate transform. The prior distribution pz(z)                     tion, i.e.,R|ψ(x)|2dx = 1. For the purpose of learning an elec-
+is  usually  chosen  to  be  simple,  such  as  a  Gaussian  or  uni-             tronic wavefunction,  one should use the square-normalizing
+form distribution.  The diffeomorphic coordinate transforma-                      flow.
+tion g : Rn→ Rn is defined as x = g(z). Therefore, px(x) can
+be derived by
+               px(x) = pz(g−1(x))·|detJ g−1(x)|,               (6)               1.    Bijections and priors
+
+where g−1 is the inverse of g, often referred to as the flow, and                    The key components of normalizing flows are the priors and
+J g−1(x) is the Jacobian matrix of g−1(x).                                       bijections, denoted as pz(z) and g−1 in Eq. (6).  A good prior
+                                                                                                                                                              5
+
+                                                                                  D.  Topological mismatch
+
+                                                                                      The  topological  mismatch  problem  in  normalizing  flows
+                                                                                  arises when the target distribution has a different topological
+                                                                                  structure compared to the prior distribution.  When this hap-
+                                                                                  pens, it becomes impossible to perfectly match px,learned(x) to
+                                                                                   px,target(x).   For example,  a Gaussian prior cannot be trans-
+                                                                                  formed into a distribution with two disconnected components.
+                                                                                  Moreover, this can lead to numerical issues when inverting the
+                                                                                  bijection55.  We illustrate the connectivity mismatch problem
+                                                                                  by attempting to reproduce the double-circle distribution with
+                                                                                  normalizing flows. In Fig. 2a, we sampled 20,000 points from
+                                                                                  the scikit-learn56 double-circle dataset with a Gaussian noise
+                                                                                  of width 0.05. We used three affine coupling layers26 to trans-
+                                                                                  form a two-dimensional Gaussian distribution into the target
+FIG. 4: The wavefunction of two particles in a box, including                     double-circle  distribution.   We  then  sampled  20,000  points
+the relative coordinate systems and the fundamental domain.                       from the output of the 10,000th epoch, as shown in Fig. 2b.
+ The blue and red regions are equivalent, with either capable                     Since the Gaussian distribution is connected everywhere, the
+              of serving as the fundamental domain.                               affine  normalizing  flows  failed  to  reproduce  a  disconnected
+                                                                                  distribution.
+                                                                                      The  topological  problem  becomes  more  severe  for  the
+                                                                                  square-normalizing  flows,  where  both  positive  and  negative
+distribution should be simple and easy to sample from.  The                       values are allowed.  In addition to the connectivity mismatch,
+bijection must be invertible and differentiable, with an easy-                    the number of nodes (points where the function changes sign)
+to-compute  Jacobian  determinant.   Monotonic  splines,  such                    is also fixed during a continuous coordinate transformation.
+as  the  rational  quadratic  spline  (RQS)51,  provide  a  flexible              We illustrate the node number mismatch in Fig. 3.  Starting
+yet controlled choice for bijections.   However,  RQS is only                     from  a  one-dimensional  square-normalized  distribution  be-
+once differentiable, while higher-order differentiability is pre-                 tween [0,1] with 5 nodes shown in the upper panel, one can
+ferred for better trainability and stability.  In particular, learn-              use square-normalizing flows to transform it into another dis-
+ing an electronic wavefunction requires the bijection to be at                    tribution with 5 nodes shown in the lower left panel. However,
+least  twice  differentiable  because  of  the  Laplacian  operator               transforming this distribution to a distribution with a different
+in the Hamiltonian. Bijections with improved smoothness in-                       number of nodes (e.g., 3 nodes in the lower right panel) is im-
+clude mixture of logistic transformations52, deep (dense) sig-                    possible. This node number mismatch makes learning an elec-
+moidalflows53 and smooth bump functions37.                                        tronic wavefunction challenging because the number of nodes
+   In  this  work,  we  propose  combining  I-splines  as  the  bi-               for the desired electronic wavefunction is usually unknown a
+jection  and  M/O-splines  as  the  prior54.   M-splines  serve  as               priori.
+the normalized prior, while O-splines are used for the square-                        The above topological problems can be tackled by introduc-
+normalized case.  The spline curves are constructed as linear                     ing shape parameters θP  to the prior distribution.  In autore-
+combinations of polynomial basis functions.  The weights of                       gressive flows, these parameters can depend on the previous
+the basis functions serve as the parameters of the prior and bi-                  output, and the flows become
+jection, denoted θP and θB, respectively.  This setting allows                                       n−1∏
+precise control over the values and derivatives of the splines at                         px(x) =         pz(g−1(xi|θB,i)|θP,i)·∂xig−1(xi|θB,i),     (9)
+                                                                                                     i=0
+given points, making it convenient to enforce boundary condi-                     where θP,i = θP(z0:i−1) are the parameters for the prior.   In
+tions. Moreover, using M/O-splines as the prior enhances flex-                    this  work,  we  choose  the  same  MADE  network  as  for  the
+ibility, enabling the model to learn arbitrarily complex distri-                  bijections  to  predict  the  shape  parameters  θP.    The  same
+butions and, therefore, overcome the topology mismatch prob-                      trick can be applied to the square-normalizing flow.   There-
+lem discussed in the next subsection.                                             fore, we choose a slightly more complicated while more flex-
+   One drawback of the I-spline bijection is the lack of an an-                   ible  prior  pz(z|θP(z))  and ψz(z|θP(z)),  while  using  the  co-
+alytical inverse.   In this work,  we use binary search to find                   ordinate transformations g−1  to perform the fine-tuning.  As
+its  inverse  up  to  a  small  numerical  error.   Since  calling  the           an example, in Fig. 2c, we used Waveflow to reproduce the
+I-spline function is computationally inexpensive compared to                      double-circle distribution.  The Waveflow was constructed by
+neural network calls, inverting the I-spline does not introduce                   a degree-5 M-spline curve with 23 knots as the prior, and three
+a significant computational overhead.  However, the numeri-                       layers of degree-5 I-spline curves with 23 knots as the bijec-
+cal inversion can become unstable when the curve is flat.  To                     tion.  We sampled 20,000 points at the 10,000th epoch.  The
+mitigate this, we regularize the minimal derivative by adding                     regularization constant εr  is set to be 0.02.  The learned dis-
+a small constant εr to all θB.  The mathematical formulas of                      tribution successfully captured the target distribution’s topol-
+the splines mentioned above can be found in Appendix C.                           ogy, which was not possible in the previous attempt shown in
+                                                                                                                                                                6
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      FIG. 5: Training progress of Waveflow for the ground state of a one-dimensional helium-like system. The blue region
+ corresponds to the wavefunction with positive values and the red region with negative values. The x-axis and y-axis denote x0
+         and x1, respectively. The dots indicate samples drawn from the fundamental domain, chosen as the region where
+                                                                     d1 = x1− x0≥ 0.
+
+
+Fig. 2b. Normalizing flows algorithms with shape parameters                        where xli indicates the transformed xi after l layers. Therefore,
+are provided in Appendix A.                                                                  px(x0,...,xi = x∗,...,xn−1)
+
+                                                                                             =  pz(g−1(x0))· ...· pz(g−1(xi = x∗|θB,i))· ...
+                                                                                                ·∂x0g−1(x0)· ...·∂xig−1(xi = x∗|θB,i)· ...
+E.  Boundary conditions                                                                      =  pz(g−1(x0))· ...· pz(zi = x∗)·...
+                                                                                                                       |     {z     }
+                                                                                                                             =0
+   We consider the following k-th order boundary condition                                      ·∂x0g−1(x0)· ...·∂xig−1(xi = x∗|θB,i)· ...
+                                                                                             =  0.
+                           ∂ kxi px(x)|xi=x∗ = 0,                            (10)
+
+where k = 0,1,... and x∗ is called the enforcement point.  In                         The  preconditions  of Theorem  1  can  be  met by  ensuring
+this work, we focus on the zeroth-order boundary condition.                        the  M/O/I-splines  have  the  desired  values  at  x∗.   Similarly,
+                                                                                   the normalizing flows defined in Eq. (9) can also be adapted
+                                                                                   to  enforce  higher-order  boundary  conditions,  which  are  not
+Theorem 1.  Let g−1l   (x) be a composition of autoregressive bi-                  covered here for brevity.
+jections with parameters θlB. Assume that g−1l   (xi = x∗|θlB,i) =
+x∗, for all l and θB, and that pz(z) is an autoregressive prior                    1.    Antisymmetry
+distribution with pz(zi = x∗|θP,i) = 0,∀θP. Then any (square)
+normalizing flow defined in Eq. (9) fulfills px(x)|xi=x∗ = 0.                         We begin by introducing two key concepts from group the-
+
+                                                                                   ory that are essential for enforcing antisymmetry to the Wave-
+Proof.  Consider x with xi = x∗, and let g−1 be a bijection that                   flow ansatz.
+maps x to a new point x′ such that x′i = x∗. The transformation                    Definition II.1 (Orbit).  Let G be a group that acts on a space
+of the ith dimension can be expressed as                                           X. The orbit of a point x∈ X is defined as
+
+g−1(xi = x∗|θB,i) = g−1(xLi|θLB,i)◦...◦g−1(x1i = x∗|θ1B,i)) = x∗,                                         OrbG(x) :={g· x|g∈ G}.                      (11)
+                                                                                                                                                          7
+
+Definition II.2 (Fundamental domain).  Let G be a group that                    particle, denoted as xF = x0. The fundamental domain is given
+acts on a space X, and let S⊂ X be a closed subset of X. Then                   by{d0,...,dn−2,xu|0≤ di≤ 2L,∀i;−L≤ xu≤ L}.
+we call S the fundamental domain of G if for all x,y∈ S,                           We use I-splines as the bijection g−1.  Since I-splines map
+                                                                                [0,1] to [0,1], we rescale the relative coordinates into the [0,1]
+      X =∪x∈SOrbG(x) and /0 = OrbG(x)∩ OrbG(y).        (12)                     range.  For square-normalizing flows, we take the coordinate
+   The  fundamental  domain  S  serves  as  a  minimal,  non-                   transformation and rescaling as the parameter-free first layer.
+redundant building block that covers the entire space without                   Antisymmetry is fulfilled by enforcing ψ(d0,...,dn−2,xu) = 0
+overlaps when repeated under the symmetry operators in G.                       when∃di = 0. Moreover, we require the wavefunction to be 0
+Similarly, we can define the antisymmetric fundamental do-                      at the wall of the box, corresponding to∃di = 1 or xu = 0 or 1.
+main of a space under permutation operators. We only need to                    Therefore, the boundary conditions of the square-normalizing
+approximate the wavefunction within the fundamental domain                      flows in the fundamental domain are
+and enforce necessary boundary conditions38.  In the follow-                                  ψ(d0,...,di = 0,...,dn−2,xu) = 0,∀i,
+ing, we articulate this idea for the one-dimensional system.                                  ψ(d0,...,di = 1,...,dn−2,xu) = 0,∀i,
+   We define a group P  of permutation operators Pσ  acting                                           ψ(d0,...,dn−2,xu = 0) = 0,                      (16)
+on the spatial coordinates (x0,x1,...,xn−1) such that                                                 ψ(d0,...,dn−2,xu = 1) = 0.
+
+   Pσ·(x0,x1,...,xn−1) = (σ(x0),σ(x1),...,σ(xn−1)),    (13)
+                                                                                The  above  boundary  conditions  are  enforced  using  Theo-
+where σ  represents a specific permutation.  The fundamental                    rem  1.    Subsequently,  the  Waveflow  ansatz  is  trained  by
+domain of P is then given by:                                                   VQMC described in Section II B. The overall complexity of
+Theorem 2.  S ={x0≤ x1≤ ...≤ xn−1|x0,...,xn−1∈ R} is a                          the model scales as O T Nsn3, where T is the number of gra-
+fundamental domain of P on Rn.                                                  dient decent steps, Ns is the number of samples, and n is the
+                                                                                number of electrons.  A detailed complexity analysis is pro-
+   We define the antisymmetric wavefunction within the above                    vided in Appendix B.
+fundamental domain S.  Moreover, we impose the following                           Once the wavefunction is evaluated within the fundamental
+boundary condition                                                              domain S, denoted as ψS(d0,...,dn−2,xu), we can expand it to
+                                                                                the whole space. We identify the permutation between points
+                        ψ(x) = 0, ∀x∈ ∂S,                         (14)          outside and inside S, and use η(x0,...,xn−1) to represent the
+                                                                                number of pair-wise exchanges, then
+where ∂S denotes the boundary of S, corresponding to where
+at least two coordinates coincide.  Eq. 14 corresponds to the                     ψ(x0,...,xn−1) = (−1)η(x0,...,xn−1)ψS(d0,...,dn−2,xu).  (17)
+Pauli exclusion principle, meaning that two identical electrons
+cannot be found at the same position.                                           Note that for the purpose of evaluating a physical observable,
+   To illustrate the definition of fundamental domains, we con-                 such as the energy, the wavefunction in the fundamental do-
+sider the ground state of two electrons in a box ranging from                   main is sufficient.  We expand the wavefunction to the whole
+−L to L, analytically evaluated as                                              space using Eq. (17) only for visualization purposes.
+                                h      πx0          πx1
+          ψ(x0,x1) =    1√2L     cos    2L     sin    L
+                                        πx1           πx0    i       (15)       III.  EXPERIMENTS
+                                − cos     2L     sin    L      .
+                                                                                   We study a one-dimensional spinless electronic system with
+We plot the ground state wavefunction in Fig. 4 (b). The fun-                   a central nuclear-like potential within [−L,L] and an infinite
+damental domain can be chosen as either the blue or red re-                     potential for regions outside this interval. The Hamiltonian in-
+gions.                                                                          volves two electrons, making the ground state straightforward
+                                                                                to visualize.  We set the "nuclear" charge to be 2 and refer to
+                                                                                this toy model as a one-dimensional helium-like system. The
+F.  Waveflow algorithm                                                          Hamiltonian is defined as
+   This  section  presents  the  Waveflow  algorithm,  focusing                    H =−1           ∇2i− ∑       q   2      +             1p
+on  one-dimensional  many-electron  systems  confined  within                              2 ∑i=0,1       i=0,1    1+ x2i        1+(x0− x1)2 ,   (18)
+[−L,L].   This  confinement  applies  to  most  one-dimensional
+systems since we can make L arbitrarily large.  We transform                    where we used the soft Coulomb potential for both electron-
+the absolute coordinates{x0,...,xn−1} to relative coordinates                   nuclear and electron-electron interactions, with the softening
+{di = xi+1− xi|i∈{0,...,n− 2}} plus an extra unconstrained                      parameter equal to 1. The soft Coulomb potential avoids deal-
+coordinate xu  describing the global position of the particles.                 ing with cusp conditions, which is beyond the scope of this
+xu  can be chosen as the average of the absolute coordinates,                   work.   All units are in the atomic units (a.u.),  with the box
+denoted as xM =  1n ∑i xi, or the absolute coordinate of the first              length L = 10 Bohr.
+                                                                                                                                                            8
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                   (a) QMSolve                                     (b) Waveflow                                  (c) Energy convergence
+
+FIG. 6: Evaluations of the ground-state wavefunction and energy for the one-dimensional helium-like system. (a) Ground state
+wavefunction evaluated by QMSolve. (b) Ground state wavefunction evaluated by Waveflow. (c) Convergence of the Waveflow
+                                                   energy with respect to the number of epochs.
+
+
+   The Waveflow ansatz was constructed with a degree-5 O-                        ment between the two solutions,  with a global phase differ-
+spline curve prior with 23 knots, along with a bijection com-                    ence−1,  which  does  not  affect  the  evaluation  of  physical
+prising three layers of degree-5 I-spline curves, each with 23                   observables.   Fig. 6c shows the convergence of the ground-
+knots.  The degree of the splines determines their differentia-                  state energy with respect to the training epochs, which aver-
+bility, while the number of knots controls their flexibility. For                aged  the  energy  value  every  5,000  epochs.   We  plotted  the
+calculating the Laplacian,  the curves must be at least twice                    error bars after the 30,000th epoch due to the large error bars
+differentiable,  which requires I-spline curves of at least de-                  in the earlier steps.  The best ground-state energy estimated
+gree 2 and O-spline curves of at least degree 3.  However, to                    by Waveflow was−1.8123± 0.038 Hartree, compared to the
+represent the ground state for a Hamiltonian with a smooth po-                   −1.8125 Hartree from QMSolve. The results indicate that our
+tential, higher differentiability is desired.  On the other hand,                approach is able to recover the correct nodal structure of the
+increasing the degree of the splines can reduce their flexibil-                  ground-state wavefunction, while converging to the accurate
+ity.   Therefore,  we  need  a  larger  number  of  knots  to  main-             ground-state energy.  The converged Waveflow model repre-
+tain flexibility, which, unfortunately, increases computational                  sents a combination of prior and flow that leads to the correct
+cost.  We found that our chosen configuration strikes a good                     target distribution, where the prior focuses on approximating
+balance  between  smoothness,  flexibility,  and  computational                  the nodal structure and the flow fine-tunes the prior into the
+efficiency.  The regularization constant εr for the bijection is                 correct ground-state wavefunction.
+set to be 0.05.  The unconstrained coordinate xu is defined as
+xu = xM = (x0 + x1)/2.  We optimize the network using the
+Adam algorithm57 with a learning rate η = 10−4, and expo-                        IV.  CONCLUSIONS
+nential decay rates for the first and second moment estimates
+set to β1 = 0.9 and β2 = 0.999. The MADE network has one                            In  this  work,  we  introduced  Waveflow,  an  NNQS  frame-
+hidden layer of 64 neurons.                                                      work  that  directly  learns  an  electronic  wavefunction  with
+
+   Fig. 5 shows the training progress of the Waveflow.   The                     boundary-conditioned  normalizing  flows.    By  defining  the
+x-axis and y-axis represent the coordinates of each electron.                    fundamental domain of the wavefunction and applying nec-
+Starting from a prior distribution with an arbitrary number of                   essary boundary conditions, Waveflow imposes antisymmetry
+nodes at epoch 1, the wavefunction was transformed to mini-                      without relying on Slater determinants, offering a potentially
+mize the ground-state energy estimated by VQMC, with 256                         more expressive ansatz for complex many-electron systems.
+points sampled from the fundamental domain.  The sampled                         Moreover, our approach addressed the topological mismatch
+points  are  shown  as  dark  dots  in  the  plot.   As  the  training           between prior and target distributions by using O-spline pri-
+progressed,  the  number  of  nodes  decreased  and  eventually                  ors  and  I-spline  bijections,  which  enabled  flexibility  in  the
+converged  to  the  correct  number  of  the  ground  state.   This              node number of the distribution while maintaining its square-
+result  demonstrates  that  Waveflow  can  overcome  the  topo-                  normalization property.  Our framework is readily applicable
+logical  mismatch  between  the  prior  and  the  target  distribu-              to other distribution learning tasks that require specific bound-
+tions.   We chose the solution from the QMSolve package58                        ary conditions or suffer from topological mismatches, such as
+as the reference to benchmark our results.  We compared the                      connectivity mismatch for normalizing flows and node num-
+wavefunction derived from Waveflow in Fig. 6b to that from                       ber mismatch for square-normalizing flows. Furthermore, this
+QMSolve in Fig. 6a.  The comparison shows excellent agree-                       ansatz can be extended beyond electronic structures.  For in-
+                                                                                                                                                              9
+
+stance, its automatic square normalization feature positions it                            Algorithm A2: Sampling an autoregressive
+as a promising candidate for applications in quantum dynam-                                                normalizing flow
+ics simulations. Nevertheless, the current stage of Waveflow is                      Input: NN parameters θNN
+still proof-of-concept, and a more efficient implementation is                       Output:x               sampled from px(x)
+desired to handle large-scale experiments. In summary, Wave-                         Draw a sample from the prior xL∼ pz(z)
+flow represents a significant step forward in the application                        for l← L− 1 to 0 do
+of normalizing flows to quantum chemistry.  While there are                               for i← 0 to n− 1 do
+challenges to overcome, the potential benefits of this approach                                θ lB,i = θlB(xl0,...,xli−1)
+warrant further exploration and development.                                                   xli = g(xl−1i |θ lB,i)
+                                                                                          end
+DATA AVAILABILITY STATEMENT                                                          end
+                                                                                     return x0
+
+   The  Waveflow  code  and  experiments  can  be  found  at
+https://github.com/aspuru-guzik-group/waveflow.                                           Algorithm A3: Evaluating an autoregressive
+                                                                                               normalizing flow with adaptive prior
+ACKNOWLEDGEMENT                                                                      Input: samples x, prior pz(z), and NN parameters θNN
+                                                                                     Output:  px(x) = pz(g−1(x))·|detJ g−1(x)|
+                                                                                     Initialize det← 1
+   This work was supported in part by the Acceleration Con-                          for l← 0 to L− 1 do
+sortium and the Vector Institute.  A.A.-G. also acknowledges                              θlB = θlB(x)
+the  generous  support  from  Dr.   Anders  G.  Frøseth,  Natural                         for i← 0 to n− 1 do
+Resources Canada, and the Canada 150 Research Chairs Pro-                                      xl+1i     = g−1(xli|θ lB,i)
+gram.                                                                                          det = det·∂xg−1(xli|θ lB,i)
+                                                                                          end
+                                                                                     end
+Appendix A: Normalizing flow algorithmss                                             θP = θP(x)
+                                                                                     return px(x) = ∏n−1i=0  pz(xLi|θP,i)· det
+   We provide the pseudocodes for evaluating and sampling
+from an autoregressive normalizing flow.   These algorithms                                Algorithm A4: Sampling an autoregressive
+can be adapted for square-normalizing flows by replacing the                                   normalizing flow with adaptive prior
+normalized  prior  distribution  pz(z)  with  square  normalized
+ψz(z), and substituting the determinant of the Jacobian with                         Input: NN parameters θNN
+the square root of the determinant, as summarized in Eq. (8).                        Output:x               sampled from px(x)
+Additionally, for square-normalizing flows, sampling is based                        Draw a sample from the adaptive prior: xL0∼ pz(z|θP,0)
+on|ψz(z)|2 instead of pz(z).                                                         for i← 0 to n− 1 do
+   The  algorithms  for  standard  normalizing  flows  are  pre-                          θP,i = θP(xL0,...,xLi−1)
+sented  in  Algorithms  A1  and  A2.     The  algorithms  with                            xLi∼ pz(z|θP,i)
+adaptive  prior  described  in  this  work  are  summarized  in                      end
+Algrithms A3 and A4.  We use θNN for the parameters of the                           Transform the sample:
+neural networks, θlB for the parameters of the lth layer of the                      for l← L− 1 to 0 do
+bijection, and θP for the parameters of the prior.                                        for i← 0 to n− 1 do
+                                                                                               θ lB,i = θlB(xl0,...,xli−1)
+       Algorithm A1: Evaluating an autoregressive                                              xli = g(xl−1i |θ lB,i)
+                        normalizing flow                                                  end
+                                                                                     end
+   Input: samples x, prior pz(z), and NN parameters θNN                              return x0
+   Output:  px(x) = pz(g−1(x))·|detJ g−1(x)|
+   Initialize det← 1
+   for l← 0 to L− 1 do                                                            Appendix B: Complexity Analysis
+       θlB = θlB(x)
+       for i← 0 to n− 1 do
+            xl+1i     = g−1(xli|θ lB,i)                                              In this section, we provide the complexity analysis of the
+            det = det·∂xg−1(xli|θ lB,i)                                           Waveflow model. We first evaluate the cost of one model eval-
+       end                                                                        uation, Cmodel.   Each model evaluation involves running the
+   end                                                                            neural networks that encode electron positions, which scales
+   return px(x) = ∏n−1i=0  pz(xLi )· det                                          as O(nMh),  where  n  is  the  number  of  electrons  and  Mh  is
+                                                                                  the hidden dimension.  Although Mh  is a hyperparameter, it
+                                                                                  is practical to choose Mh to be proportional to the number of
+                                                                                                                                                              10
+
+the electrons, Mh ∝ n. Therefore, Cmodel scales as O(n2).
+   The  training  cost  per  sample  per  step  can  be  divided
+into three components:  sampling (Csamp),  energy evaluation
+(Cenergy), and gradient evaluation (Cgrad). For each sample, the
+number of model evaluations scales linearly with the number
+of electrons n, as we autoregressively sample each degree of
+freedom.   Therefore, Csamp  scales  as O(n3).   The  dominant
+cost in energy evaluation comes from computing the Lapla-
+cian.   For  each  sample,  we  calculate  the  second  derivative                                   (a)                                    (b)
+for each electron. Using automatic differentiation, the cost of
+each second derivative is a constant multiple (approximately
+5 times) of the cost of model evaluation.  Therefore, Cenergy
+also  scales  as O(n3),  but  with  a  larger  computational  over-
+head. The cost of gradient evaluation, Cgrad, remains constant,
+as automatic differentiation is used to compute the gradients
+of the neural network parameters.
+   Summing these components, the total cost of the Waveflow
+model scales asO T Nsn3, where T is the number of gradient                                          (c)                                    (d)
+descent steps, and Ns is the number of samples.
+                                                                                        FIG. 7: Examples of splines and spline curves. (a) 14
+Appendix C: Splines                                                                          B-splines of degree k = 5. (b) O-splines from
+                                                                                       orthogonalization of (a). (c) An M-spline curve. (d) An
+   In  this  section,  we  briefly  review  the  different  types  of                                  I-spline curve and its inverse.
+splines used in this work.
+                                                                                   Next we define an M-spline curve Mk(x|t,α) by summing up
+1.  B-splines                                                                      all Mi,k(x|t) splines with weights{αi},
+
+   The B-spline basis functions are defined recursively. Given                                                            N∑
+a set of non-increasing knots{ti}, the B-splines are defined as                                         Mk(x|t,α) =          αiMi,k(x|t),                   (C3)
+                                                                                                                         i=1
+                    (                                                              where αi > 0 and ∑i αi = 1.  Therefore Mk(x|t,α) is normal-
+      Bi,1(x|t) =      1,    if ti < x < ti+1,
+                       0,    otherwise;                                            ized.  We sample Mk(x|t,α) with rejection sampling, which
+                                                                                   requires an upper bound for Mk(x|t,α).
+      Bi,k(x|t) =  x−ti                                                 (C1)
+                    ti+k−ti Bi,k−1(x|t)                                            Theorem 3.  Mk(x|t,α) is bounded by
+                    +   ti+k+1− xti+k+1−ti+1 Bi+1,k−1(x|t),k > 1.                                       Mk(x|t,α)≤ k max
+                                                                                                                            i,x  Mi,k(x|t).                   (C4)
+The B-splines satisfy that Bi,k(x|t)≥ 0 and ∑i Bi,k(x|t) = 1.                      Proof.  According to Eq. (C2), for any x value, there are only
+We call k the degree of the splines.  B-splines of degree-5 is                     k Mi,k(x) that are non-zero.  Therefore, at x = x0, we can find
+shown in Fig. 7a.                                                                  a number  j0 such that
+
+
+                                                                                                            N∑                    j0+k∑
+2.  M-splines                                                                           Mk(x0|t,α) =           αiMi,k(x0|t) =          αiMi,k(x0|t)       (C5)
+                                                                                                           i=1                    i= j0
+R ti+1M-splines59      are     normalized     B-splines     satisfying
+ ti     Mi,k(x|t)dx =  1  for  any  i  and  k  values.     Thus  has               In addition, since 0≤ αi≤ 1,
+the form                                                                                                  j0+k∑
+                           (                                                           Mk(x0|t,α)≤             Mi,k(x0|t)
+            Mi,1(x|t) =      (ti+1−ti)−1,    ti < x < ti+1;                                               i= j0
+                             0,                     otherwise.                                            j0+k∑                                            (C6)
+                                     x−ti                                                             ≤        max
+            Mi,k(x|t) =    k                                            (C2)                              i= j0  x   Mi,k(x|t)≤ k maxi,x  Mi,k(x|t).
+                           k− 1      ti+k−ti Mi,k−1(x|t)
+                       +  ti+k− x                       ,k > 1.                    The  above  derivation  applies  to  any  x0  values.   Therefore,
+                           ti+k−ti Mi+1,k−1(x|t)                                   Eq. (C4) holds.
+                                                                                                                                                                                  11
+
+   We only sample one dimension at a time,  making the re-                                       Moreover, I-splines are smoother than the M-splines: if the
+jection sampling efficient.  Once the partition t is chosen, the                              M-spline curve is k-differentiable, the corresponding I-spline
+double max in Eq. (C4) can be evaluated numerically by pre-                                   curve is (k+1)-differentiable. The inverse of Ik(x|t,α) can be
+computing the basis once before training.  An example of M-                                   derived by binary search.  An example of the I-spine curve is
+spline curves is shown in Fig. 7c.                                                            presented in Fig. 7d.
+
+                                                                                               1A. Szabo, A. Szabó,  and N. Ostlund, Modern Quantum Chemistry: Intro-
+3.  O-splines                                                                                  2I. Levine, Quantum Chemistry, Pearson advanced chemistry series (Pear-duction to Advanced Electronic Structure Theory (Macmillan, 1982).
+
+                                                                                                son, 2014).
+                                                                                               3F. Jensen, Introduction to Computational Chemistry (Wiley, 2017).
+   O-splines  Oi,k(x|t)  are  introduced  to  represent  square-                               4Y. Cao,  J. Romero,  J. P. Olson,  M. Degroote,  P. D. Johnson,  M. Kiefer-
+normalized  functions  and  can  be  derived  by  symmetrically                                 ová, I. D. Kivlichan, T. Menke, B. Peropadre, N. P. Sawaya, et al., “Quan-
+orthogonalizing the B-spline basis using Löwdin’s symmet-                                       tum chemistry in the age of quantum computing,” Chemical reviews 119,
+ric orthogonalization60. Let Ok(x|t,α) = ∑Ni=1 βiOi,k(x|t), the                                 10856–10915 (2019).
+                                                                                               5M.  Motta  and  J.  E.  Rice,  “Emerging  quantum  computing  algorithms  for
+square-normalization becomes                                                                    quantum chemistry,” WIREs Computational Molecular Science 12, e1580
+                Z                       Z    N∑                                                 (2022).
+                                                                                               6G. B. Goh, N. O. Hodas,  and A. Vishnu, “Deep learning for computational
+                   Ok(x|t,α)2 =                 β 2i O2i,k(x|t) = 1.           (C7)             chemistry,” Journal of Computational Chemistry 38, 1291–1307 (2017).
+                                           i=0                                                 7P. O. Dral, “Quantum chemistry in the age of machine learning,” The Jour-
+Due to the orthogonality,  one can make each Oi,k(x) square                                     nal of Physical Chemistry Letters 11, 2336–2347 (2020).
+                                                                                               8J.  Hermann,  J.  Spencer,  K.  Choo,  A.  Mezzacapo,  W.  M.  C.  Foulkes,
+normalized,   so R O2i,k(x|t) =  1,   and  require  the  weights                                D. Pfau, G. Carleo,  and F. Noé, “Ab initio quantum chemistry with neural-
+∑Ni=1 β 2i  = 1.   The  normalization  and  orthogonalization  are                              network wavefunctions,” Nature Reviews Chemistry 7, 692–709 (2023).
+                                                                                               9J. B. Foresman, M. Head-Gordon, J. A. Pople,  and M. J. Frisch, “Toward
+performed once before training.                                                                 a  systematic  molecular  orbital  theory  for  excited  states,”  The  Journal  of
+   We sample Ok(x|t,α)2 with rejection sampling, which re-                                      Physical Chemistry 96, 135–149 (1992).
+quires the upper bound ofOk(x|t,α)2.                                                          10M. Head-Gordon, R. J. Rico, M. Oumi,  and T. J. Lee, “A doubles correction
+                                                                                                to electronic excited states from configuration interaction in the space of
+Theorem 4.  The value of Ok(x|t,α)2 is upper bounded by                                         single substitutions,” Chemical Physics Letters 219, 21–29 (1994).
+                                                                                              11J.  ˇCížek, “On the Correlation Problem in Atomic and Molecular Systems.
+                        Ok(x|t,α)2≤ max(βTΩ)2,                    (C8)                          Calculation of Wavefunction Components in Ursell-Type Expansion Using
+                                                                                                Quantum-Field Theoretical Methods,” The Journal of Chemical Physics 45,
+                                                                                                4256–4266 (1966).
+where Ω denotes the basis change matrix from the B-spline to                                  12I.  Purvis,  George  D.  and  R.  J.  Bartlett,  “A  full  coupled-cluster  singles
+the O-spline basis.                                                                             and  doubles  model:  The  inclusion  of  disconnected  triples,”  The  Journal
+                                                                                                of Chemical Physics 76, 1910–1918 (1982).
+Proof.  Löwdin’s symmetric orthogonalization defines the re-                                  13S.  R.  White,  “Density  matrix  formulation  for  quantum  renormalization
+lationship Oi,k(x|t) = ∑ j Ωi jB j,k(x|t), thus                                                 groups,” Phys. Rev. Lett. 69, 2863–2866 (1992).
+                                                                                              14R.  Orús,  “A  practical  introduction  to  tensor  networks:   Matrix  product
+                                                                               !2               states and projected entangled pair states,” Annals of Physics 349, 117–158
+                       N∑                       N∑                                              (2014).
+   O2k(x|t,α) =            β 2i O2i,k(x|t) =       β 2i   ∑Ωi jB j,k(x|t)                     15R. Orús, “Tensor networks for complex quantum systems,” Nature Reviews
+                      i=1                      i=1          j                                   Physics 1, 538–550 (2019).
+                                  N∑               !2                                         16M.  Medvidovi´c  and  J.  R.  Moreno,  “Neural-network  quantum  states  for
+        N∑                                                   N∑                                 many-body physics,”  (2024), arXiv:2402.11014 [cond-mat.dis-nn].
+    ≤       β 2i [maxj   Ωi j]2        B j,k(x|t)       =       β 2i [maxj   Ωi j]2           17G. Carleo and M. Troyer, “Solving the quantum many-body problem with
+       i=1                        j=1                       i=1                                 artificial neural networks,” Science 355, 602–606 (2017).
+                                                                                              18O. Sharir, Y. Levine, N. Wies, G. Carleo,  and A. Shashua, “Deep autore-
+    ≤ maxi, j  (βiΩi j)2 = max(βTΩ)2                                                            gressive models for the efficient variational simulation of many-body quan-
+                                                                                                tum systems,” Phys. Rev. Lett. 124, 020503 (2020).
+                                                                                              19M.  Hibat-Allah,  M.  Ganahl,  L.  E.  Hayward,  R.  G.  Melko,   and  J.  Car-
+where we used ∑Ni=1 Bi,k(x|t) = 1.                                                              rasquilla, “Recurrent neural network wave functions,” Phys. Rev. Res. 2,
+                                                                                                023358 (2020).
+   A  set  of  O-splines  derived  from  B-splines  in  Fig.  7a  are                         20K. Choo, A. Mezzacapo,  and G. Carleo, “Fermionic neural-network states
+shown in Fig. 7b.                                                                               for ab-initio electronic structure,” Nature communications 11, 1–7 (2020).
+                                                                                              21S. B. Bravyi and A. Y. Kitaev, “Fermionic quantum computation,” Annals
+                                                                                                of Physics 298, 210–226 (2002).
+                                                                                              22M. Ruggeri, S. Moroni,  and M. Holzmann, “Nonlinear network description
+4.  I-splines                                                                                   for many-body quantum systems in continuous space,” Phys. Rev. Lett. 120,
+                                                                                                205302 (2018).
+                                                                                              23D. Luo and B. K. Clark, “Backflow transformations via neural networks for
+   I-spline curves are derived by integrating M-spline curves                                   quantum many-body wave functions,” Physical review letters 122, 226401
+                                        Z  x                                                    (2019).
+                       Ik(x|t,α) =                                                            24J. Hermann, Z. Schätzle,  and F. Noé, “Deep-neural-network solution of the
+                                          0  Mk(y|t,α)dy                   (C9)                 electronic schrödinger equation,” Nature Chemistry 12, 891–897 (2020).
+                                                                                              25J. Robledo Moreno, G. Carleo, A. Georges,  and J. Stokes, “Fermionic wave
+Since M-splines are positive, the integral is monotonically in-                                 functions from neural-network constrained hidden states,” Proceedings of
+creasing.                                                                                       the National Academy of Sciences 119 (2022), 10.1073/pnas.2122059119.
+                                                                                                                                                                                              12
+
+
+26L. Dinh, D. Krueger,  and Y. Bengio, “Nice: Non-linear independent com-                              Rev. B 83, 121310 (2011).
+  ponents estimation,”  (2015), arXiv:1410.8516 [cs.LG].                                            44F. D. M. Haldane, “Effective harmonic-fluid approach to low-energy prop-
+27L. Dinh, J. Sohl-Dickstein,  and S. Bengio, “Density estimation using real                           erties of one-dimensional quantum fluids,” Phys. Rev. Lett. 47, 1840–1843
+  nvp,”  (2017), arXiv:1605.08803 [cs.LG].                                                             (1981).
+28G. Papamakarios, T. Pavlakou,  and I. Murray, “Masked autoregressive flow                         45A. Imambekov, T. L. Schmidt,  and L. I. Glazman, “One-dimensional quan-
+  for density estimation,” Advances in neural information processing systems                           tum liquids:  Beyond the luttinger liquid paradigm,” Rev. Mod. Phys. 84,
+  30 (2017).                                                                                           1253–1306 (2012).
+29D.  P.  Kingma  and  P.  Dhariwal,  “Glow:   Generative  flow  with  invertible                   46H. Li, Z. Xiang, T. Wang, M. H. Naik, W. Kim, J. Nie, S. Li, Z. Ge, Z. He,
+  1x1 convolutions,” Advances in neural information processing systems 31                              Y. Ou,  et al., “Imaging tunable luttinger liquid systems in van der waals
+  (2018).                                                                                              heterostructures,” Nature , 1–6 (2024).
+30R. T. Chen,  Y. Rubanova,  J. Bettencourt,   and D. K. Duvenaud, “Neural                          47R. Mann, An Introduction to Particle Physics and the Standard Model (CRC
+  ordinary differential equations,” Advances in neural information processing                          Press, 2010).
+  systems 31 (2018).                                                                                48M.  D.  Schwartz,  Quantum  Field  Theory  and  the  Standard  Model  (Cam-
+31C. Durkan, A. Bekasov, I. Murray,   and G. Papamakarios, “Neural spline                              bridge University Press, 2013).
+  flows,” Advances in neural information processing systems 32 (2019).                              49D.  P.  Kingma,  T.  Salimans,  R.  Jozefowicz,  X.  Chen,  I.  Sutskever,   and
+32G. Papamakarios, E. Nalisnick, D. J. Rezende, S. Mohamed,  and B. Lak-                               M.  Welling,  “Improved  variational  inference  with  inverse  autoregressive
+  shminarayanan, “Normalizing flows for probabilistic modeling and infer-                              flow,” Advances in neural information processing systems 29 (2016).
+  ence,”  (2021), arXiv:1912.02762 [stat.ML].                                                       50M. Germain, K. Gregor, I. Murray,   and H. Larochelle, “MADE: Masked
+33I. Kobyzev,  S. J.  Prince,   and M.  A. Brubaker, “Normalizing  flows:  An                          autoencoder for distribution estimation,” in International conference on ma-
+  introduction and review of current methods,” IEEE Transactions on Pattern                            chine learning (PMLR, 2015) pp. 881–889.
+  Analysis and Machine Intelligence 43, 3964–3979 (2021).                                           51C. Durkan, A. Bekasov, I. Murray,  and G. Papamakarios, “Neural Spline
+34H. Xie, L. Zhang,   and L. Wang, “Ab-initio study of interacting fermions                            Flows,”   arXiv   e-prints   ,   arXiv:1906.04032   (2019),   arXiv:1906.04032
+  at finite temperature with neural canonical transformation,” Journal of Ma-                          [stat.ML].
+  chine Learning 1, 38–59 (2022).                                                                   52J. Ho, X. Chen, A. Srinivas, Y. Duan,  and P. Abbeel, “Flow++: Improving
+35F. Noé, S. Olsson, J. Köhler,  and H. Wu, “Boltzmann generators: Sampling                            flow-based generative models with variational dequantization and architec-
+  equilibrium states of many-body systems with deep learning,” Science 365,                            ture  design,”  in  International  Conference  on  Machine  Learning  (PMLR,
+  eaaw1147 (2019).                                                                                     2019) pp. 2722–2730.
+36J. Köhler, L. Klein,  and F. Noé, “Equivariant flows: exact likelihood gen-                       53C.-W. Huang, D. Krueger, A. Lacoste,   and A. Courville, “Neural autore-
+  erative  learning  for  symmetric  densities,”  in  International  conference  on                    gressive flows,” in International Conference on Machine Learning (PMLR,
+  machine learning (PMLR, 2020) pp. 5361–5370.                                                         2018) pp. 2078–2087.
+37J. Köhler, A. Krämer,  and F. Noé, “Smooth normalizing flows,” Advances                           54J. O. Ramsay, “Monotone regression splines in action,” Statistical science ,
+  in Neural Information Processing Systems 34, 2796–2809 (2021).                                       425–441 (1988).
+38A.  Klimyk,  J.  Patera,  et  al.,  “Antisymmetric  orbit  functions,”  SIGMA.                    55R. Cornish, A. Caterini, G. Deligiannidis,  and A. Doucet, “Relaxing bijec-
+  Symmetry, Integrability and Geometry:  Methods and Applications 3, 023                               tivity constraints with continuously indexed normalising flows,” in Interna-
+  (2007).                                                                                              tional conference on machine learning (PMLR, 2020) pp. 2133–2143.
+39J. E. Hirsch, R. L. Sugar, D. J. Scalapino,  and R. Blankenbecler, “Monte                         56F. Pedregosa, G. Varoquaux, A. Gramfort, V. Michel, B. Thirion, O. Grisel,
+  carlo simulations of one-dimensional fermion systems,” Phys. Rev. B 26,                              M. Blondel, P. Prettenhofer, R. Weiss, V. Dubourg, J. Vanderplas, A. Passos,
+  5033–5055 (1982).                                                                                    D. Cournapeau, M. Brucher, M. Perrot,   and E. Duchesnay, “Scikit-learn:
+40M.  L.  Roukes,  A.  Scherer,  S.  J.  Allen,  H.  G.  Craighead,  R.  M.  Ruthen,                   Machine learning in Python,” Journal of Machine Learning Research 12,
+  E. D. Beebe,   and J. P. Harbison, “Quenching of the hall effect in a one-                           2825–2830 (2011).
+  dimensional wire,” Phys. Rev. Lett. 59, 3011–3014 (1987).                                         57D. P. Kingma and J. Ba, “Adam:  A method for stochastic optimization,”
+41L.-M. Peng, Z. Zhang,  and S. Wang, “Carbon nanotube electronics: recent                             arXiv preprint arXiv:1412.6980  (2014).
+  advances,” Materials Today 17, 433–442 (2014).                                                    58m.     Rafael     de     la     Fuente,     “Qmsolve,”    https://github.com/
+42B. I. Halperin, “Quantized hall conductance, current-carrying edge states,                           quantum-visualizations/qmsolve (2022).
+  and the existence of extended states in a two-dimensional disordered poten-                       59H. B. Curry and I. J. Schoenberg, “On pólya frequency functions iv:  the
+  tial,” Phys. Rev. B 25, 2185–2190 (1982).                                                            fundamental spline functions and their limits,” in IJ Schoenberg Selected
+43M. Wada, S. Murakami, F. Freimuth,  and G. Bihlmayer, “Localized edge                                Papers (Springer, 1988) pp. 347–383.
+  states in two-dimensional topological insulators: Ultrathin bi films,” Phys.                      60P.-O. Löwdin, “Quantum theory of cohesive properties of solids,” Advances
+                                                                                                       in Physics 5, 1–171 (1956).
