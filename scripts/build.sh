@@ -17,3 +17,4 @@ node scripts/validate.mjs
 node scripts/summary.mjs > /dev/null
 node scripts/readme_table.mjs
 node scripts/stats.mjs
+node scripts/figures.mjs
