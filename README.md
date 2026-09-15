@@ -8,15 +8,16 @@
 [![rows](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Ftzerweck%2Fquantum-many-body-leaderboard%2Fmain%2Fdata%2F_summary.json&query=%24.rows&label=rows&color=success)](data/_summary.json)
 [![records](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Ftzerweck%2Fquantum-many-body-leaderboard%2Fmain%2Fdata%2F_summary.json&query=%24.records.held&label=records&color=success)](data/_summary.json)
 
-**A record book of the best published ground-state energies in quantum many-body
+**A record book of the SOTA ground-state energies in quantum many-body
 physics.**
 
-This is the literature organised to serve fellow researchers and AI to see the works 
-of the wider research community at one glance.
+This is the literature organised to serve fellow researchers and AI. 
+So that we can see the works of the wider research community at one glance.
+As well as place our own results in the context of other research.
 
 Every row is one published claim about a Hamiltonian instance, carrying the energy value,
 its error bar (uncertainty of last digit in brackets), the method, the primary reference, 
-and a declared `bound_type` saying what kind of quantity the number actually is (either a strict
+and a declared `bound_type` saying what kind of quantity the energy value actually is (either a strict
 variational bound, a fixed-node estimate or a zero-variance extrapolation).
 
 ## Leaderboard
@@ -31,7 +32,8 @@ variational bound, a fixed-node estimate or a zero-variance extrapolation).
 | J1-J2 square 20x20, J2 = 0.5 | 2 | **-0.4967987(6)** | CNN-MPS (h,D,l)=(32,15,20) | [Fan et al. (2026)](https://doi.org/10.48550/arxiv.2603.14425) | -0.4967320 ViT with symmetry restoration |
 | Hubbard square 16x16, U = 8, n = 0.875 | 13 | **-0.75865(3)** | VAFQMC stripe length 8 | [Sorella (2023)](https://doi.org/10.1103/physrevb.107.115133) | -0.75730 &#9675; ACE (16 conv layers), no symmetry... |
 | Hubbard 4x16, U = 8, n = 0.875 | 8 | **-0.76623(1)** | ACE (16 conv layers) + full symmetry... | [Gu et al. (2026)](https://doi.org/10.48550/arxiv.2604.25775) | -0.76560 NNBF, 32 determinants + free... |
-| Triangular Heisenberg, 196 sites, open | 5 | **-0.5138(1)** | 2D Gated RNN | [Hibat-Allah et al. (2022)](https://doi.org/10.48550/arxiv.2207.14314) | -0.5108 DMRG (Bond dimension = 2000) |
+| Triangular Heisenberg, 196 sites, open | 5 | **-0.5138(1)** | 2D Gated RNN | [Hibat-Allah et al. (2022)](https://doi.org/10.48550/arxiv
+ c.2207.14314) | -0.5108 DMRG (Bond dimension = 2000) |
 | Kagome Heisenberg, 192 sites | 1 | **-0.42987(1)** | VMC with Dirac spin liquid + Jastrow | [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/kagome-8x8_192_P/vmc_gutzwiller.sh) &mdash; no paper cited | none |
 | Pyrochlore Heisenberg, 256 sites | 2 | **-0.48310(7)** | mVMC with SU(2) and symmetry projections | [Astrakhantsev et al. (2021)](https://doi.org/10.1103/physrevx.11.041021) | none |
 
