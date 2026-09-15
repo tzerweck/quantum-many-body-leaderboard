@@ -11,6 +11,41 @@ Second pass on every paper: **harvest its bibliography**. Comparison tables cite
 they are beating, and reviews aggregate SOTA across models we have not touched. That is how the
 triangular/kagome/pyrochlore instances get found: nobody wrote a SOTA note for them.
 
+## The all-results pass (2026-09-15): every published number, not only records
+
+The table records what the field has published, so a weaker or older energy is a row like
+any other. `match_tables.mjs --all` drops nothing for its distance from the record: it bands
+cells (SUB-EXACT, BEATS, FILLS, WEAKER), rescues a cell that misses only by a unit convention
+(factor 4 for Pauli vs S.S, N for per-site vs total) and says which factor it applied, and
+removes values the instance already carries. Readers then go paper by paper, and every row
+that claims a record, sits below an exact value or is filed with low confidence gets a second,
+adversarial reading. Rows and their evidence are data in `sweep-rows-2026-09-15.json`;
+`add_allresults_rows.mjs` converts units and appends.
+
+Two rounds on the cached and newly fetched sources added **195 energies from 59 papers**.
+Chasing quotes found two primary tables worth more than the papers quoting them, both parsed
+by column from the committed text: **Gong et al. 2014** (arXiv:1311.5962, Table I, DMRG at
+4096/6144/8192 SU(2) states and the truncation-error extrapolation on L x L J1-J2 tori) and
+**Hu, Becca, Parola & Sorella 2013** (arXiv:1304.2630, Tables I-IV, VMC with 0/1/2 Lanczos
+steps and the variance extrapolation, to L = 18).
+
+What the readers got wrong, and what now guards against it:
+
+- **Site count is not geometry.** An 8x32 cylinder was filed on the 16x16 torus; both have
+  256 sites. Evidence must name the dimensions.
+- **Error bars.** 38 rows lost their printed error bar and one "(7)" was read as sigma = 7,
+  which let a sub-exact energy take a record. Sigma is parsed from the printed string.
+- **Method strings are data.** "mean field initialised" in a sampled method matched the
+  deterministic-method test in `units.mjs` and exempted the row from the sigma rule.
+- **A superscript citation glued onto the last digits** (-1.1147 [44] read as -1.114744).
+- **Quoted rows.** VarBench's own numbers come back under a second paper's name, and a
+  rounded quote of an exact value is that value, not a new one.
+
+The matcher is capped less by tags than by sizes: most papers state the lattice in the caption
+or the body rather than in the table, so of 479 papers outside the full-text scan only 103 have
+a sized cell. A Haiku screen of the 227 unsized papers passed 5; a deterministic check of the
+other 222 (family words, 8+ negative 4-decimal numbers, size tokens) passed 5 more.
+
 ## The backwards sweep (2026-09-14, evening): 161 candidates becomes 7940
 
 With paging, loud failure and `--since 2019` in place, the sweep was rerun through the
