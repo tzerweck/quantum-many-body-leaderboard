@@ -107,3 +107,11 @@ DEFECTS.push(
     flag: "below-exact",
     finding: "E/N = -1.2381549(7) against the exact -1.2381490 printed in the same table (Table I, N = 10), about 8 sigma below. An independent matrix-free Lanczos ED (checks/tfim_obc_ed.mjs) reproduces the paper's exact column at N = 6-16, so the columns are read correctly; the inversion is in the published numbers. Same instance and same class of error as the VarBench RBM (alpha = 1) row." },
 );
+
+// arXiv:2607.00398 on the 8x8 Heisenberg torus: an energy with no error bar below the SSE
+// QMC ground state. Same paper as the two energy-variance-inconsistent J1-J2 rows above.
+DEFECTS.push(
+  { match: { instance: "Heisenberg/square_64_P", method: "HQT (Ours)" },
+    flag: "below-exact",
+    finding: "E/N = -0.6735 printed without an error bar, 1.3e-5 per site below the stochastic-series-expansion ground state carried on this instance. With no sigma the gap cannot be read as sampling noise." },
+);

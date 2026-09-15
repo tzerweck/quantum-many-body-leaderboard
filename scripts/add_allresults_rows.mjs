@@ -41,8 +41,11 @@ for (const [id, rows] of Object.entries(byInst)) {
   const dof = expectedDof(inst) ?? inst.rows[0].dof;
   const einf = expectedEinf(inst) ?? inst.rows[0].einf;
   for (const r of rows) {
-    const tol = r.origin === "quoted" ? Math.max(r.tol, r.sigma_per_site ?? 0) : r.tol;
-    const dup = inst.rows.find(x => Math.abs(x.energy / div - r.eps) <= tol &&
+    // A quoted exact value rounded to its error bar is the exact row already carried; any other
+    // quoted value repeats a stored row only to its printed digits (Kochkov et al.'s -0.5022(4)
+    // is not the 2048-state DMRG row 3e-4 away).
+    const dup = inst.rows.find(x => Math.abs(x.energy / div - r.eps) <=
+      (r.origin === "quoted" && r.bound_type === "exact" ? Math.max(r.tol, r.sigma_per_site ?? 0) : r.tol) &&
       ((r.origin === "quoted" && x.bound_type === r.bound_type) || x.method === r.method || (x.reference || "").includes(r.arxiv) ||
        (x.verified?.note || "").includes(r.arxiv) || (x.bound_type === "exact" && r.bound_type === "exact")));
     if (dup) { skipped.push(`${id} ${r.reported_as} [${r.arxiv}] = "${dup.method.slice(0, 40)}"`); continue; }

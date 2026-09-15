@@ -51,7 +51,7 @@ order; the marker is an open question regarding ambiguous information (see [erro
 ### All 322 instances
 
 <details>
-<summary><b>Heisenberg</b>: 96 instances, 31 with a record, energies as <code>E/N (S.S)</code></summary>
+<summary><b>Heisenberg</b>: 96 instances, 35 with a record, energies as <code>E/N (S.S)</code></summary>
 
 | instance | record | method | closest challenger |
 |---|---|---|---|
@@ -101,8 +101,8 @@ order; the marker is an open question regarding ambiguous information (see [erro
 | square 6x6 | **-0.678871(3)** | Grassmann Variational Monte Carlo (GVMC): CNN... Grassmann Variational Monte Carl | -0.678870 2D RNN wavefunction (best... [Moss et al. (2025)](https://doi.org/10.48550/arxiv.2502.17144) |
 | square, 40 sites | no record | solved exactly | |
 | square, 50 sites | no record | solved exactly | |
-| square 8x8, open | no record | solved exactly | |
-| square 8x8 | no record | solved exactly | |
+| square 8x8, open | **-0.619033(3)** | PEPS, GO method, D=10, Dc=20 Gradient optimization of finite  | -0.619013 PEPS, GO method, D=8, Dc=16 Gradient optimization of finite  |
+| square 8x8 | **-0.673482(3)** | RBM [Chen et al. (2022)](https://doi.org/10.48550/arxiv.2206.14307) | none |
 | square 10x10, open | **-0.628656(9)** | 2D tensorized RNN (symmetry + annealing) [Hibat-Allah et al. (2022)](https://doi.org/10.48550/arxiv.2207.14314) | -0.628649 RNN + translational symmetry [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/square_100_O/vmc_rnn.sh), no paper cited |
 | square 10x10 | **-0.67155260(3)** | CNN + MinSR [Chen & Heyl (2023)](https://doi.org/10.48550/arxiv.2302.01941) | -0.67154400 Grassmann Variational Monte Carlo... Grassmann Variational Monte Carl |
 | square 12x12, open | no record | solved exactly | |
@@ -110,7 +110,7 @@ order; the marker is an open question regarding ambiguous information (see [erro
 | square 14x14, open | no record | solved exactly | |
 | square 14x14 | **-0.668346(8)** | VMC with fermions (flux+neel+Jastrow) [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/square_196_P/vmc_gutzwiller.sh), no paper cited | -0.663805 RBM (alpha = 1) [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/square_196_P/vmc_rbm.sh), no paper cited |
 | square 16x16, open | **-0.643504(3)** | 2D minGRU (3 layers, c4v symmetry, parallel... [Merali et al. (2026)](https://doi.org/10.48550/arxiv.2605.13807) | -0.643448 PixelCNN (deep autoregressive) Sharir, Levine, Wies, Carleo & S |
-| square 16x16 | no record | solved exactly | |
+| square 16x16 | **-0.669716(1)** | aCNN(C4v) Variational optimization of the  | none |
 | square 18x18, open | no record | solved exactly | |
 | square 18x18 | no record | solved exactly | |
 | square 20x20, open | no record | solved exactly | |
@@ -118,7 +118,7 @@ order; the marker is an open question regarding ambiguous information (see [erro
 | square 22x22, open | no record | solved exactly | |
 | square 22x22 | no record | solved exactly | |
 | square 24x24, open | no record | solved exactly | |
-| square 24x24 | no record | solved exactly | |
+| square 24x24 | **-0.669237(2)** | aCNN(C4v) Variational optimization of the  | none |
 | square 26x26, open | no record | solved exactly | |
 | square 26x26 | no record | solved exactly | |
 | square 28x28, open | no record | solved exactly | |
@@ -219,7 +219,7 @@ order; the marker is an open question regarding ambiguous information (see [erro
 </details>
 
 <details>
-<summary><b>Hubbard</b>: 137 instances, 75 with a record, energies as <code>E/site</code></summary>
+<summary><b>Hubbard</b>: 137 instances, 77 with a record, energies as <code>E/site</code></summary>
 
 | instance | record | method | closest challenger |
 |---|---|---|---|
@@ -262,19 +262,19 @@ order; the marker is an open question regarding ambiguous information (see [erro
 | square 4x4, U = 7.74264, n = 0.625 | **-1.1002331** | DMRG (MaxBondDim = 7000) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_hubbard/square_16_P_5_7.74264.jl), no paper cited | -1.1001250 VMC Hidden Fermion Determinant... [Moreno et al. (2022)](https://doi.org/10.1073/pnas.2122059119) |
 | square 4x4, U = 8, n = 0.625 | **-1.0943979** | DMRG (MaxBondDim = 7000) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_hubbard/square_16_P_5_8.jl), no paper cited | -1.0943960 HFPS + CNN Jastrow, VMC [Chen et al. (2025)](https://doi.org/10.48550/arXiv.2507.10705) |
 | square 4x4, U = 10, n = 0.625 | **-1.0564725** | DMRG (MaxBondDim = 7000) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_hubbard/square_16_P_5_10.jl), no paper cited | -1.0564680 HFPS + CNN Jastrow, VMC [Chen et al. (2025)](https://doi.org/10.48550/arXiv.2507.10705) |
-| square 4x4, U = 2, n = 1 | no record | solved exactly | |
-| square 4x4, U = 4, n = 1 | no record | solved exactly | |
-| square 4x4, U = 6, n = 1 | no record | solved exactly | |
-| square 4x4, U = 8, n = 1 | no record | solved exactly | |
+| square 4x4, U = 2, n = 1 | no record | sampled rows carry no error bar | |
+| square 4x4, U = 4, n = 1 | **-0.8511(1)** | TQS Physics-inspired transformer qua | -0.8511 PITQS Physics-inspired transformer qua |
+| square 4x4, U = 6, n = 1 | no record | sampled rows carry no error bar | |
+| square 4x4, U = 8, n = 1 | **-0.5292(3)** | PITQS Physics-inspired transformer qua | -0.5291 &#9675; HB K = 2 Locality-Induced Hierarchical Ba |
 | square 4x4, periodic/antiperiodic, U = 2, n = 1 | no record | solved exactly | |
 | square 4x4, periodic/antiperiodic, U = 4, n = 1 | no record | solved exactly | |
 | square 4x4, periodic/antiperiodic, U = 6, n = 1 | no record | solved exactly | |
 | square 4x4, periodic/antiperiodic, U = 8, n = 1 | no record | solved exactly | |
 | square 6x6, U = 4, n &asymp; 0.6667 | no record | no variational row | |
-| square 6x6, U = 2, n = 1 | no record | solved exactly | |
-| square 6x6, U = 4, n = 1 | no record | solved exactly | |
+| square 6x6, U = 2, n = 1 | no record | sampled rows carry no error bar | |
+| square 6x6, U = 4, n = 1 | no record | sampled rows carry no error bar | |
 | square 6x6, U = 6, n = 1 | no record | solved exactly | |
-| square 6x6, U = 8, n = 1 | no record | solved exactly | |
+| square 6x6, U = 8, n = 1 | no record | sampled rows carry no error bar | |
 | square 6x6, U = 4, n &asymp; 1.3333 | no record | no variational row | |
 | square 6x6, periodic/antiperiodic, U = 2, n = 1 | **-1.2079(1)** | VMC Hidden Fermion Determinant State Ansatz... [Moreno et al. (2022)](https://doi.org/10.1073/pnas.2122059119) | none |
 | square 6x6, periodic/antiperiodic, U = 4, n = 1 | **-0.87173(2)** | VMC Hidden Fermion Determinant State Ansatz... [Moreno et al. (2022)](https://doi.org/10.1073/pnas.2122059119) | none |
@@ -293,9 +293,9 @@ order; the marker is an open question regarding ambiguous information (see [erro
 | square 8x8, U = 8, n = 0.875 | **-0.7458(6)** | Jastrow-backflow (JBf), 8x8 torus [Sharma et al. (2025)](https://doi.org/10.48550/arXiv.2510.11710) | -0.7454 Hidden-fermion determinant state... [Sharma et al. (2025)](https://doi.org/10.48550/arXiv.2510.11710) |
 | square 8x8, U = -8, n = 1 | no record | sampled rows carry no error bar | |
 | square 8x8, U = -4, n = 1 | no record | sampled rows carry no error bar | |
-| square 8x8, U = 2, n = 1 | no record | solved exactly | |
+| square 8x8, U = 2, n = 1 | no record | sampled rows carry no error bar | |
 | square 8x8, U = 4, n = 1 | **-0.859156(8)** | mVMC with SU(2) and momentum projections... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_64_P_32_4/mVMC/mVMC.sh), no paper cited | -0.858100 &#9675; Hierarchical Backflow (HB) VMC... Locality-Induced Hierarchical Ba |
-| square 8x8, U = 6, n = 1 | no record | solved exactly | |
+| square 8x8, U = 6, n = 1 | no record | sampled rows carry no error bar | |
 | square 8x8, U = 8, n = 1 | **-0.52459(1)** | mVMC with SU(2) and momentum projections... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_64_P_32_8/mVMC/mVMC.sh), no paper cited | -0.52450 &#9675; Hierarchical Backflow (HB) VMC... Locality-Induced Hierarchical Ba |
 | square 8x8, periodic/antiperiodic, U = 2, n = 1 | **-1.19003(9)** | VMC Hidden Fermion Determinant State Ansatz... [Moreno et al. (2022)](https://doi.org/10.1073/pnas.2122059119) | none |
 | square 8x8, periodic/antiperiodic, U = 4, n = 1 | **-0.8622(2)** | VMC Hidden Fermion Determinant State Ansatz... [Moreno et al. (2022)](https://doi.org/10.1073/pnas.2122059119) | none |
@@ -303,10 +303,10 @@ order; the marker is an open question regarding ambiguous information (see [erro
 | square 8x8, periodic/antiperiodic, U = 8, n = 1 | **-0.5245(2)** | VMC Hidden Fermion Determinant State Ansatz... [Moreno et al. (2022)](https://doi.org/10.1073/pnas.2122059119) | none |
 | square 8x8, periodic/open, U = 8, n = 1 | **-0.49944(4)** | VAFQMC [Sorella (2023)](https://doi.org/10.1103/physrevb.107.115133) | -0.49843 DMRG (MaxLinkDim=10000... [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_hubbard/square_64_PO_32_8.jl), no paper cited |
 | square 10x10, U = 4, n = 0.8 | no record | sampled rows carry no error bar | |
-| square 10x10, U = 2, n = 1 | no record | solved exactly | |
-| square 10x10, U = 4, n = 1 | no record | solved exactly | |
-| square 10x10, U = 6, n = 1 | no record | solved exactly | |
-| square 10x10, U = 8, n = 1 | no record | solved exactly | |
+| square 10x10, U = 2, n = 1 | no record | sampled rows carry no error bar | |
+| square 10x10, U = 4, n = 1 | no record | sampled rows carry no error bar | |
+| square 10x10, U = 6, n = 1 | no record | sampled rows carry no error bar | |
+| square 10x10, U = 8, n = 1 | no record | sampled rows carry no error bar | |
 | square 10x10, periodic/antiperiodic, U = 2, n = 1 | no record | solved exactly | |
 | square 10x10, periodic/antiperiodic, U = 4, n = 1 | no record | solved exactly | |
 | square 10x10, periodic/antiperiodic, U = 6, n = 1 | no record | solved exactly | |
@@ -315,11 +315,11 @@ order; the marker is an open question regarding ambiguous information (see [erro
 | square 12x12, U = 2, n = 1 | no record | solved exactly | |
 | square 12x12, U = 4, n = 1 | no record | solved exactly | |
 | square 12x12, U = 6, n = 1 | no record | solved exactly | |
-| square 12x12, U = 8, n = 1 | no record | solved exactly | |
+| square 12x12, U = 8, n = 1 | no record | sampled rows carry no error bar | |
 | square 12x12, periodic/antiperiodic, U = 2, n = 1 | no record | solved exactly | |
 | square 12x12, periodic/antiperiodic, U = 4, n = 1 | no record | solved exactly | |
 | square 12x12, periodic/antiperiodic, U = 6, n = 1 | no record | solved exactly | |
-| square 12x12, periodic/antiperiodic, U = 8, n = 1 | no record | solved exactly | |
+| square 12x12, periodic/antiperiodic, U = 8, n = 1 | no record | sampled rows carry no error bar | |
 | square 14x14, U = 2, n = 1 | no record | solved exactly | |
 | square 14x14, U = 4, n = 1 | no record | solved exactly | |
 | square 14x14, U = 6, n = 1 | no record | solved exactly | |
@@ -420,13 +420,13 @@ order; the marker is an open question regarding ambiguous information (see [erro
 
 </details>
 
-Across the whole table: **182 of 322 instances have a record**, from 947 energies.
-Of the 140 instances without one, 130 are solved exactly and have nothing to compete
-for. Separately, **60 sampled variational energies across 39 instances carry no error bar**, so
-they are listed and rank for nothing, and 15 of them sit below their instance's current
+Across the whole table: **188 of 322 instances have a record**, from 1008 energies.
+Of the 134 instances without one, 111 are solved exactly and have nothing to compete
+for. Separately, **91 sampled variational energies across 54 instances carry no error bar**, so
+they are listed and rank for nothing, and 38 of them sit below their instance's current
 record. If one of those is your paper, the error bar is the only thing missing.
 
-And **78 energies carry no error metric we could find** (&#9675;). Those numbers stay in the
+And **112 energies carry no error metric we could find** (&#9675;). Those numbers stay in the
 table and in the ranking; the marker only says the energy still needs verification or a word
 from the people who produced it.
 
