@@ -1,4 +1,4 @@
-# QMBL: the Quantum Many-Body Leaderboard
+# QMBL - the Quantum Many-Body Leaderboard
 
 <!-- All badges via shields.io. Zenodo's own badge endpoint (zenodo.org/badge/DOI/....svg)
      returns 403 and renders as a broken image, so the DOI badge is built here instead. -->
@@ -279,7 +279,7 @@ a moving table.
 - **v0.1.0: [10.5281/zenodo.22753735](https://doi.org/10.5281/zenodo.22753735)** (205 instances, 675 rows, 182
   records). Cite this to pin the exact comparison set your numbers were measured against.
 
-> T. Zerweck, *QMBL: the Quantum Many-Body Leaderboard*, v0.1.0, Zenodo (2026).
+> T. Zerweck, *QMBL - the Quantum Many-Body Leaderboard*, v0.1.0, Zenodo (2026).
 > [10.5281/zenodo.22753735](https://doi.org/10.5281/zenodo.22753735)
 
 Individual energies should cite **the primary paper named on the row**, not this dataset:
