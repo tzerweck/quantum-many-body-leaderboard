@@ -269,10 +269,6 @@ New rows: open an issue or a PR with the instance, the number, the error bar and
 was estimated, the `bound_type`, and the primary reference. A row is `pending` for 30
 days and `confirmed` if no objection is unresolved.
 
-Planned, not yet built: a **records-held** table ("group X holds 12 of 47 open records").
-It needs a `group` field, which the imported rows do not carry, and it is not worth
-faking by grouping on method names.
-
 ## Citing
 
 Releases are archived on Zenodo, so a paper can cite a frozen comparison set rather than
