@@ -4,8 +4,8 @@
      returns 403 and renders as a broken image, so the DOI badge is built here instead. -->
 [![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.22753734-1682D4)](https://doi.org/10.5281/zenodo.22753734)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
-[![instances](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Ftzerweck%2Fquantum-many-body-leaderboard%2Fmain%2Fdata%2F_summary.json&query=%24.instances&label=instances&color=success)](data/_summary.json)
-[![rows](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Ftzerweck%2Fquantum-many-body-leaderboard%2Fmain%2Fdata%2F_summary.json&query=%24.rows&label=rows&color=success)](data/_summary.json)
+[![hamiltonian instances](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Ftzerweck%2Fquantum-many-body-leaderboard%2Fmain%2Fdata%2F_summary.json&query=%24.instances&label=hamiltonian%20instances&color=success)](data/_summary.json)
+[![energies](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Ftzerweck%2Fquantum-many-body-leaderboard%2Fmain%2Fdata%2F_summary.json&query=%24.rows&label=energies&color=success)](data/_summary.json)
 [![records](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Ftzerweck%2Fquantum-many-body-leaderboard%2Fmain%2Fdata%2F_summary.json&query=%24.records.held&label=records&color=success)](data/_summary.json)
 
 **A record book of the SOTA ground-state energies in quantum many-body
