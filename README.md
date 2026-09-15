@@ -48,10 +48,10 @@ sampled energy with a variance but no error bar.
 Both rows stay in the table and in rank
 order; the marker is an open question regarding ambiguous information (see [error metrics](DATA.md#error-metrics)).
 
-### All 300 instances
+### All 322 instances
 
 <details>
-<summary><b>Heisenberg</b>: 86 instances, 31 with a record, energies as <code>E/N (S.S)</code></summary>
+<summary><b>Heisenberg</b>: 96 instances, 31 with a record, energies as <code>E/N (S.S)</code></summary>
 
 | instance | record | method | closest challenger |
 |---|---|---|---|
@@ -59,7 +59,16 @@ order; the marker is an open question regarding ambiguous information (see [erro
 | chain, 20 sites | **-0.4452193** | DMRG (max truncation error ~ 1.0E-13) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_heisenberg/chain_20_P.jl), no paper cited | -0.4452189 RNN + translational symmetry [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/chain_20_P/vmc_rnn.sh), no paper cited |
 | chain, 200 sites, open | **-0.4422078** | DMRG (max truncation error ~ 1.0E-14) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_heisenberg/chain_200_O.jl), no paper cited | -0.4378396 RBM (alpha = 1) [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/chain_200_O/vmc_rbm.sh), no paper cited |
 | chain, 200 sites | **-0.4431678** | DMRG (max truncation error ~ 2.8E-12) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_heisenberg/chain_200_P.jl), no paper cited | -0.4430967 VMC with projected fermions +... [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/chain_200_P/vmc_gutzwiller.sh), no paper cited |
+| kagome-24, 24 sites | no record | solved exactly | |
+| kagome 2x2 (12 sites) | no record | solved exactly | |
 | kagome 2x3 (18 sites) | **-0.4471262** | DMRG (bond dimension = 368) [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/kagome-2x3_18_P/dmrg.sh), no paper cited | -0.4467304 &dagger; VQE (SR + symm. + 108 variational... [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/kagome-2x3_18_P/vqe.sh), no paper cited |
+| kagome-30, 30 sites | no record | solved exactly | |
+| kagome-36a, 36 sites | no record | solved exactly | |
+| kagome-36b, 36 sites | no record | solved exactly | |
+| kagome-36c, 36 sites | no record | solved exactly | |
+| kagome-36d, 36 sites | no record | solved exactly | |
+| kagome-42a, 42 sites | no record | solved exactly | |
+| kagome-42b, 42 sites | no record | solved exactly | |
 | kagome 4x4 (48 sites) | **-0.4375(2)** | GCNN (6 layers, 6 feature maps), symmetric... [Đurić et al. (2024)](https://doi.org/10.48550/arxiv.2401.02866) | -0.4304 VMC with Dirac spin liquid +... [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/kagome-4x4_48_P/vmc_gutzwiller.sh), no paper cited |
 | kagome 6x6 (108 sites) | no record | every variational row is flagged | |
 | kagome 8x8 (192 sites) | **-0.42987(1)** | VMC with Dirac spin liquid + Jastrow [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/kagome-8x8_192_P/vmc_gutzwiller.sh), no paper cited | none |
@@ -90,6 +99,7 @@ order; the marker is an open question regarding ambiguous information (see [erro
 | square 4x4 | **-0.7017449** | VQE + symm. circuit (64 pars., exact grad... [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/square_16_P/vqe.sh), no paper cited | -0.7017252 &dagger; VQE + symm. circuit (64 pars.... [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/square_16_P/vqe_noisy.sh), no paper cited |
 | square 6x6, open | **-0.6035218** | DMRG (bond dimension = 2048) [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/square_36_O/dmrg.sh), no paper cited | -0.5948382 Jastrow baseline [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/square_36_O/vmc_jastrow.sh), no paper cited |
 | square 6x6 | **-0.67887(2)** | 2D RNN wavefunction (best variational) [Moss et al. (2025)](https://doi.org/10.48550/arxiv.2502.17144) | -0.67887 RBM + Lanczos recursion [Chen et al. (2022)](https://doi.org/10.48550/arxiv.2206.14307) |
+| square, 40 sites | no record | solved exactly | |
 | square, 50 sites | no record | solved exactly | |
 | square 8x8, open | no record | solved exactly | |
 | square 8x8 | no record | solved exactly | |
@@ -145,7 +155,7 @@ order; the marker is an open question regarding ambiguous information (see [erro
 </details>
 
 <details>
-<summary><b>J1-J2</b>: 44 instances, 43 with a record, energies as <code>E/N (S.S)</code></summary>
+<summary><b>J1-J2</b>: 56 instances, 43 with a record, energies as <code>E/N (S.S)</code></summary>
 
 | instance | record | method | closest challenger |
 |---|---|---|---|
@@ -177,6 +187,18 @@ order; the marker is an open question regarding ambiguous information (see [erro
 | square 6x6, J2 = 0.8 | **-0.586411(9)** | RBM wave function [Chen et al. (2022)](https://doi.org/10.48550/arxiv.2206.14307) | -0.585900 CNN Choo, Neupert & Carleo, Two-dime |
 | square 6x6, J2 = 0.9 | **-0.6478705** | DMRG (bond dimension = 2048) [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_36_P_0.9/dmrg.sh), no paper cited | -0.6416472 RBM (alpha = 1) [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_36_P_0.9/vmc_rbm.sh), no paper cited |
 | square 6x6, J2 = 1 | **-0.71429(1)** | RBM wave function [Chen et al. (2022)](https://doi.org/10.48550/arxiv.2206.14307) | -0.71351 CNN Choo, Neupert & Carleo, Two-dime |
+| square, 40 sites, J2 = 0.1 | no record | solved exactly | |
+| square, 40 sites, J2 = 0.2 | no record | solved exactly | |
+| square, 40 sites, J2 = 0.3 | no record | solved exactly | |
+| square, 40 sites, J2 = 0.4 | no record | solved exactly | |
+| square, 40 sites, J2 = 0.5 | no record | solved exactly | |
+| square, 40 sites, J2 = 0.55 | no record | solved exactly | |
+| square, 40 sites, J2 = 0.6 | no record | solved exactly | |
+| square, 40 sites, J2 = 0.65 | no record | solved exactly | |
+| square, 40 sites, J2 = 0.7 | no record | solved exactly | |
+| square, 40 sites, J2 = 0.8 | no record | solved exactly | |
+| square, 40 sites, J2 = 0.9 | no record | solved exactly | |
+| square, 40 sites, J2 = 1 | no record | solved exactly | |
 | square 8x8, J2 = 0.5 | **-0.498963(2)** | RBM+PP with momentum (K=0), spin-parity (even... [Nomura & Imada (2021)](https://doi.org/10.1103/physrevx.11.031034) | -0.498666 RBM with momentum (K=0)... [Nomura (2021)](https://doi.org/10.1088/1361-648x/abe268) |
 | square 8x8, J2 = 0.55 | **-0.48835(8)** | ClebschTree [Vieijra & Nys (2021)](https://doi.org/10.1103/physrevb.104.045123) | none |
 | square 10x10, J2 = 0.3 | **-0.55485(1)** | VMC with fermions (flux+neel+Jastrow) [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_100_P_0.3/vmc_gutzwiller.sh), no paper cited | -0.54909 DMRG (bond dimension = 1024) [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_100_P_0.3/dmrg.sh), no paper cited |
@@ -398,8 +420,8 @@ order; the marker is an open question regarding ambiguous information (see [erro
 
 </details>
 
-Across the whole table: **182 of 300 instances have a record**, from 791 energies.
-Of the 118 instances without one, 111 are solved exactly and have nothing to compete
+Across the whole table: **182 of 322 instances have a record**, from 813 energies.
+Of the 140 instances without one, 133 are solved exactly and have nothing to compete
 for. Separately, **31 sampled variational energies across 26 instances carry no error bar**, so
 they are listed and rank for nothing, and 5 of them sit below their instance's current
 record. If one of those is your paper, the error bar is the only thing missing.

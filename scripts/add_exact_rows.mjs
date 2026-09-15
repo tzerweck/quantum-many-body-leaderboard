@@ -166,4 +166,72 @@ for (const [L, printed] of SANDVIK_TABLES.cyl) {
 }
 console.log(`batch B: ${added - before[0]} exact rows (${created - before[1]} new instances)`);
 
+// ---------------------------------------------------------------------------------------
+// Batch C: exact diagonalization of frustrated clusters. Deterministic, so no sigma; the
+// energies are exact to the printed digits.
+//
+// C1: the tilted 40-site square cluster of Richter & Schulenburg, "The spin-1/2 J1-J2
+// Heisenberg antiferromagnet on the square lattice: Exact diagonalization for N = 40
+// spins", Eur. Phys. J. B 73, 117 (2010), arXiv:0909.3723, Table 1: E_GS(S = 0) at 13
+// values of J2/J1, periodic boundaries, H = J1 sum s.s + J2 sum s.s with J1 = 1 (S.S
+// totals). J2 = 0 is the plain Heisenberg model on the same cluster. The cluster is the
+// one of the paper's Fig. 1; its lattice vectors are not stated in the text.
+//
+// C2: kagome clusters of Lauchli, Sudan & Sorensen, "Ground-state energy and spin gap of
+// spin-1/2 kagome Heisenberg antiferromagnetic clusters: large-scale exact diagonalization
+// results", Phys. Rev. B 83, 212401 (2011), arXiv:1103.1159, Table I. A kagome cluster is
+// identified by its basis vectors, not its size - the table lists four different 36-site
+// clusters - so each instance names the paper's cluster label and carries the vectors.
+// Only the even-N clusters are taken (the odd ones have S = 1/2 ground states, a different
+// sector); 18b is already VarBench's kagome-2x3_18_P, whose exact row -8.048270773 / 18
+// matches this table to all digits, and 12 = (2,0),(0,2) is written kagome-2x2 in the
+// VarBench naming. The per-site column of the table reproduces E/N for every row, which
+// is the column-alignment check.
+const RS = { ref: "Richter & Schulenburg, The spin-1/2 J1-J2 Heisenberg antiferromagnet on the square lattice: Exact diagonalization for N = 40 spins, Eur. Phys. J. B 73, 117 (2010), arXiv:0909.3723", pr: true };
+const LSS = { ref: "Lauchli, Sudan & Sorensen, Ground-state energy and spin gap of spin-1/2 kagome Heisenberg antiferromagnetic clusters: large-scale exact diagonalization results, Phys. Rev. B 83, 212401 (2011), arXiv:1103.1159", pr: true };
+const ED = "Exact diagonalization (Lanczos)";
+const ED_WHY = "exact diagonalization of the full cluster; deterministic, exact to the printed digits (RULES.md 4)";
+const ED_READ = "arXiv PDF extracted locally with pypdf in layout mode, parsed by column position and checked against the paper's own per-site column; no LLM transcription";
+
+// [J2, E_GS(S = 0) total, S.S]
+const RS_TABLE_1 = [
+  [0, "-27.09485025"], [0.1, "-25.46460260"], [0.2, "-23.90046918"], [0.3, "-22.42728643"],
+  [0.4, "-21.08836670"], [0.5, "-19.96304839"], [0.55, "-19.51791526"], [0.6, "-19.18368038"],
+  [0.65, "-20.04603255"], [0.7, "-21.05530239"], [0.8, "-23.34020427"], [0.9, "-25.83691287"],
+  [1, "-28.43880892"],
+];
+// [cluster label, N, basis vector a, basis vector b, total E, S.S]
+const LSS_TABLE_I = [
+  ["12", 12, "(2,0)", "(0,2)", "-5.444875216"],
+  ["24", 24, "(1,2)", "(-3,2)", "-10.589965547"],
+  ["30", 30, "(2,1)", "(-2,4)", "-13.154318948"],
+  ["36a", 36, "(-2,3)", "(4,0)", "-15.787874847"],
+  ["36b", 36, "(3,0)", "(-3,4)", "-15.806927756"],
+  ["36c", 36, "(3,0)", "(-1,4)", "-15.814334002"],
+  ["36d", 36, "(4,-2)", "(-2,4)", "-15.781555118"],
+  ["42a", 42, "(-1,3)", "(5,-1)", "-18.395959984"],
+  ["42b", 42, "(-2,4)", "(4,-1)", "-18.401988921"],
+];
+
+const beforeC = [added, created];
+for (const [J2, printed] of RS_TABLE_1) {
+  const N = 40, E = +printed;
+  const id = J2 === 0 ? "Heisenberg/square_40_P" : `J1J2/square_40_P_${J2}`;
+  put(id,
+    { model: J2 === 0 ? "Heisenberg" : "J1J2", lattice: "square", n_sites: N, boundary: "P", params: J2 === 0 ? {} : { J2 }, dof: N, einf: 0 },
+    { energy: +(4 * E).toPrecision(12), sigma: null, src: RS, method: ED, why: ED_WHY, read: ED_READ,
+      reported: `E_GS(S = 0) = ${printed} (total, S.S, J1 = 1), N = 40, J2 = ${J2}`,
+      note: `Table 1, "Ground state energy E_GS(S = 0) ...", row J2 = ${J2}. The tilted 40-site square-lattice cluster of the paper's Fig. 1 with periodic boundaries (Sec. 2); E/N = ${(E / N).toFixed(7)} in S.S units, Pauli total = 4 E. ${J2 === 0 ? "J2 = 0 is the plain Heisenberg antiferromagnet on this cluster." : "The paper's J2 grid is 0, 0.1, ..., 0.5, 0.55, 0.6, 0.65, 0.7, 0.8, 0.9, 1.0."}` });
+}
+for (const [label, N, a, b, printed] of LSS_TABLE_I) {
+  const E = +printed;
+  const lattice = label === "12" ? "kagome-2x2" : `kagome-${label}`;
+  put(`Heisenberg/${lattice}_${N}_P`,
+    { model: "Heisenberg", lattice, n_sites: N, boundary: "P", params: {}, dof: N, einf: 0 },
+    { energy: +(4 * E).toPrecision(12), sigma: null, src: LSS, method: ED, why: ED_WHY, read: ED_READ,
+      reported: `Total E = ${printed} (S.S), cluster ${label}`,
+      note: `Table I, "Cluster studied in this work", row N = ${label}: basis vectors a = ${a}, b = ${b} in units of the kagome lattice vectors a1, a2 (each of length 2a), periodic (torus). E/N = ${(E / N).toFixed(6)} as printed in the table's own E/N column; Pauli total = 4 E. ${label === "36d" ? "The 36d cluster (|a| = |b| = d = sqrt 12) is the standard 36-site kagome cluster with the full symmetry of the plane." : label === "12" ? "The (2,0),(0,2) cluster is 2 x 2 unit cells, kagome-2x2 in the VarBench naming." : ""}`.trim() });
+}
+console.log(`batch C: ${added - beforeC[0]} exact rows (${created - beforeC[1]} new instances)`);
+
 console.log(`added ${added} exact rows (${created} new instances)`);
