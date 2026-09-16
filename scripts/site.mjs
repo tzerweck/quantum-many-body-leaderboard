@@ -17,6 +17,7 @@ import { citeRef } from "./cite.mjs";
 import { sources, sourceOf } from "./enrich_sources.mjs";
 import { FRONTIER } from "./views.mjs";
 import { quote, marks, shorten, MODELS, BOUNDARY, instanceLabel, byGeometry, noRecordReason, challengerOf, gapAbove } from "./readme_table.mjs";
+import { logoSvg, faviconSvg, LOGO_CSS } from "./logo.mjs";
 
 const OUT = "_site";
 const REPO = "https://github.com/tzerweck/quantum-many-body-leaderboard";
@@ -54,12 +55,15 @@ function page({ url, title, description, body, wide = false }) {
 <meta name="description" content="${esc(description)}">
 <link rel="canonical" href="https://qmbl.org${url}">
 <link rel="stylesheet" href="/style.css">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml" sizes="any">
+<link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <meta property="og:title" content="${esc(title ?? "QMBL - the Quantum Many-Body Leaderboard")}">
 <meta property="og:description" content="${esc(description)}">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://qmbl.org${url}">
 <header class="site">
-  <a class="wordmark" href="/">QMBL<span>the quantum many-body leaderboard</span></a>
+  <a class="wordmark" href="/">${logoSvg()}<b>QMBL<span>the quantum many-body leaderboard</span></b></a>
   <nav>${NAV.map(([href, label]) =>
     `<a href="${href}"${href === url ? ' aria-current="page"' : ""}>${label}</a>`).join("")}
     <a class="ext" href="${REPO}">GitHub</a></nav>
@@ -745,9 +749,12 @@ header.site {
   border-bottom: 1px solid var(--grid);
 }
 .wordmark {
+  display: flex; align-items: center; gap: 0.7rem;
   font-family: var(--serif); font-size: 1.3rem; font-weight: 600; color: var(--ink);
   text-decoration: none; letter-spacing: 0.02em;
 }
+.wordmark b { font-weight: inherit; }
+.wordmark .logo { width: 34px; height: 34px; flex: none; }
 .wordmark span {
   display: block; font-family: var(--sans); font-size: 0.72rem; font-weight: 400;
   letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
@@ -860,7 +867,7 @@ pre {
 }
 h1:hover .anchor, h2:hover .anchor, h3:hover .anchor, h4:hover .anchor { opacity: 1; color: var(--muted); }
 hr { border: 0; border-top: 1px solid var(--grid); margin: 2rem 0; }
-`;
+` + LOGO_CSS;
 
 // ----------------------------------------------------------------------------- output
 function write(rel, content) {
@@ -880,6 +887,10 @@ write("data/index.html", docPage("DATA.md", "/data/", "Data",
 write("contribute/index.html", contributePage());
 write("404.html", notFoundPage());
 write("style.css", CSS);
+write("favicon.svg", faviconSvg());
+// Rendered once from favicon.svg (scripts/assets/); Safari and share sheets do not take SVG icons.
+for (const png of ["apple-touch-icon.png", "favicon-32.png"])
+  fs.copyFileSync(path.join("scripts/assets", png), path.join(OUT, png));
 write("llms.txt", llmsTxt());
 write(".nojekyll", "");
 write("robots.txt", "User-agent: *\nAllow: /\nSitemap: https://qmbl.org/sitemap.xml\n");

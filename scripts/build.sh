@@ -20,6 +20,7 @@ node scripts/validate.mjs
 node scripts/summary.mjs > /dev/null
 node scripts/readme_table.mjs
 node scripts/figures.mjs
+node scripts/logo.mjs
 # Generated output, gitignored. Built here too so a site that no longer renders the data
 # fails locally rather than in the Pages workflow.
 node scripts/site.mjs

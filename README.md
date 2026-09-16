@@ -6,6 +6,13 @@
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 [![entries](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Ftzerweck%2Fquantum-many-body-leaderboard%2Fmain%2Fdata%2F_summary.json&query=%24.rows&label=entries&color=success)](data/_summary.json)
 
+<!-- Text-only animation (scripts/logo.mjs): 4x4 spins scrambling and settling into Neel order.
+     Two files because an SVG shown as an image cannot see the page's colour scheme. -->
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="figures/logo-neel-dark.svg">
+  <img src="figures/logo-neel.svg" width="160" alt="Sixteen spins scrambling and settling into a Néel checkerboard">
+</picture>
+
 SOTA ground-state energies.
 
 This is the literature organised to serve fellow researchers and AI. 
