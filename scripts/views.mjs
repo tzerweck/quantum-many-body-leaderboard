@@ -11,8 +11,8 @@ export const CONTESTED = 5;
 // The instances the field actually competes on, in the order they are shown. Curated,
 // not top-N-by-anything: an automatic ranking by V-score surfaces the stale J2 != 0.5
 // baselines instead and buries 10x10 (the internal view of those is staleness.mjs).
-// Shared because the README and the site both lead with this table, and a front page
-// that disagreed with the repo's README is the same failure as a stale README.
+// The site's front page leads with this table; the README lists every instance instead
+// (readme_table.mjs) and no longer renders it.
 export const FRONTIER = [
   ["J1J2/square_64_P_0.5", "J1-J2 square 8x8, J2 = 0.5"],
   ["J1J2/square_100_P_0.5", "J1-J2 square 10x10, J2 = 0.5"],

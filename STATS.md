@@ -154,7 +154,7 @@ That leaves **116 records from independent papers, of which 84 resolve to a coun
 
 Two things the table does not say. **It is not a ranking of who is ahead**: a record set
 in 2017 and one taken last month weigh the same, and a country total says nothing about
-*which* instances are held: the four frontier records in the README are held by two
+*which* instances are held: the four frontier records on the site's front page are held by two
 groups, which is invisible in a column of totals. **And it is not a measure of output**:
 it counts records currently standing, so a group whose results have since been beaten
 disappears from it entirely.

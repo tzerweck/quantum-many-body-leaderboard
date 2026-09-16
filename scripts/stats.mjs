@@ -225,7 +225,7 @@ p(`| *VarBench collaboration* | *${ccBaseline}* | *33 authors, 8 countries, not 
 p("");
 p("Two things the table does not say. **It is not a ranking of who is ahead**: a record set");
 p("in 2017 and one taken last month weigh the same, and a country total says nothing about");
-p("*which* instances are held: the four frontier records in the README are held by two");
+p("*which* instances are held: the four frontier records on the site's front page are held by two");
 p("groups, which is invisible in a column of totals. **And it is not a measure of output**:");
 p("it counts records currently standing, so a group whose results have since been beaten");
 p("disappears from it entirely.", "");
