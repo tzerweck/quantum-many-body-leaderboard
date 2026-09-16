@@ -271,7 +271,7 @@ function homePage() {
   const current = instances.filter(i => i.rows.some(r => (yearOf(r) ?? 0) >= 2025)).length;
   const b = summary.blocked_on_sigma;
   const body = `
-<h1>The best published ground-state energies, in one table</h1>
+<h1>The best published ground-state energies</h1>
 <p class="lead">QMBL is a record book of the state of the art in quantum many-body simulation: one row
 per published energy, ranked within each Hamiltonian instance, every row citing the paper that
 produced the number and declaring what kind of quantity it is. Where an instance is solved, the
