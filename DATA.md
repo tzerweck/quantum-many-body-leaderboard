@@ -41,7 +41,7 @@ This is the row currently holding the 10×10 J1-J2 record, in full:
 paper: a reference calculation run across the instance set so the V-score would have
 something to measure against, not a published state-of-the-art claim. 369 of the 578
 imported rows are of this kind. 75 of VarBench's own exact diagonalizations hold their
-instance's record, as any exact energy does ([§6](RULES.md#6-records-and-ties)), and 28
+instance's record, as any exact energy does ([§6](RULES.md#6-records-and-ties)), and 27
 of its variational reference runs do, which means *no published result has ever beaten the
 benchmark's own reference run on those instances*
 (`baseline_records` in `data/_summary.json` counts the latter). See
@@ -168,6 +168,40 @@ something specific here and withholds the record.
 
 If one of these is yours, see [Contributing](README.md#contributing): the error bar, the
 variance, or the checkpoint all resolve it.
+
+### Where an added error bar or variance came from: the `error_metrics` block
+
+A row may carry a `sigma` or an `energy_variance` its paper does not print. The row's
+`energy` is still the printed one; the `error_metrics` block says where the added numbers
+came from:
+
+```json
+"error_metrics": {
+  "fields": ["energy_variance"],
+  "measured_by": "authors",
+  "checked_on": "2026-09-16",
+  "source": "authors' repository github.com/NeuralQXLab/convnextnnqs@c78787343c, data/optimizations.ipynb, ...",
+  "source_file": "sources/2505.03466-repo-optimizations-j1j2.json",
+  "reported_as": "(-0.4975827288198424, 5.751903088141703e-06) | (0.002727916908247034, 0)",
+  "conversion": "v_score",
+  "note": "..."
+}
+```
+
+- `fields` names what the block set; nothing a row already carried is overwritten.
+- `measured_by` is `authors` when the number is in the authors' own data release (a
+  repository, a Zenodo record, a notebook's stored output), and `qmbl` when we measured it
+  on the checkpoint the authors published, with their network. A state we trained
+  ourselves is never attached to someone else's row; it is a row of its own.
+- `source_file` is committed under `sources/`, and every ` | `-separated part of
+  `reported_as` appears in it verbatim, so each value can be checked from a clone.
+- `conversion` is the convention the source states its variance in (`var_total_pauli`,
+  `var_total_SS`, `var_over_n_SS`, `var_over_n2_SS`, `v_score`), converted to the stored
+  convention once, in [`scripts/add_error_metrics.mjs`](scripts/add_error_metrics.mjs).
+
+A source's number is attached only if its energy agrees with the row's within two combined
+error bars, which is the check that it describes the state behind the printed energy.
+Passes are `error-metrics-YYYY-MM-DD.json` at the repository root.
 
 ## Provenance and defects
 

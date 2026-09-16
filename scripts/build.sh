@@ -13,6 +13,7 @@ node scripts/add_worklist_rows.mjs
 node scripts/add_exact_rows.mjs
 node scripts/add_allresults_rows.mjs
 node scripts/add_repo_data_rows.mjs
+node scripts/add_error_metrics.mjs
 node scripts/add_compute.mjs
 node scripts/add_coverage.mjs
 node scripts/apply_defects.mjs

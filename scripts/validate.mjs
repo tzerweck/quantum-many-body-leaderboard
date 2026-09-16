@@ -50,6 +50,18 @@ for (const m of fs.readdirSync("data")) {
             if (/normali[sz]ed|equivalent|h100_eq/i.test(k)) issues.push(`COMPUTE ${at}: normalised field ${k}; DATA.md forbids normalisation`);
         }
       }
+      // An error bar or variance the paper does not print must say who produced it and be
+      // checkable against a committed file (DATA.md, the `error_metrics` block).
+      if (r.error_metrics != null) {
+        const m = r.error_metrics;
+        if (!["authors", "qmbl"].includes(m.measured_by)) issues.push(`ERRMET ${at}: measured_by ${m.measured_by}`);
+        if (!Array.isArray(m.fields) || !m.fields.length || m.fields.some(k => r[k] == null))
+          issues.push(`ERRMET ${at}: fields ${JSON.stringify(m.fields)} not all set on the row`);
+        const text = m.source_file && fs.existsSync(m.source_file) ? fs.readFileSync(m.source_file, "utf8") : null;
+        if (text == null) issues.push(`ERRMET ${at}: source_file ${m.source_file} missing`);
+        else if (!m.reported_as || m.reported_as.split(" | ").some(s => !text.includes(s)))
+          issues.push(`ERRMET ${at}: reported_as not verbatim in ${m.source_file}`);
+      }
     }
     // `coverage` is instance level: when its literature was last checked and by what.
     // A check that found nothing is as real as one that added a row, so `found: 0` is

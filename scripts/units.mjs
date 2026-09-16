@@ -11,7 +11,11 @@ export const SPIN_MODELS = new Set(["Heisenberg", "J1J2", "TFIsing"]);
 // 144 of the 399 variational rows are of that kind - requiring sigma of them would
 // vacate more than half the table's records over a field that cannot exist.
 // Deterministic is asserted by explicit markers; everything else counts as sampled.
-const DETERMINISTIC = /\bdmrg\b|\bmps\b|\bpeps\b|\bmera\b|tensor network|statevector|exact diagonaliz|exact solution|bethe ansatz|hartree|mean[- ]field|truncation error|bond dimension|\bfci\b|full configuration/i;
+// A method string that is only "HF" is the Hartree-Fock energy a paper prints beside its
+// own (arXiv:2210.05871, Tables 1 and 2). "HB K = 0 (HF)" is not: the HB paper samples its
+// K = 0 state like every other depth (arXiv:2606.00924, Table II caption, "sampling errors
+// are around 0.0003"), so the bare abbreviation matches only as the whole string.
+const DETERMINISTIC = /\bdmrg\b|\bmps\b|\bpeps\b|\bmera\b|tensor network|statevector|exact diagonaliz|exact solution|bethe ansatz|hartree|mean[- ]field|truncation error|bond dimension|\bfci\b|full configuration|^HF$/i;
 export const isSampled = method => !DETERMINISTIC.test(method || "");
 
 // Did WE find any error metric for this row? Neither a sigma nor an energy variance

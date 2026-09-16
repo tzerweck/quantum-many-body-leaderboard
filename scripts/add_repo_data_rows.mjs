@@ -95,3 +95,57 @@ for (const r of [...best.values()].sort((a, b) => a.boundary.localeCompare(b.bou
 }
 console.log(`added ${added} repository-data rows (arXiv:2502.17144); ${skipped.length} already on their instance from Table V`);
 if (process.env.QMBL_VERBOSE) skipped.forEach(s => console.log("  dup", s));
+
+// The same authors' triangular-lattice paper (arXiv:2505.20406) sits in the same repository,
+// Triangular/final_plotting/plotting_data/final_energies_data_plotting.pkl, copied whole into
+// sources/2505.20406-repo-final_energies_data.json. The paper prints its finite-size energy
+// only at L = 6 (Table V, -0.5562(2)) and the V-scores of its most accurate schedule, s = 4.0,
+// r = 0.158, at every L (Table II); the file reproduces both. Of its periodic sizes only
+// L = 6 and L = 12 are QMBL instances (L = 18, 24, 30 are not, and creating instances is a
+// mining pass, not this one); L = 6 is already on its instance from Table V and gets its
+// variance through add_error_metrics.mjs. The open-boundary runs (Appendix I) are not taken
+// yet: this file holds one open-boundary schedule (SquareMS basis, s = 1.0, r = 0.475,
+// T0 = 0.25) at L = 6, 12, 18, while the three obc_*_data_plotting.pkl files beside it hold
+// lower energies with no L attached, so which run is the paper's best at L = 12 needs the
+// plotting notebook read first.
+{
+  const TRI = JSON.parse(fs.readFileSync("sources/2505.20406-repo-final_energies_data.json", "utf8"));
+  const TREF = "Moss, Wiersema, Hibat-Allah, Carrasquilla & Melko, arXiv:2505.20406v3 (2025-10-13)";
+  const r = TRI.runs.find(x => x.basis === "TriangularMS" && x.boundary === "periodic" && x.scale === 4 && x.rate === 0.158 && x.L === 12);
+  const id = "Heisenberg/triangular_144_P";
+  const p = `data/${id}.json`;
+  const inst = JSON.parse(fs.readFileSync(p, "utf8"));
+  const div = perSiteDivisor(inst);
+  if (inst.rows.some(x => (x.reference || "").includes("2505.20406"))) console.log(`  ${id}: already carries a row from arXiv:2505.20406, not added`);
+  else {
+    const energy = +(r.energy_per_site * div).toPrecision(12);
+    const varTot = +(r.variance_per_site * inst.n_sites ** 2 * 16).toPrecision(8);
+    const dof = expectedDof(inst) ?? inst.rows[0]?.dof ?? null;
+    const einf = expectedEinf(inst) ?? inst.rows[0]?.einf ?? null;
+    inst.rows.push({
+      energy, sigma: +(r.std_error * div).toPrecision(6),
+      energy_variance: varTot, dof, einf,
+      v_score: vScore(varTot, dof, energy, einf),
+      method: "2D RNN wavefunction (iterative retraining, s=4.0, r=0.158)", bound_type: "variational",
+      bound_type_reason: "variational ansatz at a stated size; energy is an upper bound (assigned during source reading)",
+      reference: TREF, peer_reviewed: false,
+      source: `repo-data-${CHECKED}`, provenance: "primary",
+      verified: {
+        checked_on: CHECKED,
+        method: "authors' data release read locally (pickle via numpy), values copied by key, no transcription; the file is committed as sources/2505.20406-repo-final_energies_data.json and reproduces Table V's L = 6 energy and Table II's V-scores",
+        reported_as: `${r.energy_per_site} +/- ${r.std_error} per site (S.S), Var(E/N) = ${r.variance_per_site}, V-score ${r.v_score}`,
+        note: `${TRI.source}: ['TriangularMS,periodicBC']['scale=4.0,rate=0.158,T=1.00'], L = 12. The paper's most accurate schedule (Table II, whose L = 12 V-score 4.6e-2 is this run's ${r.v_score.toFixed(4)}); plotted in Fig. 4(a), not printed. TriangularMS is the 120-degree basis rotation U_tri, which changes the representation, not the Hamiltonian. Variance is Var(H)/N^2 in S.S units; total = var x N^2 x 16.`,
+        secondary_of: null,
+      },
+      compute: {
+        parameters: null, gpu_hours: 1700, device: "NVIDIA H200", n_devices: 2, samples: 10000, wall_clock: null, cpu_core_hours: null, bond_dimension: null, iterations: null,
+        reported_as: "Sec. IV Discussion: The longest simulation reported in this work took 1,700 GPU hours and produced energies for six different system sizes up to 30x30, albeit with more modern hardware (see Appendix E). Appendix E, Figs. 10-11 captions: ... using two H200 GPUs. Fig. 4 caption: Each of our variational energies is estimated with 10x10^3 samples.",
+        source: "Sec. IV Discussion, Appendix E Figs. 10-11 captions, Fig. 4 caption, arXiv:2505.20406 (compute pass 2026-09-16, block reused for the repository row)",
+        scope: "ansatz", confidence: "medium",
+        note: "1,700 GPU-hours is the paper's total for its longest iterative-retraining chain (L = 6 ... 30), read as the s = 4.0, r = 0.158 schedule this row comes from; the paper does not split it per size. No parameter count stated.",
+      },
+    });
+    fs.writeFileSync(p, JSON.stringify(inst, null, 2) + "\n");
+    console.log(`added 1 repository-data row (arXiv:2505.20406): ${id} ${r.energy_per_site.toFixed(7)}(${Math.round(r.std_error * 1e7)})`);
+  }
+}
