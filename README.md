@@ -405,9 +405,9 @@ Organised literature for fellow researchers and AI, so that we can see the works
 | TB-DMFT-SOC, size 119 | **-1305.3902308** | DMRG (bond dimension 350) using fork tensor... [Bauernfeind et al. (2017)](https://doi.org/10.1103/physrevx.7.031013) | -1305.3902296 (+1.3e-6) DMRG (bond dimension 330) using... [Bauernfeind et al. (2017)](https://doi.org/10.1103/physrevx.7.031013) |
 | TB-DMFT-SOC, size 309 | **-3351.7573592** | DMRG (bond dimension 350) using fork tensor... [Bauernfeind et al. (2017)](https://doi.org/10.1103/physrevx.7.031013) | -3351.7573530 (+6.2e-6) DMRG (bond dimension 330) using... [Bauernfeind et al. (2017)](https://doi.org/10.1103/physrevx.7.031013) |
 
+<!-- END LEADERBOARD -->
 
 ## Details
-</details>
 
 Every row in the dataset further contains a declared `bound_type` saying what kind of quantity the energy value actually is. Also see [units and conventions](DATA.md#units-and-conventions) and [the ranking rules](RULES.md#6-records-and-ties). 
 
@@ -422,8 +422,6 @@ sampled energy with a variance but no error bar.
 
 Both rows stay in the table and in rank
 order; the marker is an open question regarding ambiguous information (see [error metrics](DATA.md#error-metrics)).
-
-<!-- END LEADERBOARD -->
 
 Check [RULES.md](RULES.md) for how a record is decided.
 
