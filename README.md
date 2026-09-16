@@ -1,3 +1,4 @@
+
 <!-- Header and footer animations are text-mode GIFs from scripts/ascii.mjs. -->
 <img src="figures/qmbl-ascii.gif" width="614" alt="QMBL - the Quantum Many-Body Leaderboard">
 
@@ -7,11 +8,9 @@
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 [![entries](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Ftzerweck%2Fquantum-many-body-leaderboard%2Fmain%2Fdata%2F_summary.json&query=%24.rows&label=entries&color=success)](data/_summary.json)
 
-SOTA ground-state energies.
+**A live record of SOTA published ground-state energies for lattice Hamiltonians.**
 
-This is the literature organised to serve fellow researchers and AI. 
-
-So that we can see the works of the wider research community at one glance.
+Organised literature for fellow researchers and AI, so that we can see the works of the wider research community at one glance.
 
 ## Leaderboard
 
@@ -406,21 +405,23 @@ So that we can see the works of the wider research community at one glance.
 | TB-DMFT-SOC, size 119 | **-1305.3902308** | DMRG (bond dimension 350) using fork tensor... [Bauernfeind et al. (2017)](https://doi.org/10.1103/physrevx.7.031013) | -1305.3902296 (+1.3e-6) DMRG (bond dimension 330) using... [Bauernfeind et al. (2017)](https://doi.org/10.1103/physrevx.7.031013) |
 | TB-DMFT-SOC, size 309 | **-3351.7573592** | DMRG (bond dimension 350) using fork tensor... [Bauernfeind et al. (2017)](https://doi.org/10.1103/physrevx.7.031013) | -3351.7573530 (+6.2e-6) DMRG (bond dimension 330) using... [Bauernfeind et al. (2017)](https://doi.org/10.1103/physrevx.7.031013) |
 
-</details>
+<!-- END LEADERBOARD -->
 
-Every row in the dataset also contains a declared `bound_type` saying what kind of quantity the energy value actually is (either a strict variational bound, a fixed-node estimate or a zero-variance extrapolation) and if available the corresponding error metric.
+## Details
 
-Also see [units and conventions](DATA.md#units-and-conventions) and [the ranking rules](RULES.md#6-records-and-ties). 
+Every row in the dataset further contains a declared `bound_type` saying what kind of quantity the energy value actually is. Also see [units and conventions](DATA.md#units-and-conventions) and [the ranking rules](RULES.md#6-records-and-ties). 
+
 **Bold** is the record: the exact energy where the instance is solved, otherwise the lowest
-eligible variational bound. The last column is the closest variational challenger and how far above the record it sits, per site. 
+eligible variational bound. 
+
 **&#9675;** marks a row where **we found no error
 metric** (neither an error bar nor an energy variance) in the source we read; 
+
 **&dagger;** marks a
 sampled energy with a variance but no error bar. 
+
 Both rows stay in the table and in rank
 order; the marker is an open question regarding ambiguous information (see [error metrics](DATA.md#error-metrics)).
-
-<!-- END LEADERBOARD -->
 
 Check [RULES.md](RULES.md) for how a record is decided.
 
