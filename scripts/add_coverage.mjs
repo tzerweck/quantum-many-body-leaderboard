@@ -2,25 +2,28 @@
 // method, against which papers, and how many of them carry an energy for it. A check that
 // found nothing is recorded too - it is what lets an instance page say how current it is.
 //
-// One file per checking pass, appended in date order. `found` counts the screened papers
+// One file per checking pass, appended in date order: sweep-coverage-YYYY-MM-DD.json for a
+// table-harvest pass, sweep-coverage-YYYY-MM-DD-cites.json for a citation screen; the date
+// is the pass's checked_on. Every such file in the repo root is applied. `found` counts the screened papers
 // that the instance carries at least one energy from, read off the rows as built (reference,
 // or the note of a row quoted from it), so it can never disagree with the page. A reader's
 // own "has results" judgement is not used: in the first pass it said no for papers whose
 // rows were already on the instance.
 import fs from "node:fs";
 
-const PASSES = [
-  {
-    file: "sweep-coverage-2026-09-15.json", checked_on: "2026-09-15",
+const KINDS = {
+  harvest: {
     method: "table harvest of cached arXiv sources (match_tables.mjs --all), every matched paper read for this instance",
     note: "Only papers whose tables matched the instance by size were read; not a citation screen.",
   },
-  {
-    file: "sweep-coverage-2026-09-15-cites.json", checked_on: "2026-09-15",
+  cites: {
     method: c => `citation screen of ${c.seed}: citing works from OpenAlex and Semantic Scholar (scripts/cited_by.mjs)`,
     note: c => `${c.citing_total} citing works, ${c.citing_arxiv} on arXiv, ${c.citing_text} fetched; ${c.screened.length} read in full, ${c.excluded} excluded by a text filter (no energy to four decimals, or no QMBL model named).`,
   },
-];
+};
+const PASSES = fs.readdirSync(".").map(f => f.match(/^sweep-coverage-(\d{4}-\d{2}-\d{2})(-cites)?\.json$/)).filter(Boolean)
+  .sort((a, b) => a[1].localeCompare(b[1]) || (a[2] ? 1 : 0) - (b[2] ? 1 : 0))   // by date; harvest before cites on the same day
+  .map(m => ({ file: m[0], checked_on: m[1], ...KINDS[m[2] ? "cites" : "harvest"] }));
 
 let entries = 0;
 for (const pass of PASSES) {
