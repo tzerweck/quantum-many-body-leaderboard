@@ -25,6 +25,8 @@ import { citeRef, paperYear } from "./cite.mjs";
 import { sources } from "./enrich_sources.mjs";
 import { quote, marks, shorten, MODELS, BOUNDARY, instanceLabel, byGeometry, noRecordReason, gapAbove } from "./readme_table.mjs";
 import { logoSvg, faviconSvg, LOGO_CSS } from "./logo.mjs";
+import { hoursOf, costFigureName } from "./cost.mjs";
+import { FRONTIER } from "./views.mjs";
 
 const OUT = "_site";
 const REPO = "https://github.com/tzerweck/quantum-many-body-leaderboard";
@@ -253,9 +255,49 @@ const FIGURES = [
     "Each panel colours one family's energies over all the others in grey and joins the family's best energy at each size."],
   ["size-vs-accuracy-ladders", "Accuracy as the same Hamiltonian grows",
     "Six families of instances that differ only in size, each size placed against its exact or unbiased QMC energy where it has one, otherwise against the standing record, whose holder then sits in the band above the plot."],
-  ["energy-vs-compute", "The best energies at each cost, instance by instance",
-    "The energies whose papers state what they cost in GPU-hours, or as a device count and a wall-clock, on the instances they were computed for. CPU core-hours are never put on the same axis."],
 ];
+
+// The cost figures: one per instance with enough energies costed in hours, drawn by
+// pareto.mjs into figures/cost/. Which instances have one is read off the directory, which
+// pareto.mjs empties before writing, so the site never shows a figure for an instance that
+// has lost its costs. Frontier instances first, in their order, then the rest by id.
+const COST_FIGS = instances
+  .filter(inst => fs.existsSync(`figures/${costFigureName(inst)}.svg`))
+  .sort((a, b) => {
+    const rank = i => { const k = FRONTIER.findIndex(([id]) => id === i.instance_id); return k < 0 ? FRONTIER.length : k; };
+    return rank(a) - rank(b) || a.instance_id.localeCompare(b.instance_id);
+  });
+const costEntry = inst => [costFigureName(inst), `${modelName(inst.model)} ${instanceLabel(inst)}: the best energies at each cost`,
+  "Every energy on this instance whose paper states its compute cost in hours, against that cost; the line is the frontier of results nothing beats for less."];
+
+// Front page: one badge per instance, CSS-only (a radio input per badge, the checked one
+// showing its figure), so the switch works without the script and the inputs stay in the
+// keyboard order. The first badge is checked.
+function costSwitcher() {
+  if (!COST_FIGS.length) return "";
+  const inputs = COST_FIGS.map((inst, k) => `<input type="radio" name="cost-tab" id="cost-tab-${k}"${k ? "" : " checked"}>`).join("");
+  const labels = COST_FIGS.map((inst, k) => `<label for="cost-tab-${k}">${esc(modelName(inst.model))} ${esc(instanceLabel(inst))}</label>`).join("");
+  return `<section class="tabs" id="energy-vs-compute">
+  <h2>The best energies at each cost<a class="anchor" href="#energy-vs-compute" aria-label="Link to this section">#</a></h2>
+  <p class="muted">What the published results on one instance cost in compute, and which of them nothing beats for less. Drawn for the
+  ${COST_FIGS.length} instances where at least two energies state their cost; GPU-hours and CPU core-hours are never converted into each other.</p>
+  ${inputs}
+  <div class="tab-labels">${labels}</div>
+  <div class="tab-panels">${COST_FIGS.map(inst => figure(costEntry(inst))).join("\n")}</div>
+</section>`;
+}
+const TAB_CSS = COST_FIGS.map((_, k) =>
+  `#cost-tab-${k}:checked ~ .tab-panels > figure:nth-child(${k + 1}) { display: block; }
+#cost-tab-${k}:checked ~ .tab-labels > label[for="cost-tab-${k}"] { color: #fff; background: var(--accent); border-color: var(--accent); }
+#cost-tab-${k}:focus-visible ~ .tab-labels > label[for="cost-tab-${k}"] { outline: 2px solid var(--accent); outline-offset: 2px; }`).join("\n");
+
+// Leaderboard: the instance's cost figure above its rows, or how many of its energies state
+// a cost when that is too few to draw.
+function costSlot(inst) {
+  if (COST_FIGS.includes(inst)) return figure(costEntry(inst));
+  const k = inst.rows.filter(r => hoursOf(r.compute)).length;
+  return `<p class="muted cost-none">${k ? `${k} of ${inst.rows.length} energies here state a compute cost; a cost figure is drawn from two.` : "No energy on this instance states its compute cost yet."}</p>`;
+}
 
 // Dark mode for an inlined figure: an attribute selector per light colour, which beats the
 // presentation attribute in the cascade. The two themes list their colours in the same
@@ -289,9 +331,10 @@ function figure([name, title, caption]) {
   if (/<title|<desc|aria-labelledby/.test(svg)) throw new Error(`${file}: header not in the shape figure() expects`);
   for (const [, hex] of svg.matchAll(/(?:fill|stroke)="(#[0-9a-fA-F]{6})"/g))
     if (!FIG_COLOURS.has(hex)) throw new Error(`${file}: ${hex} is not a chart.mjs theme colour, so dark mode cannot recolour it`);
-  return `<figure id="${name}" class="chart">
+  const id = name.replace(/[^\w-]/g, "-");
+  return `<figure id="${id}" class="chart">
 ${svg}
-  <figcaption><a href="#${name}" class="anchor" aria-label="Link to this figure">#</a>
+  <figcaption><a href="#${id}" class="anchor" aria-label="Link to this figure">#</a>
     <a href="${REPO}/blob/main/figures/${name}.svg">SVG</a></figcaption>
 </figure>`;
 }
@@ -344,7 +387,7 @@ const FIG_SCRIPT = `<script>
 function homePage() {
   const current = instances.filter(i => i.rows.some(r => (yearOf(r) ?? 0) >= 2025)).length;
   const b = summary.blocked_on_sigma;
-  const figures = FIGURES.map(figure).join("\n");
+  const figures = FIGURES.map(figure).join("\n") + "\n" + costSwitcher();
   const linked = new Set([...figures.matchAll(/href="\/instances\/#(r-[\w-]+)"/g)].map(m => m[1]));
   const cards = instances.flatMap(inst => inst.rows.filter(r => linked.has(rowId(inst, r)))
     .map(r => `<div data-row="${rowId(inst, r)}">${rowCard(r, inst)}</div>`));
@@ -434,7 +477,8 @@ function allRows(inst) {
       <td class="num">${yearOf(r) ?? '<span class="muted">n/a</span>'}</td>
     </tr>`;
   }).join("");
-  return `<table class="next"><thead><tr><th>${perSiteLabel(inst)}</th><th>&sigma;</th><th>kind</th><th>method</th><th>source</th><th>year</th></tr></thead><tbody>${rows}</tbody></table>
+  return `${costSlot(inst)}
+    <table class="next"><thead><tr><th>${perSiteLabel(inst)}</th><th>&sigma;</th><th>kind</th><th>method</th><th>source</th><th>year</th></tr></thead><tbody>${rows}</tbody></table>
     <p class="links"><a href="${jsonUrl(inst)}">JSON</a> <span class="muted"><code>${esc(inst.instance_id)}</code></span></p>`;
 }
 
@@ -1027,6 +1071,17 @@ h1:hover .anchor, h2:hover .anchor, h3:hover .anchor, h4:hover .anchor { opacity
 hr { border: 0; border-top: 1px solid var(--grid); margin: 2rem 0; }
 pre.ticks { font-family: var(--mono); font-size: clamp(7px, 1.6vw, 13px); line-height: 1.2; color: var(--muted);
   margin: 0 0 2rem; overflow: hidden; white-space: pre; }
+.tabs > input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.tab-labels { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.6rem 0 0.8rem; font-size: 0.8rem; }
+.tab-labels label {
+  line-height: 1.2; cursor: pointer; padding: 0.2rem 0.65rem;
+  color: var(--ink2); background: var(--surface); border: 1px solid var(--grid); border-radius: 999px;
+}
+.tab-labels label:hover { border-color: var(--accent); color: var(--accent); }
+.tab-panels > figure { display: none; }
+${TAB_CSS}
+tr.more figure.chart { margin: 0.4rem 0 0.8rem; }
+.cost-none { font-size: 0.8rem; margin: 0.2rem 0 0.5rem; }
 @media (prefers-color-scheme: dark) {
 ${FIG_DARK}
 }
