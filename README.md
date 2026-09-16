@@ -453,26 +453,6 @@ the admissible grounds are listed in
 listed but ranks for nothing, and several such rows sit below their instance's current
 record.
 
-## Figures
-
-Drawn from `data/` on every build by [`scripts/figures.mjs`](scripts/figures.mjs); all six
-are in [`figures/`](figures/).
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="figures/record-over-time-dark.svg">
-  <img alt="Relative energy above the current record versus publication year, for J1-J2 square 10x10 at J2 = 0.5 and Hubbard square 16x16 at U = 8, n = 0.875" src="figures/record-over-time.svg">
-</picture>
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="figures/record-status-dark.svg">
-  <img alt="Record status of every instance, by model: contested, challenged, single number, solved exactly, or no record" src="figures/record-status.svg">
-</picture>
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="figures/records-by-family-dark.svg">
-  <img alt="Records held by ansatz family, counted over all instances and over contested instances only" src="figures/records-by-family.svg">
-</picture>
-
 ## Citing
 
 Releases are archived on Zenodo, so a paper can cite a frozen comparison set rather than
