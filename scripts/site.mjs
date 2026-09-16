@@ -52,9 +52,11 @@ const esc = s => String(s)
   .replace(/&(?![#A-Za-z0-9]+;)/g, "&amp;")
   .replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
+// Labels are what the pages are for: the front page is the Pareto view, /instances/ is the
+// data. The URLs stay - they are what is linked and cited.
 const NAV = [
-  ["/", "Leaderboard"],
-  ["/instances/", "Instances"],
+  ["/", "Pareto"],
+  ["/instances/", "Data"],
   ["/contribute/", "Contribute"],
 ];
 
@@ -390,8 +392,7 @@ function instancesPage() {
   }).join("\n");
 
   const body = `
-<h1>All ${summary.instances} instances</h1>
-<p class="lead">One row per Hamiltonian instance with its record; click a row for every energy
+<p class="lead">${summary.instances} Hamiltonian instances, one row each with its record; click a row for every energy
 published on it. ${summary.records.held} instances have a record; the rest say why they do not.</p>
 <p><input id="filter" type="search" placeholder="Filter by lattice, size, coupling or method…" autocomplete="off" spellcheck="false">
 <span id="filter-count" class="muted"></span></p>
@@ -444,7 +445,7 @@ for (const row of document.querySelectorAll("tr.inst")) row.addEventListener("cl
   row.classList.toggle("open", !more.hidden);
 });
 </script>`;
-  return page({ url: "/instances/", title: `All ${summary.instances} instances`, body, wide: true,
+  return page({ url: "/instances/", title: "Data", body, wide: true,
     description: `Every Hamiltonian instance in QMBL: ${summary.instances} instances across ${MODELS.length} models, with the record energy and method for each.` });
 }
 
@@ -679,8 +680,8 @@ function llmsTxt() {
     "primary paper named on the row, not to this site.",
     "",
     "## Pages",
-    "- [Leaderboard](https://qmbl.org/): the accuracy and cost figures, and how to cite.",
-    `- [All instances](https://qmbl.org/instances/): every one of the ${summary.instances} instances, with its record.`,
+    "- [Pareto](https://qmbl.org/): the accuracy and cost figures, and how to cite.",
+    `- [Data](https://qmbl.org/instances/): every one of the ${summary.instances} instances, with its record and every energy.`,
     `- [Rules](${RULES}): what counts as a record, ties, provenance, objections.`,
     `- [Data](${DATA}): row format, units and conventions, error metrics, defects.`,
     "- [Contribute](https://qmbl.org/contribute/): corrections, missing results, missing error bars.",
@@ -806,6 +807,9 @@ td.none { color: var(--muted); }
 .badge.flag { color: var(--flag); border-color: var(--flag); }
 .legend { font-size: 0.9rem; color: var(--ink2); max-width: 46em; }
 .citation { max-width: none; }
+
+section[data-model] h2 { font-size: 2.1rem; margin-top: 3rem; }
+main > p.lead:first-child { margin-top: 0; }
 
 .quick { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; margin: 0.6rem 0 0; font-size: 0.85rem; }
 .quick .muted { margin-right: 0.2rem; }
