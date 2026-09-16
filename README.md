@@ -1,3 +1,4 @@
+
 <!-- Header and footer animations are text-mode GIFs from scripts/ascii.mjs. -->
 <img src="figures/qmbl-ascii.gif" width="614" alt="QMBL - the Quantum Many-Body Leaderboard">
 
