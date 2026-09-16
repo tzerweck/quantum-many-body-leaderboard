@@ -161,30 +161,7 @@ function main() {
   const s = summarize(instances);
   const cache = sources();
 
-  // Tristan's wording, written into the block on GitHub on 2026-09-15; kept here so the build
-  // does not erase it.
   const lines = [];
-  lines.push("Every row is one published claim about a Hamiltonian instance, carrying the energy value,");
-  lines.push("its error bar (uncertainty of last digit in brackets), the method, the primary reference, ");
-  lines.push("and a declared `bound_type` saying what kind of quantity the energy value actually is (either a strict");
-  lines.push("variational bound, a fixed-node estimate or a zero-variance extrapolation).");
-
-  const spin = perSiteLabel(byId.get("J1J2/square_100_P_0.5"));
-  const site = perSiteLabel(byId.get("Hubbard/square_256_P_112_8"));
-  lines.push("");
-  lines.push(`Energies are per site: spin models as \`${spin}\`, Hubbard as \`${site}\` (see`);
-  lines.push("[units and conventions](DATA.md#units-and-conventions)). **Bold** is the record under");
-  // Tristan's wording and line breaks from the same GitHub edit.
-  lines.push("[the ranking rules](RULES.md#6-records-and-ties): the exact energy where the instance is");
-  lines.push("solved, otherwise the lowest eligible variational bound. The last column is the closest");
-  lines.push("variational challenger and how far above the record it sits, per site. ");
-  lines.push("**&#9675;** marks a row where **we found no error");
-  lines.push("metric** (neither an error bar nor an energy variance) in the source we read; ");
-  lines.push("**&dagger;** marks a");
-  lines.push("sampled energy with a variance but no error bar. ");
-  lines.push("Both rows stay in the table and in rank");
-  lines.push("order; the marker is an open question regarding ambiguous information (see [error metrics](DATA.md#error-metrics)).");
-  lines.push("");
   lines.push(`### All ${s.instances} instances (CLICK ME BELOW)`);
   lines.push("");
   const known = new Set(MODELS.map(([m]) => m));
@@ -198,6 +175,27 @@ function main() {
     lines.push(`<summary><b>${name}</b>: ${group.length} instances, energies as <code>${perSiteLabel(group[0])}</code></summary>`);
     lines.push("", ...HEADER, ...group.map(i => row(i, instanceLabel(i), cache)), "", "</details>", "");
   }
+
+  // Tristan's wording, written into the block on GitHub on 2026-09-15 and moved below the
+  // tables on 2026-09-16 (947bce2); kept here so the build does not erase it.
+  lines.push("Every row in the dataset also contains a declared `bound_type` saying what kind of quantity the energy value actually is (either a strict variational bound, a fixed-node estimate or a zero-variance extrapolation) and if available the corresponding error metric.");
+  const spin = perSiteLabel(byId.get("J1J2/square_100_P_0.5"));
+  const site = perSiteLabel(byId.get("Hubbard/square_256_P_112_8"));
+  lines.push("");
+  lines.push(`Energies are per site: spin models as \`${spin}\`, Hubbard as \`${site}\` (see`);
+  lines.push("[units and conventions](DATA.md#units-and-conventions)). **Bold** is the record under");
+  // Tristan's wording and line breaks from the same GitHub edit; the record definition and
+  // the challenger column were added on 2026-09-16 when exact energies began holding records.
+  lines.push("[the ranking rules](RULES.md#6-records-and-ties): the exact energy where the instance is");
+  lines.push("solved, otherwise the lowest eligible variational bound. The last column is the closest");
+  lines.push("variational challenger and how far above the record it sits, per site. ");
+  lines.push("**&#9675;** marks a row where **we found no error");
+  lines.push("metric** (neither an error bar nor an energy variance) in the source we read; ");
+  lines.push("**&dagger;** marks a");
+  lines.push("sampled energy with a variance but no error bar. ");
+  lines.push("Both rows stay in the table and in rank");
+  lines.push("order; the marker is an open question regarding ambiguous information (see [error metrics](DATA.md#error-metrics)).");
+  lines.push("");
   const b = s.blocked_on_sigma, r = s.records;
   // The no-record reasons are a sentence, not a list, so each takes a verb that agrees
   // with its count; zero counts are left out rather than printed as "0 have".
