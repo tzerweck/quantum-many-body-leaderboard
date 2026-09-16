@@ -1,5 +1,5 @@
 import fs from "node:fs"; import path from "node:path";
-import { expectedDof, expectedEinf, vScore, perSiteDivisor, groundStateExact } from "./units.mjs";
+import { expectedDof, expectedEinf, vScore, perSiteDivisor, groundStateReference } from "./units.mjs";
 const issues = [], rounding = []; let rows = 0, checkedD = 0, checkedE = 0, checkedV = 0, checkedC = 0, checkedCov = 0;
 for (const m of fs.readdirSync("data")) {
   const dir = path.join("data", m);
@@ -15,20 +15,26 @@ for (const m of fs.readdirSync("data")) {
       if (r.v_score != null) { checkedV++;
         const v = vScore(r.energy_variance, r.dof, r.energy, r.einf);
         if (v == null || Math.abs(v - r.v_score) > 1e-9 * v) issues.push(`VSCORE ${at}: stored ${r.v_score}, recomputed ${v}`); }
-      // Variational principle: no strict bound may sit below an exact row in the same
-      // instance. Sector-resolved ED rows are excluded - they are the lowest state in
-      // ONE symmetry sector, so an unconstrained variational state may legitimately
+      // An unbiased energy is an estimate (RULES.md 4): without its error bar there is no
+      // saying how good it is, and the bound check below has nothing to measure against.
+      if (r.bound_type === "unbiased" && r.sigma == null) issues.push(`SIGMA ${at}: unbiased row without an error bar "${r.method.slice(0,38)}"`);
+      // Variational principle: no strict bound may sit below an exact or unbiased row in
+      // the same instance. Sector-resolved ED rows are excluded - they are the lowest state
+      // in ONE symmetry sector, so an unconstrained variational state may legitimately
       // sit below them. Violations under a relative 1e-8 are reported as rounding.
-      if (groundStateExact(r) && perSiteDivisor(inst) != null) {
+      if (groundStateReference(r) && perSiteDivisor(inst) != null) {
+        // An unbiased reference carries an error bar of its own; the two combine.
+        const refSigma = r.bound_type === "unbiased" ? r.sigma : null;
         for (const o of inst.rows) {
           if (o.bound_type !== "variational" || o.energy >= r.energy) continue;
           const rel = (r.energy - o.energy) / Math.abs(r.energy);
-          // A variational MC energy may sit below the exact value by a fraction of its
-          // own error bar without violating anything. Only flag past 3 sigma.
+          // A variational MC energy may sit below the reference by a fraction of the
+          // combined error bar without violating anything. Only flag past 3 sigma.
           const gap = r.energy - o.energy;
-          const realViolation = o.sigma != null ? gap > 3 * o.sigma : rel > 1e-8;
+          const sigma = o.sigma != null || refSigma != null ? Math.hypot(o.sigma ?? 0, refSigma ?? 0) : null;
+          const realViolation = sigma != null ? gap > 3 * sigma : rel > 1e-8;
           (realViolation ? issues : rounding).push(
-            `BOUND ${at}: variational ${o.energy} below exact ${r.energy} (rel ${rel.toExponential(1)}) "${o.method.slice(0,38)}"`);
+            `BOUND ${at}: variational ${o.energy} below ${r.bound_type} ${r.energy} (rel ${rel.toExponential(1)}) "${o.method.slice(0,38)}"`);
         }
       }
       // `compute` is self-reported and unfalsifiable, so what the validator can check is

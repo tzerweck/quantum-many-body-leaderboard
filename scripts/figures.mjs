@@ -160,19 +160,19 @@ write("rows-per-instance", t => {
 // ------------------------------------------------------------ 3. record status by model
 const MODELS = { Heisenberg: "Heisenberg", J1J2: "J1-J2", Hubbard: "Hubbard", tV: "Spinless t-V", TFIsing: "Transverse-field Ising", Impurity: "Impurity" };
 
-// A solved instance's record is its exact energy (RULES.md 6); the competition categories
-// describe the variational-held records only, since "contested" is about how many bounds
-// were published against each other, and on a solved instance they compete for second.
+// Where an instance has an exact or unbiased QMC energy, that is its record (RULES.md 6); the
+// competition categories describe the variational-held records only, since "contested" is
+// about how many bounds were published against each other, and there they compete for second.
 function status(i) {
   const rec = recordOf(i);
   if (!rec) return "other";
-  if (rec.bound_type === "exact") return "exact";
+  if (rec.bound_type !== "variational") return "reference";
   return i.rows.length >= CONTESTED ? "contested" : variationalRows(i).length === 1 ? "single" : "challenged";
 }
 
 write("record-status", t => {
   const STATUS = [
-    ["exact", "Solved: exact energy is the record", t.recessive[0]],
+    ["reference", "Exact or unbiased QMC energy is the record", t.recessive[0]],
     ["contested", `Contested (${CONTESTED}+ rows)`, t.ordinal[2]],
     ["challenged", `Rivals, under ${CONTESTED} rows`, t.ordinal[1]],
     ["single", "Single number", t.ordinal[0]],
@@ -184,7 +184,7 @@ write("record-status", t => {
   const held = instances.filter(recordOf).length;
   const tally = k => models.reduce((s, m) => s + m.by[k], 0);
   const h = header(t, "Record status of every instance, by model",
-    `${held} of ${instances.length} instances have a record, ${tally("exact")} of them solved. Of the ${held - tally("exact")} variational-held records, ` +
+    `${held} of ${instances.length} instances have a record, ${tally("reference")} of them an exact or unbiased QMC energy. Of the ${held - tally("reference")} variational-held records, ` +
     `${tally("single")} stand on a single published number and ${tally("contested")} were taken on instances with ${CONTESTED} or more rows.`);
   const lg = legend(t, STATUS.map(([, label, color]) => ({ kind: "square", color, label })), h.bottom + 34);
   const top = lg.bottom + 26, pitch = 36, bh = 22, left = PAD + 190, right = W - PAD - 36;
@@ -204,7 +204,7 @@ write("record-status", t => {
       x += w;
     });
   });
-  const fn = footnote(t, "Bar length is the number of instances. A record is the exact energy where the instance is solved, otherwise the lowest eligible variational energy; " +
+  const fn = footnote(t, "Bar length is the number of instances. A record is the exact or unbiased QMC energy where the instance has one, otherwise the lowest eligible variational energy; " +
     `"rows" counts every published row on the instance; ${CONTESTED} or more is contested.`, top + models.length * pitch + 20);
   parts.push(fn.svg);
   return doc(t, fn.bottom + 24, "Record status of every instance, by model",
@@ -212,9 +212,9 @@ write("record-status", t => {
 });
 
 // --------------------------------------------------------------- 4. records by family
-// The medal table counts records held by a variational bound only (RULES.md 7). An exact
-// energy is the answer, not an ansatz, and counting it would hand the most records to
-// whoever ran exact diagonalization on the most small instances.
+// The medal table counts records held by a variational bound only (RULES.md 7). An exact or
+// unbiased QMC energy is not an ansatz, and counting it would hand the most records to
+// whoever ran exact diagonalization or QMC on the most instances.
 write("records-by-family", t => {
   const allCount = {}, hard = {};
   for (const i of instances) {
@@ -228,10 +228,10 @@ write("records-by-family", t => {
     .filter(f => allCount[f] || hard[f])
     .map(f => ({ f, all: allCount[f] || 0, hard: hard[f] || 0 }))
     .sort((a, b) => b.hard - a.hard || b.all - a.all);
-  const solved = instances.filter(i => recordOf(i)?.bound_type === "exact").length;
+  const solved = instances.filter(i => ["exact", "unbiased"].includes(recordOf(i)?.bound_type)).length;
   const varHeld = Object.values(allCount).reduce((a, b) => a + b, 0);
   const h = header(t, "Records by ansatz family",
-    `Over the ${varHeld} records held by a variational bound; the ${solved} solved instances, where the exact energy is the record, are left out. ` +
+    `Over the ${varHeld} records held by a variational bound; the ${solved} instances held by an exact or unbiased QMC energy are left out. ` +
     "Counting every instance rewards whichever method was run on the most easy problems, so " +
     `the contested bars count only instances with ${CONTESTED}+ published rows, which is where the field is actually competing.`);
   const lg = legend(t, [
@@ -268,7 +268,8 @@ write("error-metrics", t => {
   ];
   const kind = r => r.sigma != null && r.energy_variance != null ? "both"
     : r.sigma != null ? "sigma" : r.energy_variance != null ? "variance" : "none";
-  // An exact energy has no error to report, so exact rows would only dilute the bars.
+  // An exact energy has no error to report, so exact rows would only dilute the bars. Unbiased
+  // QMC rows are estimates and are counted.
   const rows = instances.flatMap(i => i.rows).filter(r => r.bound_type !== "exact");
   const groups = [
     ["Imported from VarBench", rows.filter(r => r.source.startsWith("varbench@"))],
@@ -303,7 +304,7 @@ write("error-metrics", t => {
 });
 
 // ------------------------------------------------------------ 6. standing records by year
-// Variational-held records only, as in the family chart: an exact energy has no year of
+// Variational-held records only, as in the family chart: an exact or unbiased energy has no year of
 // setting a record in the sense meant here, and most cite a run script anyway.
 write("records-by-year", t => {
   const recs = instances.map(recordOf).filter(r => r?.bound_type === "variational");

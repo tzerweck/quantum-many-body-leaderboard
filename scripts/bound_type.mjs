@@ -8,16 +8,22 @@ export const RULES = [
   // 2. Variational circuits BEFORE the exact rule: "exact grad" / "exact grads & metric"
   //    describes how the gradient was computed, not the energy. 21 VQE rows depend on this.
   [/\bvqe\b|\bcircuit\b|\bpqc\b|variational quantum/i, "variational"],
-  // 3. Numerically exact / exactly solved.
-  //    NOTE: "QMC (continuous-time expansion)" is deliberately NOT here. It is
-  //    numerically exact for impurity models, but on the t-V lattice instances its
+  // 3. Sign-problem-free QMC: unbiased, with a statistical error bar - not exact (Tristan,
+  //    2026-09-16). VarBench writes these "AFQMC (Metropolis), numerically exact", so this
+  //    rule must come before the exact rule below. A Trotter-step extrapolation of such a
+  //    run stays unbiased: it removes a controlled discretisation error of the method, it
+  //    does not extrapolate a variational energy past what any state reached (RULES.md 4).
+  [/\b(?:afqmc|qmc|quantum monte carlo|stochastic series expansion)\b.*numerically exact|numerically exact.*\b(?:afqmc|qmc)\b/i, "unbiased"],
+  // 4. Exactly solved.
+  //    NOTE: "QMC (continuous-time expansion)" is deliberately NOT here or above. It is
+  //    unbiased for impurity models, but on the t-V lattice instances its
   //    rows sit ABOVE exact diagonalization (tV/chain_32_P_16_4) and above DMRG by
   //    4.7e-2 (tV/square_64_P_32_4), so it cannot be treated as a ground-state
   //    reference. Falls through to needs-review until someone classifies it per model.
   [/exact diagonalization|exact solution|numerically exact|full configuration interaction|\bfci\b|\bbethe ansatz\b/i, "exact"],
-  // 4. Extrapolation is the reported number (bond dim, zero-variance, Trotter)
+  // 5. Extrapolation of a variational energy is the reported number (bond dim, zero-variance)
   [/extrapolat/i, "extrapolated"],
-  // 5. Strict variational upper bounds
+  // 6. Strict variational upper bounds
   [/vmc|\brbm\b|\brnn\b|jastrow|dmrg|\bmps\b|\bpeps\b|tensor|mvmc|hidden fermion|\bhfds\b|backflow|\bbcs\b|slater|neural|\bnqs\b|transformer|\bvit\b|\bcnn\b|\bffn\b|clebsch|gutzwiller|vafqmc|variational|hartree|mean[- ]field|feed[- ]forward/i, "variational"],
 ];
 export function classify(method) {

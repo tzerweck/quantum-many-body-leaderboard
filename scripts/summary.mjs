@@ -8,7 +8,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
-import { recordEligible, exactEligible, isSampled, noErrorMetrics } from "./units.mjs";
+import { recordEligible, referenceEligible, REFERENCE_BOUNDS, isSampled, noErrorMetrics } from "./units.mjs";
 
 export function collect() {
   const instances = [];
@@ -35,8 +35,9 @@ export function rowId(inst, r) {
   return `r-${inst.instance_id.replace(/[^\w-]/g, "_")}-${hash}${repeat > 0 ? `-${repeat + 1}` : ""}`;
 }
 
-// The record for an instance is its state-of-the-art energy (RULES.md 6): the exact
-// energy where the instance is solved, otherwise the lowest eligible variational bound.
+// The record for an instance is its state-of-the-art energy (RULES.md 6): its exact or
+// unbiased ground-state energy where it has one, otherwise the lowest eligible variational
+// bound.
 // Eligibility itself lives in units.mjs and is not restated here - two copies of that
 // rule would drift, and the one in units.mjs is what records.mjs already rules by.
 // Returns null where no row qualifies: that is a real state of the table, not an
@@ -47,21 +48,21 @@ export function rowId(inst, r) {
 // energies as references for the V-score rather than as results, and it read as if
 // exact diagonalization were not the state of the art on the instances it solves.
 export function recordOf(inst) {
-  return exactRecordOf(inst) ?? variationalRecordOf(inst);
+  return referenceRecordOf(inst) ?? variationalRecordOf(inst);
 }
 
-// The most precise eligible exact row, not the lowest: exact rows are estimates of one
-// number, so among several the lowest is the luckiest, not the best. Exact
-// diagonalization (no error bar) outranks sign-problem-free QMC, and a smaller error bar
-// outranks a larger one; only then does the energy order them. Where two exact rows
-// disagree beyond their stated precision that is a defect to raise on the row, not a
-// ranking question.
-export function exactRecordOf(inst) {
-  return inst.rows.filter(exactEligible)
-    .sort((a, b) => (a.sigma ?? 0) - (b.sigma ?? 0) || a.energy - b.energy)[0] ?? null;
+// The most precise eligible reference row, not the lowest: exact and unbiased rows are
+// estimates of one number, so among several the lowest is the luckiest, not the best. An
+// exact row outranks an unbiased one, and a smaller error bar outranks a larger one; only
+// then does the energy order them. Where two reference rows disagree beyond their stated
+// precision that is a defect to raise on the row, not a ranking question.
+export function referenceRecordOf(inst) {
+  const rank = r => REFERENCE_BOUNDS.indexOf(r.bound_type);
+  return inst.rows.filter(referenceEligible)
+    .sort((a, b) => rank(a) - rank(b) || (a.sigma ?? 0) - (b.sigma ?? 0) || a.energy - b.energy)[0] ?? null;
 }
 
-// Lowest eligible variational bound: the record where no exact row exists, and the
+// Lowest eligible variational bound: the record where no reference row exists, and the
 // best variational number - the closest challenger - where one does. The medal-table
 // views count only instances where this IS the record (RULES.md 7).
 export function variationalRecordOf(inst) {
@@ -80,9 +81,10 @@ export function summarize(instances) {
     // is a question about variational bounds, so they are not counted here.
     baseline_rows: 0, baseline_records: 0,
     // held_by_exact: the instance is solved and the exact energy is the record.
-    // held_by_variational: no exact row, so the lowest eligible variational bound is.
+    // held_by_unbiased: no exact row, and an unbiased QMC energy is the record.
+    // held_by_variational: neither, so the lowest eligible variational bound is.
     // The none_* keys say why an instance has neither, in the order they are tested.
-    records: { held: 0, held_by_exact: 0, held_by_variational: 0, none_no_sigma: 0, none_flagged: 0, none_sector_only: 0, none_no_variational: 0 },
+    records: { held: 0, held_by_exact: 0, held_by_unbiased: 0, held_by_variational: 0, none_no_sigma: 0, none_flagged: 0, none_sector_only: 0, none_no_variational: 0 },
     // Sampled variational energies published without an error bar: listed, ranking for
     // nothing. `would_take_record` is the subset sitting below their instance's current
     // record, i.e. the rows where a single missing number is costing someone a record.
@@ -116,7 +118,7 @@ export function summarize(instances) {
 
     if (rec) {
       s.records.held++;
-      if (rec.bound_type === "exact") s.records.held_by_exact++; else s.records.held_by_variational++;
+      s.records[`held_by_${rec.bound_type}`]++;
       if (rec.baseline && rec.bound_type === "variational") s.baseline_records++;
       continue;
     }
@@ -128,7 +130,7 @@ export function summarize(instances) {
   return s;
 }
 
-// Why an instance has neither an exact row nor an eligible variational one, as a key
+// Why an instance has neither a reference row nor an eligible variational one, as a key
 // into summary.records. readme_table.mjs turns the key into the cell text, so the
 // reasons under the table and the counts beneath it are one computation.
 export function noRecordKey(inst) {

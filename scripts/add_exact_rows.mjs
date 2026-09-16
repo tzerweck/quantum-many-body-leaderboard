@@ -1,6 +1,7 @@
-// Exactly solved instances: benchmarks whose ground-state energy is known to within a
-// stated error, so that a paper reporting on them can be scored by its distance from the
-// answer rather than ranked against other papers. Most of these instances have no
+// Reference energies: instances whose ground-state energy is known, exactly (batch C,
+// exact diagonalization) or as an unbiased sign-problem-free QMC estimate within a stated
+// error bar (batches A and B, `unbiased`, RULES.md 4 - filed as `exact` until Tristan ruled
+// on 2026-09-16 that QMC is not exact). Either holds its instance's record (RULES.md 6). Most of these instances have no
 // variational row at all yet; that is the point of carrying them.
 //
 // Every table below was read from the paper's own text (PDF layout mode or arXiv HTML),
@@ -33,7 +34,7 @@ function put(id, create, row) {
   const einf = inst.rows[0]?.einf ?? cEinf;
   inst.rows.push({
     energy: row.energy, sigma: row.sigma, energy_variance: null, dof, einf, v_score: null,
-    method: row.method, bound_type: "exact", bound_type_reason: row.why,
+    method: row.method, bound_type: row.bound, bound_type_reason: row.why,
     reference: row.src.ref, peer_reviewed: row.src.pr,
     source: "exact-2026-09-15", provenance: "primary",
     verified: { checked_on: CHECKED, method: row.read, reported_as: row.reported, note: row.note, secondary_of: null },
@@ -81,14 +82,14 @@ for (const [L, U, bc, printed] of TABLE_IV) {
   const [energy, sigma] = parse(printed);
   put(`Hubbard/square_${N}_${bc}_${Nf}_${U}`,
     { model: "Hubbard", lattice: "square", n_sites: N, boundary: bc, params: { Nf, U }, dof: 2 * Nf, einf: (U * Nf * Nf) / N },
-    { energy, sigma, src: QIN,
+    { energy, sigma, src: QIN, bound: "unbiased",
       method: "AFQMC, sign-problem-free at half filling (tau = 0.01, Trotter error below the statistical error)",
-      why: "sign-problem-free AFQMC at half filling on a bipartite lattice; the paper states the results are numerically exact (RULES.md 4)",
+      why: "sign-problem-free AFQMC at half filling on a bipartite lattice: unbiased, statistical error only (the paper calls it numerically exact; RULES.md 4)",
       read: "arXiv PDF extracted locally with pypdf in layout mode, E rows of Table IV parsed by column position; no LLM transcription",
       reported: `E = ${printed} (total), ${L} x ${L}, U = ${U}, ${bc === "P" ? "PBC" : "PBC-APBC"}`,
       note: `Table IV, "Total ground state energy (E) ... in the Hubbard model at half-filling, for U = 2, 4, 6, 8 ... for both PBC and PBC-APBC. Statistical errors are on the last digit." Row ${L} x ${L}, column U = ${U} ${bc === "P" ? "PBC" : "PBC-APBC"}. Half filling: N_up = N_dn = ${Nf}. Cross-checks: the 8 x 8 PBC values at U = 4 and 8 agree with VarBench's own AFQMC exact rows to 1.3 sigma, and the 8 x 8, 10 x 10 and 12 x 12 PBC U = 8 values with the AFQMC references quoted by arXiv:2507.02644 (Table S1) to the printed digits.` });
 }
-console.log(`batch A: ${added} exact rows (${created} new instances)`);
+console.log(`batch A: ${added} unbiased rows (${created} new instances)`);
 
 // ---------------------------------------------------------------------------------------
 // Batch B: the square-lattice spin-1/2 Heisenberg antiferromagnet from Sandvik, "High-
@@ -107,7 +108,7 @@ console.log(`batch A: ${added} exact rows (${created} new instances)`);
 // number twice.
 const SANDVIK = { ref: "Sandvik, High-precision ground state parameters of the two-dimensional spin-1/2 Heisenberg model on the square lattice, arXiv:2601.20189 (2026)", pr: false };
 const SSE = "SSE QMC (stochastic series expansion), T -> 0 converged at beta/L = 32 and 64";
-const SSE_WHY = "sign-problem-free SSE QMC on a bipartite lattice, T -> 0 converged; numerically exact (RULES.md 4)";
+const SSE_WHY = "sign-problem-free SSE QMC on a bipartite lattice, T -> 0 converged: unbiased, statistical error only (RULES.md 4)";
 const SSE_READ = "arXiv HTML parsed locally, one value per table cell; no LLM transcription";
 
 const SANDVIK_TABLES = {
@@ -143,7 +144,7 @@ for (const [L, printed] of SANDVIK_TABLES.pbc) {
   const N = L * L, [e, s] = parse(printed);
   put(`Heisenberg/square_${N}_P`,
     { model: "Heisenberg", lattice: "square", n_sites: N, boundary: "P", params: {}, dof: N, einf: 0 },
-    { energy: +(4 * N * e).toPrecision(12), sigma: +(4 * N * s).toPrecision(3), src: SANDVIK, method: SSE, why: SSE_WHY, read: SSE_READ,
+    { energy: +(4 * N * e).toPrecision(12), sigma: +(4 * N * s).toPrecision(3), src: SANDVIK, bound: "unbiased", method: SSE, why: SSE_WHY, read: SSE_READ,
       reported: `e0 = ${printed} per spin (S.S), L = ${L}, periodic`,
       note: `Table 1, "Results for different system sizes computed at inverse temperature beta/L = 64 for L > 30 and averaged over beta/L = 32 and beta/L = 64 simulations for L <= 30", column e0, row L = ${L}. Pauli total = 4 N e0. The L = 6 value agrees with the exact-diagonalization row on square_36_P to 1.6e-8.` });
 }
@@ -152,7 +153,7 @@ for (const [L, printed] of SANDVIK_TABLES.obc) {
   if (N === 100 || N === 256) continue;   // already carried, quoted from this paper via arXiv:2605.13807
   put(`Heisenberg/square_${N}_O`,
     { model: "Heisenberg", lattice: "square", n_sites: N, boundary: "O", params: {}, dof: N, einf: 0 },
-    { energy: +(-4 * Nb * v).toPrecision(12), sigma: +(4 * Nb * s).toPrecision(3), src: SANDVIK, method: SSE, why: SSE_WHY, read: SSE_READ,
+    { energy: +(-4 * Nb * v).toPrecision(12), sigma: +(4 * Nb * s).toPrecision(3), src: SANDVIK, bound: "unbiased", method: SSE, why: SSE_WHY, read: SSE_READ,
       reported: `E0/N_b = ${printed} (magnitude, per bond, N_b = ${Nb}), L = ${L}, open`,
       note: `Table 2, "SSE data for L x L systems with open boundary conditions. The ground state energy is normalized by the number of interaction bonds N_b = 2(L^2 - L)", row L = ${L}. Printed as a magnitude; E/N = -(E0/N_b) N_b / N = ${(-v * Nb / N).toFixed(8)} in S.S units, Pauli total = 4 N E/N. The L = 6 value agrees with the exact-diagonalization row on square_36_O to 3.3e-7 (2 sigma), and L = 10 and 16 reproduce the rows QMBL already quotes from this paper via arXiv:2605.13807.` });
 }
@@ -160,11 +161,11 @@ for (const [L, printed] of SANDVIK_TABLES.cyl) {
   const N = 2 * L * L, Nb = 2 * L * L - L, [v, s] = parse(printed);
   put(`Heisenberg/rectangular-${L}x${2 * L}_${N}_PO`,
     { model: "Heisenberg", lattice: `rectangular-${L}x${2 * L}`, n_sites: N, boundary: "PO", params: {}, dof: N, einf: 0 },
-    { energy: +(-4 * Nb * v).toPrecision(12), sigma: +(4 * Nb * s).toPrecision(3), src: SANDVIK, method: SSE, why: SSE_WHY, read: SSE_READ,
+    { energy: +(-4 * Nb * v).toPrecision(12), sigma: +(4 * Nb * s).toPrecision(3), src: SANDVIK, bound: "unbiased", method: SSE, why: SSE_WHY, read: SSE_READ,
       reported: `E0/N_b = ${printed} (magnitude, per bond, N_b = ${Nb}), L x 2L = ${L} x ${2 * L}, cylinder`,
       note: `Table 3, "SSE data for L x 2L lattices with cylindrical boundary conditions (periodic in the shorter direction and open in the longer direction). The ground state energy is normalized by the number of interaction bonds N_b = 2 L^2 - L", row L = ${L}. Boundary PO (VarBench lattice.md): periodic along the ${L}-site direction, open along the ${2 * L}-site one. Printed as a magnitude; E/N = -(E0/N_b) N_b / N = ${(-v * Nb / N).toFixed(8)} in S.S units, Pauli total = 4 N E/N.` });
 }
-console.log(`batch B: ${added - before[0]} exact rows (${created - before[1]} new instances)`);
+console.log(`batch B: ${added - before[0]} unbiased rows (${created - before[1]} new instances)`);
 
 // ---------------------------------------------------------------------------------------
 // Batch C: exact diagonalization of frustrated clusters. Deterministic, so no sigma; the
@@ -219,7 +220,7 @@ for (const [J2, printed] of RS_TABLE_1) {
   const id = J2 === 0 ? "Heisenberg/square_40_P" : `J1J2/square_40_P_${J2}`;
   put(id,
     { model: J2 === 0 ? "Heisenberg" : "J1J2", lattice: "square", n_sites: N, boundary: "P", params: J2 === 0 ? {} : { J2 }, dof: N, einf: 0 },
-    { energy: +(4 * E).toPrecision(12), sigma: null, src: RS, method: ED, why: ED_WHY, read: ED_READ,
+    { energy: +(4 * E).toPrecision(12), sigma: null, src: RS, bound: "exact", method: ED, why: ED_WHY, read: ED_READ,
       reported: `E_GS(S = 0) = ${printed} (total, S.S, J1 = 1), N = 40, J2 = ${J2}`,
       note: `Table 1, "Ground state energy E_GS(S = 0) ...", row J2 = ${J2}. The tilted 40-site square-lattice cluster of the paper's Fig. 1 with periodic boundaries (Sec. 2); E/N = ${(E / N).toFixed(7)} in S.S units, Pauli total = 4 E. ${J2 === 0 ? "J2 = 0 is the plain Heisenberg antiferromagnet on this cluster." : "The paper's J2 grid is 0, 0.1, ..., 0.5, 0.55, 0.6, 0.65, 0.7, 0.8, 0.9, 1.0."}` });
 }
@@ -228,10 +229,10 @@ for (const [label, N, a, b, printed] of LSS_TABLE_I) {
   const lattice = label === "12" ? "kagome-2x2" : `kagome-${label}`;
   put(`Heisenberg/${lattice}_${N}_P`,
     { model: "Heisenberg", lattice, n_sites: N, boundary: "P", params: {}, dof: N, einf: 0 },
-    { energy: +(4 * E).toPrecision(12), sigma: null, src: LSS, method: ED, why: ED_WHY, read: ED_READ,
+    { energy: +(4 * E).toPrecision(12), sigma: null, src: LSS, bound: "exact", method: ED, why: ED_WHY, read: ED_READ,
       reported: `Total E = ${printed} (S.S), cluster ${label}`,
       note: `Table I, "Cluster studied in this work", row N = ${label}: basis vectors a = ${a}, b = ${b} in units of the kagome lattice vectors a1, a2 (each of length 2a), periodic (torus). E/N = ${(E / N).toFixed(6)} as printed in the table's own E/N column; Pauli total = 4 E. ${label === "36d" ? "The 36d cluster (|a| = |b| = d = sqrt 12) is the standard 36-site kagome cluster with the full symmetry of the plane." : label === "12" ? "The (2,0),(0,2) cluster is 2 x 2 unit cells, kagome-2x2 in the VarBench naming." : ""}`.trim() });
 }
 console.log(`batch C: ${added - beforeC[0]} exact rows (${created - beforeC[1]} new instances)`);
 
-console.log(`added ${added} exact rows (${created} new instances)`);
+console.log(`added ${added} reference rows (${created} new instances)`);

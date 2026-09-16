@@ -215,7 +215,8 @@ the same number refereed for machine-learning contribution are not equal evidenc
 The validator in [`scripts/validate.mjs`](scripts/validate.mjs) runs on every build and
 checks `dof` and `einf` against the instance definition, the V-score against the row's
 own inputs, the row's energy against its own reported variance, and the variational
-principle against any exact row in the same instance.
+principle against any exact or unbiased row in the same instance (combining the two error bars
+where the reference is an unbiased QMC energy), and that every unbiased row states its sigma.
 
 Rows that fail are **flagged in place, never silently corrected and never deleted**. The
 flag withholds the record and nothing else; [§10](RULES.md#10-pending-confirmed-objections) is the process for lifting

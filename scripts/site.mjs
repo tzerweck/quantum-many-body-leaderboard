@@ -141,19 +141,21 @@ const instUrl = inst => `/i/${inst.instance_id}/`;
 const jsonUrl = inst => `/api/i/${inst.instance_id}.json`;
 const yearOf = r => paperYear(r, cache);
 
-const BOUND_ORDER = ["variational", "projected", "extrapolated", "exact", null];
+const BOUND_ORDER = ["variational", "projected", "extrapolated", "unbiased", "exact", null];
 const BOUND_LABEL = {
   variational: "Strict variational upper bounds",
   projected: "Projected or fixed-node estimates",
   extrapolated: "Extrapolations",
-  exact: "Numerically exact",
+  unbiased: "Unbiased QMC estimates",
+  exact: "Exact",
   null: "Not yet classified",
 };
 const BOUND_NOTE = {
-  variational: "Where the instance is not solved, the record is the lowest eligible energy in this group; where it is, the lowest eligible energy here is the best variational bound and the closest challenger to the exact one.",
+  variational: "Where the instance is not solved, the record is the lowest eligible energy in this group; where it is, the lowest eligible energy here is the best variational bound and the closest challenger to it.",
   projected: "Variational only within a constraint: fixed-node, constrained-path, GFMC on a trial state. Node- or constraint-dependent, so not cleanly comparable to each other or to the group above, and never the record.",
-  extrapolated: "Zero-variance, bond-dimension or Trotter-error extrapolations. Not a bound: no ansatz ever reached the number, so it cannot hold the record.",
-  exact: "Exact diagonalization, an exact solution, or sign-problem-free QMC where that is established: the answer, not a claim about it, and therefore the record wherever one exists. Sector-resolved diagonalizations state the lowest energy in one symmetry sector and do not hold it.",
+  extrapolated: "Zero-variance or bond-dimension extrapolations of a variational energy. Not a bound: no ansatz ever reached the number, so it cannot hold the record.",
+  unbiased: "Sign-problem-free quantum Monte Carlo: no systematic bias, but an estimate with a statistical error bar, not an exact energy, so it may sit on either side of the ground-state energy within its error. It holds the record where the instance has no exact energy; among several, the most precise holds it.",
+  exact: "Exact diagonalization or an exact solution: the ground-state energy itself, and therefore the record wherever one exists. Sector-resolved diagonalizations state the lowest energy in one symmetry sector and do not hold it.",
   null: "The method string does not say whether the energy is sign-problem-free or constrained, so no bound_type could be assigned without guessing.",
 };
 
@@ -245,13 +247,13 @@ function variantNote(inst) {
 // pareto.mjs) and committed, in a light and a dark variant for GitHub; the page inlines the
 // light one and the stylesheet recolours it in dark mode (FIG_DARK). One entry per figure.
 const FIGURES = [
-  ["size-vs-accuracy", "How far published energies sit from the exact answer, by system size",
-    "Every energy on an instance with an exact ground-state energy, as its relative distance from that energy. Colour is the kind of number; filled marks can hold a record, hollow ones cannot."],
-  ["size-vs-accuracy-by-family", "The same distances, one panel per method family",
-    "Each panel colours one family's energies over all the others in grey and joins the family's best distance at each size."],
+  ["size-vs-accuracy", "The best published energies, by system size",
+    "Every energy on an instance with an exact or unbiased QMC ground-state energy, placed by its relative gap to it so that different Hamiltonians share one axis; a better energy is higher. Colour is the kind of number; filled marks can hold a record, hollow ones cannot."],
+  ["size-vs-accuracy-by-family", "The best energies by system size, one panel per method family",
+    "Each panel colours one family's energies over all the others in grey and joins the family's best energy at each size."],
   ["size-vs-accuracy-ladders", "Accuracy as the same Hamiltonian grows",
-    "Six families of instances that differ only in size. Distance is from the exact energy where one exists, otherwise from the standing record, whose holder then sits in the column at the left."],
-  ["energy-vs-compute", "What a published energy cost, against how far it sits from the reference",
+    "Six families of instances that differ only in size, each size placed against its exact or unbiased QMC energy where it has one, otherwise against the standing record, whose holder then sits in the band above the plot."],
+  ["energy-vs-compute", "The best energies at each cost, instance by instance",
     "The energies whose papers state what they cost in GPU-hours, or as a device count and a wall-clock, on the instances they were computed for. CPU core-hours are never put on the same axis."],
 ];
 
@@ -351,8 +353,8 @@ function homePage() {
 <h1>The best published ground-state energies</h1>
 <p class="lead">QMBL is a record book of the state of the art in quantum many-body simulation: one row
 per published energy, ranked within each Hamiltonian instance, every row citing the paper that
-produced the number and declaring what kind of quantity it is. Where an instance is solved, the
-exact energy is the record; everywhere else the best variational bound is.
+produced the number and declaring what kind of quantity it is. Where an instance has an exact
+energy, or an unbiased QMC estimate, that is the record; everywhere else the best variational bound is.
 <a href="/instances/">All ${summary.instances} instances and their ${summary.rows} energies &rarr;</a></p>
 
 ${figures}
@@ -373,7 +375,7 @@ below their instance's current record. If one of those is your paper,
 <p>Every row is one published claim about one Hamiltonian instance: the energy, its error bar, the
 method, the primary reference, and a declared <code>bound_type</code> saying what the number
 actually is &mdash; a strict variational bound, a projected or fixed-node estimate, a zero-variance
-extrapolation, or a numerically exact result. An exact result is the record wherever one exists;
+extrapolation, an unbiased QMC estimate, or an exact result. An exact or unbiased result is the record wherever one exists;
 on every other instance only strict variational bounds compete for it, which is what keeps an
 extrapolated number from beating a measured one.
 The rules are in <a href="${RULES}">RULES.md</a>, the row format in <a href="${DATA}">DATA.md</a>.</p>
@@ -409,7 +411,7 @@ const SIZE_BANDS = [
 ];
 const sizeBand = inst => SIZE_BANDS.find(([, test]) => test(inst.n_sites))[0];
 
-const BOUND_SHORT = { variational: "variational", projected: "projected", extrapolated: "extrapolated", exact: "exact", null: "unclassified" };
+const BOUND_SHORT = { variational: "variational", projected: "projected", extrapolated: "extrapolated", unbiased: "unbiased", exact: "exact", null: "unclassified" };
 
 // Every row of the instance, the record marked, challengers with their gap above it. sigma
 // is shown because 62% of rows carry one (2026-09-16); Var(E) and the V-score, on 36%, stay
@@ -625,6 +627,8 @@ function instancePage(inst) {
         <p>${esc(rec.method)}</p>
         <p class="muted">${citeHtml(rec)} &middot; ${rec.bound_type === "exact"
           ? "exact energy: the instance is solved, and this is the state of the art on it"
+          : rec.bound_type === "unbiased"
+          ? "unbiased QMC estimate: not exact, but free of systematic bias within its error bar, and the state of the art on this instance"
           : "lowest eligible strict variational bound"}
           (<a href="${RULES}#6-records-and-ties">rules &sect;6</a>)</p>
       </div>`
@@ -780,12 +784,13 @@ function llmsTxt() {
   const lines = [
     "# QMBL - the Quantum Many-Body Leaderboard",
     "",
-    `> The best published ground-state energies for ${summary.instances} lattice Hamiltonian instances (${summary.rows} energies, ${summary.records.held} with a record, ${summary.records.held_by_exact} of them solved exactly). Read-only, generated from the repository's data/ directory, Apache-2.0.`,
+    `> The best published ground-state energies for ${summary.instances} lattice Hamiltonian instances (${summary.rows} energies, ${summary.records.held} with a record, ${summary.records.held_by_exact} of them held by an exact energy and ${summary.records.held_by_unbiased} by an unbiased QMC estimate). Read-only, generated from the repository's data/ directory, Apache-2.0.`,
     "",
     "Every row is one published claim about one Hamiltonian instance and carries the energy, its",
     "error bar, the method, the primary reference, and a `bound_type`: strict variational bound,",
-    "projected/fixed-node estimate, zero-variance extrapolation, or numerically exact. An exact",
-    "energy is the record wherever one exists; otherwise only a strict variational bound can hold",
+    "projected/fixed-node estimate, zero-variance extrapolation, unbiased (sign-problem-free QMC, an",
+    "estimate with an error bar, not exact), or exact. An exact or unbiased energy is the record",
+    "wherever one exists; otherwise only a strict variational bound can hold",
     "it. Energies are stored as totals in VarBench's convention",
     "and quoted per site; the conversion is in DATA.md. Individual energies must be cited to the",
     "primary paper named on the row, not to this site.",
