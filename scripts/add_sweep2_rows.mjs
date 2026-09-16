@@ -102,7 +102,7 @@ const ADD = {
     { eps: -0.6286561, err: 2e-7, m: "QMC (stochastic series expansion)", bt: "exact",
       src: MINGRU, primary: P.sandvik,
       note: T2_SQ + ' Column "QMC [49]" = arXiv:2601.20189. The square-lattice Heisenberg AFM is bipartite and sign-problem-free, so SSE QMC is numerically exact here (RULES.md 4).' },
-    { eps: -0.628656, err: 9e-6, m: "2D tensorized-GRU RNN wavefunction, best variational (own)", bt: "variational",
+    { eps: -0.628656, err: 9e-6, m: "2D tensorized-GRU RNN wavefunction, best variational", bt: "variational",
       src: MINGRU, primary: P.moss25,
       note: T2_SQ + ' Column "2D TRNN [40]". Bibliography item [40] of arXiv:2605.13807 is Moss et al. 2025 (arXiv:2502.17144), whose Table 5 prints this value as "This work (best RNN)", OBC 10x10; until 2026-09-16 this row credited Hibat-Allah, Melko & Carrasquilla 2022, a misread of the citation number (the arXiv HTML numbers its bibliography differently from the printed text). It sits 1e-7 below the QMC reference, well inside its own 9e-6 error bar.' },
     { eps: -0.628637, err: 4e-6, m: "2D minGRU (3 layers, c4v symmetry, parallel scan)", bt: "variational",

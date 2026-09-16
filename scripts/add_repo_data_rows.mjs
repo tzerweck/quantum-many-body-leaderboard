@@ -32,7 +32,7 @@ import { perSiteDivisor, expectedDof, expectedEinf, vScore } from "./units.mjs";
 const CHECKED = "2026-09-16";
 const SRC = JSON.parse(fs.readFileSync("sources/2502.17144-repo-final_energy_data.json", "utf8"));
 const REF = "Moss, Wiersema, Hibat-Allah, Carrasquilla & Melko, Leveraging recurrence in neural network wavefunctions for large-scale simulations of Heisenberg antiferromagnets on the square lattice, Phys. Rev. B (2025), arXiv:2502.17144";
-const METHOD = { periodic: "2D RNN wavefunction (best variational)", open: "2D tensorized-GRU RNN wavefunction, best variational (own)" };
+const METHOD = { periodic: "2D RNN wavefunction (best variational)", open: "2D tensorized-GRU RNN wavefunction, best variational" };
 // Ansatz-scope compute as the compute pass of 2026-09-16 read it from the paper (Table I,
 // Fig. 3/12 captions, Fig. 7/8 captions, Appendix C); the same block the paper's other rows
 // carry, since the parameter count and the sampling are per ansatz, not per row.
