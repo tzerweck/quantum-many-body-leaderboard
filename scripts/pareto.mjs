@@ -16,10 +16,10 @@
 //
 // The frontier is the staircase of results nothing beats for less: sorted by cost, a row
 // is on it when its energy is below every cheaper row that could hold a record (RULES.md
-// 6: a strict bound with an error bar, or a ground-state exact or unbiased energy). Projections and
+// 6: a strict bound with an error bar, or a ground-state exact energy). Projections and
 // extrapolations are drawn but never on the frontier, as they are not bounds.
 import fs from "node:fs";
-import { recordEligible, referenceEligible, REFERENCE_BOUNDS, perSiteDivisor, perSiteLabel } from "./units.mjs";
+import { recordEligible, exactEligible, boundLabel, perSiteDivisor, perSiteLabel } from "./units.mjs";
 import { collect, recordOf } from "./summary.mjs";
 import { hoursOf, parametersOf, MIN_COSTED, costFigureName } from "./cost.mjs";
 import { W, PAD, n, text, hline, dot, legend, header, footnote, doc, textWidth, niceStep, writer, log, logScale, pow10, shortLabel, rowHref, linked } from "./chart.mjs";
@@ -27,9 +27,7 @@ import { W, PAD, n, text, hline, dot, legend, header, footnote, doc, textWidth, 
 const OUT = "figures";
 const instances = collect();
 const { write, written } = writer(OUT);
-// Unbiased QMC shares the exact colour: both state the ground-state energy rather than a
-// bound on it, and the palette has four series colours. The legend names both.
-const BOUNDS = { variational: 0, projected: 1, extrapolated: 2, exact: 3, unbiased: 3 };
+const BOUNDS = { variational: 0, projected: 1, extrapolated: 2, exact: 3 };
 
 
 const MODEL = { J1J2: "J1-J2", Heisenberg: "Heisenberg", Hubbard: "Hubbard", TFIsing: "TFIM", tV: "t-V", Impurity: "impurity" };
@@ -42,14 +40,13 @@ function instLabel(i) {
 }
 
 // The costed rows of an instance under one cost accessor. A row on the frontier can hold
-// a record; exact and unbiased rows count only when they state the ground state.
+// a record; exact rows count only when they state the ground state.
 function costed(inst, costOf) {
   const f = perSiteDivisor(inst);
   return inst.rows.filter(r => r.bound_type in BOUNDS && !r.defect).flatMap(r => {
     const cost = costOf(r.compute);
-    const reference = REFERENCE_BOUNDS.includes(r.bound_type);
-    if (!cost || (reference && !referenceEligible(r))) return [];
-    return [{ r, inst, cost, e: r.energy / f, eligible: reference ? referenceEligible(r) : recordEligible(r) }];
+    if (!cost || !(r.bound_type !== "exact" || exactEligible(r))) return [];
+    return [{ r, inst, cost, e: r.energy / f, eligible: r.bound_type === "exact" ? exactEligible(r) : recordEligible(r) }];
   });
 }
 function frontierOf(pts) {
@@ -107,7 +104,7 @@ function drawPanel(t, parts, inst, pts, { px, left, right, top, bottom, xLabel, 
     if (recE != null) {
       parts.push(hline(left, right, Y(recE), t.ink2));
       // Named below its line, where nothing but a projection or extrapolation can sit.
-      parts.push(text(left + 4, Y(recE) + 13, `${REFERENCE_BOUNDS.includes(rec.bound_type) ? rec.bound_type : "record"}: ${shortLabel(rec)}`, { size: 10.5, fill: t.ink, weight: 600 }));
+      parts.push(text(left + 4, Y(recE) + 13, `${rec.bound_type === "exact" ? boundLabel(rec) : "record"}: ${shortLabel(rec)}`, { size: 10.5, fill: t.ink, weight: 600 }));
     }
     if (front.length > 1) {
       let d = `M${n(X(front[0].cost.value))} ${n(Y(front[0].e))}`;
@@ -155,7 +152,7 @@ const HOURS_LEGEND = t => [
   { kind: "dot", color: t.series[0], label: "Variational bound" },
   { kind: "dot", color: t.series[1], label: "Projected" },
   { kind: "dot", color: t.series[2], label: "Extrapolated" },
-  { kind: "dot", color: t.series[3], label: "Exact or unbiased QMC" },
+  { kind: "dot", color: t.series[3], label: "Exact" },
   { kind: "ring", color: t.ink2, label: "Cannot hold a record" },
   { kind: "line", color: t.series[0], label: "Frontier" },
 ];

@@ -28,10 +28,19 @@ export const isSampled = method => !DETERMINISTIC.test(method || "");
 // can close it. Deliberately NOT a `defect`, which asserts a suspected error and
 // withholds the record; RULES.md 3 says a missing field excludes nothing. `exact` rows
 // are not marked - an exact diagonalization has no error to report, so nothing is
-// missing there. `unbiased` rows are: a QMC energy is an estimate, and one without its
-// error bar is missing the number that says how good it is.
+// missing there - except stochastic ones (below), whose error bar is part of the claim.
 export const noErrorMetrics = r =>
-  r.bound_type !== "exact" && r.sigma == null && r.energy_variance == null;
+  (r.bound_type !== "exact" || stochasticExact(r)) && r.sigma == null && r.energy_variance == null;
+
+// Sign-problem-free QMC is `exact` within its statistical error bar, not to the printed
+// digits (RULES.md 4): such a row must state sigma, and every surface prints its class as
+// "exact (stochastic)" (Tristan, 2026-09-16). The method string tells it apart from exact
+// diagonalization and exact solutions.
+const STOCHASTIC = /\bqmc\b|\bafqmc\b|monte carlo|stochastic series/i;
+export const stochasticExact = r => r.bound_type === "exact" && STOCHASTIC.test(r.method || "");
+
+// A row's bound_type as the site, the figures and records.mjs print it.
+export const boundLabel = r => stochasticExact(r) ? "exact (stochastic)" : (r.bound_type ?? "unclassified");
 
 // Sector-resolved exact diagonalization, as VarBench labels it: "Exact Diagonalization
 // 0.C1.A -1" is the lowest state in ONE symmetry sector, not the ground state, so an
@@ -49,29 +58,20 @@ export const SECTOR_RESOLVED = /[A-Z][0-9a-z]*\.[A-Z]/;
 // regex above cannot tell the ground-state sector from the others.
 const RULED_GROUND_STATE = new Set(["Exact Diagonalization Gamma.D6.A1 1"]);
 
-// The classes that state the ground-state energy itself rather than a bound on it or an
-// extrapolation toward it (RULES.md 4), in rank order: `exact` (exact diagonalization, an
-// exact solution; no error) before `unbiased` (sign-problem-free QMC; no systematic bias,
-// a statistical error bar). Sign-problem-free QMC was filed as `exact` until 2026-09-16,
-// when Tristan ruled that it is not: it is an estimate with an error bar, and is displayed
-// as one, but it still holds the record where it is the best number (RULES.md 6).
-export const REFERENCE_BOUNDS = ["exact", "unbiased"];
+// Does this exact row state the ground-state energy, rather than a sector minimum?
+export const groundStateExact = r =>
+  r.bound_type === "exact" && (!SECTOR_RESOLVED.test(r.method || "") || RULED_GROUND_STATE.has(r.method));
 
-// Does this row state the instance's ground-state energy? Sector-resolved exact
-// diagonalization states the lowest energy of one sector instead, and does not.
-export const groundStateReference = r =>
-  (r.bound_type === "exact" && (!SECTOR_RESOLVED.test(r.method || "") || RULED_GROUND_STATE.has(r.method)))
-  || r.bound_type === "unbiased";
-
-// A reference row that may hold the record: such a row IS the record wherever one exists
-// (RULES.md 6), since the ground-state energy outranks every bound on it. A flagged
-// reference row is skipped like any other (6.1).
-export const referenceEligible = r => groundStateReference(r) && !r.defect;
+// An exact row that states the instance's ground-state energy: exact diagonalization, an
+// exact solution, or sign-problem-free QMC where that is established (RULES.md 4). Such a
+// row IS the record wherever one exists (RULES.md 6): the answer outranks every claim
+// about it. A flagged exact row is skipped like any other (6.1).
+export const exactEligible = r => groundStateExact(r) && !r.defect;
 
 // A row may hold its instance's VARIATIONAL record only if it is a strict variational
 // bound, carries no unresolved defect (RULES.md 6.1), and - when its energy was sampled -
 // states the error bar the tie rule needs (RULES.md 6). On an instance with an eligible
-// exact or unbiased row this decides the best variational bound, not the record.
+// exact row this decides the best variational bound, not the record.
 export function recordEligible(r) {
   if (r.bound_type !== "variational" || r.defect) return false;
   return !isSampled(r.method) || r.sigma != null;

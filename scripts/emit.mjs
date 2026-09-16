@@ -4,7 +4,7 @@ import { classify } from "./bound_type.mjs";
 
 // model -> names of the trailing params after lattice_N_BC
 const PARAMS = { J1J2:["J2"], Hubbard:["Nf","U"], tV:["Nf","V"], TFIsing:["h"], Heisenberg:[], Impurity:[] };
-const NEEDS_REVIEW = new Set(["QMC","AFQMC"]); // bare strings: sign-problem-free (unbiased) vs constrained (projected)
+const NEEDS_REVIEW = new Set(["QMC","AFQMC"]); // bare strings: sign-problem-free (exact) vs constrained (projected)
 
 // Clean rebuild: data/ is fully derived from vendor/ + scripts/, never edited by hand,
 // so wipe it first. Without this, add_literature.mjs double-appends to instances it created.

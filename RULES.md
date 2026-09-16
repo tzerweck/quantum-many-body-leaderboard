@@ -50,19 +50,13 @@ energies from different classes are not comparable and mixing them manufactures 
   Still an upper bound in most cases, but node- or constraint-dependent, so two projected
   energies from different trial states are not cleanly comparable to each other or to
   variational ones.
-- **`extrapolated`**: the reported number is an extrapolation of a variational energy, not an
-  achieved energy: zero-variance or bond-dimension extrapolation. **Not a bound.** No
+- **`extrapolated`**: the reported number is an extrapolation, not an achieved energy:
+  zero-variance, bond-dimension, or Trotter-error extrapolation. **Not a bound.** No
   ansatz ever reached it.
-- **`unbiased`**: an estimate of the ground-state energy with no systematic bias and a
-  statistical error bar: sign-problem-free QMC where the absence of a sign problem is
-  established (SSE on bipartite spin models, AFQMC at half filling on a bipartite lattice or
-  at attractive U), converged to the ground state as the authors state it. **Not exact and
-  not a bound**: it may sit on either side of the ground-state energy within its error bar,
-  so it must state `sigma`. A Trotter-step extrapolation of such a run stays `unbiased`: it
-  removes a controlled discretisation error of the method, it does not extrapolate a
-  variational energy past what any state reached.
-- **`exact`**: the ground-state energy itself, to the printed digits: exact diagonalization,
-  an exact solution.
+- **`exact`**: numerically exact for this instance: exact diagonalization, exact solution,
+  sign-problem-free QMC where that is established. QMC is exact only within its statistical
+  error bar, not to the printed digits: such a row must state `sigma`, and is shown
+  everywhere as **`exact (stochastic)`**.
 
 Worked cases that fixed the boundaries:
 
@@ -74,17 +68,15 @@ Worked cases that fixed the boundaries:
 - *Zero-variance extrapolation is its own class.* Chen & Heyl report both a variational
   −0.4976921(4) and an extrapolated −0.497715(9) on 10x10 J1-J2. Ranking them in one
   column would award the record to a number no wave function achieved.
-- *QMC is not exact.* Until 2026-09-16 sign-problem-free QMC was filed as `exact`, following
-  the papers' own "numerically exact". It is not: an energy with an error bar is an estimate,
-  however unbiased. The 125 rows (Sandvik's SSE tables, Qin, Shi & Zhang's
-  half-filled AFQMC, VarBench's sign-free AFQMC) moved to `unbiased`. No record moved: an
-  unbiased energy still holds the record where no exact one exists (§6), and is displayed
-  with its error bar as what it is.
-- *A method name is not a guarantee.* `QMC (continuous-time expansion)` is unbiased
-  for impurity models, but on t-V lattice instances its rows sit above exact
+- *Stochastic exact says so.* An energy with an error bar is an estimate, so a QMC row is not
+  exact in the sense a diagonalization is. It stays `exact` - unbiased, and on most of its
+  instances the most precise number there is - but its label reads `exact (stochastic)` and
+  its error bar is required (§9.4), so no reader takes it for a diagonalization (2026-09-16).
+- *A method name is not a guarantee.* `QMC (continuous-time expansion)` is numerically
+  exact for impurity models, but on t-V lattice instances its rows sit above exact
   diagonalization and 4.7e-2 above DMRG. It is `null` pending per-model classification.
 - *When in doubt, `null`.* Bare `QMC` and `AFQMC` strings are unresolved: sign-problem-free
-  (unbiased) and constrained-path (projected) are different classes and the string does not say.
+  (exact) and constrained-path (projected) are different classes and the string does not say.
 
 ## 5. Units and conventions
 
@@ -104,9 +96,8 @@ Any submitted number is converted by the loader, never by hand.
 ## 6. Records and ties
 
 The record for an instance is its **state-of-the-art energy**: the `exact` energy where the
-instance is solved, else its most precise `unbiased` energy where it has one, otherwise the
-**lowest eligible `variational` energy**. `projected` and `extrapolated` rows are displayed
-alongside but never hold it.
+instance is solved, otherwise the **lowest eligible `variational` energy**. `projected` and
+`extrapolated` rows are displayed alongside but never hold it.
 
 - **A solved instance has a record, and exact diagonalization holds it.** The exact energy is
   the answer, so it is the state of the art on that instance by definition; the variational
@@ -115,15 +106,10 @@ alongside but never hold it.
   never hold it") and the table reported solved instances as having "nothing to compete for".
   That was inherited from VarBench, which uses exact energies as references for the V-score
   rather than as results, and it misread ED as something other than the state of the art.
-- **Where no exact energy exists, an unbiased one holds the record.** Sign-problem-free QMC
-  is not exact (§4), but it is free of systematic bias, which no variational or projected
-  energy is, so it is the state of the art on the instance. The best variational bound is
-  the closest challenger; one that sits below the unbiased energy within their combined
-  error bars is consistent with it (§9.4), not a new record.
-- **Among several exact or unbiased rows the most precise holds the record, not the lowest.**
-  They are estimates of one number, so the lowest of them is the luckiest, not the best: an
-  `exact` row outranks an `unbiased` one, and a smaller error bar outranks a larger one. Two
-  such rows that disagree beyond their stated precision are a
+- **Among several exact rows the most precise holds the record, not the lowest.** Exact rows
+  are estimates of one number, so the lowest of them is the luckiest, not the best: exact
+  diagonalization (no error bar) outranks sign-problem-free QMC, and a smaller error bar
+  outranks a larger one. Two exact rows that disagree beyond their stated precision are a
   `defect` to raise on the row (11), not a ranking question.
 - **Sector-resolved exact diagonalization holds the record only in the ground-state sector.** A
   row such as `Exact Diagonalization 0.C1.A -1` states the lowest energy in one symmetry sector,
@@ -131,7 +117,7 @@ alongside but never hold it.
   `J1J2/triangular_48_P_0.125` carries all 48 sectors of Wietek et al. (PRX 14, 021010), whose
   App. B names Γ.A1 (spin-flip +1) as the ground state; that row holds the record and the other
   47 do not (ruling of 2026-09-16: they move to a per-instance spectrum record). `SECTOR_RESOLVED`
-  and `groundStateReference` in `scripts/units.mjs` draw the line, and the validator excludes the
+  and `groundStateExact` in `scripts/units.mjs` draw the line, and the validator excludes the
   same sector rows from the variational-principle check for the same reason.
 - Rows whose error bars overlap at **2 sigma** share the rank.
 - **A sampled energy must state its `sigma` to be eligible.** `sigma` must also state how it
@@ -164,8 +150,8 @@ alongside but never hold it.
   table and in rank order, and closing it takes one message. It is deliberately **not** a
   `defect` (11), which asserts a suspected error and withholds the record: missing data is not
   an error, and by 3 it excludes nothing. `exact` rows are not marked, since an exact
-  diagonalization has no error to report and nothing is missing. `unbiased` rows are, and the
-  validator requires their `sigma` (§9.4).
+  diagonalization has no error to report and nothing is missing. Stochastic exact rows are,
+  and the validator requires their `sigma` (§9.4).
 
 ### 6.1 A flagged row cannot hold a record
 
@@ -186,9 +172,9 @@ and is never ranked on.
 
 **Aggregates over methods count only records held by a `variational` bound.** The medal
 table, records by ansatz family and records by year are statements about ansätze competing;
-an exact or unbiased energy is not an ansatz, and counting it would hand the most records to
-whoever ran exact diagonalization or QMC on the most instances. The per-instance record is
-still the exact or unbiased energy where one exists (6); the aggregates simply say over which
+an exact energy is the answer rather than an ansatz, and counting it would hand the most
+records to whoever ran exact diagonalization on the most small instances. The per-instance
+record is still the exact energy where one exists (6); the aggregates simply say over which
 instances they are computed.
 
 ## 8. Provenance
@@ -271,13 +257,12 @@ worth attacking, and one of those readings finds them and the other does not.
    rows on 4x4 (U = 3.5981, 8 and 10 electrons) show the same signature from having
    converged to an excited state. The check stands; what it establishes is a question to
    the authors, which is how the HQT case in 8.1 is carried.
-4. **The variational principle**: no `variational` row may sit below an `exact` or `unbiased`
-   row in the same instance. Sector-resolved ED rows are excluded, since an unconstrained
-   state may legitimately sit below the lowest state of one sector. A violation counts only
-   past 3 sigma - the row's own, combined in quadrature with the `unbiased` row's where the
-   reference is one - or past a relative 1e-8 when neither states a sigma. An `unbiased` row
-   without `sigma` is itself an issue: it is an estimate, and this check has nothing to
-   measure against.
+4. **The variational principle**: no `variational` row may sit below an `exact` row in the
+   same instance. Sector-resolved ED rows are excluded, since an unconstrained state may
+   legitimately sit below the lowest state of one sector. A violation counts only past
+   3 sigma - the row's own, combined in quadrature with the exact row's where that row is
+   stochastic - or past a relative 1e-8 when neither states one. A stochastic exact row
+   without `sigma` is itself an issue.
 
 Six issues survive these checks on the imported VarBench data. They are carried as known
 defects attached to the row (§11), not silently corrected.
@@ -333,7 +318,7 @@ technical. A new row is **`pending`** for 30 days and **`confirmed`** if no obje
 - wrong unit convention (§5);
 - `bound_type` misdeclared (§4);
 - `sigma` estimated without autocorrelation correction (§6);
-- the energy violates the variational principle against a known exact or unbiased reference (§9);
+- the energy violates the variational principle against a known exact reference (§9);
 - **the sampling is non-ergodic**: the Monte Carlo update rule is incompatible with a
   conservation law or symmetry of the Hamiltonian, so the reported average is taken over a
   non-representative set of configurations (§9, the kagome case);

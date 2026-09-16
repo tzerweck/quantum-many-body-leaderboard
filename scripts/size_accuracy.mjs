@@ -10,15 +10,15 @@
 //
 // The question every figure here asks is which published results are the best (Tristan,
 // 2026-09-16); the relative gap is only the mechanic that lets Hamiltonians of different
-// energy scales share one axis. It is taken against the instance's exact energy, or its
-// unbiased QMC energy where it has no exact one (RULES.md 4), wherever the instance has
-// either; the first two figures use only such instances. The ladders fall back to the record where no exact row exists, and
+// energy scales share one axis. It is taken against the exact energy wherever an instance
+// has one. The two exact-referenced figures use
+// only such instances. The ladders fall back to the record where no exact row exists, and
 // say so per size; there the record holder sits in the band at the top. None of the three
 // draws a V-score, a variance or a distance-to-record for the record itself, so nothing
 // here says how well converged a standing record is - that is the beatable-records
 // question, which stays off the site.
 import { recordEligible } from "./units.mjs";
-import { collect, recordOf, referenceRecordOf } from "./summary.mjs";
+import { collect, recordOf, exactRecordOf } from "./summary.mjs";
 import { FAMILIES, family } from "./views.mjs";
 import { W, PAD, n, text, hline, dot, legend, header, footnote, doc, textWidth, writer, log, logScale, pow10, rowHref } from "./chart.mjs";
 
@@ -31,15 +31,15 @@ const FLOOR = 1e-8; // relative gaps below this are drawn at the top edge, and c
 
 // The reference an instance's rows are measured against, and what kind it is.
 function referenceOf(inst) {
-  const reference = referenceRecordOf(inst);
-  if (reference) return { row: reference, kind: "reference" };
+  const exact = exactRecordOf(inst);
+  if (exact) return { row: exact, kind: "exact" };
   const rec = recordOf(inst);
   return rec ? { row: rec, kind: "record" } : null;
 }
 
 // Every row that is a result rather than the answer: a bound or an extrapolation,
 // unflagged, with a stated bound type. `gap` is relative to the reference energy;
-// extrapolations and projections may land below the reference, and the absolute
+// extrapolations and projections may land below an exact reference, and the absolute
 // value is what the axis shows, so the colour has to say which kind of row it is.
 function points(inst, ref) {
   return inst.rows
@@ -74,19 +74,19 @@ function frontier(pts, X, Y, color) {
   return `<path d="${d}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" opacity="0.85"/>`;
 }
 
-const referenced = instances.map(i => [i, referenceOf(i)]).filter(([, ref]) => ref?.kind === "reference");
-const all = referenced.flatMap(([i, ref]) => points(i, ref));
+const exactRef = instances.map(i => [i, referenceOf(i)]).filter(([, ref]) => ref?.kind === "exact");
+const all = exactRef.flatMap(([i, ref]) => points(i, ref));
 const NS = all.map(p => p.inst.n_sites);
 const X0 = 8, X1 = Math.max(...NS) * 1.4;
 const Y0 = FLOOR, Y1 = 1;
 const XT = [10, 30, 100, 300, 1000].filter(v => v <= X1);
 const floored = all.filter(p => p.gap < FLOOR).length;
-const Y_LABEL = "relative gap to the instance's reference energy (better is higher)";
+const Y_LABEL = "relative gap to the instance's exact energy (better is higher)";
 
-// -------------------------------------------- 1. every row on an instance with a reference
+// ------------------------------------------------------ 1. every row against an exact energy
 write("size-vs-accuracy", t => {
   const h = header(t, "The best published energies, by system size",
-    `${all.length} energies on the ${referenced.length} instances with an exact or unbiased QMC ground-state energy, ` +
+    `${all.length} energies on the ${exactRef.length} instances that have an exact ground-state energy, ` +
     "placed by their relative gap to it so that different Hamiltonians share one axis; a better energy is higher. Colour is the kind of number; filled marks can hold a record, hollow ones cannot.");
   const lg = legend(t, [
     { kind: "dot", color: t.series[0], label: "Variational bound" },
@@ -100,12 +100,12 @@ write("size-vs-accuracy", t => {
   // Hollow first, then filled; within each, extrapolated and projected under variational.
   const order = [...all].sort((a, b) => (a.eligible - b.eligible) || (BOUNDS[b.r.bound_type] - BOUNDS[a.r.bound_type]));
   for (const p of order) parts.push(dot(t, X(p.inst.n_sites), Y(p.gap), t.series[BOUNDS[p.r.bound_type]], p.eligible, rowHref(p.inst, p.r)));
-  const fn = footnote(t, `Height is |E − E_ref| / |E_ref| on an inverted log scale, so that a better energy is higher; ${floored} rows closer than ${pow10(log(FLOOR))} sit on the top line. ` +
+  const fn = footnote(t, `Height is |E − E_exact| / |E_exact| on an inverted log scale, so that a better energy is higher; ${floored} rows closer than ${pow10(log(FLOOR))} sit on the top line. ` +
     "No line joins the sizes: the instances at one size are different Hamiltonians, and a frontier across them would compare a Hubbard " +
-    "energy with a Heisenberg one. The reference is exact diagonalization where it exists, otherwise sign-problem-free QMC, which is unbiased but not exact; flagged rows are not shown.", bottom + 58);
+    "energy with a Heisenberg one. Exact references are exact diagonalization or sign-problem-free QMC, exact within its error bar; flagged rows are not shown.", bottom + 58);
   parts.push(fn.svg);
   return doc(t, fn.bottom + 24, "The best published energies, by system size",
-    `Number of sites (x) against relative gap to the reference ground-state energy (y, inverted log scale, better is higher) for ${all.length} published energies on ${referenced.length} instances with an exact or unbiased QMC energy.`, parts);
+    `Number of sites (x) against relative gap to the exact ground-state energy (y, inverted log scale, better is higher) for ${all.length} published energies on ${exactRef.length} exactly solved instances.`, parts);
 });
 
 // ------------------------------------------------------------- 2. the same, by method family
@@ -148,7 +148,7 @@ write("size-vs-accuracy-by-family", t => {
 });
 
 // ---------------------------------------------------------------- 3. the instance ladders
-// Same Hamiltonian at growing sizes. Where a size has no exact or unbiased energy the reference is the
+// Same Hamiltonian at growing sizes. Where a size has no exact energy the reference is the
 // record, and the size's label says so by colour; the record holder itself sits in the
 // band above the plot. One line per method family through its best row at each size.
 const LADDERS = [
@@ -163,7 +163,7 @@ const LADDERS = [
 write("size-vs-accuracy-ladders", t => {
   const cols = 2, plotH = 200, pitch = plotH + 120, panelW = (W - 2 * PAD - 40) / cols;
   const h = header(t, "Accuracy as the same Hamiltonian grows",
-    "Six families of instances that differ only in size. Each size is placed against its exact or unbiased QMC energy where it has one (sizes in grey), " +
+    "Six families of instances that differ only in size. Each size is placed against its exact energy where it has one (sizes in grey), " +
     "otherwise against the standing record (sizes in orange), whose holder then sits in the band above the plot. One line per method family, " +
     "through its best energy at each size; a family present at one size only is a lone mark. A better energy is higher.");
   const lg = legend(t, [
@@ -193,7 +193,7 @@ write("size-vs-accuracy-ladders", t => {
       const kind = members.find(([i]) => i.n_sites === N)[1].kind, x = X(N), w = textWidth(String(N), 11);
       parts.push(`<path d="M${n(x)} ${n(bottom)}v4" stroke="${t.grid}" stroke-width="1"/>`);
       if (x - w / 2 < lastEnd + 6) continue;
-      parts.push(text(x, bottom + 18, String(N), { size: 11, fill: kind === "reference" ? t.muted : t.series[1], anchor: "middle", nums: true }));
+      parts.push(text(x, bottom + 18, String(N), { size: 11, fill: kind === "exact" ? t.muted : t.series[1], anchor: "middle", nums: true }));
       lastEnd = x + w / 2;
     }
     // The record holders' band, above the plot: gap zero by construction.
@@ -232,4 +232,4 @@ write("size-vs-accuracy-ladders", t => {
   return doc(t, fn.bottom + 24, "Accuracy as the same Hamiltonian grows: six instance ladders", descs.join("; "), parts);
 });
 
-console.log(`${OUT}/: ${written.length} files (size vs accuracy: ${all.length} energies on ${referenced.length} instances with an exact or unbiased reference, ${floored} at the floor)`);
+console.log(`${OUT}/: ${written.length} files (size vs accuracy: ${all.length} exact-referenced energies on ${exactRef.length} instances, ${floored} at the floor)`);

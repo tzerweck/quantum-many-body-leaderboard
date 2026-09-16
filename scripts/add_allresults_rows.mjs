@@ -23,7 +23,7 @@
 // The rows were read before the exactly solved batches of the same day landed, so the
 // duplicate check runs here, against the tree as built, and reports what it skipped.
 import fs from "node:fs";
-import { perSiteDivisor, expectedDof, expectedEinf, vScore, REFERENCE_BOUNDS } from "./units.mjs";
+import { perSiteDivisor, expectedDof, expectedEinf, vScore } from "./units.mjs";
 
 const PASSES = fs.readdirSync(".").filter(f => /^sweep-rows-\d{4}-\d{2}-\d{2}\.json$/.test(f)).sort()
   .map(f => ({ file: f, date: f.slice(11, 21), rows: JSON.parse(fs.readFileSync(f, "utf8")) }));
@@ -32,7 +32,6 @@ const REASON = {
   extrapolated: "zero-variance or bond-dimension extrapolation; not an upper bound (assigned during source reading)",
   projected: "projection (GFMC/fixed-node) on a trial state; not a strict variational bound (assigned during source reading)",
   exact: "numerically exact reference as stated by the source (assigned during source reading)",
-  unbiased: "sign-problem-free QMC: unbiased, statistical error only; not exact (assigned during source reading, reclassified 2026-09-16)",
 };
 
 let added = 0, created = 0;
@@ -57,9 +56,9 @@ for (const [id, rows] of Object.entries(byInst)) {
     // quoted value repeats a stored row only to its printed digits (Kochkov et al.'s -0.5022(4)
     // is not the 2048-state DMRG row 3e-4 away).
     const dup = inst.rows.find(x => Math.abs(x.energy / div - r.eps) <=
-      (r.origin === "quoted" && REFERENCE_BOUNDS.includes(r.bound_type) ? Math.max(r.tol, r.sigma_per_site ?? 0) : r.tol) &&
+      (r.origin === "quoted" && r.bound_type === "exact" ? Math.max(r.tol, r.sigma_per_site ?? 0) : r.tol) &&
       ((r.origin === "quoted" && x.bound_type === r.bound_type) || x.method === r.method || (x.reference || "").includes(r.arxiv) ||
-       (x.verified?.note || "").includes(r.arxiv) || (REFERENCE_BOUNDS.includes(x.bound_type) && REFERENCE_BOUNDS.includes(r.bound_type))));
+       (x.verified?.note || "").includes(r.arxiv) || (x.bound_type === "exact" && r.bound_type === "exact")));
     if (dup) { skipped.push(`${id} ${r.reported_as} [${r.arxiv}] = "${dup.method.slice(0, 40)}"`); continue; }
     const energy = +(r.eps * div).toPrecision(12);
     // sigma^2/N_site as printed; totals scale with the site count (as in add_worklist_rows). A relative
