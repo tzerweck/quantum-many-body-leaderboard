@@ -2,32 +2,47 @@
 //
 // Generated from data/ by the same modules the README is generated from: units.mjs for
 // every conversion, summary.mjs for what a record is, readme_table.mjs for how an
-// instance is named and how a number is quoted, views.mjs for the frontier list. The
-// site and the README therefore cannot disagree about a number - if they ever do, one
-// of those modules is wrong and both surfaces are wrong together, which is the only
-// kind of disagreement worth having.
+// instance is named and how a number is quoted. The site and the README therefore cannot
+// disagree about a number - if they ever do, one of those modules is wrong and both
+// surfaces are wrong together, which is the only kind of disagreement worth having.
+//
+// The figures on the front page are the committed figures/*.svg, drawn by size_accuracy.mjs
+// and pareto.mjs from the same data/; this script only copies them. A figure carries its
+// own title and subtitle, so the page puts nothing above it; the title and caption listed
+// here are its alt text.
+// RULES.md and DATA.md are not rendered here - they live on GitHub, and /rules/ and
+// /data/ redirect there so links that predate the change keep resolving.
 //
 // No dependencies and no build step: plain strings, written once. `_site/` is generated
 // output and is never committed.
 import fs from "node:fs";
 import path from "node:path";
-import { perSiteDivisor, perSiteLabel, isSampled, noErrorMetrics, recordEligible } from "./units.mjs";
+import { perSiteDivisor, perSiteLabel, isSampled, recordEligible } from "./units.mjs";
 import { collect, recordOf, summarize } from "./summary.mjs";
 import { citeRef } from "./cite.mjs";
 import { sources, sourceOf } from "./enrich_sources.mjs";
-import { FRONTIER } from "./views.mjs";
-import { quote, marks, shorten, MODELS, BOUNDARY, instanceLabel, byGeometry, noRecordReason, challengerOf, gapAbove } from "./readme_table.mjs";
+import { quote, marks, shorten, MODELS, BOUNDARY, instanceLabel, byGeometry, noRecordReason, gapAbove } from "./readme_table.mjs";
 import { logoSvg, faviconSvg, LOGO_CSS } from "./logo.mjs";
 
 const OUT = "_site";
 const REPO = "https://github.com/tzerweck/quantum-many-body-leaderboard";
+const RULES = `${REPO}/blob/main/RULES.md`;
+const DATA = `${REPO}/blob/main/DATA.md`;
 const DOI = "10.5281/zenodo.22753734";
 const SNAPSHOT = "varbench@2024-10-22";
 const BUILT = new Date().toISOString().slice(0, 10);
 
+// The citation the Cite button copies and the front page prints, from CITATION.cff so a
+// release bump changes it in one place.
+const CFF = fs.readFileSync("CITATION.cff", "utf8");
+const cffField = k => CFF.match(new RegExp(`^${k}:\\s*"?([^"\\n]+)"?\\s*$`, "m"))?.[1];
+const VERSION = cffField("version");
+const RELEASED = cffField("date-released");
+if (!VERSION || !RELEASED) throw new Error("CITATION.cff: version or date-released not found");
+const CITATION = `Tristan Zerweck, QMBL - the Quantum Many-Body Leaderboard, v${VERSION}, Zenodo (${RELEASED.slice(0, 4)}). https://doi.org/${DOI}`;
+
 const cache = sources();
 const instances = collect();
-const byId = new Map(instances.map(i => [i.instance_id, i]));
 const summary = summarize(instances);
 
 // ------------------------------------------------------------------------------ html
@@ -40,10 +55,25 @@ const esc = s => String(s)
 const NAV = [
   ["/", "Leaderboard"],
   ["/instances/", "Instances"],
-  ["/rules/", "Rules"],
-  ["/data/", "Data"],
   ["/contribute/", "Contribute"],
 ];
+
+// GitHub's mark (octicon mark-github, MIT), inline so it takes the nav's colour.
+const GITHUB_MARK = `<svg viewBox="0 0 16 16" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>`;
+
+// The Cite button copies CITATION; where the clipboard is unavailable (no HTTPS, an old
+// browser, a denied permission) it goes to the citing section on the front page instead,
+// so the button never does nothing.
+const CITE_SCRIPT = `<script>
+for (const b of document.querySelectorAll("button.cite-btn")) b.addEventListener("click", () => {
+  const done = () => { b.classList.add("copied"); b.querySelector("span").textContent = "Copied";
+    setTimeout(() => { b.classList.remove("copied"); b.querySelector("span").textContent = "Cite"; }, 2000); };
+  const fallback = () => { location.href = "/#cite"; };
+  if (navigator.clipboard && navigator.clipboard.writeText)
+    navigator.clipboard.writeText(b.dataset.cite).then(done, fallback);
+  else fallback();
+});
+</script>`;
 
 function page({ url, title, description, body, wide = false }) {
   const head = title === null ? "QMBL" : `${title} &middot; QMBL`;
@@ -66,7 +96,8 @@ function page({ url, title, description, body, wide = false }) {
   <a class="wordmark" href="/">${logoSvg()}<b>QMBL<span>the quantum many-body leaderboard</span></b></a>
   <nav>${NAV.map(([href, label]) =>
     `<a href="${href}"${href === url ? ' aria-current="page"' : ""}>${label}</a>`).join("")}
-    <a class="ext" href="${REPO}">GitHub</a></nav>
+    <a class="ext" href="${REPO}" aria-label="QMBL on GitHub" title="Source and data on GitHub">${GITHUB_MARK}</a>
+    <button class="cite-btn" type="button" data-cite="${esc(CITATION)}" title="Copy the citation">&#10077;<span>Cite</span></button></nav>
 </header>
 <main class="${wide ? "wide" : ""}">
 ${body}
@@ -78,134 +109,27 @@ ${body}
   <p class="muted">Every energy on this site is someone else's published result, cited on its row.
      Built ${BUILT} from <a href="${REPO}/tree/main/data">data/</a>.</p>
 </footer>
+${CITE_SCRIPT}
 </html>
 `;
 }
 
-// --------------------------------------------------------------------------- markdown
-// A small renderer for RULES.md and DATA.md: headings with GitHub-compatible anchors,
-// tables, lists, fenced code, blockquotes. Those two files are the site's rules and
-// format pages, and shipping a dependency to display two markdown files we control is
-// worse than the 80 lines below.
-const slug = s => s.toLowerCase().replace(/<[^>]+>/g, "").replace(/[^\w\s-]/g, "").trim().replace(/\s+/g, "-");
-
-function inline(s, rewrite) {
-  const code = [];
-  let t = s.replace(/`([^`]+)`/g, (_, c) => `@@code:${code.push(c) - 1}@@`);
-  t = esc(t);
-  t = t.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, label, url) =>
-    `<a href="${esc(rewrite(url))}">${label}</a>`);
-  t = t.replace(/\*\*([^*]+)\*\*/g, (_, b) => `<strong>${b}</strong>`);
-  t = t.replace(/(^|[\s(])\*([^*\n]+)\*/g, (_, pre, em) => `${pre}<em>${em}</em>`);
-  return t.replace(/@@code:(\d+)@@/g, (_, i) => `<code>${esc(code[Number(i)])}</code>`);
-}
-
-const LIST = /^(\s*)([-*+]|\d+\.)\s+(.*)$/;
-
-function parseList(lines, start, rewrite) {
-  const indent = lines[start].match(LIST)[1].length;
-  const ordered = /\d/.test(lines[start].match(LIST)[2]);
-  const items = [];
-  let i = start;
-  while (i < lines.length) {
-    if (!lines[i].trim()) {
-      // A blank line only ends the list if what follows is not another item of it.
-      let j = i;
-      while (j < lines.length && !lines[j].trim()) j++;
-      const m = j < lines.length && lines[j].match(LIST);
-      if (!m || m[1].length < indent) break;
-      i = j;
-      continue;
-    }
-    const m = lines[i].match(LIST);
-    if (!m || m[1].length < indent) break;
-    if (m[1].length > indent) {
-      const [html, next] = parseList(lines, i, rewrite);
-      if (items.length) items[items.length - 1].children.push(html);
-      i = next;
-      continue;
-    }
-    const item = { text: [m[3]], children: [] };
-    i++;
-    while (i < lines.length && lines[i].trim() && !LIST.test(lines[i]) && !/^#{1,6}\s|^\||^```/.test(lines[i]))
-      item.text.push(lines[i++].trim());
-    items.push(item);
-  }
-  const tag = ordered ? "ol" : "ul";
-  const html = `<${tag}>${items.map(it =>
-    `<li>${inline(it.text.join(" "), rewrite)}${it.children.join("")}</li>`).join("")}</${tag}>`;
-  return [html, i];
-}
-
-function renderMarkdown(src, rewrite) {
-  const lines = src.split("\n");
-  const out = [];
-  const cells = r => r.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map(c => c.trim());
-  let i = 0;
-  while (i < lines.length) {
-    const line = lines[i];
-    if (!line.trim()) { i++; continue; }
-
-    if (/^```/.test(line)) {
-      const body = [];
-      i++;
-      while (i < lines.length && !/^```/.test(lines[i])) body.push(lines[i++]);
-      i++;
-      out.push(`<pre><code>${esc(body.join("\n"))}</code></pre>`);
-      continue;
-    }
-    const h = line.match(/^(#{1,6})\s+(.*)$/);
-    if (h) {
-      const id = slug(h[2]);
-      out.push(`<h${h[1].length} id="${id}">${inline(h[2].trim(), rewrite)}` +
-        `<a class="anchor" href="#${id}" aria-label="Link to this section">#</a></h${h[1].length}>`);
-      i++;
-      continue;
-    }
-    if (/^(-{3,}|\*{3,}|_{3,})\s*$/.test(line)) { out.push("<hr>"); i++; continue; }
-    if (/^\|/.test(line) && /^\|[\s:|-]+\|?\s*$/.test(lines[i + 1] ?? "")) {
-      const head = cells(line);
-      i += 2;
-      const body = [];
-      while (i < lines.length && /^\|/.test(lines[i])) body.push(cells(lines[i++]));
-      out.push(`<div class="scroll"><table><thead><tr>${
-        head.map(c => `<th>${inline(c, rewrite)}</th>`).join("")}</tr></thead><tbody>${
-        body.map(r => `<tr>${r.map(c => `<td>${inline(c, rewrite)}</td>`).join("")}</tr>`).join("")
-      }</tbody></table></div>`);
-      continue;
-    }
-    if (/^>\s?/.test(line)) {
-      const body = [];
-      while (i < lines.length && /^>\s?/.test(lines[i])) body.push(lines[i++].replace(/^>\s?/, ""));
-      out.push(`<blockquote>${renderMarkdown(body.join("\n"), rewrite)}</blockquote>`);
-      continue;
-    }
-    if (LIST.test(line)) {
-      const [html, next] = parseList(lines, i, rewrite);
-      out.push(html);
-      i = next;
-      continue;
-    }
-    const para = [];
-    while (i < lines.length && lines[i].trim() && !/^(#{1,6}\s|```|>|\|)/.test(lines[i]) && !LIST.test(lines[i]))
-      para.push(lines[i++]);
-    out.push(`<p>${inline(para.join("\n"), rewrite)}</p>`);
-  }
-  return out.join("\n");
-}
-
-// Links inside RULES.md and DATA.md point at repo files. The two that have a page here
-// become site links; everything else goes to the file on GitHub, so no link silently
-// 404s on the site and none of them pretends a page exists that does not.
-function docLink(url) {
-  if (/^(https?:|mailto:|#)/.test(url)) return url;
-  const [file, hash] = url.split("#");
-  const frag = hash ? `#${hash}` : "";
-  if (!file) return frag;
-  if (/^RULES\.md$/i.test(file)) return `/rules/${frag}`;
-  if (/^DATA\.md$/i.test(file)) return `/data/${frag}`;
-  if (/^README\.md$/i.test(file)) return /^contributing/i.test(hash ?? "") ? "/contribute/" : `/${frag}`;
-  return `${REPO}/blob/main/${file}${frag}`;
+// ---------------------------------------------------------------------- redirects
+// RULES.md and DATA.md are read on GitHub. /rules/ and /data/ existed as rendered pages
+// until 2026-09-16 and are linked from outside, so each keeps a page that forwards to the
+// file - fragment included, so a link to a section still lands on that section.
+function redirectPage(url, target, title) {
+  return `<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="robots" content="noindex">
+<meta http-equiv="refresh" content="0; url=${target}">
+<link rel="canonical" href="${target}">
+<title>${title} &middot; QMBL</title>
+<script>location.replace("${target}" + location.hash);</script>
+<p>${title} now lives on GitHub: <a href="${target}">${target}</a></p>
+</html>
+`;
 }
 
 // ------------------------------------------------------------------------------- data
@@ -313,24 +237,32 @@ function variantNote(inst) {
 }
 
 // -------------------------------------------------------------------------- home page
-function frontierTable() {
-  const rows = FRONTIER.map(([id, label]) => {
-    const inst = byId.get(id);
-    if (!inst) throw new Error(`FRONTIER names ${id}, which is not in data/`);
-    const rec = recordOf(inst);
-    const link = `<a href="${instUrl(inst)}">${esc(label)}</a>`;
-    if (!rec) return `<tr><th scope="row">${link}</th><td class="none">no record</td><td>${esc(noRecordReason(inst))}</td><td></td></tr>`;
-    const q = quoteRow(rec, inst);
-    const next = challengerOf(inst, rec);
-    const f = perSiteDivisor(inst) ?? 1;
-    return `<tr><th scope="row">${link}</th>
-      <td class="record"><span class="num">${q.text}</span>${marks(rec)}</td>
-      <td>${esc(shorten(rec.method, 46))} ${citeHtml(rec)}</td>
-      <td>${next ? `${energyCell(next, inst, q.decimals)} <span class="muted num">(${esc(gapAbove(rec, next, f, q.decimals))})</span> ${esc(shorten(next.method, 34))} ${citeHtml(next)}` : '<span class="muted">none</span>'}</td></tr>`;
-  });
-  return `<div class="scroll"><table class="leaderboard">
-    <thead><tr><th>instance</th><th>record</th><th>method</th><th>closest challenger</th></tr></thead>
-    <tbody>${rows.join("")}</tbody></table></div>`;
+// The front page is the figures. Each is drawn into figures/ by the build (size_accuracy.mjs,
+// pareto.mjs) and committed; one entry here per figure, light and dark variants side by
+// side because an SVG shown as an <img> cannot see the page's colour scheme. The Pareto
+// figure joins this list when pareto.mjs draws it.
+const FIGURES = [
+  ["size-vs-accuracy", "How far published energies sit from the exact answer, by system size",
+    "Every energy on an instance with an exact ground-state energy, as its relative distance from that energy. Colour is the kind of number; filled marks can hold a record, hollow ones cannot."],
+  ["size-vs-accuracy-by-family", "The same distances, one panel per method family",
+    "Each panel colours one family's energies over all the others in grey and joins the family's best distance at each size."],
+  ["size-vs-accuracy-ladders", "Accuracy as the same Hamiltonian grows",
+    "Six families of instances that differ only in size. Distance is from the exact energy where one exists, otherwise from the standing record, whose holder then sits in the column at the left."],
+  ["energy-vs-compute", "What a published energy cost, against how far it sits from the reference",
+    "The energies whose papers state what they cost in GPU-hours, or as a device count and a wall-clock, on the instances they were computed for. CPU core-hours are never put on the same axis."],
+];
+
+function figure([name, title, caption]) {
+  for (const v of [name, `${name}-dark`])
+    if (!fs.existsSync(`figures/${v}.svg`)) throw new Error(`figures/${v}.svg is missing; run the build first`);
+  return `<figure id="${name}">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="/figures/${name}-dark.svg">
+    <img src="/figures/${name}.svg" alt="${esc(title)}. ${esc(caption)}" loading="lazy">
+  </picture>
+  <figcaption><a href="#${name}" class="anchor" aria-label="Link to this figure">#</a>
+    <a href="${REPO}/blob/main/figures/${name}.svg">SVG</a></figcaption>
+</figure>`;
 }
 
 function homePage() {
@@ -341,27 +273,10 @@ function homePage() {
 <p class="lead">QMBL is a record book of the state of the art in quantum many-body simulation: one row
 per published energy, ranked within each Hamiltonian instance, every row citing the paper that
 produced the number and declaring what kind of quantity it is. Where an instance is solved, the
-exact energy is the record; everywhere else the best variational bound is.</p>
+exact energy is the record; everywhere else the best variational bound is.
+<a href="/instances/">All ${summary.instances} instances and their ${summary.rows} energies &rarr;</a></p>
 
-<ul class="tiles">
-  <li><b>${summary.instances}</b><span>Hamiltonian instances</span></li>
-  <li><b>${summary.rows}</b><span>published energies</span></li>
-  <li><b>${summary.records.held}</b><span>instances with a record, ${summary.records.held_by_exact} of them solved</span></li>
-  <li><b>${current}</b><span>with a 2025&ndash;26 result</span></li>
-</ul>
-
-<h2>The frontier</h2>
-<p>The instances the field actually competes on. Energies are per site, in the convention the
-papers use (<a href="/data/#units-and-conventions">units and conventions</a>).
-<b>Bold</b> is the record under <a href="/rules/#6-records-and-ties">the ranking rules</a>: the exact
-energy where the instance is solved, otherwise the lowest eligible variational bound. The last column
-is the closest variational challenger and how far above the record it sits, per site.</p>
-${frontierTable()}
-<p class="legend"><b>&#9675;</b> we found no error metric in the source we read, neither an error
-bar nor an energy variance. <b>&dagger;</b> a sampled energy with a variance but no error bar.
-Both rows stay in the table and in rank order; the marker is a question for whoever can close
-it, not a criticism. See <a href="/data/#error-metrics">error metrics</a>.</p>
-<p><a class="more" href="/instances/">All ${summary.instances} instances &rarr;</a></p>
+${FIGURES.map(figure).join("\n")}
 
 <h2>How current this is</h2>
 <p>${current} of ${summary.instances} instances carry a result published in 2025 or 2026; the rest
@@ -380,12 +295,12 @@ actually is &mdash; a strict variational bound, a projected or fixed-node estima
 extrapolation, or a numerically exact result. An exact result is the record wherever one exists;
 on every other instance only strict variational bounds compete for it, which is what keeps an
 extrapolated number from beating a measured one.
-The rules are in <a href="/rules/">RULES.md</a>, the row format in <a href="/data/">DATA.md</a>.</p>
+The rules are in <a href="${RULES}">RULES.md</a>, the row format in <a href="${DATA}">DATA.md</a>.</p>
 
-<section class="cite">
+<section class="cite" id="cite">
   <h2>Citing QMBL</h2>
   <p>Cite the dataset by its concept DOI, which always resolves to the latest release:</p>
-  <p>T. Zerweck, <i>QMBL - the Quantum Many-Body Leaderboard</i>, v0.1.0, Zenodo (2026).
+  <p class="citation">${esc(CITATION.slice(0, CITATION.indexOf(" https://")))}
   <a href="https://doi.org/${DOI}"><code>${DOI}</code></a></p>
   <p>Individual energies should cite the primary paper named on the row, not this site.</p>
 </section>`;
@@ -396,6 +311,53 @@ The rules are in <a href="/rules/">RULES.md</a>, the row format in <a href="/dat
 }
 
 // ------------------------------------------------------------------------ browse page
+// A row is the instance and its record; clicking it opens the next NEXT energies below it,
+// in rank order, so the shape of the competition on an instance is one click away rather
+// than a page away. The instance page still exists, at its stable URL, linked from the
+// panel; it is what search engines, llms.txt and the API point at.
+const NEXT = 5;
+
+// The badge families: the lattice name without its cell spec (kagome-36a -> kagome), and
+// four size bands. Both are per model, and a band or lattice that no instance of the model
+// falls in is not offered.
+const latticeOf = inst => inst.lattice.replace(/-.*$/, "");
+const SIZE_BANDS = [
+  ["s1", n => n <= 36, "&le; 36 sites"],
+  ["s2", n => n > 36 && n <= 100, "37&ndash;100"],
+  ["s3", n => n > 100 && n <= 400, "101&ndash;400"],
+  ["s4", n => n > 400, "&gt; 400"],
+];
+const sizeBand = inst => SIZE_BANDS.find(([, test]) => test(inst.n_sites))[0];
+
+const BOUND_SHORT = { variational: "variational", projected: "projected", extrapolated: "extrapolated", exact: "exact", null: "unclassified" };
+
+function nextRows(inst) {
+  const rec = recordOf(inst);
+  const sorted = [...inst.rows].sort((a, b) => a.energy - b.energy);
+  const start = rec ? sorted.indexOf(rec) + 1 : 0;
+  const next = sorted.slice(start, start + NEXT);
+  const f = perSiteDivisor(inst) ?? 1;
+  const decimals = rec ? quoteRow(rec, inst).decimals : null;
+  const rows = next.map(r => {
+    const gap = rec && r.bound_type === "variational" && !r.defect ? gapAbove(rec, r, f, decimals) : null;
+    return `<tr class="${r.defect ? "is-flagged" : ""}">
+      <td class="record">${energyCell(r, inst, decimals)}${gap ? ` <span class="muted num">(${esc(gap)})</span>` : ""}</td>
+      <td><span class="badge">${BOUND_SHORT[String(r.bound_type ?? null)]}</span>${r.defect ? ` <span class="badge flag">flagged</span>` : ""}</td>
+      <td>${esc(shorten(r.method, 60))}</td>
+      <td>${citeHtml(r)}</td>
+      <td class="num">${yearOf(r) ?? '<span class="muted">n/a</span>'}</td>
+    </tr>`;
+  }).join("");
+  const rest = inst.rows.length - start - next.length;
+  const lead = !next.length ? "No other energy is published for this instance."
+    : rec ? `The next ${next.length === 1 ? "energy" : `${next.length} energies`} after the record, in rank order.`
+    : `The lowest ${next.length === 1 ? "energy" : `${next.length} energies`}, in rank order.`;
+  return `<p class="muted">${lead}${rest > 0 ? ` ${rest} more on the instance page.` : ""}</p>
+    ${next.length ? `<table class="next"><thead><tr><th>${perSiteLabel(inst)}</th><th>kind</th><th>method</th><th>source</th><th>year</th></tr></thead><tbody>${rows}</tbody></table>` : ""}
+    <p class="links"><a href="${instUrl(inst)}">Instance page &rarr;</a> <a href="${jsonUrl(inst)}">JSON</a>
+      <span class="muted"><code>${esc(inst.instance_id)}</code></span></p>`;
+}
+
 function instancesPage() {
   const sections = MODELS.map(([model, name]) => {
     const group = instances.filter(i => i.model === model).sort(byGeometry);
@@ -408,12 +370,22 @@ function instancesPage() {
       const cells = rec
         ? `<td class="record">${energyCell(rec, inst)}</td><td>${esc(shorten(rec.method, 52))} ${citeHtml(rec)}</td>`
         : `<td class="none">no record</td><td>${esc(noRecordReason(inst))}</td>`;
-      return `<tr data-search="${esc(search)}"><th scope="row"><a href="${instUrl(inst)}">${esc(label)}</a></th>
-        ${cells}<td class="num">${inst.rows.length}</td></tr>`;
+      const id = `x-${inst.instance_id.replace(/[^\w-]/g, "_")}`;
+      return `<tr class="inst" data-search="${esc(search)}" data-lattice="${esc(latticeOf(inst))}" data-size="${sizeBand(inst)}">
+        <th scope="row"><button type="button" aria-expanded="false" aria-controls="${id}">${esc(label)}</button></th>
+        ${cells}<td class="num">${inst.rows.length}</td></tr>
+      <tr class="more" id="${id}" hidden><td colspan="4">${nextRows(inst)}</td></tr>`;
     });
+    const lattices = [...new Set(group.map(latticeOf))].sort();
+    const bands = SIZE_BANDS.filter(([key]) => group.some(i => sizeBand(i) === key));
+    const badges = `<div class="quick">
+      <span class="muted">lattice</span>${lattices.map(l => `<button type="button" data-lattice="${esc(l)}">${esc(l)}</button>`).join("")}
+      ${bands.length > 1 ? `<span class="muted">size</span>${bands.map(([key, , label]) => `<button type="button" data-size="${key}">${label}</button>`).join("")}` : ""}
+    </div>`;
     return `<section data-model="${model}">
       <h2 id="${model.toLowerCase()}">${esc(name)}<a class="anchor" href="#${model.toLowerCase()}" aria-label="Link to this section">#</a></h2>
-      <p class="muted">${group.length} instances, ${held} with a record, energies as <code>${perSiteLabel(group[0])}</code></p>
+      <p class="muted"><span class="count">${group.length} instances</span>, ${held} with a record, energies as <code>${perSiteLabel(group[0])}</code></p>
+      ${badges}
       <div class="scroll"><table class="leaderboard">
         <thead><tr><th>instance</th><th>record</th><th>method</th><th>rows</th></tr></thead>
         <tbody>${rows.join("")}</tbody></table></div>
@@ -422,8 +394,8 @@ function instancesPage() {
 
   const body = `
 <h1>All ${summary.instances} instances</h1>
-<p class="lead">One page per Hamiltonian instance, at a stable URL, listing every published energy
-for it. ${summary.records.held} instances have a record; the rest say why they do not.</p>
+<p class="lead">One row per Hamiltonian instance with its record; click a row for the energies
+behind it. ${summary.records.held} instances have a record; the rest say why they do not.</p>
 <p><input id="filter" type="search" placeholder="Filter by lattice, size, coupling or method…" autocomplete="off" spellcheck="false">
 <span id="filter-count" class="muted"></span></p>
 <nav class="jump">${MODELS.filter(([m]) => instances.some(i => i.model === m))
@@ -432,18 +404,47 @@ ${sections}
 <script>
 const box = document.getElementById("filter");
 const count = document.getElementById("filter-count");
-const rows = [...document.querySelectorAll("tr[data-search]")];
-box.addEventListener("input", () => {
+const sections = [...document.querySelectorAll("section[data-model]")];
+const total = document.querySelectorAll("tr.inst").length;
+
+// One selection per badge row per section; a badge toggles, and the text box applies on top.
+function apply() {
   const q = box.value.trim().toLowerCase();
   let shown = 0;
-  for (const row of rows) {
-    const hit = !q || row.dataset.search.includes(q);
-    row.hidden = !hit;
-    if (hit) shown++;
+  for (const section of sections) {
+    const lattice = section.querySelector(".quick button[data-lattice].on")?.dataset.lattice;
+    const size = section.querySelector(".quick button[data-size].on")?.dataset.size;
+    const rows = [...section.querySelectorAll("tr.inst")];
+    let n = 0;
+    for (const row of rows) {
+      const hit = (!q || row.dataset.search.includes(q))
+        && (!lattice || row.dataset.lattice === lattice)
+        && (!size || row.dataset.size === size);
+      row.hidden = !hit;
+      const more = row.nextElementSibling;
+      if (!hit) { more.hidden = true; row.querySelector("button").setAttribute("aria-expanded", "false"); }
+      if (hit) n++;
+    }
+    shown += n;
+    section.hidden = !n && !lattice && !size;
+    section.querySelector(".count").textContent = (n === rows.length ? "" : n + " of ") + rows.length + " instances";
   }
-  for (const section of document.querySelectorAll("section[data-model]"))
-    section.hidden = ![...section.querySelectorAll("tr[data-search]")].some(r => !r.hidden);
-  count.textContent = q ? shown + " of " + rows.length + " instances" : "";
+  count.textContent = q ? shown + " of " + total + " instances" : "";
+}
+box.addEventListener("input", apply);
+for (const b of document.querySelectorAll(".quick button")) b.addEventListener("click", () => {
+  const on = b.classList.contains("on");
+  const key = "lattice" in b.dataset ? "lattice" : "size";
+  for (const o of b.parentElement.querySelectorAll("button[data-" + key + "]")) o.classList.remove("on");
+  if (!on) b.classList.add("on");
+  apply();
+});
+for (const row of document.querySelectorAll("tr.inst")) row.addEventListener("click", e => {
+  if (e.target.closest("a")) return;
+  const more = row.nextElementSibling;
+  more.hidden = !more.hidden;
+  row.querySelector("button").setAttribute("aria-expanded", String(!more.hidden));
+  row.classList.toggle("open", !more.hidden);
 });
 </script>`;
   return page({ url: "/instances/", title: `All ${summary.instances} instances`, body, wide: true,
@@ -524,12 +525,12 @@ function instancePage(inst) {
         <p class="muted">${citeHtml(rec)} &middot; ${rec.bound_type === "exact"
           ? "exact energy: the instance is solved, and this is the state of the art on it"
           : "lowest eligible strict variational bound"}
-          (<a href="/rules/#6-records-and-ties">rules &sect;6</a>)</p>
+          (<a href="${RULES}#6-records-and-ties">rules &sect;6</a>)</p>
       </div>`
     : `<div class="record-box none">
         <p class="eyebrow">No record</p>
         <p class="big">&mdash;</p>
-        <p>${esc(noRecordReason(inst))} (<a href="/rules/#6-records-and-ties">rules &sect;6</a>).
+        <p>${esc(noRecordReason(inst))} (<a href="${RULES}#6-records-and-ties">rules &sect;6</a>).
         Every row is still listed below.</p>
       </div>`;
 
@@ -558,7 +559,7 @@ ${recordBox}
   <p class="muted">Stored as a total energy in the convention of
     <a href="https://doi.org/10.1126/science.adg9774">VarBench</a>; quoted here as
     <code>${perSiteLabel(inst)}</code>, which is what the papers report
-    (<a href="/data/#units-and-conventions">how the conversion works</a>).</p>
+    (<a href="${DATA}#units-and-conventions">how the conversion works</a>).</p>
 </section>
 
 <section>
@@ -569,7 +570,7 @@ ${recordBox}
 
 ${flagged ? `<section><h2>Flagged rows</h2>
   <p>A flag withholds the record and nothing else: the row stays listed, in rank order.
-  <a href="/rules/#10-pending-confirmed-objections">Rules &sect;10</a> is how a flag is lifted or upheld.</p>
+  <a href="${RULES}#10-pending-confirmed-objections">Rules &sect;10</a> is how a flag is lifted or upheld.</p>
   ${flagged}</section>` : ""}
 
 ${verified ? `<section><h2>How these numbers were read</h2>
@@ -593,18 +594,10 @@ ${verified ? `<section><h2>How these numbers were read</h2>
     description: `${label}: ${inst.rows.length} published ground-state energies. ${recText}` });
 }
 
-// --------------------------------------------------------------------------- doc page
-function docPage(file, url, title, lead) {
-  const src = fs.readFileSync(file, "utf8").replace(/^#\s+.*\n/, "");
-  const body = `<h1>${esc(title)}</h1>
-<p class="lead">${lead}</p>
-<article class="prose">${renderMarkdown(src, docLink)}</article>
-<p class="muted">Rendered from <a href="${REPO}/blob/main/${file}">${file}</a>.</p>`;
-  return page({ url, title, body, description: lead.replace(/<[^>]+>/g, "") });
-}
-
+// --------------------------------------------------------------------- contribute page
 function contributePage() {
   const b = summary.blocked_on_sigma;
+  const costed = instances.flatMap(i => i.rows).filter(r => r.compute?.gpu_hours != null || r.compute?.cpu_core_hours != null || r.compute?.parameters != null).length;
   const body = `
 <h1>Contribute</h1>
 <p class="lead">Everything here is someone else's published work. Corrections are the most valuable
@@ -618,32 +611,33 @@ account to create beyond GitHub.</p>
   should be. Rows are corrected in place and the history stays in git.</li>
   <li><b>A missing result.</b> The instance, the energy, its error bar, the method, and the paper
   it was published in. Anything missing renders as <code>n/a</code> rather than blocking the row
-  (<a href="/rules/#3-required-fields">rules &sect;3</a>).</li>
+  (<a href="${RULES}#3-required-fields">rules &sect;3</a>).</li>
   <li><b>An error bar we could not find.</b> ${b.rows} sampled energies across ${b.instances}
   instances are listed but rank for nothing because no error bar was found in the source we read,
   and ${b.would_take_record} of them sit below their instance's current record. One message closes
-  that (<a href="/rules/#6-records-and-ties">rules &sect;6</a>).</li>
+  that (<a href="${RULES}#6-records-and-ties">rules &sect;6</a>).</li>
   <li><b>An objection to a row.</b> Wrong symmetry sector, a mis-declared <code>bound_type</code>,
   an error bar with no autocorrelation correction: these are technical disputes with a process,
-  <a href="/rules/#10-pending-confirmed-objections">rules &sect;10</a>. Rulings cite a clause
+  <a href="${RULES}#10-pending-confirmed-objections">rules &sect;10</a>. Rulings cite a clause
   rather than anyone's judgement about anyone's work.</li>
-  <li><b>What a number cost.</b> GPU-hours &times; device, parameter count, wall-clock. No row
-  carries this yet, which is why there is no accuracy-versus-cost view
-  (<a href="/data/#what-a-number-cost-the-compute-block">the format is specified</a>).</li>
+  <li><b>What a number cost.</b> GPU-hours &times; device, parameter count, wall-clock. ${costed}
+  rows state at least one of these, which is what the <a href="/#energy-vs-compute">energy-versus-cost
+  figure</a> is drawn from; yours can join them
+  (<a href="${DATA}#what-a-number-cost-the-compute-block">the format is specified</a>).</li>
 </ul>
 
 <h2>The marks on a row are questions, not criticism</h2>
 <p><b>&#9675;</b> means we found no error metric in the source we read. It is a statement about our
 search, not about the authors: the figure may well be in a supplement, a companion paper, or your
 own records. The row stays in the table and stays in the ranking either way
-(<a href="/data/#error-metrics">error metrics</a>).</p>
+(<a href="${DATA}#error-metrics">error metrics</a>).</p>
 
 <h2>Variance and checkpoints</h2>
 <p>Var(E) &mdash; the variance of the local energy, not the error bar &mdash; is what the V-score
 needs, and almost nobody reports it. It is a by-product of any sampling pass, so if you send an
 optimized checkpoint and the model code, the variance can be measured and credited on your row.
 A state we retrain ourselves is a new row rather than a variance for yours
-(<a href="/rules/#11-corrections">rules &sect;11</a>).</p>`;
+(<a href="${RULES}#11-corrections">rules &sect;11</a>).</p>`;
   return page({ url: "/contribute/", title: "Contribute", body,
     description: "How to correct a row, add a published result, supply a missing error bar, or object to a record in QMBL." });
 }
@@ -688,10 +682,10 @@ function llmsTxt() {
     "primary paper named on the row, not to this site.",
     "",
     "## Pages",
-    "- [Leaderboard](https://qmbl.org/): the frontier instances, records and closest challengers.",
+    "- [Leaderboard](https://qmbl.org/): the accuracy and cost figures, and how to cite.",
     `- [All instances](https://qmbl.org/instances/): every one of the ${summary.instances} instances, with its record.`,
-    "- [Rules](https://qmbl.org/rules/): what counts as a record, ties, provenance, objections.",
-    "- [Data](https://qmbl.org/data/): row format, units and conventions, error metrics, defects.",
+    `- [Rules](${RULES}): what counts as a record, ties, provenance, objections.`,
+    `- [Data](${DATA}): row format, units and conventions, error metrics, defects.`,
     "- [Contribute](https://qmbl.org/contribute/): corrections, missing results, missing error bars.",
     "",
     "## Data",
@@ -757,11 +751,20 @@ header.site {
   display: block; font-family: var(--sans); font-size: 0.72rem; font-weight: 400;
   letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
 }
-header.site nav { display: flex; flex-wrap: wrap; gap: 1.2rem; font-size: 0.95rem; }
+header.site nav { display: flex; flex-wrap: wrap; gap: 1.2rem; align-items: center; font-size: 0.95rem; }
 header.site nav a { color: var(--ink2); text-decoration: none; }
 header.site nav a:hover { color: var(--accent); }
 header.site nav a[aria-current] { color: var(--ink); box-shadow: inset 0 -2px 0 var(--accent); }
-header.site nav a.ext { color: var(--muted); }
+header.site nav a.ext { color: var(--muted); display: inline-flex; }
+header.site nav a.ext:hover { color: var(--ink); }
+header.site nav a.ext svg { display: block; }
+button.cite-btn {
+  font: inherit; font-size: 0.85rem; line-height: 1; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.4rem 0.7rem;
+  color: var(--ink2); background: var(--surface); border: 1px solid var(--grid); border-radius: 999px;
+}
+button.cite-btn:hover { color: var(--accent); border-color: var(--accent); }
+button.cite-btn.copied { color: var(--exact); border-color: var(--exact); }
 
 main { padding: 2.4rem clamp(1rem, 4vw, 3rem) 4rem; max-width: 52rem; }
 main.wide { max-width: 78rem; }
@@ -772,13 +775,12 @@ footer.site {
 }
 footer.site p { margin: 0.3rem 0; }
 
-.tiles { display: flex; flex-wrap: wrap; gap: 0.6rem; list-style: none; padding: 0; margin: 1.6rem 0; }
-.tiles li {
-  flex: 1 1 8rem; padding: 0.8rem 1rem; background: var(--surface);
-  border: 1px solid var(--grid); border-radius: 3px;
-}
-.tiles b { display: block; font-family: var(--mono); font-size: 1.6rem; line-height: 1.1; }
-.tiles span { font-size: 0.82rem; color: var(--muted); }
+figure { margin: 2.2rem 0 0; }
+figure picture, figure img { display: block; width: 100%; max-width: 920px; height: auto; }
+figure img { border: 1px solid var(--grid); border-radius: 3px; background: var(--surface); }
+figcaption { font-size: 0.8rem; margin-top: 0.3rem; }
+figcaption .anchor { margin: 0 0.4rem 0 0; opacity: 1; color: var(--grid); }
+figcaption a:not(.anchor) { color: var(--muted); }
 
 .scroll { overflow-x: auto; margin: 1.2rem 0; }
 table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
@@ -806,7 +808,37 @@ td.none { color: var(--muted); }
 }
 .badge.flag { color: var(--flag); border-color: var(--flag); }
 .legend { font-size: 0.9rem; color: var(--ink2); max-width: 46em; }
-.more { font-weight: 500; }
+.citation { max-width: none; }
+
+.quick { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; margin: 0.6rem 0 0; font-size: 0.85rem; }
+.quick .muted { margin-right: 0.2rem; }
+.quick .muted:not(:first-child) { margin-left: 0.8rem; }
+.quick button {
+  font: inherit; font-size: 0.8rem; line-height: 1.2; cursor: pointer; padding: 0.2rem 0.65rem;
+  color: var(--ink2); background: var(--surface); border: 1px solid var(--grid); border-radius: 999px;
+}
+.quick button:hover { border-color: var(--accent); color: var(--accent); }
+.quick button.on { color: #fff; background: var(--accent); border-color: var(--accent); }
+
+tr.inst { cursor: pointer; }
+tr.inst th button {
+  font: inherit; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer;
+  text-align: left; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px;
+}
+tr.inst th button::before {
+  content: ""; display: inline-block; width: 0.4em; height: 0.4em; margin-right: 0.5em;
+  border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted);
+  transform: rotate(-45deg) translateY(-0.1em); transition: transform 0.1s;
+}
+tr.inst.open th button::before { transform: rotate(45deg) translateY(-0.2em); }
+tr.inst.open td, tr.inst.open th { background: var(--surface); border-bottom-color: transparent; }
+tr.more > td { padding: 0.2rem 0 1.2rem 1.4rem; background: var(--surface); }
+tr.more:hover { background: none; }
+tr.more p { margin: 0.4rem 0; font-size: 0.88rem; }
+tr.more p.links a { margin-right: 1rem; }
+table.next { width: auto; min-width: 60%; font-size: 0.85rem; margin: 0.4rem 0 0.6rem; }
+table.next th, table.next td { padding: 0.35rem 1.2rem 0.35rem 0; }
+table.next tr.is-flagged td:first-child { box-shadow: inset 3px 0 0 var(--flag); }
 
 .record-box {
   background: var(--surface); border: 1px solid var(--grid); border-left: 3px solid var(--accent);
@@ -850,15 +882,6 @@ details.defect summary b { color: var(--flag); }
 #filter-count { margin-left: 0.6rem; font-size: 0.85rem; }
 nav.jump { display: flex; flex-wrap: wrap; gap: 1rem; font-size: 0.9rem; margin: 1rem 0 0; }
 
-.prose { max-width: 44em; }
-.prose h2 { border-bottom: 1px solid var(--grid); padding-bottom: 0.3rem; }
-.prose table { font-size: 0.88rem; }
-.prose li { margin: 0.35rem 0; }
-.prose blockquote { margin: 1rem 0; padding-left: 1rem; border-left: 3px solid var(--grid); color: var(--ink2); }
-pre {
-  background: var(--surface); border: 1px solid var(--grid); border-radius: 3px;
-  padding: 0.9rem 1rem; overflow-x: auto; font-size: 0.82rem; line-height: 1.5;
-}
 .anchor {
   margin-left: 0.4rem; color: var(--grid); text-decoration: none; font-size: 0.8em;
   opacity: 0; transition: opacity 0.1s;
@@ -878,10 +901,8 @@ fs.rmSync(OUT, { recursive: true, force: true });
 
 write("index.html", homePage());
 write("instances/index.html", instancesPage());
-write("rules/index.html", docPage("RULES.md", "/rules/", "Rules",
-  "What counts as a record, how ties are broken, what may be objected to, and what happens then. Every boundary here was drawn from a case the table actually hit."));
-write("data/index.html", docPage("DATA.md", "/data/", "Data",
-  "What each row contains, the unit conventions, what the error-metric markers mean, and how defects are recorded."));
+write("rules/index.html", redirectPage("/rules/", RULES, "Rules"));
+write("data/index.html", redirectPage("/data/", DATA, "Data"));
 write("contribute/index.html", contributePage());
 write("404.html", notFoundPage());
 write("style.css", CSS);
@@ -889,6 +910,9 @@ write("favicon.svg", faviconSvg());
 // Rendered once from favicon.svg (scripts/assets/); Safari and share sheets do not take SVG icons.
 for (const png of ["apple-touch-icon.png", "favicon-32.png"])
   fs.copyFileSync(path.join("scripts/assets", png), path.join(OUT, png));
+fs.mkdirSync(path.join(OUT, "figures"), { recursive: true });
+for (const [name] of FIGURES) for (const v of [name, `${name}-dark`])
+  fs.copyFileSync(`figures/${v}.svg`, path.join(OUT, "figures", `${v}.svg`));
 write("llms.txt", llmsTxt());
 write(".nojekyll", "");
 write("robots.txt", "User-agent: *\nAllow: /\nSitemap: https://qmbl.org/sitemap.xml\n");
@@ -918,7 +942,7 @@ write("api/qmbl.json", JSON.stringify({
   summary, instances: instances.map(apiInstance),
 }, null, 2) + "\n");
 
-const urls = ["/", "/instances/", "/rules/", "/data/", "/contribute/", ...instances.map(instUrl)];
+const urls = ["/", "/instances/", "/contribute/", ...instances.map(instUrl)];
 write("sitemap.xml", `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${urls.map(u => `  <url><loc>https://qmbl.org${u}</loc><lastmod>${BUILT}</lastmod></url>`).join("\n")}
