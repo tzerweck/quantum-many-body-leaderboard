@@ -40,8 +40,11 @@ for (const m of fs.readdirSync("data")) {
         if (typeof c !== "object" || Array.isArray(c)) issues.push(`COMPUTE ${at}: not an object`);
         else {
           if (!c.reported_as) issues.push(`COMPUTE ${at}: no reported_as, so the number cannot be checked against the paper`);
-          for (const k of ["parameters", "gpu_hours", "n_devices", "samples"])
-            if (c[k] != null && !(typeof c[k] === "number" && c[k] > 0)) issues.push(`COMPUTE ${at}: ${k} is ${c[k]}`);
+          // Zero parameters is a statement (a projected wavefunction with nothing to fit); zero
+          // hours or samples is not.
+          for (const k of ["parameters", "gpu_hours", "n_devices", "samples", "cpu_core_hours", "bond_dimension", "iterations"])
+            if (c[k] != null && !(typeof c[k] === "number" && (c[k] > 0 || (k === "parameters" && c[k] === 0))))
+              issues.push(`COMPUTE ${at}: ${k} is ${c[k]}`);
           if (c.gpu_hours != null && !c.device) issues.push(`COMPUTE ${at}: gpu_hours without a device model`);
           for (const k of Object.keys(c))
             if (/normali[sz]ed|equivalent|h100_eq/i.test(k)) issues.push(`COMPUTE ${at}: normalised field ${k}; DATA.md forbids normalisation`);

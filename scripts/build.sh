@@ -12,6 +12,7 @@ node scripts/add_triangular_rows.mjs
 node scripts/add_worklist_rows.mjs
 node scripts/add_exact_rows.mjs
 node scripts/add_allresults_rows.mjs
+node scripts/add_compute.mjs
 node scripts/add_coverage.mjs
 node scripts/apply_defects.mjs
 node scripts/validate.mjs
@@ -20,6 +21,8 @@ node scripts/validate.mjs
 node scripts/summary.mjs > /dev/null
 node scripts/readme_table.mjs
 node scripts/figures.mjs
+node scripts/size_accuracy.mjs
+node scripts/pareto.mjs
 node scripts/logo.mjs
 # Generated output, gitignored. Built here too so a site that no longer renders the data
 # fails locally rather than in the Pages workflow.

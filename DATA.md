@@ -64,16 +64,35 @@ only half of a result, and the field argues informally about the other half.
 
 ```json
 "compute": {
-  "parameters": 267000,
-  "gpu_hours": 1920,
-  "device": "NVIDIA A100 40GB",
+  "parameters": 267720,
+  "gpu_hours": null,
+  "device": "NVIDIA A100",
   "n_devices": 20,
-  "samples": null,
-  "wall_clock": "4 days",
-  "reported_as": "20 A100 GPUs for 4 days, 2.7e5 parameters",
-  "source": "Methods, arXiv:xxxx.xxxxx"
+  "samples": 6000,
+  "wall_clock": "four days",
+  "cpu_core_hours": null,
+  "bond_dimension": null,
+  "iterations": null,
+  "reported_as": "the sentence(s) the numbers were read from, verbatim",
+  "source": "Sec. II, Table I, arXiv:2310.05715 (compute pass 2026-09-16)",
+  "scope": "row | ansatz | paper",
+  "confidence": "high | medium | low",
+  "note": "what a reader needs: what the paper gives instead of a missing field, which run the statement is about"
 }
 ```
+
+The four fields after `wall_clock` are the cost metrics of methods that are not neural
+networks: CPU core-hours and bond dimension for tensor networks and exact diagonalization,
+sample and iteration counts for Monte Carlo. They are recorded in their own units and never
+translated into GPU-hours. `scope` says what the statement covers - this row, this ansatz
+across sizes, or the paper as a whole - and `confidence` drops to `medium` where a count
+was evaluated from a formula the paper prints, `low` where the only statement is second-hand
+or an acknowledgement naming a supercomputer.
+
+Blocks are attached by `scripts/add_compute.mjs` from `compute-rows-<date>.json`, one file
+per reading pass, applied in date order; the first (2026-09-16) read all 130 papers behind
+the non-baseline rows in full, appendices and supplements included, and found a statement
+in 81 of them.
 
 Three rules, and they are the whole design:
 
@@ -84,6 +103,10 @@ Three rules, and they are the whole design:
 - **Self-reported and unfalsifiable.** Nothing here is checked against a run. `reported_as`
   carries the authors' own words so a reader can see what was claimed, and is required.
 - **Never estimated.** A field nobody stated is `null`, not a guess from the ansatz size.
+  "20 A100 GPUs for four days" fills `n_devices`, `device` and `wall_clock` and leaves
+  `gpu_hours` null; a figure gives its own "GPU-days" as hours and the note says so. A view
+  that multiplies devices by wall-clock does that at draw time and marks the point as
+  derived; the stored fields stay as reported.
 
 A missing `compute` block excludes nothing, exactly like a missing variance.
 

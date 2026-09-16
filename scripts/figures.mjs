@@ -1,153 +1,15 @@
-// Generate figures/*.svg - the README numbers, drawn.
-//
-// Every figure is written twice, light and dark. GitHub chooses between the two with a
-// <picture> element keyed on the viewer's GitHub theme; an SVG that switched itself on
-// prefers-color-scheme would follow the operating system instead, and show a light
-// chart on a dark page. Plain SVG strings and no plotting library: the build stays
-// offline and dependency-free, and identical data gives byte-identical files, so a
-// figure changes in git exactly when its numbers do.
-//
-// Colours are the validated default palette of the dataviz method (categorical slots in
-// fixed order, an ordinal blue ramp, recessive greys). Nothing here is picked by eye.
-import fs from "node:fs";
+// Generate figures/*.svg - the README numbers, drawn. The drawing kit is chart.mjs.
 import { isSampled, recordEligible, perSiteDivisor, perSiteLabel } from "./units.mjs";
 import { collect, recordOf } from "./summary.mjs";
 import { sourceOf, sources } from "./enrich_sources.mjs";
 import { CONTESTED, FAMILIES, family, variationalRows } from "./views.mjs";
+import { W, PAD, n, text, hline, hbar, vbar, onFill, dot, legend, header, footnote, doc, textWidth, pct, niceStep, writer } from "./chart.mjs";
 
 const OUT = "figures";
 const cache = sources();
 const instances = collect();
 const byId = new Map(instances.map(i => [i.instance_id, i]));
-
-const THEMES = {
-  light: {
-    surface: "#fcfcfb", ink: "#0b0b0b", ink2: "#52514e", muted: "#898781", grid: "#e1e0d9",
-    series: ["#2a78d6", "#eb6834", "#1baf7a", "#eda100"],
-    ordinal: ["#86b6ef", "#2a78d6", "#104281"], // fewest rows -> most
-    recessive: ["#c3c2b7", "#898781"],
-  },
-  dark: {
-    surface: "#1a1a19", ink: "#ffffff", ink2: "#c3c2b7", muted: "#898781", grid: "#2c2c2a",
-    series: ["#3987e5", "#d95926", "#199e70", "#c98500"],
-    ordinal: ["#1c5cab", "#3987e5", "#9ec5f4"], // the ramp flips on a dark surface
-    recessive: ["#52514e", "#898781"],
-  },
-};
-
-// ------------------------------------------------------------------------ drawing kit
-const W = 920, PAD = 28;
-const n = x => +x.toFixed(1);
-const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
-// Layout needs label widths before a browser has seen the text. This over-estimates for
-// the usual UI faces, so a label that fits here fits on screen.
-const textWidth = (s, size) => [...s].reduce((w, c) => w + (
-  /[il.,:;'|!()\s]/.test(c) ? 0.32 : /[mwMW]/.test(c) ? 0.9 : /[A-Z]/.test(c) ? 0.7 : /\d/.test(c) ? 0.62 : 0.58), 0) * size;
-
-function wrap(s, size, maxW) {
-  const lines = [];
-  let line = "";
-  for (const word of s.split(" ")) {
-    const next = line ? `${line} ${word}` : word;
-    if (line && textWidth(next, size) > maxW) { lines.push(line); line = word; } else line = next;
-  }
-  return line ? [...lines, line] : lines;
-}
-
-const text = (x, y, s, { size = 13, fill, weight, anchor, nums } = {}) =>
-  `<text x="${n(x)}" y="${n(y)}" font-size="${size}" fill="${fill}"` +
-  (weight ? ` font-weight="${weight}"` : "") + (anchor ? ` text-anchor="${anchor}"` : "") +
-  (nums ? ` style="font-variant-numeric:tabular-nums"` : "") + `>${esc(s)}</text>`;
-
-const hline = (x0, x1, y, stroke, width = 1) =>
-  `<path d="M${n(x0)} ${n(y) + 0.5}H${n(x1)}" stroke="${stroke}" stroke-width="${width}"/>`;
-
-// Bars grow from one baseline: square foot, 4px rounded data end.
-function hbar(x0, x1, y, h, fill, rounded = true) {
-  const w = x1 - x0;
-  if (w <= 0) return "";
-  if (!rounded) return `<rect x="${n(x0)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" fill="${fill}"/>`;
-  const r = Math.min(4, w, h / 2);
-  return `<path d="M${n(x0)} ${n(y)}H${n(x1 - r)}A${r} ${r} 0 0 1 ${n(x1)} ${n(y + r)}V${n(y + h - r)}` +
-    `A${r} ${r} 0 0 1 ${n(x1 - r)} ${n(y + h)}H${n(x0)}Z" fill="${fill}"/>`;
-}
-function vbar(x, w, base, top, fill) {
-  const h = base - top;
-  if (h <= 0) return "";
-  const r = Math.min(4, h, w / 2);
-  return `<path d="M${n(x)} ${n(base)}V${n(top + r)}A${r} ${r} 0 0 1 ${n(x + r)} ${n(top)}H${n(x + w - r)}` +
-    `A${r} ${r} 0 0 1 ${n(x + w)} ${n(top + r)}V${n(base)}Z" fill="${fill}"/>`;
-}
-
-// A label set inside a filled mark takes white or ink by the fill's luminance.
-function onFill(hex) {
-  const lin = v => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
-  const [r, g, b] = [1, 3, 5].map(k => lin(parseInt(hex.slice(k, k + 2), 16) / 255));
-  const L = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-  return 1.05 / (L + 0.05) >= (L + 0.05) / 0.0533 ? "#ffffff" : "#0b0b0b";
-}
-
-// Surface ring on every dot so overlapping marks stay separable. Hollow = listed only.
-function dot(t, x, y, color, filled) {
-  const ring = `<circle cx="${n(x)}" cy="${n(y)}" r="6.5" fill="${t.surface}"/>`;
-  return ring + (filled
-    ? `<circle cx="${n(x)}" cy="${n(y)}" r="4.5" fill="${color}"/>`
-    : `<circle cx="${n(x)}" cy="${n(y)}" r="4" fill="${t.surface}" stroke="${color}" stroke-width="2"/>`);
-}
-
-function legend(t, items, y) {
-  const out = [];
-  let x = PAD, row = y;
-  for (const it of items) {
-    const w = 22 + textWidth(it.label, 12) + 18;
-    if (x + w > W - PAD && x > PAD) { x = PAD; row += 22; }
-    const cx = x + 7, cy = row - 4;
-    if (it.kind === "line") out.push(`<path d="M${cx - 7} ${cy}H${cx + 7}" stroke="${it.color}" stroke-width="2" stroke-linecap="round"/>`);
-    else if (it.kind === "dot" || it.kind === "ring") out.push(dot(t, cx, cy, it.color, it.kind === "dot"));
-    else out.push(`<rect x="${cx - 5}" y="${cy - 5}" width="10" height="10" rx="2" fill="${it.color}"/>`);
-    out.push(text(x + 20, row, it.label, { size: 12, fill: t.ink2 }));
-    x += w;
-  }
-  return { svg: out.join("\n"), bottom: row };
-}
-
-// Title and subtitle; returns the y the chart may start below.
-function header(t, title, subtitle) {
-  const out = [text(PAD, 38, title, { size: 17, fill: t.ink, weight: 600 })];
-  const lines = wrap(subtitle, 13, W - 2 * PAD);
-  lines.forEach((l, k) => out.push(text(PAD, 62 + k * 19, l, { size: 13, fill: t.ink2 })));
-  return { svg: out.join("\n"), bottom: 62 + (lines.length - 1) * 19 };
-}
-
-function footnote(t, s, y) {
-  const lines = wrap(s, 11.5, W - 2 * PAD);
-  return { svg: lines.map((l, k) => text(PAD, y + k * 16, l, { size: 11.5, fill: t.muted })).join("\n"), bottom: y + (lines.length - 1) * 16 };
-}
-
-function doc(t, height, title, desc, parts) {
-  return [
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${n(height)}" viewBox="0 0 ${W} ${n(height)}" role="img" aria-labelledby="title desc">`,
-    `<title id="title">${esc(title)}</title>`,
-    `<desc id="desc">${esc(desc)}</desc>`,
-    `<style>text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}</style>`,
-    `<rect width="${W}" height="${n(height)}" rx="8" fill="${t.surface}"/>`,
-    ...parts, "</svg>", "",
-  ].join("\n");
-}
-
-const pct = (a, b) => `${Math.round((100 * a) / b)}%`;
-const niceStep = raw => { const p = 10 ** Math.floor(Math.log10(raw)); return [1, 2, 5, 10].map(m => m * p).find(m => m >= raw * 0.999); };
-
-const written = [];
-function write(name, render) {
-  fs.mkdirSync(OUT, { recursive: true });
-  for (const [mode, t] of Object.entries(THEMES)) {
-    const file = `${OUT}/${name}${mode === "dark" ? "-dark" : ""}.svg`;
-    fs.writeFileSync(file, render(t));
-    written.push(file);
-  }
-}
+const { write, written } = writer(OUT);
 
 const yearOf = r => sourceOf(r, cache)?.year ?? null;
 
