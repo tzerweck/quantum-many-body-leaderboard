@@ -273,9 +273,8 @@ Three things make this the sharpest case in this document:
 
 ## 10. Pending, confirmed, objections
 
-A new row is **`pending`** for 30 days and **`confirmed`** if no objection is unresolved.
 Anyone may object by opening an issue against the row. An objection must be specific and
-technical. Admissible grounds:
+technical. A new row is **`pending`** for 30 days and **`confirmed`** if no objection is unresolved. Admissible grounds:
 
 - wrong symmetry sector, particle number, or boundary conditions;
 - wrong unit convention (§5);
@@ -286,9 +285,6 @@ technical. Admissible grounds:
   conservation law or symmetry of the Hamiltonian, so the reported average is taken over a
   non-representative set of configurations (§9, the kagome case);
 - the number cannot be located in the cited source (§8).
-
-Not admissible: that a method is uninteresting, that a comparison is unflattering, or that
-a competing row ought to have been cited.
 
 The submitter may correct or withdraw. A confirmed row is overturned only by an objection
 that meets the same bar. Rulings cite a clause.
