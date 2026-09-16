@@ -10,9 +10,8 @@
 //                             | |
 //   o-o  .       o-o  .       o o  .
 //
-// Also generates figures/banner.svg (+ -dark): the README header, the same animated mark next
-// to the wordmark, self-contained (an SVG shown as an image sees neither the page's CSS nor
-// its colour scheme, hence one file per scheme).
+// figures/logo.svg is the frozen mark for reuse elsewhere. The README's animations are text-mode
+// GIFs from scripts/ascii.mjs.
 //
 //   node scripts/logo.mjs        writes the figures; site.mjs imports the functions.
 //
@@ -117,36 +116,8 @@ ${sites()}
 `;
 }
 
-// ------------------------------------------------------------------ README banner: mark + wordmark
-const PALETTE = {
-  light: { bg: "#fcfcfb", ink: "#0b0b0b", muted: "#898781", grid: "#e1e0d9", accent: "#2a78d6" },
-  dark:  { bg: "#1a1a19", ink: "#ffffff", muted: "#898781", grid: "#2c2c2a", accent: "#3987e5" },
-};
-const SERIF = `"Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif`;
-const SANS = `ui-sans-serif, system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif`;
-
-export function bannerSvg({ dark = false } = {}) {
-  const c = PALETTE[dark ? "dark" : "light"];
-  const W = 640, H = 128, M = 96;                       // mark M x M at the left
-  const mark = logoSvg().replace('<svg class="logo" viewBox="0 0 32 32"',
-    `<svg class="logo" x="16" y="${(H - M) / 2}" width="${M}" height="${M}" viewBox="0 0 32 32" overflow="visible"`);
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="QMBL, the quantum many-body leaderboard">
-<style>
-svg { --ink: ${c.ink}; --muted: ${c.muted}; --grid: ${c.grid}; --accent: ${c.accent}; }
-.name { font-family: ${SERIF}; font-size: 46px; font-weight: 600; letter-spacing: 0.02em; fill: var(--ink); }
-.sub  { font-family: ${SANS}; font-size: 15.5px; letter-spacing: 0.1em; text-transform: uppercase; fill: var(--muted); }
-${LOGO_CSS}</style>
-${mark}
-<text class="name" x="136" y="66">QMBL</text>
-<text class="sub" x="138" y="92">the quantum many-body leaderboard</text>
-</svg>
-`;
-}
-
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-  fs.writeFileSync(path.join(root, "figures/banner.svg"), bannerSvg());
-  fs.writeFileSync(path.join(root, "figures/banner-dark.svg"), bannerSvg({ dark: true }));
   fs.writeFileSync(path.join(root, "figures/logo.svg"), faviconSvg());
-  console.log("wrote figures/banner.svg, figures/banner-dark.svg, figures/logo.svg");
+  console.log("wrote figures/logo.svg");
 }
