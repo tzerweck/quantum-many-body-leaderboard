@@ -175,24 +175,10 @@ function main() {
     lines.push("", ...HEADER, ...group.map(i => row(i, instanceLabel(i), cache)), "", "</details>", "");
   }
 
-  // Tristan's wording, written into the block on GitHub on 2026-09-15, moved below the
-  // tables and cut down on 2026-09-16 (947bce2, e8c6086); kept here so the build does not
-  // erase it. The one sentence on what the record and the last column are is the
-  // generator's, added the day exact energies began holding records.
-  lines.push("Every row in the dataset also contains a declared `bound_type` saying what kind of quantity the energy value actually is (either a strict variational bound, a fixed-node estimate or a zero-variance extrapolation) and if available the corresponding error metric.");
-  lines.push("");
-  lines.push("Also see [units and conventions](DATA.md#units-and-conventions) and [the ranking rules](RULES.md#6-records-and-ties). ");
-  lines.push("**Bold** is the record: the exact energy where the instance is solved, otherwise the lowest");
-  lines.push("eligible variational bound. The last column is the closest variational challenger and how far above the record it sits, per site. ");
-  lines.push("**&#9675;** marks a row where **we found no error");
-  lines.push("metric** (neither an error bar nor an energy variance) in the source we read; ");
-  lines.push("**&dagger;** marks a");
-  lines.push("sampled energy with a variance but no error bar. ");
-  lines.push("Both rows stay in the table and in rank");
-  lines.push("order; the marker is an open question regarding ambiguous information (see [error metrics](DATA.md#error-metrics)).");
-  // The table-wide counts (records held, solved, blocked on a missing error bar) were cut
-  // from the README by Tristan on 2026-09-16 (e8c6086); they live in data/_summary.json and
-  // on the site's front page, and the generator does not put them back.
+  // The legend (bound_type, bold, circle, dagger) and the table-wide counts are Tristan's
+  // hand-written "## Details" section below the END marker since 2026-09-16 (2eb98a3), so
+  // the generator emits nothing after the last </details>; the counts live in
+  // data/_summary.json and on the site's front page.
 
   const readme = fs.readFileSync("README.md", "utf8");
   const i = readme.indexOf(BEGIN);
@@ -200,7 +186,7 @@ function main() {
   if (i < 0 || j < 0) throw new Error("README.md is missing the leaderboard markers");
   // Spliced by index, never by String.replace: a replacement containing $' or $& is
   // interpreted as a match reference and pastes the file back into itself.
-  const block = `${BEGIN}\n\n${lines.join("\n")}\n\n${END}`;
+  const block = `${BEGIN}\n\n${lines.join("\n").trimEnd()}\n\n${END}`;
   fs.writeFileSync("README.md", readme.slice(0, i) + block + readme.slice(j + END.length));
   console.log(`README.md leaderboard: ${s.instances} instances by model, ${s.records.held}/${s.instances} records held`);
 }

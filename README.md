@@ -405,6 +405,8 @@ Organised literature for fellow researchers and AI, so that we can see the works
 | TB-DMFT-SOC, size 119 | **-1305.3902308** | DMRG (bond dimension 350) using fork tensor... [Bauernfeind et al. (2017)](https://doi.org/10.1103/physrevx.7.031013) | -1305.3902296 (+1.3e-6) DMRG (bond dimension 330) using... [Bauernfeind et al. (2017)](https://doi.org/10.1103/physrevx.7.031013) |
 | TB-DMFT-SOC, size 309 | **-3351.7573592** | DMRG (bond dimension 350) using fork tensor... [Bauernfeind et al. (2017)](https://doi.org/10.1103/physrevx.7.031013) | -3351.7573530 (+6.2e-6) DMRG (bond dimension 330) using... [Bauernfeind et al. (2017)](https://doi.org/10.1103/physrevx.7.031013) |
 
+</details>
+
 <!-- END LEADERBOARD -->
 
 ## Details
