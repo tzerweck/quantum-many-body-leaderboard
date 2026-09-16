@@ -32,14 +32,19 @@ const REASON = {
 
 const byInst = {};
 for (const r of ROWS) (byInst[r.instance_id] ||= []).push(r);
-let added = 0;
+let added = 0, created = 0;
 const skipped = [];
 for (const [id, rows] of Object.entries(byInst)) {
   const p = `data/${id}.json`;
-  const inst = JSON.parse(fs.readFileSync(p, "utf8"));
+  // A row can name an instance QMBL does not have yet (a torus or strip a primary table covers
+  // and VarBench never defined); it then carries the header to create, in VarBench's naming.
+  const create = rows.find(r => r.create)?.create;
+  if (!fs.existsSync(p) && !create) { console.log(`MISS instance ${id}`); continue; }
+  const inst = fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, "utf8")) : { ...create, instance_id: id, rows: [] };
+  if (!fs.existsSync(p)) { created++; fs.mkdirSync(`data/${id.split("/")[0]}`, { recursive: true }); }
   const div = perSiteDivisor(inst);
-  const dof = expectedDof(inst) ?? inst.rows[0].dof;
-  const einf = expectedEinf(inst) ?? inst.rows[0].einf;
+  const dof = expectedDof(inst) ?? inst.rows[0]?.dof ?? null;
+  const einf = expectedEinf(inst) ?? inst.rows[0]?.einf ?? null;
   for (const r of rows) {
     // A quoted exact value rounded to its error bar is the exact row already carried; any other
     // quoted value repeats a stored row only to its printed digits (Kochkov et al.'s -0.5022(4)
@@ -74,5 +79,5 @@ for (const [id, rows] of Object.entries(byInst)) {
   }
   fs.writeFileSync(p, JSON.stringify(inst, null, 2) + "\n");
 }
-console.log(`added ${added} all-results rows; ${skipped.length} already on their instance`);
+console.log(`added ${added} all-results rows (${created} new instances); ${skipped.length} already on their instance`);
 if (process.env.QMBL_VERBOSE) skipped.forEach(s => console.log("  dup", s));

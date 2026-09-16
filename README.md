@@ -48,7 +48,7 @@ sampled energy with a variance but no error bar.
 Both rows stay in the table and in rank
 order; the marker is an open question regarding ambiguous information (see [error metrics](DATA.md#error-metrics)).
 
-### All 322 instances
+### All 341 instances
 
 <details>
 <summary><b>Heisenberg</b>: 96 instances, 35 with a record, energies as <code>E/N (S.S)</code></summary>
@@ -155,7 +155,7 @@ order; the marker is an open question regarding ambiguous information (see [erro
 </details>
 
 <details>
-<summary><b>J1-J2</b>: 56 instances, 43 with a record, energies as <code>E/N (S.S)</code></summary>
+<summary><b>J1-J2</b>: 72 instances, 59 with a record, energies as <code>E/N (S.S)</code></summary>
 
 | instance | record | method | closest challenger |
 |---|---|---|---|
@@ -181,7 +181,9 @@ order; the marker is an open question regarding ambiguous information (see [erro
 | square 4x4, J2 = 1 | **-0.7684501** | VQE + symm. circuit (64 pars., exact grad... [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_16_P_1.0/vqe.sh), no paper cited | -0.7683608 &dagger; VQE + symm. circuit (64 pars.... [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_16_P_1.0/vqe_noisy.sh), no paper cited |
 | square 6x6, J2 = 0.3 | **-0.5618876** | DMRG (bond dimension = 2048) [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_36_P_0.3/dmrg.sh), no paper cited | -0.5549965 RBM (alpha = 1) [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_36_P_0.3/vmc_rbm.sh), no paper cited |
 | square 6x6, J2 = 0.4 | **-0.5297440** &#9675; | DMRG on the L x L torus, 8192 SU(2) states Gong, Zhu, Sheng, Motrunich & Fi | -0.5297420 &#9675; DMRG on the L x L torus, 6144... Gong, Zhu, Sheng, Motrunich & Fi |
+| square 6x6, J2 = 0.45 | **-0.5156550** &#9675; | DMRG on the L x L torus, 8192 SU(2) states Gong, Zhu, Sheng, Motrunich & Fi | -0.5156520 &#9675; DMRG on the L x L torus, 6144... Gong, Zhu, Sheng, Motrunich & Fi |
 | square 6x6, J2 = 0.5 | **-0.5038050** &#9675; | DMRG on the L x L torus, 8192 SU(2) states Gong, Zhu, Sheng, Motrunich & Fi | -0.5038001 RBM+PP with momentum (K=0)... [Nomura & Imada (2021)](https://doi.org/10.1103/physrevx.11.031034) |
+| square 6x6, J2 = 0.55 | **-0.4951670** &#9675; | DMRG on the L x L torus, 8192 SU(2) states Gong, Zhu, Sheng, Motrunich & Fi | -0.4951500 &#9675; DMRG on the L x L torus, 6144... Gong, Zhu, Sheng, Motrunich & Fi |
 | square 6x6, J2 = 0.6 | **-0.49318(5)** | RBM wave function + 2-step Lanczos recursion [Chen et al. (2022)](https://doi.org/10.48550/arxiv.2206.14307) | -0.49313 RBM wave function + 1-step... [Chen et al. (2022)](https://doi.org/10.48550/arxiv.2206.14307) |
 | square 6x6, J2 = 0.7 | **-0.5299243** | DMRG (bond dimension = 2048) [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_36_P_0.7/dmrg.sh), no paper cited | -0.5299210 RBM wave function [Chen et al. (2022)](https://doi.org/10.48550/arxiv.2206.14307) |
 | square 6x6, J2 = 0.8 | **-0.586411(9)** | RBM wave function [Chen et al. (2022)](https://doi.org/10.48550/arxiv.2206.14307) | -0.585900 CNN Choo, Neupert & Carleo, Two-dime |
@@ -199,18 +201,32 @@ order; the marker is an open question regarding ambiguous information (see [erro
 | square, 40 sites, J2 = 0.8 | no record | solved exactly | |
 | square, 40 sites, J2 = 0.9 | no record | solved exactly | |
 | square, 40 sites, J2 = 1 | no record | solved exactly | |
+| square 8x8, J2 = 0.4 | **-0.52539(1)** | VMC + 2 Lanczos steps Hu, Becca, Parola & Sorella, Dir | -0.52520 &#9675; DMRG on the L x L torus, 8192... Gong, Zhu, Sheng, Motrunich & Fi |
+| square 8x8, J2 = 0.45 | **-0.51125(1)** | VMC + 2 Lanczos steps Hu, Becca, Parola & Sorella, Dir | -0.51101 VMC + 1 Lanczos step Hu, Becca, Parola & Sorella, Dir |
 | square 8x8, J2 = 0.5 | **-0.498963(2)** | RBM+PP with momentum (K=0), spin-parity (even... [Nomura & Imada (2021)](https://doi.org/10.1103/physrevx.11.031034) | -0.498860 VMC + 2 Lanczos steps Hu, Becca, Parola & Sorella, Dir |
 | square 8x8, J2 = 0.55 | **-0.48841(2)** | VMC + 2 Lanczos steps Hu, Becca, Parola & Sorella, Dir | -0.48835 ClebschTree [Vieijra & Nys (2021)](https://doi.org/10.1103/physrevb.104.045123) |
 | square 10x10, J2 = 0.3 | **-0.55485(1)** | VMC with fermions (flux+neel+Jastrow) [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_100_P_0.3/vmc_gutzwiller.sh), no paper cited | -0.54909 DMRG (bond dimension = 1024) [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_100_P_0.3/dmrg.sh), no paper cited |
 | square 10x10, J2 = 0.4 | **-0.5240(1)** | VMC + 2 Lanczos steps Hu, Becca, Parola & Sorella, Dir | -0.5239 RBM wave function [Chen et al. (2022)](https://doi.org/10.48550/arxiv.2206.14307) |
+| square 10x10, J2 = 0.45 | **-0.51001(1)** | VMC + 2 Lanczos steps Hu, Becca, Parola & Sorella, Dir | -0.50973 VMC + 1 Lanczos step Hu, Becca, Parola & Sorella, Dir |
 | square 10x10, J2 = 0.5 | **-0.4976939(2)** | CNN-MPS (h,D,l)=(32,20,20), Marshall sign... [Fan et al. (2026)](https://doi.org/10.48550/arxiv.2603.14425) | -0.4976923 T-MPS [Fan et al. (2026)](https://doi.org/10.48550/arxiv.2603.14425) |
+| square 10x10, J2 = 0.55 | **-0.48693(3)** | VMC + 2 Lanczos steps Hu, Becca, Parola & Sorella, Dir | -0.48677 GCNN (deep group-convolutional... [Roth et al. (2022)](https://doi.org/10.48550/arxiv.2211.07749) |
 | square 10x10, J2 = 0.6 | **-0.4774611** | DMRG (bond dimension = 1024) [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_100_P_0.6/dmrg.sh), no paper cited | -0.4766200 RBM wave function [Chen et al. (2022)](https://doi.org/10.48550/arxiv.2206.14307) |
 | square 10x10, J2 = 0.7 | **-0.51889(2)** | RBM wave function [Chen et al. (2022)](https://doi.org/10.48550/arxiv.2206.14307) | -0.51643 DMRG (bond dimension = 1024) [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_100_P_0.7/dmrg.sh), no paper cited |
 | square 10x10, J2 = 0.8 | **-0.57404(2)** | RBM wave function [Chen et al. (2022)](https://doi.org/10.48550/arxiv.2206.14307) | -0.57383 CNN Choo, Neupert & Carleo, Two-dime |
 | square 10x10, J2 = 0.9 | **-0.6269664** | DMRG (bond dimension = 1024) [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_100_P_0.9/dmrg.sh), no paper cited | -0.5974150 RBM (alpha = 1) [run script](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_100_P_0.9/vmc_rbm.sh), no paper cited |
 | square 10x10, J2 = 1 | **-0.69670(2)** | RBM wave function [Chen et al. (2022)](https://doi.org/10.48550/arxiv.2206.14307) | -0.69664 &#9675; ViT Extremely slow scaling of minima |
+| square 12x12, J2 = 0.5 | **-0.496791(4)** | mVMC + RBM (as quoted) [Roth et al. (2022)](https://doi.org/10.48550/arxiv.2211.07749) | -0.496769 GCNN (deep group-convolutional... [Roth et al. (2022)](https://doi.org/10.48550/arxiv.2211.07749) |
+| square 12x12, J2 = 0.55 | **-0.48607(1)** | GCNN (deep group-convolutional network) [Roth et al. (2022)](https://doi.org/10.48550/arxiv.2211.07749) | -0.48574 mVMC + RBM (as quoted) [Roth et al. (2022)](https://doi.org/10.48550/arxiv.2211.07749) |
+| square 14x14, J2 = 0.4 | **-0.52287(1)** | VMC + 1 Lanczos step Hu, Becca, Parola & Sorella, Dir | -0.52124 VMC, p = 0 Lanczos steps Hu, Becca, Parola & Sorella, Dir |
+| square 14x14, J2 = 0.45 | **-0.50899(1)** | VMC + 1 Lanczos step Hu, Becca, Parola & Sorella, Dir | -0.50745 VMC, p = 0 Lanczos steps Hu, Becca, Parola & Sorella, Dir |
 | square 14x14, J2 = 0.5 | **-0.49638(1)** | VMC + 1 Lanczos step Hu, Becca, Parola & Sorella, Dir | -0.49447 VMC, p = 0 Lanczos steps Hu, Becca, Parola & Sorella, Dir |
+| square 14x14, J2 = 0.55 | **-0.48519(1)** | VMC + 1 Lanczos step Hu, Becca, Parola & Sorella, Dir | -0.48242 VMC, p = 0 Lanczos steps Hu, Becca, Parola & Sorella, Dir |
 | square 16x16, J2 = 0.5 | **-0.4969140(5)** | CNN-MPS [Fan et al. (2026)](https://doi.org/10.48550/arxiv.2603.14425) | -0.4967860 T-MPS [Fan et al. (2026)](https://doi.org/10.48550/arxiv.2603.14425) |
+| square 16x16, J2 = 0.55 | **-0.485583(8)** | GCNN (deep group-convolutional network) [Roth et al. (2022)](https://doi.org/10.48550/arxiv.2211.07749) | -0.485208 mVMC + RBM (as quoted) [Roth et al. (2022)](https://doi.org/10.48550/arxiv.2211.07749) |
+| square 18x18, J2 = 0.4 | **-0.52259(1)** | VMC + 1 Lanczos step Hu, Becca, Parola & Sorella, Dir | -0.52107 VMC, p = 0 Lanczos steps Hu, Becca, Parola & Sorella, Dir |
+| square 18x18, J2 = 0.45 | **-0.50874(1)** | VMC + 1 Lanczos step Hu, Becca, Parola & Sorella, Dir | -0.50728 VMC, p = 0 Lanczos steps Hu, Becca, Parola & Sorella, Dir |
+| square 18x18, J2 = 0.5 | **-0.49611(1)** | VMC + 1 Lanczos step Hu, Becca, Parola & Sorella, Dir | -0.49426 VMC, p = 0 Lanczos steps Hu, Becca, Parola & Sorella, Dir |
+| square 18x18, J2 = 0.55 | **-0.48475(1)** | VMC + 1 Lanczos step Hu, Becca, Parola & Sorella, Dir | -0.48215 VMC, p = 0 Lanczos steps Hu, Becca, Parola & Sorella, Dir |
 | square 20x20, J2 = 0.5 | **-0.4967987(6)** | CNN-MPS (h,D,l)=(32,15,20) [Fan et al. (2026)](https://doi.org/10.48550/arxiv.2603.14425) | -0.4967320 ViT with symmetry restoration [Viteritti et al. (2026)](https://doi.org/10.48550/arxiv.2602.02665) |
 | triangular, 48 sites, J2 = 0.125 | no record | solved exactly | |
 | triangular, 108 sites, J2 = 0.125 | **-0.51268(9)** | GCNN + Lanczos step [Roth et al. (2022)](https://doi.org/10.48550/arxiv.2211.07749) | -0.51175 GCNN (deep group-equivariant CNN) [Roth et al. (2022)](https://doi.org/10.48550/arxiv.2211.07749) |
@@ -219,7 +235,7 @@ order; the marker is an open question regarding ambiguous information (see [erro
 </details>
 
 <details>
-<summary><b>Hubbard</b>: 137 instances, 81 with a record, energies as <code>E/site</code></summary>
+<summary><b>Hubbard</b>: 140 instances, 81 with a record, energies as <code>E/site</code></summary>
 
 | instance | record | method | closest challenger |
 |---|---|---|---|
@@ -247,6 +263,9 @@ order; the marker is an open question regarding ambiguous information (see [erro
 | rectangular 6x48, U = 8, n = 0.875 | **-0.74834(3)** | VMC with stripe of wavelength 8 (+Jastrow and... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/rectangular-6x48_288_P_126_8/VMC-stripes/vmc_hubbard.sh), no paper cited | -0.74365 VMC with uniform BCS pairing... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/rectangular-6x48_288_P_126_8/VMC-uniform/vmc_hubbard.sh), no paper cited |
 | rectangular 6x48, U = 12, n = 0.875 | **-0.62556(3)** | VMC with stripe of wavelength 6 (+Jastrow and... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/rectangular-6x48_288_P_126_12/VMC-stripes/vmc_hubbard.sh), no paper cited | -0.62226 VMC with uniform BCS (+Jastrow... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/rectangular-6x48_288_P_126_12/VMC-uniform/vmc_hubbard.sh), no paper cited |
 | rectangular 6x48, U = 8, n &asymp; 0.9167 | **-0.67269(3)** | VMC with stripe of wavelength 8 (+Jastrow and... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/rectangular-6x48_288_P_132_8/VMC-stripes/vmc_hubbard.sh), no paper cited | -0.66615 VMC with uniform BCS pairing and... [run script](https://github.com/varbench/methods/blob/main/scripts/Hubbard/rectangular-6x48_288_P_132_8/VMC-uniform/vmc_hubbard.sh), no paper cited |
+| rectangular 8x16, U = 8, n = 0.875 | no record | sampled rows carry no error bar | |
+| rectangular 8x24, U = 8, n = 0.875 | no record | sampled rows carry no error bar | |
+| rectangular 8x32, U = 8, n = 0.875 | no record | sampled rows carry no error bar | |
 | square 4x4, U = 2, n = 0.5 | **-1.1559648** | DMRG (MaxLinkDim ~ 3200) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_hubbard/square_16_P_4_2.jl), no paper cited | none |
 | square 4x4, U = 3.5981, n = 0.5 | **-1.1060144** | DMRG (MaxBondDim ~3200) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_hubbard/square_16_P_4_3.5981.jl), no paper cited | -1.1058481 VMC Hidden Fermion Determinant... [Moreno et al. (2022)](https://doi.org/10.1073/pnas.2122059119) |
 | square 4x4, U = 4, n = 0.5 | **-1.0959310** | DMRG (MaxBondDim ~ 3200) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensors_hubbard/square_16_P_4_4.jl), no paper cited | none |
@@ -420,13 +439,13 @@ order; the marker is an open question regarding ambiguous information (see [erro
 
 </details>
 
-Across the whole table: **192 of 322 instances have a record**, from 1104 energies.
-Of the 130 instances without one, 111 are solved exactly and have nothing to compete
-for. Separately, **135 sampled variational energies across 81 instances carry no error bar**, so
-they are listed and rank for nothing, and 43 of them sit below their instance's current
+Across the whole table: **208 of 341 instances have a record**, from 1186 energies.
+Of the 133 instances without one, 111 are solved exactly and have nothing to compete
+for. Separately, **141 sampled variational energies across 84 instances carry no error bar**, so
+they are listed and rank for nothing, and 49 of them sit below their instance's current
 record. If one of those is your paper, the error bar is the only thing missing.
 
-And **159 energies carry no error metric we could find** (&#9675;). Those numbers stay in the
+And **185 energies carry no error metric we could find** (&#9675;). Those numbers stay in the
 table and in the ranking; the marker only says the energy still needs verification or a word
 from the people who produced it.
 
