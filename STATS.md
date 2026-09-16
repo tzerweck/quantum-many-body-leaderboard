@@ -6,16 +6,14 @@ who holds a record. Where a view can only be computed over part of the table, it
 
 ## Records nobody has challenged
 
-**53 of 208 records stand on a single published number.**
+**50 of 208 records stand on a single published number.**
 One group computed an energy, and in the years since, nobody has published a second
 one to compare it against. That is not a criticism of the number; it is a statement
 about the coverage of this table, and of the literature it draws on.
 
 | instance | record | method | source |
 |---|---|---|---|
-| `Heisenberg/pyrochlore-4x4x4_1024_P` | -0.4880022 | mVMC (PP + 1st step Lanczos, spin-parity | [Pohle et al. (2023)](https://doi.org/10.48550/arxiv.2311.11561) |
 | `Heisenberg/square_576_P` | -0.6692370 | aCNN(C4v) | no paper cited |
-| `Heisenberg/pyrochlore-3x3x3_432_P` | -0.4884745 | mVMC (PP + 1st step Lanczos, spin-parity | [Pohle et al. (2023)](https://doi.org/10.48550/arxiv.2311.11561) |
 | `Heisenberg/shuriken_384_P` | -0.4371289 | mVMC with SU(2) and point group projecti | [Astrakhantsev et al. (2021)](https://doi.org/10.1103/physrevb.104.l220408) |
 | `Heisenberg/square_256_P` | -0.6697160 | aCNN(C4v) | no paper cited |
 | `Hubbard/square_256_P_106_8` | -0.8378770 | VAFQMC stripe length=8 | [Sorella (2023)](https://doi.org/10.1103/physrevb.107.115133) |
@@ -28,8 +26,10 @@ about the coverage of this table, and of the literature it draws on.
 | `Hubbard/square_256_P_118_8` | -0.6721480 | VAFQMC stripe length=8 | [Sorella (2023)](https://doi.org/10.1103/physrevb.107.115133) |
 | `Hubbard/square_256_P_120_8` | -0.6405290 | VAFQMC stripe length=8 | [Sorella (2023)](https://doi.org/10.1103/physrevb.107.115133) |
 | `Hubbard/square_256_PA_107_8_t12` | -0.7993750 | mVMC with SU(2) and momentum projections | no paper cited |
+| `Hubbard/square_256_PA_107_8_t12_UV1V2` | 1.2591797 | mVMC with SU(2) and momentum projections | no paper cited |
+| `Hubbard/rectangular-14x16_224_P_98_8` | -0.7582990 | VAFQMC stripe length=7 | [Sorella (2023)](https://doi.org/10.1103/physrevb.107.115133) |
 
-…and 38 more.
+…and 35 more.
 
 ## Records held: symmetrised vs not
 
@@ -39,7 +39,7 @@ for itself, which beats any single paper's ablation.
 
 | ansatz | records (all) | records (contested) | records where both kinds were tried |
 |---|---:|---:|---:|
-| explicit symmetry projection | 38 | 13 | 13 |
+| explicit symmetry projection | 38 | 15 | 13 |
 | no explicit projection | 170 | 53 | 12 |
 
 **The last column is the one that means anything**: on 25 instances both a symmetrised and an
@@ -112,9 +112,9 @@ answer has been settled for a decade. The contested column counts only instances
 | tensor network | 82 | 28 |
 | CNN / ResNet | 5 | 4 |
 | RNN | 3 | 2 |
-| RBM | 19 | 14 |
+| RBM | 19 | 15 |
 | backflow / Pfaffian | 15 | 2 |
-| classic VMC | 12 | 2 |
+| classic VMC | 12 | 3 |
 | AFQMC / GFMC | 28 | 3 |
 | VQE / circuit | 19 | 0 |
 | other | 25 | 11 |

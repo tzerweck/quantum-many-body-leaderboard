@@ -274,9 +274,12 @@ Two entries touch QMBL instances and **neither is a new row**:
   record −0.4830957 on `pyrochlore-4x4x4_256_P`, quoted to fewer digits. The stalest instance
   in the table (V-score 1.1e-1) is stale because **nobody has beaten it**, not because we
   stopped looking.
-- `mVMC-RBM/Lanczos, Pohle et al., L=2, N_s=128, −0.49229(7)` is a re-quote of the same Pohle
-  result that gives `pyrochlore-2x2x2_128_P` its record of −0.4922012. Importing the rounded
-  third-party value as a new record would have manufactured one out of a rounding difference.
+- `mVMC-RBM/Lanczos, Pohle et al., L=2, N_s=128, −0.49229(7)` quotes the value Pohle et al. print
+  in their own Supplemental Material (Table SI) and Appendix B. **Corrected 2026-09-16:** this
+  note first called it a rounded re-quote of the stored −0.4922012. It is not. The two differ by
+  9e-5 (1.1 sigma), and −0.4922012 is not printed in arXiv:2311.11561 at all: it is Pohle's own
+  VarBench submission of 2022-02-26, 21 months before the preprint, never updated to the paper's
+  value. Both are carried as separate measurements; the paper's value holds the record.
 
 Everything else in that table is a thermodynamic-limit or extrapolated estimate.
 

@@ -30,7 +30,7 @@ As well as place our own results in the context of other research.
 | Hubbard square 16x16, U = 8, n = 0.875 | **-0.75865(3)** | VAFQMC stripe length 8 [Sorella (2023)](https://doi.org/10.1103/physrevb.107.115133) | -0.75730 &#9675; ACE (16 conv layers), no symmetry... [Gu et al. (2026)](https://doi.org/10.48550/arxiv.2604.25775) |
 | Hubbard 4x16, U = 8, n = 0.875 | **-0.76623(1)** | ACE (16 conv layers) + full symmetry... [Gu et al. (2026)](https://doi.org/10.48550/arxiv.2604.25775) | -0.76560 NNBF, 32 determinants + free... [Loehr & Clark (2025)](https://doi.org/10.48550/arxiv.2510.26906) |
 | Triangular Heisenberg, 196 sites, open | **-0.5138(1)** | 2D Gated RNN [Hibat-Allah et al. (2022)](https://doi.org/10.48550/arxiv.2207.14314) | -0.5108 DMRG (Bond dimension = 2000) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensor_cpp/dmrg_triangular_heisenberg_14x14.cc), no paper cited |
-| Kagome Heisenberg, 192 sites | **-0.42987(1)** | VMC with Dirac spin liquid + Jastrow [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/kagome-8x8_192_P/vmc_gutzwiller.sh), no paper cited | none |
+| Kagome Heisenberg, 192 sites | **-0.42987(1)** | VMC with Dirac spin liquid + Jastrow [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/kagome-8x8_192_P/vmc_gutzwiller.sh), no paper cited | -0.42868 VMC, Gutzwiller-projected U(1)... He, Yu & Li, Phys. Rev. Lett. 13 |
 | Pyrochlore Heisenberg, 256 sites | **-0.48310(7)** | mVMC with SU(2) and symmetry projections [Astrakhantsev et al. (2021)](https://doi.org/10.1103/physrevx.11.041021) | none |
 
 Every row is one published claim about a Hamiltonian instance, carrying the energy value,
@@ -71,13 +71,13 @@ order; the marker is an open question regarding ambiguous information (see [erro
 | kagome-42b, 42 sites | no record | solved exactly | |
 | kagome 4x4 (48 sites) | **-0.4375(2)** | GCNN (6 layers, 6 feature maps), symmetric... [Đurić et al. (2024)](https://doi.org/10.48550/arxiv.2401.02866) | -0.4304 VMC with Dirac spin liquid +... [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/kagome-4x4_48_P/vmc_gutzwiller.sh), no paper cited |
 | kagome 6x6 (108 sites) | no record | every variational row is flagged | |
-| kagome 8x8 (192 sites) | **-0.42987(1)** | VMC with Dirac spin liquid + Jastrow [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/kagome-8x8_192_P/vmc_gutzwiller.sh), no paper cited | none |
+| kagome 8x8 (192 sites) | **-0.42987(1)** | VMC with Dirac spin liquid + Jastrow [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/kagome-8x8_192_P/vmc_gutzwiller.sh), no paper cited | -0.42868 VMC, Gutzwiller-projected U(1)... He, Yu & Li, Phys. Rev. Lett. 13 |
 | pyrochlore 2x2x2 (32 sites) | **-0.51627(2)** | mVMC with SU(2) and symmetry projections [Astrakhantsev et al. (2021)](https://doi.org/10.1103/physrevx.11.041021) | -0.51523 RBM with symmetry projections [Astrakhantsev et al. (2021)](https://doi.org/10.1103/physrevx.11.041021) |
-| pyrochlore 2x2x2 (128 sites) | **-0.49229(7)** | spin-parity mVMC-RBM/Lanczos [Pohle et al. (2023)](https://doi.org/10.48550/arxiv.2311.11561) | -0.49220 mVMC (PP + RBM + 1st step Lanczos... [Pohle et al. (2023)](https://doi.org/10.48550/arxiv.2311.11561) |
+| pyrochlore 2x2x2 (128 sites) | **-0.49229(7)** | spin-parity mVMC-RBM/Lanczos (PP + RBM + 1st... [Pohle et al. (2023)](https://doi.org/10.48550/arxiv.2311.11561) | -0.49220 mVMC (PP + RBM + 1st step Lanczos... [Pohle et al. (2023)](https://doi.org/10.48550/arxiv.2311.11561) |
 | pyrochlore 3x3x3 (108 sites) | **-0.48711(9)** | mVMC with SU(2) and symmetry projections [Astrakhantsev et al. (2021)](https://doi.org/10.1103/physrevx.11.041021) | -0.48510 DMRG [Hagymási et al. (2021)](https://doi.org/10.1103/physrevlett.126.117204) |
-| pyrochlore 3x3x3 (432 sites) | **-0.48847(3)** | mVMC (PP + 1st step Lanczos, spin-parity... [Pohle et al. (2023)](https://doi.org/10.48550/arxiv.2311.11561) | none |
+| pyrochlore 3x3x3 (432 sites) | **-0.48851(3)** | mVMC/Lanczos (PP + 1st Lanczos step... [Pohle et al. (2023)](https://doi.org/10.48550/arxiv.2311.11561) | -0.48847 mVMC (PP + 1st step Lanczos... [Pohle et al. (2023)](https://doi.org/10.48550/arxiv.2311.11561) |
 | pyrochlore 4x4x4 (256 sites) | **-0.48310(7)** | mVMC with SU(2) and symmetry projections [Astrakhantsev et al. (2021)](https://doi.org/10.1103/physrevx.11.041021) | none |
-| pyrochlore 4x4x4 (1024 sites) | **-0.48800(1)** | mVMC (PP + 1st step Lanczos, spin-parity... [Pohle et al. (2023)](https://doi.org/10.48550/arxiv.2311.11561) | none |
+| pyrochlore 4x4x4 (1024 sites) | **-0.48800(1)** | mVMC (PP + 1st step Lanczos, spin-parity... [Pohle et al. (2023)](https://doi.org/10.48550/arxiv.2311.11561) | -0.48537 mVMC (PP, spin-parity even, C3... [Pohle et al. (2023)](https://doi.org/10.48550/arxiv.2311.11561) |
 | rectangular 10x20, periodic/open | no record | solved exactly | |
 | rectangular 12x24, periodic/open | no record | solved exactly | |
 | rectangular 14x28, periodic/open | no record | solved exactly | |
@@ -439,7 +439,7 @@ order; the marker is an open question regarding ambiguous information (see [erro
 
 </details>
 
-Across the whole table: **208 of 341 instances have a record**, from 1186 energies.
+Across the whole table: **208 of 341 instances have a record**, from 1199 energies.
 Of the 133 instances without one, 111 are solved exactly and have nothing to compete
 for. Separately, **141 sampled variational energies across 84 instances carry no error bar**, so
 they are listed and rank for nothing, and 49 of them sit below their instance's current
