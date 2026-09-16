@@ -504,12 +504,7 @@ a moving table.
 > T. Zerweck, *QMBL - the Quantum Many-Body Leaderboard*, v0.1.0, Zenodo (2026).
 > [10.5281/zenodo.22753735](https://doi.org/10.5281/zenodo.22753735)
 
-Individual energies should cite **the primary paper named on the row**, not this dataset:
-QMBL is a compilation, and the people who produced a number are the ones a referee expects
-to see cited. Machine-readable metadata is in [`CITATION.cff`](CITATION.cff) and
-[`.zenodo.json`](.zenodo.json).
-
-The imported rows, the instance set, the stored conventions and the V-score come from
+Many imported rows, instances, stored conventions and the V-score come from
 **VarBench**, the dataset published with the V-score paper. Its `baseline: true` rows are
 VarBench's own reference calculations and have no other source. QMBL departs from VarBench
 on bound classification and defect handling (see [RULES.md](RULES.md)). If you use an
