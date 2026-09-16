@@ -451,13 +451,13 @@ a moving table.
 
 - **Concept DOI: [10.5281/zenodo.22753734](https://doi.org/10.5281/zenodo.22753734)** always resolves to the
   latest release. Cite this one unless you need a specific snapshot.
-- **v0.2.0**, 2026-09-16 (341 instances, 1215 rows, 334 records, 229 of them held by an exact energy).
-  Its version DOI appears here once Zenodo has archived the release.
+- **v0.2.0: [10.5281/zenodo.22799412](https://doi.org/10.5281/zenodo.22799412)**, 2026-09-16 (341 instances, 1215 rows, 334
+  records, 229 of them held by an exact energy).
 - **v0.1.0: [10.5281/zenodo.22753735](https://doi.org/10.5281/zenodo.22753735)**, 2026-09-14 (205 instances, 675 rows,
   182 records). Cite a version DOI to pin the exact comparison set your numbers were measured against.
 
 > T. Zerweck, *QMBL - the Quantum Many-Body Leaderboard*, v0.2.0, Zenodo (2026).
-> [10.5281/zenodo.22753734](https://doi.org/10.5281/zenodo.22753734)
+> [10.5281/zenodo.22799412](https://doi.org/10.5281/zenodo.22799412)
 
 Many imported rows, instances, stored conventions and the V-score come from
 **VarBench**, the dataset published with the V-score paper. Its `baseline: true` rows are
