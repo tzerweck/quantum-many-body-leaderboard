@@ -8,11 +8,9 @@
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 [![entries](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Ftzerweck%2Fquantum-many-body-leaderboard%2Fmain%2Fdata%2F_summary.json&query=%24.rows&label=entries&color=success)](data/_summary.json)
 
-SOTA ground-state energies.
+**A live record of SOTA published ground-state energies for lattice Hamiltonians.**
 
-This is the literature organised to serve fellow researchers and AI. 
-
-So that we can see the works of the wider research community at one glance.
+Organised literature for fellow researchers and AI, so that we can see the works of the wider research community at one glance.
 
 ## Leaderboard
 
