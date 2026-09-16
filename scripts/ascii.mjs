@@ -1,7 +1,7 @@
 // The README's text-mode animations, rendered frame by frame with ImageMagick and encoded to GIF:
 //
 //   figures/qmbl-ascii.gif       "QMBL" in the Alpha figlet font whose ':' fill is a spin lattice,
-//                                the tagline under it, and a 9x10 lattice of arrows to the right,
+//                                the tagline under it in Small Block, and a 9x10 lattice of arrows to the right,
 //                                both antiferromagnets under one Metropolis temperature sweep: the
 //                                fill and the arrows crystallise into Neel order, hold and melt;
 //                                the arrows jitter with T; the bar is the arrows' bond order (the
@@ -74,9 +74,13 @@ function header() {
   const LR = 9, LK = 10, F2 = 2;
   const a = Array.from({ length: LR }, () => Array.from({ length: LK }, () => (rnd() < 0.5 ? 1 : -1)));
   const jit = Array.from({ length: LR * LK }, () => ({ p: rnd() * 6.3, q: rnd() * 6.3, w: 0.35 + rnd() * 0.5, v: 0.3 + rnd() * 0.4 }));
-  const padC = 1, padR = 1, gap = 5;
-  const latC = padC + K + gap, latR = padR + Math.floor((R - LR * F2) / 2);   // lattice origin, letter-grid units
-  const cols = latC + LK * 2 * F2 + padC, rows = padR + R + 3;
+  const tag = banner("Small Block", "the quantum many-body leaderboard"), TW = Math.max(...tag.map(l => l.length));
+  const FO = 1.5, ORDER = 24;                                              // order line: size, characters
+  const padC = 1, padR = 1, gap = 16;
+  const leftW = Math.max(K, TW), leftH = R + 2 + tag.length;
+  const gridW = (LK - 1) * 2 * F2 + F2, rightH = LR * F2 + 1 + FO;         // letter-grid units
+  const latC = padC + leftW + gap, latR = padR + Math.round((leftH - rightH) / 2);
+  const cols = latC + gridW + padC, rows = padR + leftH + padR;
   const W = Math.round(cols * CW), H = rows * LH;
   const dir = mkdtempSync(path.join(tmpdir(), "qmbl-ascii-"));
   const N = 110, frames = [];
@@ -98,14 +102,16 @@ function header() {
     for (let r = 0; r < R; r++)
       for (const m of lines[r].matchAll(/[^\s:]+/g)) annotate(args, (padC + m.index) * CW, (padR + r) * LH + ASC, m[0], C.ink);
     sites.forEach(([r, c], i) => annotate(args, (padC + c) * CW, (padR + r) * LH + ASC, s[i] > 0 ? ":" : "·", s[i] > 0 ? C.accent : C.ink2));
-    annotate(args, (padC + 2) * CW, (padR + R + 1) * LH + ASC, "the quantum many-body leaderboard", C.muted);
+    tag.forEach((l, i) => { for (const m of l.matchAll(/\S+/g)) annotate(args, (padC + Math.round((leftW - TW) / 2) + m.index) * CW, (padR + R + 2 + i) * LH + ASC, m[0], C.muted); });
     let sat = 0, bonds = 0;
     for (let r = 0; r < LR; r++) for (let c = 0; c < LK; c++) {
       if (c + 1 < LK) { bonds++; if (a[r][c] !== a[r][c + 1]) sat++; }
       if (r + 1 < LR) { bonds++; if (a[r][c] !== a[r + 1][c]) sat++; }
     }
     const order = Math.max(0, 2 * (sat / bonds - 0.5));
-    annotate(args, latC * CW, (padR + R + 1) * LH + ASC, `T ${x < 0.55 ? "↓" : "↑"}   order ${"█".repeat(Math.round(order * 12)).padEnd(12, "░")}`, C.muted);
+    args.push("-pointsize", String(FS * FO));                              // centred under the grid
+    annotate(args, (latC + (gridW - ORDER * FO) / 2) * CW, (latR + LR * F2 + 1) * LH + ASC * FO,
+      `T ${x < 0.55 ? "↓" : "↑"}   order ${"█".repeat(Math.round(order * 12)).padEnd(12, "░")}`, C.muted);
     args.push("-pointsize", String(FS * F2));
     const amp = (0.6 + 2.6 * Math.min(1, T / 2.5)) * S;                    // px: ~1 cold, ~6 hot (at 2x)
     for (let r = 0; r < LR; r++) for (let c = 0; c < LK; c++) {

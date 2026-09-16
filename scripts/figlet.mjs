@@ -1,6 +1,6 @@
 // Minimal figlet renderer for scripts/ascii.mjs: .flf parsing, horizontal full-width / kerning /
 // smushing per the font's own layout (figlet.c rules 1-6 + universal), one line, left to right.
-// Fonts live in scripts/fonts/ (Alpha by Lennert Stock; Ticks Slant by Victor Parada), unmodified.
+// Fonts live in scripts/fonts/ (Alpha by Lennert Stock; Ticks Slant by Victor Parada; Small Block), unmodified.
 import { readFileSync } from "node:fs";
 
 export function loadFont(file) {
