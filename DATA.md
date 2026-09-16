@@ -196,7 +196,7 @@ came from:
 - `source_file` is committed under `sources/`, and every ` | `-separated part of
   `reported_as` appears in it verbatim, so each value can be checked from a clone.
 - `conversion` is the convention the source states its variance in (`var_total_pauli`,
-  `var_total_SS`, `var_over_n_SS`, `var_over_n2_SS`, `v_score`), converted to the stored
+  `var_as_stored`, `var_total_SS`, `var_over_n_SS`, `var_over_n2_SS`, `v_score`), converted to the stored
   convention once, in [`scripts/add_error_metrics.mjs`](scripts/add_error_metrics.mjs).
 
 A source's number is attached only if its energy agrees with the row's within two combined

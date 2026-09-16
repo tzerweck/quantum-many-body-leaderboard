@@ -19,7 +19,9 @@
 //
 // Conventions a source may state its variance in, converted once here (spin models store
 // Pauli totals, so an S.S variance of the total energy is x16):
-//   var_total_pauli   Var(H) of the stored total energy
+//   var_total_pauli   Var(H) of the stored total energy (spin models)
+//   var_as_stored     Var(H) of the total energy in the instance's stored convention, any
+//                     model (Hubbard stores totals as printed, so no factor applies)
 //   var_total_SS      Var(H) in S.S units
 //   var_over_n_SS     Var(H)/N in S.S units, the "rescaled energy variance sigma^2/N"
 //   var_over_n2_SS    Var(H)/N^2 in S.S units, the variance of the local energy per site
@@ -36,7 +38,8 @@ function varianceTotal(e, inst) {
   const n = inst.n_sites;
   const toPauli = SPIN_MODELS.has(inst.model) && inst.model !== "TFIsing" ? 16 : null;
   switch (e.variance_convention) {
-    case "var_total_pauli": return e.variance;
+    case "var_total_pauli": return SPIN_MODELS.has(inst.model) ? e.variance : null;
+    case "var_as_stored": return e.variance;
     case "var_total_SS": return toPauli && e.variance * toPauli;
     case "var_over_n_SS": return toPauli && e.variance * n * toPauli;
     case "var_over_n2_SS": return toPauli && e.variance * n * n * toPauli;
