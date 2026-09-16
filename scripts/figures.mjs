@@ -1,7 +1,8 @@
 // Generate figures/*.svg - the README numbers, drawn. The drawing kit is chart.mjs.
 import { isSampled, recordEligible, perSiteDivisor, perSiteLabel } from "./units.mjs";
 import { collect, recordOf } from "./summary.mjs";
-import { sourceOf, sources } from "./enrich_sources.mjs";
+import { sources } from "./enrich_sources.mjs";
+import { citeRef, paperYear } from "./cite.mjs";
 import { CONTESTED, FAMILIES, family, variationalRows } from "./views.mjs";
 import { W, PAD, n, text, hline, hbar, vbar, onFill, dot, legend, header, footnote, doc, textWidth, pct, niceStep, writer, shortLabel } from "./chart.mjs";
 
@@ -11,7 +12,7 @@ const instances = collect();
 const byId = new Map(instances.map(i => [i.instance_id, i]));
 const { write, written } = writer(OUT);
 
-const yearOf = r => sourceOf(r, cache)?.year ?? null;
+const yearOf = r => paperYear(r, cache);
 
 // ---------------------------------------------------------- 1. the record over time
 // Curated like the README frontier table, and for the same reason: these are the two
@@ -307,7 +308,7 @@ write("error-metrics", t => {
 write("records-by-year", t => {
   const recs = instances.map(recordOf).filter(r => r?.bound_type === "variational");
   const dated = recs.map(yearOf).filter(Boolean);
-  const noPaper = recs.filter(r => !sourceOf(r, cache)).length;
+  const noPaper = recs.filter(r => citeRef(r, cache).note === "no paper cited").length;
   const y0 = Math.min(...dated), y1 = Math.max(...dated);
   const years = Array.from({ length: y1 - y0 + 1 }, (_, k) => y0 + k);
   const count = years.map(y => dated.filter(d => d === y).length);

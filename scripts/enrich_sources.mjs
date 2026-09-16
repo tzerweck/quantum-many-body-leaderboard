@@ -160,9 +160,24 @@ export function sources() {
   return base;
 }
 
-// The metadata for a row, or null when its reference names no paper at all.
+// The identifier of the paper a row's number is from, or null. Not simply the first
+// identifier in the reference: a quoted row names the original and then where it was read,
+// "Y. Nomura and M. Imada, Phys. Rev. X 11, 031034 (2021) (cited as ref [7] in Table I of
+// arXiv:2211.07749)", and when the original carries no identifier of its own the first one
+// in the string is the quoting paper's. Until 2026-09-16 the site and the README credited
+// such numbers to the quoting paper's authors (Nomura & Imada's as "Roth et al. (2022)").
+// So a "(cited ... )" or "(quoted ... )" clause is cut before looking, and an identifier
+// that verified.secondary_of names as the quoting source is refused as well, which covers
+// the clause-less forms ("arXiv:1903.06713 (footnote [39] there)").
+const QUOTING = /\([^()]*\b(?:cited|quoted)\b[^()]*\)/gi;
+export function paperOf(row) {
+  const id = identify((row.reference || "").replace(QUOTING, ""));
+  return id && !(row.verified?.secondary_of || "").includes(id.arxiv ?? id.doi) ? id : null;
+}
+
+// The metadata for a row's paper, or null when the reference names none we can resolve.
 export function sourceOf(row, cache = sources()) {
-  const id = identify(row.reference);
+  const id = paperOf(row);
   return id ? cache[id.key] ?? null : null;
 }
 

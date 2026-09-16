@@ -21,8 +21,8 @@ import path from "node:path";
 import { perSiteDivisor, perSiteLabel, isSampled, recordEligible } from "./units.mjs";
 import { collect, recordOf, summarize, rowId } from "./summary.mjs";
 import { THEMES } from "./chart.mjs";
-import { citeRef } from "./cite.mjs";
-import { sources, sourceOf } from "./enrich_sources.mjs";
+import { citeRef, paperYear } from "./cite.mjs";
+import { sources } from "./enrich_sources.mjs";
 import { quote, marks, shorten, MODELS, BOUNDARY, instanceLabel, byGeometry, noRecordReason, gapAbove } from "./readme_table.mjs";
 import { logoSvg, faviconSvg, LOGO_CSS } from "./logo.mjs";
 
@@ -139,7 +139,7 @@ function redirectPage(url, target, title) {
 // ------------------------------------------------------------------------------- data
 const instUrl = inst => `/i/${inst.instance_id}/`;
 const jsonUrl = inst => `/api/i/${inst.instance_id}.json`;
-const yearOf = r => sourceOf(r, cache)?.year ?? null;
+const yearOf = r => paperYear(r, cache);
 
 const BOUND_ORDER = ["variational", "projected", "extrapolated", "exact", null];
 const BOUND_LABEL = {
@@ -178,7 +178,7 @@ function energyCell(row, inst, decimals) {
 function citeHtml(row) {
   const r = citeRef(row, cache);
   const link = r.url ? `<a href="${esc(r.url)}">${esc(r.text)}</a>` : esc(r.text);
-  return r.note ? `${link}<span class="muted">, ${r.note}</span>` : link;
+  return r.note ? `${link}<span class="muted">, ${esc(r.note)}</span>` : link;
 }
 
 // What the instance page says about its own currency: when the newest number here was
@@ -301,8 +301,9 @@ function rowCard(r, inst) {
   return `<b>${esc(modelName(inst.model))} ${esc(instanceLabel(inst))}</b>
 <span>${esc(shorten(r.method, 90))}</span>
 <span class="e">${energyCell(r, inst)} <span class="muted">${perSiteLabel(inst)} &middot; ${BOUND_SHORT[String(r.bound_type ?? null)]}</span>${recordOf(inst) === r ? '<span class="tag">record</span>' : ""}</span>
-<span class="muted">${esc(citeRef(r, cache).text)}</span>`;
+<span class="muted">${cardSource(r)}</span>`;
 }
+const cardSource = r => { const c = citeRef(r, cache); return esc(c.note ? `${c.text}, ${c.note}` : c.text); };
 
 // One card per row a figure links to, in a <template> so it is neither rendered nor read
 // out; the script below moves a card into the floating box while its mark is hovered.
