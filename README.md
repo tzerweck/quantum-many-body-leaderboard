@@ -7,6 +7,7 @@
 [![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.22753734-1682D4)](https://doi.org/10.5281/zenodo.22753734)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 [![entries](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Ftzerweck%2Fquantum-many-body-leaderboard%2Fmain%2Fdata%2F_summary.json&query=%24.rows&label=entries&color=success)](data/_summary.json)
+[![status: beta](https://img.shields.io/badge/status-beta-eb6834)](#details)
 
 **A live record of SOTA published ground-state energies for lattice Hamiltonians.**
 
