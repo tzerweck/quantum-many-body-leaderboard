@@ -188,9 +188,6 @@ function main() {
   lines.push(`And **${s.no_error_metrics} energies carry no error metric we could find** (&#9675;). Those numbers stay in the`);
   lines.push("table and in the ranking; the marker only says the energy still needs verification or a word");
   lines.push("from the people who produced it.");
-  lines.push("");
-  lines.push("More views of the same data (which records nobody has ever challenged, which have stood");
-  lines.push("longest, and whether symmetrising actually wins) are in [the back pages](STATS.md).");
 
   const readme = fs.readFileSync("README.md", "utf8");
   const i = readme.indexOf(BEGIN);

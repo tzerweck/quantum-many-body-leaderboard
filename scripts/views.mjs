@@ -1,11 +1,11 @@
-// Definitions shared by the views of the table: STATS.md (stats.mjs), the figures
-// (figures.mjs), the README leaderboard (readme_table.mjs) and the site (site.mjs). A
+// Definitions shared by the views of the table: the figures (figures.mjs), the README
+// leaderboard (readme_table.mjs) and the site (site.mjs). A
 // chart that counted "contested" or "tensor network" differently from the table printed
 // beside it would contradict that table, so all of them import these rather than keeping
 // a copy each.
 
 // A record on an instance nobody else has attempted says something very different from
-// a record won against nine rivals. "Contested" is the cut used throughout both views.
+// a record won against nine rivals. "Contested" is the cut used throughout.
 export const CONTESTED = 5;
 
 // The instances the field actually competes on, in the order they are shown. Curated,

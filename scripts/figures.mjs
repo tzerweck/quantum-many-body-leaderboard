@@ -1,4 +1,4 @@
-// Generate figures/*.svg - the README and STATS.md numbers, drawn.
+// Generate figures/*.svg - the README numbers, drawn.
 //
 // Every figure is written twice, light and dark. GitHub chooses between the two with a
 // <picture> element keyed on the viewer's GitHub theme; an SVG that switched itself on
@@ -351,7 +351,7 @@ write("record-status", t => {
     });
   });
   const fn = footnote(t, "Bar length is the number of instances. A record is the lowest eligible variational energy; " +
-    `"rows" counts every published row on the instance, the same cut STATS.md calls contested.`, top + models.length * pitch + 20);
+    `"rows" counts every published row on the instance; ${CONTESTED} or more is contested.`, top + models.length * pitch + 20);
   parts.push(fn.svg);
   return doc(t, fn.bottom + 24, "Record status of every instance, by model",
     models.map(m => `${MODELS[m.m] ?? m.m}: ${STATUS.map(([k, label]) => `${label} ${m.by[k]}`).join(", ")}`).join("; "), parts);

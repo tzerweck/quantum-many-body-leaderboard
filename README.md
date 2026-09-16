@@ -433,9 +433,6 @@ And **185 energies carry no error metric we could find** (&#9675;). Those number
 table and in the ranking; the marker only says the energy still needs verification or a word
 from the people who produced it.
 
-More views of the same data (which records nobody has ever challenged, which have stood
-longest, and whether symmetrising actually wins) are in [the back pages](STATS.md).
-
 <!-- END LEADERBOARD -->
 
 Check [RULES.md](RULES.md) for how a record is decided. What a row contains, the
@@ -457,9 +454,8 @@ record.
 
 ## Figures
 
-Drawn from `data/` on every build by [`scripts/figures.mjs`](scripts/figures.mjs). The
-tables behind them are in [STATS.md](STATS.md), and all six figures are in
-[`figures/`](figures/).
+Drawn from `data/` on every build by [`scripts/figures.mjs`](scripts/figures.mjs); all six
+are in [`figures/`](figures/).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="figures/record-over-time-dark.svg">
