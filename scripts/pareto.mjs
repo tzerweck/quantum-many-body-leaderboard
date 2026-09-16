@@ -13,11 +13,12 @@
 //
 // The reference is the exact energy where one exists, else the record (as in
 // size_accuracy.mjs); a row that is itself the record has no distance and sits in the
-// band under the axis. Nothing here says how converged a record is.
+// column at the left. Distance runs along x and cost up y, as in the size figures.
+// Nothing here says how converged a record is.
 import { recordEligible } from "./units.mjs";
 import { collect, recordOf, exactRecordOf } from "./summary.mjs";
 import { FAMILIES, family } from "./views.mjs";
-import { W, PAD, n, text, hline, dot, legend, header, footnote, doc, textWidth, writer } from "./chart.mjs";
+import { W, PAD, n, text, hline, dot, legend, header, footnote, doc, textWidth, writer, log, logScale, pow10 } from "./chart.mjs";
 
 const OUT = "figures";
 const instances = collect();
@@ -78,47 +79,43 @@ for (const inst of instances) {
 const present = [...FAMILIES.map(f => f[0]), "other"].filter(f => pts.some(p => p.fam === f));
 const slot = new Map(present.map((f, k) => [f, k < 4 ? k : null]));
 
-const SUP = { "-": "⁻", 0: "⁰", 1: "¹", 2: "²", 3: "³", 4: "⁴", 5: "⁵", 6: "⁶", 7: "⁷", 8: "⁸", 9: "⁹" };
-const pow10 = k => "10" + String(k).split("").map(c => SUP[c]).join("");
-const log = Math.log10;
-
 write("energy-vs-compute", t => {
   const h = header(t, "What a published energy cost, against how far it sits from the reference",
     `${pts.length} energies whose papers state what they cost in GPU-hours (${stated}) or as a device count and a wall-clock (${derived}), ` +
-    "on the instances they were computed for. Distance is from the exact energy where one exists, else from the record; a record holder sits in the band under the axis.");
+    "on the instances they were computed for. Distance is from the exact energy where one exists, else from the record; a record holder sits in the column at the left.");
   const items = present.map(f => ({ kind: "dot", color: slot.get(f) == null ? t.recessive[1] : t.series[slot.get(f)], label: f }));
   const lg = legend(t, [...items, { kind: "ring", color: t.ink2, label: "GPU-hours derived from devices × wall-clock" }], h.bottom + 34);
-  const top = lg.bottom + 28, bottom = top + 320, band = bottom + 46, left = PAD + 62, right = W - PAD - 8;
+  const top = lg.bottom + 28, bottom = top + 340, column = PAD + 16, left = PAD + 96, right = W - PAD - 8;
   const hs = pts.map(p => p.hours);
-  const x0 = 10 ** Math.floor(log(Math.min(...hs))), x1 = 10 ** Math.ceil(log(Math.max(...hs)));
+  const y0 = 10 ** Math.floor(log(Math.min(...hs))), y1 = 10 ** Math.ceil(log(Math.max(...hs)));
   const gaps = pts.filter(p => !p.holder).map(p => p.gap);
-  const y0 = 10 ** Math.floor(log(Math.min(...gaps))), y1 = 10 ** Math.ceil(log(Math.max(...gaps)));
-  const X = v => left + ((log(v) - log(x0)) / (log(x1) - log(x0))) * (right - left);
-  const Y = v => bottom - ((log(v) - log(y0)) / (log(y1) - log(y0))) * (bottom - top);
+  const x0 = 10 ** Math.floor(log(Math.min(...gaps))), x1 = 10 ** Math.ceil(log(Math.max(...gaps)));
+  const X = logScale(x0, x1, left, right), Y = logScale(y0, y1, bottom, top);
   const parts = [h.svg, lg.svg];
-  for (let k = log(y0); k <= log(y1); k++) {
-    parts.push(hline(left, right, Y(10 ** k), t.grid));
-    parts.push(text(left - 8, Y(10 ** k) + 4, pow10(k), { size: 11, fill: t.muted, anchor: "end", nums: true }));
-  }
-  for (let k = log(x0); k <= log(x1); k++)
+  for (let k = log(x0); k <= log(x1); k++) {
+    parts.push(`<path d="M${n(X(10 ** k))} ${n(top)}V${n(bottom)}" stroke="${t.grid}" stroke-width="1"/>`);
     parts.push(text(X(10 ** k), bottom + 18, pow10(k), { size: 11, fill: t.muted, anchor: "middle", nums: true }));
-  parts.push(text((left + right) / 2, bottom + 36, "GPU-hours, as reported (device model in the row)", { size: 12, fill: t.ink2, anchor: "middle" }));
-  parts.push(`<text transform="translate(${n(left - 46)} ${n((top + bottom) / 2)}) rotate(-90)" font-size="12" fill="${t.ink2}" text-anchor="middle">relative distance from the reference</text>`);
-  parts.push(hline(left, right, band + 18, t.grid));
-  parts.push(text(left - 8, band + 22, "holds the record", { size: 9.5, fill: t.muted, anchor: "end" }));
+  }
+  parts.push(hline(left, right, bottom, t.grid));
+  for (let k = log(y0); k <= log(y1); k++)
+    parts.push(text(left - 8, Y(10 ** k) + 4, pow10(k), { size: 11, fill: t.muted, anchor: "end", nums: true }));
+  parts.push(text((left + right) / 2, bottom + 38, "relative distance from the reference", { size: 12, fill: t.ink2, anchor: "middle" }));
+  parts.push(`<text transform="translate(${n(left - 46)} ${n((top + bottom) / 2)}) rotate(-90)" font-size="12" fill="${t.ink2}" text-anchor="middle">GPU-hours, as reported (device model in the row)</text>`);
+  parts.push(`<path d="M${n(column)} ${n(top)}V${n(bottom)}" stroke="${t.grid}" stroke-width="1"/>`);
+  parts.push(`<text transform="translate(${n(column - 6)} ${n(bottom)}) rotate(-90)" font-size="9.5" fill="${t.muted}">holds the record</text>`);
 
   const color = p => slot.get(p.fam) == null ? t.recessive[1] : t.series[slot.get(p.fam)];
-  const placed = pts.map(p => ({ p, x: X(p.hours), y: p.holder ? band + 18 : Y(p.gap) }));
+  const placed = pts.map(p => ({ p, x: p.holder ? column : X(p.gap), y: Y(p.hours) }));
   // The rows of one instance are joined by a faint line in order of cost - the
   // per-instance trade-off, which is what a Pareto view is - and the instance is named once,
-  // at its costliest row. Names are nudged apart vertically where two would overlap.
+  // beside its costliest row. Names are nudged apart vertically where two would overlap.
   const byInst = Map.groupBy(placed.filter(q => !q.p.holder), q => q.p.inst.instance_id);
   const labels = [];
   for (const qs of byInst.values()) {
-    qs.sort((a, b) => a.x - b.x);
+    qs.sort((a, b) => a.y - b.y);
     if (qs.length > 1) parts.push(`<path d="${qs.map((q, k) => `${k ? "L" : "M"}${n(q.x)} ${n(q.y)}`).join("")}" fill="none" stroke="${t.recessive[0]}" stroke-width="1.5"/>`);
-    const q = qs.at(-1), s = instLabel(q.p.inst), w = textWidth(s, 11), rightSide = q.x + 10 + w <= right;
-    labels.push({ s, w, x: rightSide ? q.x + 10 : qs[0].x - 10, anchor: rightSide ? "start" : "end", y: q.y + 4 });
+    const q = qs[0], s = instLabel(q.p.inst), w = textWidth(s, 11), rightSide = q.x + 10 + w <= right;
+    labels.push({ s, w, x: rightSide ? q.x + 10 : q.x - 10, anchor: rightSide ? "start" : "end", y: q.y + 4 });
   }
   for (const q of placed) parts.push(dot(t, q.x, q.y, color(q.p), !q.p.derived));
   labels.sort((a, b) => a.y - b.y);
@@ -129,10 +126,10 @@ write("energy-vs-compute", t => {
     if (c0 < p1 && p0 < c1 && cur.y - prev.y < 13) cur.y = prev.y + 13;
   }
   for (const l of labels) parts.push(text(l.x, l.y, l.s, { size: 11, fill: t.ink2, anchor: l.anchor }));
-  // Record holders are listed in a line under the band rather than labelled at their marks.
-  const holders = placed.filter(q => q.p.holder).sort((a, b) => a.x - b.x)
+  // Record holders are listed under the plot rather than labelled at their marks.
+  const holders = placed.filter(q => q.p.holder).sort((a, b) => b.y - a.y)
     .map(q => `${instLabel(q.p.inst)} (${q.p.r.method.split(/\s*[(,]/)[0].trim()}, ${Math.round(q.p.hours)} GPU-h${q.p.derived ? ", derived" : ""})`);
-  const hl = holders.length ? footnote(t, `Record holders, left to right: ${holders.join("; ")}.`, band + 44) : { svg: "", bottom: band + 18 };
+  const hl = holders.length ? footnote(t, `Record holders, cheapest first: ${holders.join("; ")}.`, bottom + 66) : { svg: "", bottom: bottom + 40 };
   parts.push(hl.svg);
 
   const fn = footnote(t, `Stored fields are never derived: a row stating "20 A100 for four days" carries those facts and no GPU-hours, and the product is taken here, ` +
