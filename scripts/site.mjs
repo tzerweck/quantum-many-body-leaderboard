@@ -22,7 +22,6 @@ import { logoSvg, faviconSvg, LOGO_CSS } from "./logo.mjs";
 const OUT = "_site";
 const REPO = "https://github.com/tzerweck/quantum-many-body-leaderboard";
 const DOI = "10.5281/zenodo.22753734";
-const VERSION_DOI = "10.5281/zenodo.22753735";
 const SNAPSHOT = "varbench@2024-10-22";
 const BUILT = new Date().toISOString().slice(0, 10);
 
@@ -387,7 +386,7 @@ The rules are in <a href="/rules/">RULES.md</a>, the row format in <a href="/dat
   <h2>Citing QMBL</h2>
   <p>Cite the dataset by its concept DOI, which always resolves to the latest release:</p>
   <p>T. Zerweck, <i>QMBL - the Quantum Many-Body Leaderboard</i>, v0.1.0, Zenodo (2026).
-  <a href="https://doi.org/${VERSION_DOI}"><code>${VERSION_DOI}</code></a></p>
+  <a href="https://doi.org/${DOI}"><code>${DOI}</code></a></p>
   <p>Individual energies should cite the primary paper named on the row, not this site.</p>
 </section>`;
   return page({
