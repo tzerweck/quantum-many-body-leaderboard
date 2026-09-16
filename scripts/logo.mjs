@@ -10,8 +10,9 @@
 //                             | |
 //   o-o  .       o-o  .       o o  .
 //
-// Also generates figures/logo-neel.svg (+ -dark): the README animation, a 4x4 grid of text
-// arrows scrambling and settling into a Neel checkerboard - the same idea in ASCII.
+// Also generates figures/banner.svg (+ -dark): the README header, the same animated mark next
+// to the wordmark, self-contained (an SVG shown as an image sees neither the page's CSS nor
+// its colour scheme, hence one file per scheme).
 //
 //   node scripts/logo.mjs        writes the figures; site.mjs imports the functions.
 //
@@ -44,12 +45,13 @@ function startAngle([ra], [lo, hi], i) {
   return f(r0);
 }
 
-function sites(staticFavicon) {
+// the unpaired site is a ring, so the mark needs no background colour
+function sites() {
   const out = [];
-  for (const y of P) for (const x of P) {
-    out.push(`<circle class="dt" cx="${x}" cy="${y}" r="2.4"/>`);
-    if (x === HOLE.cx && y === HOLE.cy) out.push(`<circle class="hl" cx="${x}" cy="${y}" r="${staticFavicon ? 1.4 : 1.3}"/>`);
-  }
+  for (const y of P) for (const x of P)
+    out.push(x === HOLE.cx && y === HOLE.cy
+      ? `<circle class="dt hl" cx="${x}" cy="${y}" r="1.8"/>`
+      : `<circle class="dt" cx="${x}" cy="${y}" r="2.4"/>`);
   return out.join("\n");
 }
 
@@ -69,15 +71,15 @@ export function logoSvg() {
   return `<svg class="logo" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
 ${frame.join("\n")}
 ${needles.join("\n")}
-${sites(false)}
+${sites()}
 </svg>`;
 }
 
-// Uses the site's palette variables (--ink, --bg, --accent, --grid).
+// Uses the site's palette variables (--ink, --accent, --grid).
 export const LOGO_CSS = `
 .logo { display: inline-block; vertical-align: middle; overflow: visible; }
 .logo .dt { fill: var(--ink); animation: logo-dt 12s infinite; }
-.logo .hl { fill: var(--bg); }
+.logo .hl { fill: none; stroke: var(--ink); stroke-width: 1.2; }
 .logo .fr { stroke: var(--grid); stroke-width: 1; stroke-linecap: round;
   animation: logo-fr 4s ease-in-out infinite; animation-delay: var(--d3); }
 .logo .nd { transform: rotate(var(--ra)); animation: logo-nd 12s infinite; animation-delay: var(--d); }
@@ -106,83 +108,45 @@ export function faviconSvg() {
     `<line class="bd" x1="${n.px}" y1="${n.py}" x2="${f(n.px + 10 * Math.cos(n.r[0] * Math.PI / 180))}" y2="${f(n.py + 10 * Math.sin(n.r[0] * Math.PI / 180))}"/>`);
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
 <style>
-.dt { fill: #0b0b0b } .hl { fill: #fcfcfb } .bd { stroke: #2a78d6; stroke-width: 3.2; stroke-linecap: round }
-@media (prefers-color-scheme: dark) { .dt { fill: #ffffff } .hl { fill: #1a1a19 } .bd { stroke: #3987e5 } }
+.dt { fill: #0b0b0b } .hl { fill: none; stroke: #0b0b0b; stroke-width: 1.2 } .bd { stroke: #2a78d6; stroke-width: 3.2; stroke-linecap: round }
+@media (prefers-color-scheme: dark) { .dt { fill: #ffffff } .hl { stroke: #ffffff } .bd { stroke: #3987e5 } }
 </style>
 ${bonds.join("\n")}
-${sites(true)}
+${sites()}
 </svg>
 `;
 }
 
-// ------------------------------------------------------------------ README: arrows settling into Neel order
-// Text-only, so it works wherever an SVG renders as an image (GitHub proxies README images
-// through camo, which keeps CSS animations but not scripts). Every arrow is positioned on
-// its own cell centre, so the grid does not depend on the viewer's monospace font.
-export function asciiNeelSvg({ dark = false } = {}) {
-  const ink = dark ? "#ffffff" : "#0b0b0b", accent = dark ? "#3987e5" : "#2a78d6", muted = "#898781";
-  const N = 4, ARROWS = ["↑", "→", "↓", "←"];
-  let s = 7;                                                 // tiny deterministic PRNG
-  const rnd = () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
-  const order = [...Array(N * N).keys()].sort(() => rnd() - 0.5);       // who settles when
-  const settleAt = order.map((k, i) => 5 + Math.floor(i * 1.5));       // by site index k
-  const dissolveAt = order.map(() => 0);
-  order.forEach((k, i) => { dissolveAt[k] = 2 + Math.floor(i * 0.5); });
-  const target = k => ((k % N) + Math.floor(k / N)) % 2 === 0 ? 0 : 2;  // up on one sublattice
-  const settledFrame = Math.max(...settleAt) + 1;
+// ------------------------------------------------------------------ README banner: mark + wordmark
+const PALETTE = {
+  light: { bg: "#fcfcfb", ink: "#0b0b0b", muted: "#898781", grid: "#e1e0d9", accent: "#2a78d6" },
+  dark:  { bg: "#1a1a19", ink: "#ffffff", muted: "#898781", grid: "#2c2c2a", accent: "#3987e5" },
+};
+const SERIF = `"Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif`;
+const SANS = `ui-sans-serif, system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif`;
 
-  // frame list: [duration in s, cell states]; state = {ch, col}
-  const frames = [];
-  const push = (dur, cells) => frames.push([dur, cells]);
-  const dot = { ch: "·", col: muted };
-  push(0.5, Array(N * N).fill({ ch: " ", col: muted }));
-  push(0.3, Array(N * N).fill(dot));
-  let prev = Array(N * N).fill(-1);
-  for (let t = 0; t < settledFrame; t++) {
-    const cells = [];
-    for (let k = 0; k < N * N; k++) {
-      if (t >= settleAt[k]) cells.push({ ch: ARROWS[target(k)], col: target(k) === 0 ? accent : ink });
-      else if (t < 2) cells.push(dot);
-      else {
-        let a; do { a = Math.floor(rnd() * 4); } while (a === prev[k]);
-        prev[k] = a;
-        cells.push({ ch: ARROWS[a], col: muted });
-      }
-    }
-    push(0.11, cells);
-  }
-  frames[frames.length - 1][0] = 2.2;                                   // hold the ordered state
-  const dissolveEnd = Math.max(...dissolveAt) + 1;
-  for (let t = 0; t < dissolveEnd; t++) {
-    push(0.09, [...Array(N * N).keys()].map(k => t >= dissolveAt[k] ? dot
-      : { ch: ARROWS[target(k)], col: target(k) === 0 ? accent : ink }));
-  }
-  push(0.4, Array(N * N).fill(dot));
-
-  const T = frames.reduce((a, [d]) => a + d, 0);
-  const cell = 22, pad = 12, size = pad * 2 + N * cell;
-  let t0 = 0, css = "", body = "";
-  frames.forEach(([dur, cells], i) => {
-    const a = f(t0 / T * 100), b = f((t0 + dur) / T * 100);
-    t0 += dur;
-    css += `.f${i}{animation:f${i} ${f(T)}s step-end infinite}@keyframes f${i}{0%,${a}%{opacity:0}${a === 0 ? "0.001" : a}%,${b}%{opacity:1}${b}%,100%{opacity:0}}\n`;
-    const spans = cells.map((c, k) => c.ch === " " ? "" :
-      `<text x="${pad + (k % N) * cell + cell / 2}" y="${pad + Math.floor(k / N) * cell + cell * 0.74}" fill="${c.col}">${c.ch}</text>`).join("");
-    body += `<g class="f${i}" opacity="0">${spans}</g>\n`;
-  });
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" width="${size * 2}" height="${size * 2}" role="img" aria-label="Spins settling into Néel order">
+export function bannerSvg({ dark = false } = {}) {
+  const c = PALETTE[dark ? "dark" : "light"];
+  const W = 640, H = 128, M = 96;                       // mark M x M at the left
+  const mark = logoSvg().replace('<svg class="logo" viewBox="0 0 32 32"',
+    `<svg class="logo" x="16" y="${(H - M) / 2}" width="${M}" height="${M}" viewBox="0 0 32 32" overflow="visible"`);
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="QMBL, the quantum many-body leaderboard">
 <style>
-text { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace; font-size: 20px; text-anchor: middle; }
-${css}@media (prefers-reduced-motion: reduce) { g { animation: none !important; } .f${settledFrame + 1} { opacity: 1 !important; } }
-</style>
-${body}</svg>
+svg { --ink: ${c.ink}; --muted: ${c.muted}; --grid: ${c.grid}; --accent: ${c.accent}; }
+.name { font-family: ${SERIF}; font-size: 46px; font-weight: 600; letter-spacing: 0.02em; fill: var(--ink); }
+.sub  { font-family: ${SANS}; font-size: 15.5px; letter-spacing: 0.1em; text-transform: uppercase; fill: var(--muted); }
+${LOGO_CSS}</style>
+${mark}
+<text class="name" x="136" y="66">QMBL</text>
+<text class="sub" x="138" y="92">the quantum many-body leaderboard</text>
+</svg>
 `;
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-  fs.writeFileSync(path.join(root, "figures/logo-neel.svg"), asciiNeelSvg());
-  fs.writeFileSync(path.join(root, "figures/logo-neel-dark.svg"), asciiNeelSvg({ dark: true }));
+  fs.writeFileSync(path.join(root, "figures/banner.svg"), bannerSvg());
+  fs.writeFileSync(path.join(root, "figures/banner-dark.svg"), bannerSvg({ dark: true }));
   fs.writeFileSync(path.join(root, "figures/logo.svg"), faviconSvg());
-  console.log("wrote figures/logo-neel.svg, figures/logo-neel-dark.svg, figures/logo.svg");
+  console.log("wrote figures/banner.svg, figures/banner-dark.svg, figures/logo.svg");
 }
