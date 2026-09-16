@@ -6,8 +6,7 @@
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 [![entries](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Ftzerweck%2Fquantum-many-body-leaderboard%2Fmain%2Fdata%2F_summary.json&query=%24.rows&label=entries&color=success)](data/_summary.json)
 
-**A record book of the SOTA ground-state energies in quantum many-body
-physics.**
+SOTA ground-state energies.
 
 This is the literature organised to serve fellow researchers and AI. 
 
@@ -410,28 +409,15 @@ So that we can see the works of the wider research community at one glance.
 
 Every row in the dataset also contains a declared `bound_type` saying what kind of quantity the energy value actually is (either a strict variational bound, a fixed-node estimate or a zero-variance extrapolation) and if available the corresponding error metric.
 
-Energies are per site: spin models as `E/N (S.S)`, Hubbard as `E/site` (see
-[units and conventions](DATA.md#units-and-conventions)). **Bold** is the record under
-[the ranking rules](RULES.md#6-records-and-ties): the exact energy where the instance is
-solved, otherwise the lowest eligible variational bound. The last column is the closest
-variational challenger and how far above the record it sits, per site. 
+Also see [units and conventions](DATA.md#units-and-conventions) and [the ranking rules](RULES.md#6-records-and-ties). 
+**Bold** is the record: the exact energy where the instance is solved, otherwise the lowest
+eligible variational bound. The last column is the closest variational challenger and how far above the record it sits, per site. 
 **&#9675;** marks a row where **we found no error
 metric** (neither an error bar nor an energy variance) in the source we read; 
 **&dagger;** marks a
 sampled energy with a variance but no error bar. 
 Both rows stay in the table and in rank
 order; the marker is an open question regarding ambiguous information (see [error metrics](DATA.md#error-metrics)).
-
-Across the whole table: **333 of 341 instances have a record**, from 1199 energies:
-228 are solved, so the exact energy is the state of the art there, and 105 are held
-by a variational bound. Of the 8 without one, 4 have only sampled rows without an error bar, 1 has every variational row flagged, 1 carries only sector-resolved exact rows, 2 have no variational row at all.
-Separately, **141 sampled variational energies across 84 instances carry no error bar**,
-so they are listed and rank for nothing, and 17 of them sit below their instance's current
-record. If one of those is your paper, the error bar is the only thing missing.
-
-And **185 energies carry no error metric we could find** (&#9675;). Those numbers stay in the
-table and in the ranking; the marker only says the energy still needs verification or a word
-from the people who produced it.
 
 <!-- END LEADERBOARD -->
 

@@ -157,7 +157,6 @@ function row(inst, label, cache) {
 
 function main() {
   const instances = collect();
-  const byId = new Map(instances.map(i => [i.instance_id, i]));
   const s = summarize(instances);
   const cache = sources();
 
@@ -176,47 +175,24 @@ function main() {
     lines.push("", ...HEADER, ...group.map(i => row(i, instanceLabel(i), cache)), "", "</details>", "");
   }
 
-  // Tristan's wording, written into the block on GitHub on 2026-09-15 and moved below the
-  // tables on 2026-09-16 (947bce2); kept here so the build does not erase it.
+  // Tristan's wording, written into the block on GitHub on 2026-09-15, moved below the
+  // tables and cut down on 2026-09-16 (947bce2, e8c6086); kept here so the build does not
+  // erase it. The one sentence on what the record and the last column are is the
+  // generator's, added the day exact energies began holding records.
   lines.push("Every row in the dataset also contains a declared `bound_type` saying what kind of quantity the energy value actually is (either a strict variational bound, a fixed-node estimate or a zero-variance extrapolation) and if available the corresponding error metric.");
-  const spin = perSiteLabel(byId.get("J1J2/square_100_P_0.5"));
-  const site = perSiteLabel(byId.get("Hubbard/square_256_P_112_8"));
   lines.push("");
-  lines.push(`Energies are per site: spin models as \`${spin}\`, Hubbard as \`${site}\` (see`);
-  lines.push("[units and conventions](DATA.md#units-and-conventions)). **Bold** is the record under");
-  // Tristan's wording and line breaks from the same GitHub edit; the record definition and
-  // the challenger column were added on 2026-09-16 when exact energies began holding records.
-  lines.push("[the ranking rules](RULES.md#6-records-and-ties): the exact energy where the instance is");
-  lines.push("solved, otherwise the lowest eligible variational bound. The last column is the closest");
-  lines.push("variational challenger and how far above the record it sits, per site. ");
+  lines.push("Also see [units and conventions](DATA.md#units-and-conventions) and [the ranking rules](RULES.md#6-records-and-ties). ");
+  lines.push("**Bold** is the record: the exact energy where the instance is solved, otherwise the lowest");
+  lines.push("eligible variational bound. The last column is the closest variational challenger and how far above the record it sits, per site. ");
   lines.push("**&#9675;** marks a row where **we found no error");
   lines.push("metric** (neither an error bar nor an energy variance) in the source we read; ");
   lines.push("**&dagger;** marks a");
   lines.push("sampled energy with a variance but no error bar. ");
   lines.push("Both rows stay in the table and in rank");
   lines.push("order; the marker is an open question regarding ambiguous information (see [error metrics](DATA.md#error-metrics)).");
-  lines.push("");
-  const b = s.blocked_on_sigma, r = s.records;
-  // The no-record reasons are a sentence, not a list, so each takes a verb that agrees
-  // with its count; zero counts are left out rather than printed as "0 have".
-  const v = (n, one, many) => `${n} ${n === 1 ? one : many}`;
-  const why = [
-    r.none_no_sigma && `${v(r.none_no_sigma, "has", "have")} only sampled rows without an error bar`,
-    r.none_flagged && `${v(r.none_flagged, "has", "have")} every variational row flagged`,
-    r.none_sector_only && `${v(r.none_sector_only, "carries", "carry")} only sector-resolved exact rows`,
-    r.none_no_variational && `${v(r.none_no_variational, "has", "have")} no variational row at all`,
-  ].filter(Boolean);
-  const without = s.instances - r.held;
-  lines.push(`Across the whole table: **${r.held} of ${s.instances} instances have a record**, from ${s.rows} energies:`);
-  lines.push(`${r.held_by_exact} are solved, so the exact energy is the state of the art there, and ${r.held_by_variational} are held`);
-  lines.push(`by a variational bound.${without ? ` Of the ${without} without one, ${why.join(", ")}.` : ""}`);
-  lines.push(`Separately, **${b.rows} sampled variational energies across ${b.instances} instances carry no error bar**,`);
-  lines.push(`so they are listed and rank for nothing, and ${b.would_take_record} of them sit below their instance's current`);
-  lines.push("record. If one of those is your paper, the error bar is the only thing missing.");
-  lines.push("");
-  lines.push(`And **${s.no_error_metrics} energies carry no error metric we could find** (&#9675;). Those numbers stay in the`);
-  lines.push("table and in the ranking; the marker only says the energy still needs verification or a word");
-  lines.push("from the people who produced it.");
+  // The table-wide counts (records held, solved, blocked on a missing error bar) were cut
+  // from the README by Tristan on 2026-09-16 (e8c6086); they live in data/_summary.json and
+  // on the site's front page, and the generator does not put them back.
 
   const readme = fs.readFileSync("README.md", "utf8");
   const i = readme.indexOf(BEGIN);
