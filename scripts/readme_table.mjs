@@ -173,10 +173,9 @@ function main() {
   for (const [model, name] of MODELS) {
     const group = instances.filter(i => i.model === model).sort(byGeometry);
     if (!group.length) continue;
-    const held = group.filter(i => recordOf(i)).length;
     // GitHub only renders a table inside <details> when a blank line follows <summary>.
     lines.push("<details>");
-    lines.push(`<summary><b>${name}</b>: ${group.length} instances, ${held} with a record, energies as <code>${perSiteLabel(group[0])}</code></summary>`);
+    lines.push(`<summary><b>${name}</b>: ${group.length} instances, energies as <code>${perSiteLabel(group[0])}</code></summary>`);
     lines.push("", ...HEADER, ...group.map(i => row(i, instanceLabel(i), cache)), "", "</details>", "");
   }
   const b = s.blocked_on_sigma;

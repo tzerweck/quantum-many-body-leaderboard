@@ -35,7 +35,7 @@ order; the marker is an open question regarding ambiguous information (see [erro
 ### All 341 instances (CLICK ME BELOW)
 
 <details>
-<summary><b>Heisenberg</b>: 96 instances, 35 with a record, energies as <code>E/N (S.S)</code></summary>
+<summary><b>Heisenberg</b>: 96 instances, energies as <code>E/N (S.S)</code></summary>
 
 | instance | record | method | closest challenger |
 |---|---|---|---|
@@ -139,7 +139,7 @@ order; the marker is an open question regarding ambiguous information (see [erro
 </details>
 
 <details>
-<summary><b>J1-J2</b>: 72 instances, 59 with a record, energies as <code>E/N (S.S)</code></summary>
+<summary><b>J1-J2</b>: 72 instances, energies as <code>E/N (S.S)</code></summary>
 
 | instance | record | method | closest challenger |
 |---|---|---|---|
@@ -219,7 +219,7 @@ order; the marker is an open question regarding ambiguous information (see [erro
 </details>
 
 <details>
-<summary><b>Hubbard</b>: 140 instances, 81 with a record, energies as <code>E/site</code></summary>
+<summary><b>Hubbard</b>: 140 instances, energies as <code>E/site</code></summary>
 
 | instance | record | method | closest challenger |
 |---|---|---|---|
@@ -367,7 +367,7 @@ order; the marker is an open question regarding ambiguous information (see [erro
 </details>
 
 <details>
-<summary><b>Spinless t-V</b>: 14 instances, 14 with a record, energies as <code>E/site</code></summary>
+<summary><b>Spinless t-V</b>: 14 instances, energies as <code>E/site</code></summary>
 
 | instance | record | method | closest challenger |
 |---|---|---|---|
@@ -389,7 +389,7 @@ order; the marker is an open question regarding ambiguous information (see [erro
 </details>
 
 <details>
-<summary><b>Transverse-field Ising</b>: 7 instances, 7 with a record, energies as <code>E/N (Pauli)</code></summary>
+<summary><b>Transverse-field Ising</b>: 7 instances, energies as <code>E/N (Pauli)</code></summary>
 
 | instance | record | method | closest challenger |
 |---|---|---|---|
@@ -404,7 +404,7 @@ order; the marker is an open question regarding ambiguous information (see [erro
 </details>
 
 <details>
-<summary><b>Impurity</b>: 12 instances, 12 with a record, energies as <code>E (total)</code></summary>
+<summary><b>Impurity</b>: 12 instances, energies as <code>E (total)</code></summary>
 
 | instance | record | method | closest challenger |
 |---|---|---|---|
