@@ -29,18 +29,30 @@ export const noErrorMetrics = r =>
   r.bound_type !== "exact" && r.sigma == null && r.energy_variance == null;
 
 // Sector-resolved exact diagonalization, as VarBench labels it: "Exact Diagonalization
-// Gamma.D6.A1 1" is the lowest state in ONE symmetry sector, not the ground state, so an
+// 0.C1.A -1" is the lowest state in ONE symmetry sector, not the ground state, so an
 // unconstrained variational energy may legitimately sit below it and it cannot stand in for
 // the instance's exact energy. One regex, used by the record, the validator and the table
 // matcher alike.
 export const SECTOR_RESOLVED = /[A-Z][0-9a-z]*\.[A-Z]/;
 
+// The one sector row that IS the ground state. J1J2/triangular_48_P_0.125 carries all 48
+// (k.irrep, spin-flip) sectors of the Sz = 0 space from Wietek et al., PRX 14, 021010, whose
+// App. B names Gamma.A1 (spin-flip +1) as the ground state; the qmbl-verify pass of
+// 2026-09-15 confirmed the number against the paper's own upload, and Tristan ruled on
+// 2026-09-16 (qmbl-verify DECISIONS.md, 3c) that this row stays and the other 47 move to a
+// per-instance spectrum record. Until that move lands the row is named here, because the
+// regex above cannot tell the ground-state sector from the others.
+const RULED_GROUND_STATE = new Set(["Exact Diagonalization Gamma.D6.A1 1"]);
+
+// Does this exact row state the ground-state energy, rather than a sector minimum?
+export const groundStateExact = r =>
+  r.bound_type === "exact" && (!SECTOR_RESOLVED.test(r.method || "") || RULED_GROUND_STATE.has(r.method));
+
 // An exact row that states the instance's ground-state energy: exact diagonalization, an
 // exact solution, or sign-problem-free QMC where that is established (RULES.md 4). Such a
 // row IS the record wherever one exists (RULES.md 6): the answer outranks every claim
 // about it. A flagged exact row is skipped like any other (6.1).
-export const exactEligible = r =>
-  r.bound_type === "exact" && !r.defect && !SECTOR_RESOLVED.test(r.method || "");
+export const exactEligible = r => groundStateExact(r) && !r.defect;
 
 // A row may hold its instance's VARIATIONAL record only if it is a strict variational
 // bound, carries no unresolved defect (RULES.md 6.1), and - when its energy was sampled -

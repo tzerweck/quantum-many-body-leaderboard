@@ -13,7 +13,7 @@
 // are decided by reading the paper (RULES.md 2, 5); this only says which paper to open.
 import fs from "node:fs";
 import path from "node:path";
-import { perSiteDivisor, recordEligible, SECTOR_RESOLVED } from "./units.mjs";
+import { perSiteDivisor, recordEligible, groundStateExact } from "./units.mjs";
 
 const tsv = f => {
   const [h, ...rest] = fs.readFileSync(f, "utf8").split("\n").filter(Boolean);
@@ -238,7 +238,7 @@ for (const inst of instances) {
   const recEps = rec.energy / div;
   // Sector-resolved ED rows are lowest-in-sector energies, not ground states, and are
   // excluded from the floor for the same reason validate.mjs excludes them.
-  const exactRow = sorted.find(r => r.bound_type === "exact" && !SECTOR_RESOLVED.test(r.method));
+  const exactRow = sorted.find(groundStateExact);
   const exactEps = exactRow ? exactRow.energy / div : null;
   const onInstance = inst.rows.map(r => r.energy / div);
   const fresh = inst.rows.some(r => r.source !== "varbench@2024-10-22");

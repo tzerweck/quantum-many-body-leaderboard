@@ -196,7 +196,7 @@ So that we can see the works of the wider research community at one glance.
 | square 18x18, J2 = 0.5 | **-0.49611(1)** | VMC + 1 Lanczos step Hu, Becca, Parola & Sorella, Dir | -0.49426 (+1.9e-3) VMC, p = 0 Lanczos steps Hu, Becca, Parola & Sorella, Dir |
 | square 18x18, J2 = 0.55 | **-0.48475(1)** | VMC + 1 Lanczos step Hu, Becca, Parola & Sorella, Dir | -0.48215 (+2.6e-3) VMC, p = 0 Lanczos steps Hu, Becca, Parola & Sorella, Dir |
 | square 20x20, J2 = 0.5 | **-0.4967987(6)** | CNN-MPS (h,D,l)=(32,15,20) [Fan et al. (2026)](https://doi.org/10.48550/arxiv.2603.14425) | -0.4967320 (+6.7e-5) ViT with symmetry restoration [Viteritti et al. (2026)](https://doi.org/10.48550/arxiv.2602.02665) |
-| triangular, 48 sites, J2 = 0.125 | no record | exact rows are sector-resolved, no ground-state energy stated | |
+| triangular, 48 sites, J2 = 0.125 | **-0.517314443433854(2)** | Exact Diagonalization Gamma.D6.A1 1 [Wietek et al. (2024)](https://doi.org/10.1103/physrevx.14.021010) | none |
 | triangular, 108 sites, J2 = 0.125 | **-0.51268(9)** | GCNN + Lanczos step [Roth et al. (2022)](https://doi.org/10.48550/arxiv.2211.07749) | -0.51175 (+9.3e-4) GCNN (deep group-equivariant CNN) [Roth et al. (2022)](https://doi.org/10.48550/arxiv.2211.07749) |
 | triangular 12x12, J2 = 0.125 | **-0.51218(9)** | GCNN + Lanczos step [Roth et al. (2022)](https://doi.org/10.48550/arxiv.2211.07749) | -0.51101 (+1.2e-3) GCNN (deep group-equivariant CNN) [Roth et al. (2022)](https://doi.org/10.48550/arxiv.2211.07749) |
 

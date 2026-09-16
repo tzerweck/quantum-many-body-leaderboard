@@ -248,13 +248,19 @@ arXiv:2604.25775's t′=−0.2 column reads as a 0.4% "record" against the t′=
 
 ### Accepted: 30 rows, 6 records, 1 new instance
 
+*Dated log, 2026-09-14.* "New record" below means the record under RULES.md §6 as it stood that
+day, when only a variational row could hold one. Since the amendment of 2026-09-16 the exact
+energy is the record wherever an instance has one, so on `triangular_36_P`, `square_36_P`,
+`square_100_P` and `square_100_O` these rows are the best variational bounds below an exact
+record, not the record. The table is left as written.
+
 | instance | row | source | via |
 |---|---|---|---|
 | `Heisenberg/triangular_36_P` | **−0.560313(3)** Group CNN, **new record**, was DMRG χ=2048 | arXiv:2211.07749 (2023) | 2505.20406 Tab. 5 |
 | `Heisenberg/triangular_36_P` | −0.5601(4) LCN; −0.55922 GCNN; −0.5562(2) RNN | 2206.07370, 2104.05085, 2505.20406 | 2505.20406 Tab. 5 |
 | `Heisenberg/square_36_P` | **−0.67887(2)** 2D RNN, **new record** | arXiv:2502.17144 | own Tab. 5 |
 | `Heisenberg/square_100_P` | **−0.67155260(3)** CNN+MinSR, **new record** | Chen & Heyl, Nat. Phys. 20, 1476 (2024) | 2502.17144 Tab. 5 |
-| `Heisenberg/square_100_O` | **−0.628656(9)** 2D TRNN, **new record**; plus first exact row | arXiv:2207.14314; QMC arXiv:2601.20189 | 2605.13807 Tab. 2 |
+| `Heisenberg/square_100_O` | **−0.628656(9)** 2D TRNN, **new record** as of 2026-09-14 (the exact QMC row holds the instance since 2026-09-16); plus first exact row | arXiv:2207.14314; QMC arXiv:2601.20189 | 2605.13807 Tab. 2 |
 | `Heisenberg/square_256_O` | **new instance** (16×16 OBC), 4 rows incl. exact QMC | arXiv:2605.13807 | own Tab. 2 |
 | `Hubbard/square_64_P_28_8` | **−0.7458(6)** JBf 8×8 torus, **new record**, +5 rows, all with Var(E) | *PRB* 113, 245104, arXiv:2510.11710 | own Tab. 1 |
 | `Hubbard/rectangular-4x8_32_PO_14_8` | −0.73342(8) HFDS, −0.7332(6) JBf, both with Var(E) | arXiv:2510.11710 | own Tab. 1 |

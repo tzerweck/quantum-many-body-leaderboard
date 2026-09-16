@@ -105,12 +105,14 @@ instance is solved, otherwise the **lowest eligible `variational` energy**. `pro
   diagonalization (no error bar) outranks sign-problem-free QMC, and a smaller error bar
   outranks a larger one. Two exact rows that disagree beyond their stated precision are a
   `defect` to raise on the row (11), not a ranking question.
-- **Sector-resolved exact diagonalization does not hold the record.** A row such as
-  `Exact Diagonalization Gamma.D6.A1 1` states the lowest energy in one symmetry sector, which
-  is the ground-state energy only if that sector is the ground state's. An instance carrying
-  only such rows has no record until an unconstrained exact energy is stated
-  (`SECTOR_RESOLVED` in `scripts/units.mjs`; the validator excludes the same rows from the
-  variational-principle check for the same reason).
+- **Sector-resolved exact diagonalization holds the record only in the ground-state sector.** A
+  row such as `Exact Diagonalization 0.C1.A -1` states the lowest energy in one symmetry sector,
+  which is the ground-state energy only if that sector is the ground state's. Case:
+  `J1J2/triangular_48_P_0.125` carries all 48 sectors of Wietek et al. (PRX 14, 021010), whose
+  App. B names Γ.A1 (spin-flip +1) as the ground state; that row holds the record and the other
+  47 do not (ruling of 2026-09-16: they move to a per-instance spectrum record). `SECTOR_RESOLVED`
+  and `groundStateExact` in `scripts/units.mjs` draw the line, and the validator excludes the
+  same sector rows from the variational-principle check for the same reason.
 - Rows whose error bars overlap at **2 sigma** share the rank.
 - **A sampled energy must state its `sigma` to be eligible.** `sigma` must also state how it
   was estimated. An error bar that ignores autocorrelation understates by around an order of
