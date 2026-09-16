@@ -52,11 +52,11 @@ const esc = s => String(s)
   .replace(/&(?![#A-Za-z0-9]+;)/g, "&amp;")
   .replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-// Labels are what the pages are for: the front page is the Pareto view, /instances/ is the
-// data. The URLs stay - they are what is linked and cited.
+// The front page is the leaderboard (the figures), /instances/ the table. The URLs stay -
+// they are what is linked and cited.
 const NAV = [
-  ["/", "Pareto"],
-  ["/instances/", "Data"],
+  ["/", "Leaderboard"],
+  ["/instances/", "Table"],
   ["/contribute/", "Contribute"],
 ];
 
@@ -445,7 +445,7 @@ for (const row of document.querySelectorAll("tr.inst")) row.addEventListener("cl
   row.classList.toggle("open", !more.hidden);
 });
 </script>`;
-  return page({ url: "/instances/", title: "Data", body, wide: true,
+  return page({ url: "/instances/", title: "Table", body, wide: true,
     description: `Every Hamiltonian instance in QMBL: ${summary.instances} instances across ${MODELS.length} models, with the record energy and method for each.` });
 }
 
@@ -680,8 +680,8 @@ function llmsTxt() {
     "primary paper named on the row, not to this site.",
     "",
     "## Pages",
-    "- [Pareto](https://qmbl.org/): the accuracy and cost figures, and how to cite.",
-    `- [Data](https://qmbl.org/instances/): every one of the ${summary.instances} instances, with its record and every energy.`,
+    "- [Leaderboard](https://qmbl.org/): the accuracy and cost figures, and how to cite.",
+    `- [Table](https://qmbl.org/instances/): every one of the ${summary.instances} instances, with its record and every energy.`,
     `- [Rules](${RULES}): what counts as a record, ties, provenance, objections.`,
     `- [Data](${DATA}): row format, units and conventions, error metrics, defects.`,
     "- [Contribute](https://qmbl.org/contribute/): corrections, missing results, missing error bars.",
