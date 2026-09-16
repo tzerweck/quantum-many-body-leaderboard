@@ -161,7 +161,7 @@ function main() {
   const cache = sources();
 
   const lines = [];
-  lines.push(`### All ${s.instances} instances (CLICK ME BELOW)`);
+  lines.push(`### All ${s.instances} Hamiltonian instances (click to unravel)`);
   lines.push("");
   const known = new Set(MODELS.map(([m]) => m));
   for (const inst of instances)
