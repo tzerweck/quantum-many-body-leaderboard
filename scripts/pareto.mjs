@@ -19,7 +19,7 @@
 // extrapolations are drawn but never on the frontier, as they are not bounds.
 import { recordEligible, exactEligible, perSiteDivisor, perSiteLabel } from "./units.mjs";
 import { collect, recordOf } from "./summary.mjs";
-import { W, PAD, n, text, hline, dot, legend, header, footnote, doc, textWidth, niceStep, writer, log, logScale, pow10, shortLabel } from "./chart.mjs";
+import { W, PAD, n, text, hline, dot, legend, header, footnote, doc, textWidth, niceStep, writer, log, logScale, pow10, shortLabel, rowHref, linked } from "./chart.mjs";
 
 const OUT = "figures";
 const instances = collect();
@@ -71,7 +71,7 @@ function costed(inst, costOf) {
   return inst.rows.filter(r => r.bound_type in BOUNDS && !r.defect).flatMap(r => {
     const cost = costOf(r.compute);
     if (!cost || !(r.bound_type !== "exact" || exactEligible(r))) return [];
-    return [{ r, cost, e: r.energy / f, eligible: r.bound_type === "exact" ? exactEligible(r) : recordEligible(r) }];
+    return [{ r, inst, cost, e: r.energy / f, eligible: r.bound_type === "exact" ? exactEligible(r) : recordEligible(r) }];
   });
 }
 function frontierOf(pts) {
@@ -86,7 +86,7 @@ function frontierOf(pts) {
 
 // Square marks for CPU core-hours, circles for everything else; a whisker under a derived
 // cost. Same surface ring and filled/hollow convention as dot().
-function mark(t, x, y, color, filled, unit, derived) {
+function mark(t, x, y, color, filled, unit, derived, href) {
   const out = [];
   if (unit === "cpu") {
     out.push(`<rect x="${n(x - 6.5)}" y="${n(y - 6.5)}" width="13" height="13" rx="2" fill="${t.surface}"/>`);
@@ -95,7 +95,7 @@ function mark(t, x, y, color, filled, unit, derived) {
       : `<rect x="${n(x - 4)}" y="${n(y - 4)}" width="8" height="8" rx="1.5" fill="${t.surface}" stroke="${color}" stroke-width="2"/>`);
   } else out.push(dot(t, x, y, color, filled));
   if (derived) out.push(`<path d="M${n(x - 7)} ${n(y + 9)}H${n(x + 7)}" stroke="${color}" stroke-width="1.5" stroke-linecap="round"/>`);
-  return out.join("");
+  return linked(href, out.join(""));
 }
 
 function costFigure({ name, title, subtitle, costOf, minRows, xLabel, legendItems, footer, describe }) {
@@ -145,7 +145,7 @@ function costFigure({ name, title, subtitle, costOf, minRows, xLabel, legendItem
         parts.push(`<path d="${d}" fill="none" stroke="${t.series[0]}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" opacity="0.7"/>`);
       }
       for (const p of [...pts].sort((a, b) => a.eligible - b.eligible))
-        parts.push(mark(t, X(p.cost.value), Y(p.e), t.series[BOUNDS[p.r.bound_type]], p.eligible, p.cost.unit, p.cost.derived));
+        parts.push(mark(t, X(p.cost.value), Y(p.e), t.series[BOUNDS[p.r.bound_type]], p.eligible, p.cost.unit, p.cost.derived, rowHref(p.inst, p.r)));
       // Frontier points are named; the label goes right of the mark, or left at the edge,
       // and is nudged down where it would sit on the previous one.
       const labels = front.filter(p => p.r !== rec).map(p => {

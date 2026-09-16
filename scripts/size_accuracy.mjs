@@ -18,7 +18,7 @@
 import { recordEligible } from "./units.mjs";
 import { collect, recordOf, exactRecordOf } from "./summary.mjs";
 import { FAMILIES, family } from "./views.mjs";
-import { W, PAD, n, text, hline, dot, legend, header, footnote, doc, textWidth, writer, log, logScale, pow10 } from "./chart.mjs";
+import { W, PAD, n, text, hline, dot, legend, header, footnote, doc, textWidth, writer, log, logScale, pow10, rowHref } from "./chart.mjs";
 
 const OUT = "figures";
 const instances = collect();
@@ -97,7 +97,7 @@ write("size-vs-accuracy", t => {
   const { X, Y } = logPlot(t, parts, { left, right, top, bottom, x0: X0, x1: X1, y0: Y0, y1: Y1, xTicks: XT, xLabel: "sites", yLabel: Y_LABEL });
   // Hollow first, then filled; within each, extrapolated and projected under variational.
   const order = [...all].sort((a, b) => (a.eligible - b.eligible) || (BOUNDS[b.r.bound_type] - BOUNDS[a.r.bound_type]));
-  for (const p of order) parts.push(dot(t, X(p.inst.n_sites), Y(p.gap), t.series[BOUNDS[p.r.bound_type]], p.eligible));
+  for (const p of order) parts.push(dot(t, X(p.inst.n_sites), Y(p.gap), t.series[BOUNDS[p.r.bound_type]], p.eligible, rowHref(p.inst, p.r)));
   const fn = footnote(t, `Distance is |E − E_exact| / |E_exact|, drawn upside down so that a better energy is higher; ${floored} rows closer than ${pow10(log(FLOOR))} sit on the top line. ` +
     "No line joins the sizes: the instances at one size are different Hamiltonians, and a frontier across them would compare a Hubbard " +
     "energy with a Heisenberg one. Exact references are exact diagonalization or sign-problem-free QMC; flagged rows are not shown.", bottom + 58);
@@ -110,6 +110,10 @@ write("size-vs-accuracy", t => {
 // Small multiples on shared axes: the family's rows in colour over every row in grey,
 // with the family's best gap at each size as a line. Same caveat as above about the line:
 // it joins different Hamiltonians, so it shows the family's reach, not one problem.
+// The grey backdrop is the same cloud in every panel, so it is drawn once and placed with
+// <use>: every row, the panel's own family included, since a coloured mark's surface ring
+// covers its grey twin. One copy instead of one per panel took the file from 334 KB to
+// 126 KB with the row links added, small enough for the front page to inline.
 write("size-vs-accuracy-by-family", t => {
   const names = [...FAMILIES.map(f => f[0]), "other"].filter(f => all.some(p => p.fam === f));
   const cols = 2, rows = Math.ceil(names.length / cols);
@@ -117,8 +121,10 @@ write("size-vs-accuracy-by-family", t => {
     "Each panel colours one family's energies over all the others in grey and joins the family's best distance at each size. " +
     "A method that only ever ran at one size is a lone mark.");
   const panelW = (W - 2 * PAD - 40) / cols, plotH = 160, pitch = plotH + 78;
-  const top0 = h.bottom + 40;
-  const parts = [h.svg];
+  const top0 = h.bottom + 40, left0 = PAD + 58, cloudId = "size-vs-accuracy-by-family-grey";
+  const CX = logScale(X0, X1, left0, PAD + panelW - 4), CY = logScale(Y0, Y1, top0, top0 + plotH);
+  const parts = [h.svg, `<defs><g id="${cloudId}" fill="${t.recessive[0]}">` +
+    all.map(p => `<circle cx="${n(CX(p.inst.n_sites))}" cy="${n(CY(p.gap))}" r="2.5"/>`).join("") + "</g></defs>"];
   names.forEach((name, k) => {
     const col = k % cols, row = Math.floor(k / cols);
     const px = PAD + col * (panelW + 40), left = px + 58, right = px + panelW - 4;
@@ -127,10 +133,9 @@ write("size-vs-accuracy-by-family", t => {
     parts.push(text(left, top - 12, `${name} (${mine.length})`, { size: 13, fill: t.ink, weight: 600 }));
     const { X, Y } = logPlot(t, parts, { left, right, top, bottom, x0: X0, x1: X1, y0: Y0, y1: Y1, xTicks: XT,
       xLabel: row === rows - 1 ? "sites" : null, yLabel: null });
-    for (const p of all) if (p.fam !== name)
-      parts.push(`<circle cx="${n(X(p.inst.n_sites))}" cy="${n(Y(p.gap))}" r="2.5" fill="${t.recessive[0]}"/>`);
+    parts.push(`<use href="#${cloudId}" x="${n(left - left0)}" y="${n(top - top0)}"/>`);
     parts.push(frontier(mine, X, Y, t.series[0]));
-    for (const p of [...mine].sort((a, b) => a.eligible - b.eligible)) parts.push(dot(t, X(p.inst.n_sites), Y(p.gap), t.series[0], p.eligible));
+    for (const p of [...mine].sort((a, b) => a.eligible - b.eligible)) parts.push(dot(t, X(p.inst.n_sites), Y(p.gap), t.series[0], p.eligible, rowHref(p.inst, p.r)));
   });
   const y = top0 + (rows - 1) * pitch + plotH + 62;
   const fn = footnote(t, "Families are assigned from the method string (views.mjs), first match wins; 'other' is what none of the patterns name. " +
@@ -193,7 +198,7 @@ write("size-vs-accuracy-ladders", t => {
     if (holders.length) {
       parts.push(hline(left, right, band, t.grid));
       parts.push(text(left - 8, band + 4, "holds the record", { size: 9.5, fill: t.muted, anchor: "end" }));
-      for (const hd of holders) parts.push(dot(t, X(hd.inst.n_sites), band, t.ink2, true));
+      for (const hd of holders) parts.push(dot(t, X(hd.inst.n_sites), band, t.ink2, true, rowHref(hd.inst, hd.r)));
     }
     // One line per family through its best row at each size; the overall best on top.
     const fams = Map.groupBy(pts, p => p.fam);
@@ -207,7 +212,7 @@ write("size-vs-accuracy-ladders", t => {
       }
     }
     parts.push(frontier(pts, X, Y, t.series[0]));
-    for (const p of [...pts].sort((a, b) => a.eligible - b.eligible)) parts.push(dot(t, X(p.inst.n_sites), Y(p.gap), t.ink2, p.eligible));
+    for (const p of [...pts].sort((a, b) => a.eligible - b.eligible)) parts.push(dot(t, X(p.inst.n_sites), Y(p.gap), t.ink2, p.eligible, rowHref(p.inst, p.r)));
     // Family names at the right end of each line, nudged apart where two would collide.
     ends.sort((a, b) => a.y - b.y);
     for (let a = 1; a < ends.length; a++) if (ends[a].y - ends[a - 1].y < 13) ends[a].y = ends[a - 1].y + 13;

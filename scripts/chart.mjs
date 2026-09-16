@@ -11,6 +11,7 @@
 // Colours are the validated default palette of the dataviz method (categorical slots in
 // fixed order, an ordinal blue ramp, recessive greys). Nothing here is picked by eye.
 import fs from "node:fs";
+import { rowId } from "./summary.mjs";
 
 export const THEMES = {
   light: {
@@ -81,12 +82,18 @@ export function onFill(hex) {
 }
 
 // Surface ring on every dot so overlapping marks stay separable. Hollow = listed only.
-export function dot(t, x, y, color, filled) {
+export function dot(t, x, y, color, filled, href) {
   const ring = `<circle cx="${n(x)}" cy="${n(y)}" r="6.5" fill="${t.surface}"/>`;
-  return ring + (filled
+  return linked(href, ring + (filled
     ? `<circle cx="${n(x)}" cy="${n(y)}" r="4.5" fill="${color}"/>`
-    : `<circle cx="${n(x)}" cy="${n(y)}" r="4" fill="${t.surface}" stroke="${color}" stroke-width="2"/>`);
+    : `<circle cx="${n(x)}" cy="${n(y)}" r="4" fill="${t.surface}" stroke="${color}" stroke-width="2"/>`));
 }
+
+// A mark that stands for one row links to that row on the table page. Inert where the SVG
+// is shown as an image; on the site the figure is inlined, and site.mjs gives the link its
+// hover card from the row itself, so the file carries the target and nothing else.
+export const rowHref = (inst, r) => `/instances/#${rowId(inst, r)}`;
+export const linked = (href, svg) => (href ? `<a class="pt" href="${href}">${svg}</a>` : svg);
 
 export function legend(t, items, y) {
   const out = [];

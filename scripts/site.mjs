@@ -7,9 +7,10 @@
 // surfaces are wrong together, which is the only kind of disagreement worth having.
 //
 // The figures on the front page are the committed figures/*.svg, drawn by size_accuracy.mjs
-// and pareto.mjs from the same data/; this script only copies them. A figure carries its
-// own title and subtitle, so the page puts nothing above it; the title and caption listed
-// here are its alt text.
+// and pareto.mjs from the same data/; this script inlines them, so that a mark standing for
+// a row can link to that row in the table and show a card for it on hover. A figure carries
+// its own title and subtitle, so the page puts nothing above it; the title and caption
+// listed here are its accessible label.
 // RULES.md and DATA.md are not rendered here - they live on GitHub, and /rules/ and
 // /data/ redirect there so links that predate the change keep resolving.
 //
@@ -18,7 +19,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { perSiteDivisor, perSiteLabel, isSampled, recordEligible } from "./units.mjs";
-import { collect, recordOf, summarize } from "./summary.mjs";
+import { collect, recordOf, summarize, rowId } from "./summary.mjs";
+import { THEMES } from "./chart.mjs";
 import { citeRef } from "./cite.mjs";
 import { sources, sourceOf } from "./enrich_sources.mjs";
 import { quote, marks, shorten, MODELS, BOUNDARY, instanceLabel, byGeometry, noRecordReason, gapAbove } from "./readme_table.mjs";
@@ -240,9 +242,8 @@ function variantNote(inst) {
 
 // -------------------------------------------------------------------------- home page
 // The front page is the figures. Each is drawn into figures/ by the build (size_accuracy.mjs,
-// pareto.mjs) and committed; one entry here per figure, light and dark variants side by
-// side because an SVG shown as an <img> cannot see the page's colour scheme. The Pareto
-// figure joins this list when pareto.mjs draws it.
+// pareto.mjs) and committed, in a light and a dark variant for GitHub; the page inlines the
+// light one and the stylesheet recolours it in dark mode (FIG_DARK). One entry per figure.
 const FIGURES = [
   ["size-vs-accuracy", "How far published energies sit from the exact answer, by system size",
     "Every energy on an instance with an exact ground-state energy, as its relative distance from that energy. Colour is the kind of number; filled marks can hold a record, hollow ones cannot."],
@@ -254,22 +255,97 @@ const FIGURES = [
     "The energies whose papers state what they cost in GPU-hours, or as a device count and a wall-clock, on the instances they were computed for. CPU core-hours are never put on the same axis."],
 ];
 
+// Dark mode for an inlined figure: an attribute selector per light colour, which beats the
+// presentation attribute in the cascade. The two themes list their colours in the same
+// slots, so slot k in light becomes slot k in dark; a light colour sitting in two slots
+// must darken the same way in both, and a figure using a colour outside the light theme
+// fails the build rather than staying light on a dark page.
+const FIG_COLOURS = new Map();
+{
+  const light = Object.values(THEMES.light).flat(), dark = Object.values(THEMES.dark).flat();
+  light.forEach((hex, k) => {
+    if (FIG_COLOURS.has(hex) && FIG_COLOURS.get(hex) !== dark[k]) throw new Error(`chart.mjs: ${hex} darkens to two colours`);
+    FIG_COLOURS.set(hex, dark[k]);
+  });
+}
+const FIG_DARK = [...FIG_COLOURS].filter(([l, d]) => l !== d)
+  .map(([l, d]) => `  figure.chart [fill="${l}"] { fill: ${d}; }\n  figure.chart [stroke="${l}"] { stroke: ${d}; }`).join("\n");
+
+// The figure's own <title> would show as the browser's tooltip over the whole chart and
+// fight the row cards, and four inlined figures would repeat its id, so it and <desc> are
+// dropped here and the entry's title and caption label the figure instead. Marks are
+// links but not tab stops: four hundred of them per figure would bury the page's keyboard
+// order, and the table they point to is the accessible form of the same rows.
 function figure([name, title, caption]) {
+  const file = `figures/${name}.svg`;
   for (const v of [name, `${name}-dark`])
     if (!fs.existsSync(`figures/${v}.svg`)) throw new Error(`figures/${v}.svg is missing; run the build first`);
-  return `<figure id="${name}">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="/figures/${name}-dark.svg">
-    <img src="/figures/${name}.svg" alt="${esc(title)}. ${esc(caption)}" loading="lazy">
-  </picture>
+  const svg = fs.readFileSync(file, "utf8").trim()
+    .replace(/<title id="title">[^<]*<\/title>\n<desc id="desc">[^<]*<\/desc>\n/, "")
+    .replace(' aria-labelledby="title desc"', () => ` aria-label="${esc(title)}. ${esc(caption)}"`)
+    .replaceAll('<a class="pt" href=', () => '<a class="pt" tabindex="-1" href=');
+  if (/<title|<desc|aria-labelledby/.test(svg)) throw new Error(`${file}: header not in the shape figure() expects`);
+  for (const [, hex] of svg.matchAll(/(?:fill|stroke)="(#[0-9a-fA-F]{6})"/g))
+    if (!FIG_COLOURS.has(hex)) throw new Error(`${file}: ${hex} is not a chart.mjs theme colour, so dark mode cannot recolour it`);
+  return `<figure id="${name}" class="chart">
+${svg}
   <figcaption><a href="#${name}" class="anchor" aria-label="Link to this figure">#</a>
     <a href="${REPO}/blob/main/figures/${name}.svg">SVG</a></figcaption>
 </figure>`;
 }
 
+// The card a figure's mark shows on hover: the instance, the method, the energy as the
+// table quotes it, and the paper. The figure file carries only the link; the words are
+// written here, from the same helpers as the table the link lands on.
+function rowCard(r, inst) {
+  return `<b>${esc(modelName(inst.model))} ${esc(instanceLabel(inst))}</b>
+<span>${esc(shorten(r.method, 90))}</span>
+<span class="e">${energyCell(r, inst)} <span class="muted">${perSiteLabel(inst)} &middot; ${BOUND_SHORT[String(r.bound_type ?? null)]}</span>${recordOf(inst) === r ? '<span class="tag">record</span>' : ""}</span>
+<span class="muted">${esc(citeRef(r, cache).text)}</span>`;
+}
+
+// One card per row a figure links to, in a <template> so it is neither rendered nor read
+// out; the script below moves a card into the floating box while its mark is hovered.
+const FIG_SCRIPT = `<script>
+(() => {
+  const cards = new Map([...document.getElementById("fig-cards").content.children].map(c => [c.dataset.row, c.innerHTML]));
+  const tip = document.createElement("div");
+  tip.id = "fig-tip"; tip.hidden = true; tip.setAttribute("role", "tooltip");
+  document.body.append(tip);
+  let on = null;
+  const place = e => {
+    const gap = 14, w = tip.offsetWidth, h = tip.offsetHeight;
+    const x = e.clientX + gap + w > innerWidth - 8 ? e.clientX - gap - w : e.clientX + gap;
+    const y = e.clientY + gap + h > innerHeight - 8 ? e.clientY - gap - h : e.clientY + gap;
+    tip.style.left = Math.max(8, x) + "px"; tip.style.top = Math.max(8, y) + "px";
+  };
+  for (const fig of document.querySelectorAll("figure.chart")) {
+    fig.addEventListener("pointerover", e => {
+      const a = e.target.closest("a.pt");
+      // An SVG <a> has no .hash, unlike an HTML one: read the attribute.
+      const row = a && a.getAttribute("href").split("#")[1];
+      if (!a || a === on || !cards.has(row)) return;
+      on = a;
+      tip.innerHTML = cards.get(row) + '<span class="go">Click to open this row in the table</span>';
+      tip.hidden = false;
+      place(e);
+    });
+    fig.addEventListener("pointermove", e => { if (on) place(e); });
+    fig.addEventListener("pointerout", e => {
+      if (on && !on.contains(e.relatedTarget)) { on = null; tip.hidden = true; }
+    });
+  }
+})();
+</script>`;
+
 function homePage() {
   const current = instances.filter(i => i.rows.some(r => (yearOf(r) ?? 0) >= 2025)).length;
   const b = summary.blocked_on_sigma;
+  const figures = FIGURES.map(figure).join("\n");
+  const linked = new Set([...figures.matchAll(/href="\/instances\/#(r-[\w-]+)"/g)].map(m => m[1]));
+  const cards = instances.flatMap(inst => inst.rows.filter(r => linked.has(rowId(inst, r)))
+    .map(r => `<div data-row="${rowId(inst, r)}">${rowCard(r, inst)}</div>`));
+  if (cards.length !== linked.size) throw new Error(`figures link ${linked.size} rows, ${cards.length} found in data/: a figure is older than the data`);
   const body = `
 <h1>The best published ground-state energies</h1>
 <p class="lead">QMBL is a record book of the state of the art in quantum many-body simulation: one row
@@ -278,7 +354,9 @@ produced the number and declaring what kind of quantity it is. Where an instance
 exact energy is the record; everywhere else the best variational bound is.
 <a href="/instances/">All ${summary.instances} instances and their ${summary.rows} energies &rarr;</a></p>
 
-${FIGURES.map(figure).join("\n")}
+${figures}
+<template id="fig-cards">${cards.join("\n")}</template>
+${FIG_SCRIPT}
 
 <h2>How current this is</h2>
 <p>${current} of ${summary.instances} instances carry a result published in 2025 or 2026; the rest
@@ -344,7 +422,7 @@ function allRows(inst) {
     const isRec = r === rec;
     const gap = rec && !isRec && r.bound_type === "variational" && !r.defect ? gapAbove(rec, r, f, decimals) : null;
     const { sigma } = perSite(r, inst);
-    return `<tr class="${isRec ? "is-record" : ""}${r.defect ? " is-flagged" : ""}">
+    return `<tr id="${rowId(inst, r)}" class="${isRec ? "is-record" : ""}${r.defect ? " is-flagged" : ""}">
       <td class="record">${energyCell(r, inst, isRec ? null : decimals)}${isRec ? '<span class="tag">record</span>' : gap ? ` <span class="muted num">(${esc(gap)})</span>` : ""}</td>
       <td class="num">${sigma == null ? '<span class="muted">n/a</span>' : sigma.toExponential(1)}</td>
       <td><span class="badge">${BOUND_SHORT[String(r.bound_type ?? null)]}</span>${r.defect ? ` <span class="badge flag">flagged</span>` : ""}</td>
@@ -444,6 +522,30 @@ for (const row of document.querySelectorAll("tr.inst")) row.addEventListener("cl
   row.querySelector("button").setAttribute("aria-expanded", String(!more.hidden));
   row.classList.toggle("open", !more.hidden);
 });
+
+// A figure's mark links here as #r-<instance>-<row>: open the instance holding that row,
+// clear any filter hiding it, and bring the row into view, marked.
+function reveal() {
+  const row = location.hash.startsWith("#r-") && document.getElementById(location.hash.slice(1));
+  if (!row) return;
+  const more = row.closest("tr.more"), inst = more.previousElementSibling;
+  if (inst.hidden) {
+    box.value = "";
+    for (const on of document.querySelectorAll(".quick button.on")) on.classList.remove("on");
+    apply();
+  }
+  for (const old of document.querySelectorAll("tr.target")) old.classList.remove("target");
+  more.hidden = false;
+  inst.classList.add("open");
+  inst.querySelector("button").setAttribute("aria-expanded", "true");
+  row.classList.add("target");
+  row.scrollIntoView({ block: "center" });
+}
+// Once now so the row is open at first paint, and again on load, because the browser's own
+// scroll to the fragment comes after this script and would pin the row to the top edge.
+addEventListener("hashchange", reveal);
+addEventListener("load", reveal);
+reveal();
 </script>`;
   return page({ url: "/instances/", title: "Table", body, wide: true,
     description: `Every Hamiltonian instance in QMBL: ${summary.instances} instances across ${MODELS.length} models, with the record energy and method for each.` });
@@ -465,7 +567,7 @@ function rowTable(rows, inst) {
         ? '<span class="badge">ineligible: sampled, no error bar</span>' : "",
     ].filter(Boolean).join(" ");
     const { sigma } = perSite(r, inst);
-    return `<tr class="${rec ? "is-record" : ""}${r.defect ? " is-flagged" : ""}">
+    return `<tr id="${rowId(inst, r)}" class="${rec ? "is-record" : ""}${r.defect ? " is-flagged" : ""}">
       <td class="record">${energyCell(r, inst)}${rec ? '<span class="tag">record</span>' : ""}</td>
       <td class="num">${sigma == null ? '<span class="muted">n/a</span>' : sigma.toExponential(1)}</td>
       <td class="num">${r.energy_variance == null ? '<span class="muted">n/a</span>' : r.energy_variance.toExponential(2)}</td>
@@ -782,8 +884,21 @@ footer.site {
 footer.site p { margin: 0.3rem 0; }
 
 figure { margin: 2.2rem 0 0; }
-figure picture, figure img { display: block; width: 100%; max-width: 920px; height: auto; }
-figure img { border: 1px solid var(--grid); border-radius: 3px; background: var(--surface); }
+figure picture, figure img, figure.chart svg { display: block; width: 100%; max-width: 920px; height: auto; }
+figure img, figure.chart svg { border: 1px solid var(--grid); border-radius: 3px; background: var(--surface); }
+figure.chart a.pt { cursor: pointer; }
+figure.chart a.pt > :nth-child(2) { transform-box: fill-box; transform-origin: center; transition: transform 80ms; }
+figure.chart a.pt:hover > :nth-child(2) { transform: scale(1.45); }
+#fig-tip {
+  position: fixed; z-index: 10; pointer-events: none; max-width: 24rem; padding: 0.55rem 0.75rem;
+  font-size: 0.82rem; line-height: 1.45; color: var(--ink); background: var(--surface);
+  border: 1px solid var(--grid); border-radius: 3px; box-shadow: 0 6px 20px rgb(0 0 0 / 0.14);
+}
+#fig-tip > b, #fig-tip > span { display: block; }
+#fig-tip > b { font-weight: 600; }
+#fig-tip .e { margin: 0.2rem 0; }
+#fig-tip .e .num { font-weight: 600; color: var(--record); }
+#fig-tip .go { margin-top: 0.3rem; font-size: 0.75rem; color: var(--accent); }
 figcaption { font-size: 0.8rem; margin-top: 0.3rem; }
 figcaption .anchor { margin: 0 0.4rem 0 0; opacity: 1; color: var(--grid); }
 figcaption a:not(.anchor) { color: var(--muted); }
@@ -850,6 +965,11 @@ table.next { width: auto; min-width: 60%; font-size: 0.85rem; margin: 0.4rem 0 0
 table.next th, table.next td { padding: 0.35rem 1.2rem 0.35rem 0; }
 table.next tr.is-flagged td:first-child { box-shadow: inset 3px 0 0 var(--flag); }
 table.next tr.is-record td { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+table.next tr.target > td, .rows tr:target > td {
+  background: color-mix(in srgb, var(--accent) 18%, transparent); animation: row-in 1.6s ease-out;
+}
+table.next tr.target > td:first-child, .rows tr:target > td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+@keyframes row-in { from { background: color-mix(in srgb, var(--accent) 45%, transparent); } }
 
 .record-box {
   background: var(--surface); border: 1px solid var(--grid); border-left: 3px solid var(--accent);
@@ -901,6 +1021,9 @@ h1:hover .anchor, h2:hover .anchor, h3:hover .anchor, h4:hover .anchor { opacity
 hr { border: 0; border-top: 1px solid var(--grid); margin: 2rem 0; }
 pre.ticks { font-family: var(--mono); font-size: clamp(7px, 1.6vw, 13px); line-height: 1.2; color: var(--muted);
   margin: 0 0 2rem; overflow: hidden; white-space: pre; }
+@media (prefers-color-scheme: dark) {
+${FIG_DARK}
+}
 ` + LOGO_CSS;
 
 // ----------------------------------------------------------------------------- output

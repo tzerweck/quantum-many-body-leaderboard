@@ -7,6 +7,7 @@
 // of what is actually on disk.
 import fs from "node:fs";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import { recordEligible, exactEligible, isSampled, noErrorMetrics } from "./units.mjs";
 
 export function collect() {
@@ -18,6 +19,20 @@ export function collect() {
       instances.push(JSON.parse(fs.readFileSync(path.join(dir, f), "utf8")));
   }
   return instances.sort((a, b) => a.instance_id.localeCompare(b.instance_id));
+}
+
+// A row's anchor id: the instance id, sanitised, and a hash of what the row claims. The
+// table page puts it on the row and the committed figures link their marks to it. Not the
+// row's position in its file: a row added or removed would shift every later link onto a
+// different row without anything failing. A hash moves only with the row itself, and a
+// figure left older than its data then links an id no row has, which site.mjs refuses to
+// build. Identical rows would share a hash, so a repeat is numbered in file order (none
+// exist as of 2026-09-16).
+const rowKey = r => `${r.energy}|${r.method}|${r.reference}`;
+export function rowId(inst, r) {
+  const key = rowKey(r), repeat = inst.rows.filter(x => rowKey(x) === key).indexOf(r);
+  const hash = createHash("sha1").update(key).digest("hex").slice(0, 8);
+  return `r-${inst.instance_id.replace(/[^\w-]/g, "_")}-${hash}${repeat > 0 ? `-${repeat + 1}` : ""}`;
 }
 
 // The record for an instance is its state-of-the-art energy (RULES.md 6): the exact
