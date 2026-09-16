@@ -1,6 +1,6 @@
 
 <!-- Header and footer animations are text-mode GIFs from scripts/ascii.mjs. -->
-<img src="figures/qmbl-ascii.gif" width="760" alt="QMBL - the Quantum Many-Body Leaderboard">
+<img src="figures/qmbl-ascii.gif" width="920" alt="QMBL - the Quantum Many-Body Leaderboard">
 
 <!-- All badges via shields.io. Zenodo's own badge endpoint (zenodo.org/badge/DOI/....svg)
      returns 403 and renders as a broken image, so the DOI badge is built here instead. -->
