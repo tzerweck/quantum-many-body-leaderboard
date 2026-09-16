@@ -407,15 +407,21 @@ Organised literature for fellow researchers and AI, so that we can see the works
 
 </details>
 
-Every row in the dataset also contains a declared `bound_type` saying what kind of quantity the energy value actually is (either a strict variational bound, a fixed-node estimate or a zero-variance extrapolation) and if available the corresponding error metric.
+Every row in the dataset further contains a declared `bound_type` saying what kind of quantity the energy value actually is (either a strict variational bound, a fixed-node estimate or a zero-variance extrapolation) and if available the corresponding error metric.
 
 Also see [units and conventions](DATA.md#units-and-conventions) and [the ranking rules](RULES.md#6-records-and-ties). 
+
 **Bold** is the record: the exact energy where the instance is solved, otherwise the lowest
-eligible variational bound. The last column is the closest variational challenger and how far above the record it sits, per site. 
+eligible variational bound. 
+
+The last column is the closest variational challenger and how far above the record it sits, per site. 
+
 **&#9675;** marks a row where **we found no error
 metric** (neither an error bar nor an energy variance) in the source we read; 
+
 **&dagger;** marks a
 sampled energy with a variance but no error bar. 
+
 Both rows stay in the table and in rank
 order; the marker is an open question regarding ambiguous information (see [error metrics](DATA.md#error-metrics)).
 
