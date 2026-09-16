@@ -124,8 +124,8 @@ Per instance, not per row, and appended to rather than overwritten:
 ]
 ```
 
-**A check that found nothing is a result and is recorded as one** (`found: 0`). Only 13 of
-205 instances have any 2025-26 row, so a site that says nothing about its own currency
+**A check that found nothing is a result and is recorded as one** (`found: 0`). Only 116 of
+341 instances have any 2025-26 row, so a site that says nothing about its own currency
 reads as more authoritative than it is. This is the field the instance pages quote, and it
 is why "we looked, and there is nothing newer" is worth the same bookkeeping as a new row.
 `screened` names the papers when there are few, `screened_count` replaces it when there are
