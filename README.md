@@ -405,16 +405,14 @@ Organised literature for fellow researchers and AI, so that we can see the works
 | TB-DMFT-SOC, size 119 | **-1305.3902308** | DMRG (bond dimension 350) using fork tensor... [Bauernfeind et al. (2017)](https://doi.org/10.1103/physrevx.7.031013) | -1305.3902296 (+1.3e-6) DMRG (bond dimension 330) using... [Bauernfeind et al. (2017)](https://doi.org/10.1103/physrevx.7.031013) |
 | TB-DMFT-SOC, size 309 | **-3351.7573592** | DMRG (bond dimension 350) using fork tensor... [Bauernfeind et al. (2017)](https://doi.org/10.1103/physrevx.7.031013) | -3351.7573530 (+6.2e-6) DMRG (bond dimension 330) using... [Bauernfeind et al. (2017)](https://doi.org/10.1103/physrevx.7.031013) |
 
+
+## Details
 </details>
 
-Every row in the dataset further contains a declared `bound_type` saying what kind of quantity the energy value actually is (either a strict variational bound, a fixed-node estimate or a zero-variance extrapolation) and if available the corresponding error metric.
-
-Also see [units and conventions](DATA.md#units-and-conventions) and [the ranking rules](RULES.md#6-records-and-ties). 
+Every row in the dataset further contains a declared `bound_type` saying what kind of quantity the energy value actually is. Also see [units and conventions](DATA.md#units-and-conventions) and [the ranking rules](RULES.md#6-records-and-ties). 
 
 **Bold** is the record: the exact energy where the instance is solved, otherwise the lowest
 eligible variational bound. 
-
-The last column is the closest variational challenger and how far above the record it sits, per site. 
 
 **&#9675;** marks a row where **we found no error
 metric** (neither an error bar nor an energy variance) in the source we read; 
