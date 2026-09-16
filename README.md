@@ -435,7 +435,8 @@ from the people who produced it.
 
 <!-- END LEADERBOARD -->
 
-Check [RULES.md](RULES.md) for how a record is decided. What a row contains, the
+Check [RULES.md](RULES.md) for how a record is decided.
+
 Check [DATA.md](DATA.md) for stored units, conventions, error-metrics, and provenance and defect handling.
 
 ## Contributing
