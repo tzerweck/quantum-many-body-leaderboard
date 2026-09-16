@@ -3,7 +3,7 @@ import { isSampled, recordEligible, perSiteDivisor, perSiteLabel } from "./units
 import { collect, recordOf } from "./summary.mjs";
 import { sourceOf, sources } from "./enrich_sources.mjs";
 import { CONTESTED, FAMILIES, family, variationalRows } from "./views.mjs";
-import { W, PAD, n, text, hline, hbar, vbar, onFill, dot, legend, header, footnote, doc, textWidth, pct, niceStep, writer } from "./chart.mjs";
+import { W, PAD, n, text, hline, hbar, vbar, onFill, dot, legend, header, footnote, doc, textWidth, pct, niceStep, writer, shortLabel } from "./chart.mjs";
 
 const OUT = "figures";
 const cache = sources();
@@ -23,16 +23,6 @@ const FRONTIER = [
 ];
 const BOUNDS = { variational: 0, projected: 1, extrapolated: 2 };
 
-function shortLabel(r) {
-  // "Holographic Quantum Transformer (HQT), ..." -> "HQT"; otherwise the text before any
-  // parenthesis or comma, which is where method strings put the architecture's name.
-  const acronym = r.method.match(/\(([A-Z][A-Za-z0-9-]{1,7})\)/);
-  let s = acronym ? acronym[1] : r.method.split(/\s*[(,]/)[0].trim();
-  if (r.bound_type === "projected") s += /fixed.?node|\bFN\b/i.test(r.method) ? " + fixed-node" : ", projected";
-  if (r.bound_type === "extrapolated") s += ", extrapolated";
-  if (r.defect) s += ", flagged";
-  return s;
-}
 
 function frontierPanel([id, title]) {
   const inst = byId.get(id);

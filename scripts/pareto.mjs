@@ -1,32 +1,33 @@
-// Generate figures/energy-vs-compute*.svg: what each published energy cost in GPU-hours
-// against how far it sits from its instance's reference. This is the accuracy-versus-cost
-// view the field argues about informally, drawn from the `compute` blocks (DATA.md) - and
-// only from them, so it is as sparse as the papers are: after the 2026-09-16 pass 12 rows
-// state GPU-hours and 13 more state a device count and a wall-clock.
+// Generate figures/energy-vs-compute*.svg and figures/energy-vs-parameters*.svg: on one
+// instance, what the best published energies are at each cost. The question is not how
+// far a number sits from the exact answer but which results are the best ones (Tristan,
+// 2026-09-16), so the axis is the energy itself and the frontier runs through whatever
+// holds it at each cost - an exact diagonalization with its CPU-hours as readily as a
+// variational bound with its GPU-hours. Panels are per instance, as energies of different
+// Hamiltonians are not comparable, and only instances with enough costed rows are drawn.
 //
-// Two rules decide what can appear. The stored fields are never derived (DATA.md), so a
-// row that says "20 A100 for four days" carries those three facts and a null gpu_hours;
-// this figure multiplies devices by wall-clock at draw time and marks such a point as
-// derived, which is the one place that product exists. CPU core-hours never share an
-// axis with GPU-hours - a conversion between them would be an argument - so the 52 rows
-// that state CPU time are counted in the footnote and not drawn.
+// Costs come from the `compute` blocks (DATA.md) and only from them. Two axes, two
+// figures: hours, and parameter count. Hours are GPU-hours where stated, devices x
+// wall-clock (multiplied here, once, and marked) where that is what the paper says, or
+// CPU core-hours; a GPU-hour and a CPU core-hour share the axis with different marks and
+// are never converted into each other - the reader sees the unit, and DATA.md forbids
+// any equivalence.
 //
-// The reference is the exact energy where one exists, else the record (as in
-// size_accuracy.mjs); a row that is itself the record has no distance and sits in the
-// band above the plot. Cost runs along x and accuracy up y on an inverted log scale, as
-// in the size figures: closer to the reference is higher. Nothing here says how
-// converged a record is.
-import { recordEligible } from "./units.mjs";
-import { collect, recordOf, exactRecordOf } from "./summary.mjs";
-import { FAMILIES, family } from "./views.mjs";
-import { W, PAD, n, text, hline, dot, legend, header, footnote, doc, textWidth, writer, log, logScale, pow10 } from "./chart.mjs";
+// The frontier is the staircase of results nothing beats for less: sorted by cost, a row
+// is on it when its energy is below every cheaper row that could hold a record (RULES.md
+// 6: a strict bound with an error bar, or a ground-state exact energy). Projections and
+// extrapolations are drawn but never on the frontier, as they are not bounds.
+import { recordEligible, exactEligible, perSiteDivisor, perSiteLabel } from "./units.mjs";
+import { collect, recordOf } from "./summary.mjs";
+import { W, PAD, n, text, hline, dot, legend, header, footnote, doc, textWidth, niceStep, writer, log, logScale, pow10, shortLabel } from "./chart.mjs";
 
 const OUT = "figures";
 const instances = collect();
 const { write, written } = writer(OUT);
+const BOUNDS = { variational: 0, projected: 1, extrapolated: 2, exact: 3 };
 
 // Total durations only. Anything per step, per sweep or cumulative over several sizes is
-// not this run's wall-clock and stays unparsed; the row then has no point on this figure.
+// not this run's wall-clock and stays unparsed; the row then has no hours.
 export function wallClockHours(s) {
   if (!s) return null;
   s = s.trim().toLowerCase();
@@ -41,103 +42,172 @@ export function wallClockHours(s) {
   return null;
 }
 
-// GPU-hours for a row: stated, or devices x wall-clock, or nothing.
-function gpuHours(c) {
+// Hours for a row: { value, unit: "gpu" | "cpu", derived }, or null.
+function hoursOf(c) {
   if (!c) return null;
-  if (c.gpu_hours != null) return { hours: c.gpu_hours, derived: false };
+  if (c.gpu_hours != null) return { value: c.gpu_hours, unit: "gpu", derived: false };
   if (c.n_devices != null && c.wall_clock) {
     const h = wallClockHours(c.wall_clock);
-    if (h != null) return { hours: c.n_devices * h, derived: true };
+    if (h != null) return { value: c.n_devices * h, unit: "gpu", derived: true };
   }
+  if (c.cpu_core_hours != null) return { value: c.cpu_core_hours, unit: "cpu", derived: false };
   return null;
 }
+const parametersOf = c => (c?.parameters > 0 ? { value: c.parameters, unit: "params", derived: false } : null);
 
 const MODEL = { J1J2: "J1-J2", Heisenberg: "Heisenberg", Hubbard: "Hubbard", TFIsing: "TFIM", tV: "t-V", Impurity: "impurity" };
 function instLabel(i) {
-  const lat = i.lattice.replace(/^rectangular-/, "").replace(/^square$/, `${Math.sqrt(i.n_sites)}×${Math.sqrt(i.n_sites)}`);
-  const extra = i.params.J2 != null ? `, J2 = ${i.params.J2}` : i.params.U != null ? `, U = ${i.params.U}` : "";
-  return `${MODEL[i.model] ?? i.model} ${lat}${/×|x/.test(lat) ? "" : ` ${i.n_sites}`}${extra}`;
+  const side = Math.sqrt(i.n_sites);
+  const lat = i.lattice.replace(/^rectangular-/, "").replace(/^square$/, Number.isInteger(side) ? `${side}×${side}` : "square");
+  const extra = i.params.J2 != null ? `, J2 = ${i.params.J2}` : i.params.U != null ? `, U = ${i.params.U}, n = ${(2 * i.params.Nf / i.n_sites).toFixed(3).replace(/0+$/, "")}` : "";
+  const bc = { O: ", open", PO: ", cylinder", PA: ", periodic-antiperiodic", A: ", antiperiodic" }[i.boundary] ?? "";
+  return `${MODEL[i.model] ?? i.model} ${lat}${/×|x/.test(lat) ? "" : ` ${i.n_sites}`}${extra}${bc}`;
 }
 
-const pts = [], cpuRows = [];
-let stated = 0, derived = 0;
-for (const inst of instances) {
-  const exact = exactRecordOf(inst);
-  const ref = exact ? { row: exact, kind: "exact" } : (r => r && { row: r, kind: "record" })(recordOf(inst));
-  for (const r of inst.rows) {
-    if (r.compute?.cpu_core_hours != null) cpuRows.push(r);
-    const g = gpuHours(r.compute);
-    if (!g || r.defect || !ref) continue;
-    if (g.derived) derived++; else stated++;
-    const holder = r === ref.row;
-    pts.push({ r, inst, fam: family(r.method), hours: g.hours, derived: g.derived, holder, refKind: ref.kind,
-      gap: holder ? 0 : Math.abs(r.energy - ref.row.energy) / Math.abs(ref.row.energy), eligible: recordEligible(r) });
+// The costed rows of an instance under one cost accessor. A row on the frontier can hold
+// a record; exact rows count only when they state the ground state.
+function costed(inst, costOf) {
+  const f = perSiteDivisor(inst);
+  return inst.rows.filter(r => r.bound_type in BOUNDS && !r.defect).flatMap(r => {
+    const cost = costOf(r.compute);
+    if (!cost || !(r.bound_type !== "exact" || exactEligible(r))) return [];
+    return [{ r, cost, e: r.energy / f, eligible: r.bound_type === "exact" ? exactEligible(r) : recordEligible(r) }];
+  });
+}
+function frontierOf(pts) {
+  const out = [];
+  let best = Infinity;
+  for (const p of [...pts].sort((a, b) => a.cost.value - b.cost.value || a.e - b.e)) {
+    if (!p.eligible) continue;
+    if (p.e < best) { best = p.e; out.push(p); }
   }
+  return out;
 }
 
-// Four categorical slots, assigned in FAMILIES order to the families present; a fifth
-// family and beyond fold into grey rather than take a colour the palette does not have.
-const present = [...FAMILIES.map(f => f[0]), "other"].filter(f => pts.some(p => p.fam === f));
-const slot = new Map(present.map((f, k) => [f, k < 4 ? k : null]));
+// Square marks for CPU core-hours, circles for everything else; a whisker under a derived
+// cost. Same surface ring and filled/hollow convention as dot().
+function mark(t, x, y, color, filled, unit, derived) {
+  const out = [];
+  if (unit === "cpu") {
+    out.push(`<rect x="${n(x - 6.5)}" y="${n(y - 6.5)}" width="13" height="13" rx="2" fill="${t.surface}"/>`);
+    out.push(filled
+      ? `<rect x="${n(x - 4.5)}" y="${n(y - 4.5)}" width="9" height="9" rx="1.5" fill="${color}"/>`
+      : `<rect x="${n(x - 4)}" y="${n(y - 4)}" width="8" height="8" rx="1.5" fill="${t.surface}" stroke="${color}" stroke-width="2"/>`);
+  } else out.push(dot(t, x, y, color, filled));
+  if (derived) out.push(`<path d="M${n(x - 7)} ${n(y + 9)}H${n(x + 7)}" stroke="${color}" stroke-width="1.5" stroke-linecap="round"/>`);
+  return out.join("");
+}
 
-write("energy-vs-compute", t => {
-  const h = header(t, "What a published energy cost, against how far it sits from the reference",
-    `${pts.length} energies whose papers state what they cost in GPU-hours (${stated}) or as a device count and a wall-clock (${derived}), ` +
-    "on the instances they were computed for. Distance is from the exact energy where one exists, else from the record, and closer is higher; a record holder sits in the band above the plot.");
-  const items = present.map(f => ({ kind: "dot", color: slot.get(f) == null ? t.recessive[1] : t.series[slot.get(f)], label: f }));
-  const lg = legend(t, [...items, { kind: "ring", color: t.ink2, label: "GPU-hours derived from devices × wall-clock" }], h.bottom + 34);
-  const band = lg.bottom + 40, top = band + 30, bottom = top + 320, left = PAD + 62, right = W - PAD - 8;
-  const hs = pts.map(p => p.hours);
-  const x0 = 10 ** Math.floor(log(Math.min(...hs))), x1 = 10 ** Math.ceil(log(Math.max(...hs)));
-  const gaps = pts.filter(p => !p.holder).map(p => p.gap);
-  const y0 = 10 ** Math.floor(log(Math.min(...gaps))), y1 = 10 ** Math.ceil(log(Math.max(...gaps)));
-  const X = logScale(x0, x1, left, right), Y = logScale(y0, y1, top, bottom);
-  const parts = [h.svg, lg.svg];
-  for (let k = log(y0); k <= log(y1); k++) {
-    parts.push(hline(left, right, Y(10 ** k), t.grid));
-    parts.push(text(left - 8, Y(10 ** k) + 4, pow10(k), { size: 11, fill: t.muted, anchor: "end", nums: true }));
-  }
-  for (let k = log(x0); k <= log(x1); k++)
-    parts.push(text(X(10 ** k), bottom + 18, pow10(k), { size: 11, fill: t.muted, anchor: "middle", nums: true }));
-  parts.push(text((left + right) / 2, bottom + 38, "GPU-hours, as reported (device model in the row)", { size: 12, fill: t.ink2, anchor: "middle" }));
-  parts.push(`<text transform="translate(${n(left - 46)} ${n((top + bottom) / 2)}) rotate(-90)" font-size="12" fill="${t.ink2}" text-anchor="middle">relative distance from the reference (closer is higher)</text>`);
-  parts.push(hline(left, right, band, t.grid));
-  parts.push(text(left - 8, band + 4, "holds the record", { size: 9.5, fill: t.muted, anchor: "end" }));
+function costFigure({ name, title, subtitle, costOf, minRows, xLabel, legendItems, footer, describe }) {
+  const panels = instances.map(inst => ({ inst, pts: costed(inst, costOf) })).filter(p => p.pts.length >= minRows)
+    .sort((a, b) => b.pts.length - a.pts.length || a.inst.instance_id.localeCompare(b.inst.instance_id));
+  write(name, t => {
+    const cols = 3, plotH = 170, pitch = plotH + 92, panelW = (W - 2 * PAD - 2 * 30) / cols;
+    const h = header(t, title, subtitle(panels));
+    const lg = legend(t, legendItems(t), h.bottom + 34);
+    const top0 = lg.bottom + 46;
+    const parts = [h.svg, lg.svg];
+    panels.forEach(({ inst, pts }, k) => {
+      const col = k % cols, row = Math.floor(k / cols);
+      const px = PAD + col * (panelW + 30), left = px + 54, right = px + panelW - 4;
+      const top = top0 + row * pitch, bottom = top + plotH;
+      const rec = recordOf(inst), recE = rec ? rec.energy / perSiteDivisor(inst) : null;
+      const front = frontierOf(pts);
+      parts.push(text(px, top - 14, instLabel(inst), { size: 12.5, fill: t.ink, weight: 600 }));
+      parts.push(text(right, top - 14, perSiteLabel(inst), { size: 9.5, fill: t.muted, anchor: "end" }));
+      // Cost axis: a decade either side of the data. Energy axis: linear, as in the
+      // record-over-time figure, so the record and an exact energy sit where they are.
+      const cs = pts.map(p => p.cost.value);
+      const x0 = 10 ** Math.floor(log(Math.min(...cs)) - 0.5), x1 = 10 ** Math.ceil(log(Math.max(...cs)) + 0.5);
+      const X = logScale(x0, x1, left, right);
+      const es = pts.map(p => p.e).concat(recE == null ? [] : [recE]);
+      const span = Math.max(Math.max(...es) - Math.min(...es), 1e-6);
+      const step = niceStep(span / 4);
+      const e0 = Math.floor((Math.min(...es) - span * 0.08) / step) * step;
+      const e1 = Math.ceil((Math.max(...es) + span * 0.08) / step) * step;
+      const Y = e => bottom - ((e - e0) / (e1 - e0)) * plotH;
+      const decimals = Math.max(0, -Math.floor(Math.log10(step)));
+      for (let i = 0; i <= Math.round((e1 - e0) / step); i++) {
+        const v = e0 + i * step;
+        parts.push(hline(left, right, Y(v), t.grid));
+        parts.push(text(left - 6, Y(v) + 4, v.toFixed(decimals).replace("-", "−"), { size: 10, fill: t.muted, anchor: "end", nums: true }));
+      }
+      for (let k2 = Math.ceil(log(x0)); k2 <= Math.floor(log(x1)); k2++)
+        parts.push(text(X(10 ** k2), bottom + 16, pow10(k2), { size: 10, fill: t.muted, anchor: "middle", nums: true }));
+      if (recE != null) {
+        parts.push(hline(left, right, Y(recE), t.ink2));
+        // Named below its line, where nothing but a projection or extrapolation can sit.
+        parts.push(text(left + 4, Y(recE) + 13, `${rec.bound_type === "exact" ? "exact" : "record"}: ${shortLabel(rec)}`, { size: 10.5, fill: t.ink, weight: 600 }));
+      }
+      if (front.length > 1) {
+        let d = `M${n(X(front[0].cost.value))} ${n(Y(front[0].e))}`;
+        for (const p of front.slice(1)) d += `H${n(X(p.cost.value))}V${n(Y(p.e))}`;
+        parts.push(`<path d="${d}" fill="none" stroke="${t.series[0]}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" opacity="0.7"/>`);
+      }
+      for (const p of [...pts].sort((a, b) => a.eligible - b.eligible))
+        parts.push(mark(t, X(p.cost.value), Y(p.e), t.series[BOUNDS[p.r.bound_type]], p.eligible, p.cost.unit, p.cost.derived));
+      // Frontier points are named; the label goes right of the mark, or left at the edge,
+      // and is nudged down where it would sit on the previous one.
+      const labels = front.filter(p => p.r !== rec).map(p => {
+        const s = shortLabel(p.r), w = textWidth(s, 10.5), x = X(p.cost.value), y = Y(p.e);
+        const rightSide = x + 10 + w <= right;
+        return { s, w, x: rightSide ? x + 10 : x - 10, anchor: rightSide ? "start" : "end", y: y + 4 };
+      }).sort((a, b) => a.y - b.y);
+      for (let a = 1; a < labels.length; a++) if (labels[a].y - labels[a - 1].y < 12) labels[a].y = labels[a - 1].y + 12;
+      for (const l of labels) parts.push(text(l.x, l.y, l.s, { size: 10.5, fill: t.ink2, anchor: l.anchor }));
+      parts.push(text((left + right) / 2, bottom + 32, xLabel, { size: 10.5, fill: t.ink2, anchor: "middle" }));
+    });
+    const y = top0 + (Math.ceil(panels.length / cols) - 1) * pitch + plotH + 56;
+    const fn = footnote(t, footer(panels), y);
+    parts.push(fn.svg);
+    return doc(t, fn.bottom + 24, title, describe(panels), parts);
+  });
+  return panels;
+}
 
-  const color = p => slot.get(p.fam) == null ? t.recessive[1] : t.series[slot.get(p.fam)];
-  const placed = pts.map(p => ({ p, x: X(p.hours), y: p.holder ? band : Y(p.gap) }));
-  // The rows of one instance are joined by a faint line in order of cost - the
-  // per-instance trade-off, which is what a Pareto view is - and the instance is named once,
-  // beside its costliest row. Names are nudged apart vertically where two would overlap.
-  const byInst = Map.groupBy(placed.filter(q => !q.p.holder), q => q.p.inst.instance_id);
-  const labels = [];
-  for (const qs of byInst.values()) {
-    qs.sort((a, b) => a.x - b.x);
-    if (qs.length > 1) parts.push(`<path d="${qs.map((q, k) => `${k ? "L" : "M"}${n(q.x)} ${n(q.y)}`).join("")}" fill="none" stroke="${t.recessive[0]}" stroke-width="1.5"/>`);
-    const q = qs.at(-1), s = instLabel(q.p.inst), w = textWidth(s, 11), rightSide = q.x + 10 + w <= right;
-    labels.push({ s, w, x: rightSide ? q.x + 10 : qs[0].x - 10, anchor: rightSide ? "start" : "end", y: q.y + 4 });
-  }
-  for (const q of placed) parts.push(dot(t, q.x, q.y, color(q.p), !q.p.derived));
-  labels.sort((a, b) => a.y - b.y);
-  for (let a = 1; a < labels.length; a++) {
-    const prev = labels[a - 1], cur = labels[a];
-    const span = l => (l.anchor === "start" ? [l.x, l.x + l.w] : [l.x - l.w, l.x]);
-    const [p0, p1] = span(prev), [c0, c1] = span(cur);
-    if (c0 < p1 && p0 < c1 && cur.y - prev.y < 13) cur.y = prev.y + 13;
-  }
-  for (const l of labels) parts.push(text(l.x, l.y, l.s, { size: 11, fill: t.ink2, anchor: l.anchor }));
-  // Record holders are listed under the plot rather than labelled at their marks.
-  const holders = placed.filter(q => q.p.holder).sort((a, b) => a.x - b.x)
-    .map(q => `${instLabel(q.p.inst)} (${q.p.r.method.split(/\s*[(,]/)[0].trim()}, ${Math.round(q.p.hours)} GPU-h${q.p.derived ? ", derived" : ""})`);
-  const hl = holders.length ? footnote(t, `Record holders in the top band, cheapest first: ${holders.join("; ")}.`, bottom + 66) : { svg: "", bottom: bottom + 40 };
-  parts.push(hl.svg);
-
-  const fn = footnote(t, `Stored fields are never derived: a row stating "20 A100 for four days" carries those facts and no GPU-hours, and the product is taken here, ` +
-    `once, and marked. GPU generations are not normalised. ${cpuRows.length} further rows state CPU core-hours and are not drawn: CPU and GPU time do not share an axis. ` +
-    "Filled marks in the size figures mean record-eligible; here they mean GPU-hours as stated.", hl.bottom + 26);
-  parts.push(fn.svg);
-  return doc(t, fn.bottom + 24, "What a published energy cost, against how far it sits from the reference",
-    pts.map(p => `${instLabel(p.inst)}: ${p.r.method.split(/\s*[(,]/)[0]} ${Math.round(p.hours)} GPU-h${p.derived ? " (derived)" : ""}, distance ${p.holder ? "0 (record)" : p.gap.toExponential(1)}`).join("; "), parts);
+const hoursPanels = costFigure({
+  name: "energy-vs-compute",
+  title: "The best energies at each cost, instance by instance",
+  subtitle: panels => `Every published energy whose paper states what it cost in hours, on the ${panels.length} instances with at least two such rows. ` +
+    "The line is the frontier: the results nothing beats for less. Colour is the kind of number; filled marks can hold a record, hollow ones cannot.",
+  costOf: hoursOf, minRows: 2,
+  xLabel: "hours, as reported",
+  legendItems: t => [
+    { kind: "dot", color: t.series[0], label: "Variational bound" },
+    { kind: "dot", color: t.series[1], label: "Projected" },
+    { kind: "dot", color: t.series[2], label: "Extrapolated" },
+    { kind: "dot", color: t.series[3], label: "Exact" },
+    { kind: "ring", color: t.ink2, label: "Cannot hold a record" },
+    { kind: "line", color: t.series[0], label: "Frontier" },
+  ],
+  footer: panels => {
+    const all = panels.flatMap(p => p.pts);
+    const cpu = all.filter(p => p.cost.unit === "cpu").length, der = all.filter(p => p.cost.derived).length;
+    return `Circles are GPU-hours, squares CPU core-hours (${cpu} rows); a whisker under a mark means the hours are devices × wall-clock, multiplied here (${der} rows) - ` +
+      "the stored fields are never derived, GPU generations are not normalised, and a CPU core-hour is not converted into a GPU-hour. " +
+      "Projections and extrapolations are not bounds and never on the frontier. The horizontal line is the instance's record, costed or not.";
+  },
+  describe: panels => panels.map(({ inst, pts }) => `${instLabel(inst)}: ${pts.map(p => `${shortLabel(p.r)} ${Math.round(p.cost.value)} ${p.cost.unit === "cpu" ? "CPU-h" : "GPU-h"}${p.cost.derived ? " (derived)" : ""} ${p.e.toFixed(6)}`).join(", ")}`).join("; "),
 });
 
-console.log(`${OUT}/: ${written.length} files (energy vs compute: ${pts.length} rows, ${stated} stated + ${derived} derived GPU-hours; ${cpuRows.length} CPU-hour rows not drawn)`);
+const paramPanels = costFigure({
+  name: "energy-vs-parameters",
+  title: "The best energies at each parameter count, instance by instance",
+  subtitle: panels => `Every published energy whose paper states the ansatz's parameter count, on the ${panels.length} instances with at least three such rows. ` +
+    "The line is the frontier: the results no smaller ansatz beats. Colour is the kind of number; filled marks can hold a record, hollow ones cannot.",
+  costOf: parametersOf, minRows: 3,
+  xLabel: "variational parameters",
+  legendItems: t => [
+    { kind: "dot", color: t.series[0], label: "Variational bound" },
+    { kind: "dot", color: t.series[1], label: "Projected" },
+    { kind: "dot", color: t.series[2], label: "Extrapolated" },
+    { kind: "ring", color: t.ink2, label: "Cannot hold a record" },
+    { kind: "line", color: t.series[0], label: "Frontier" },
+  ],
+  footer: () => "Parameter counts as the papers print them; a count evaluated from a printed formula is marked medium confidence in the row. " +
+    "Tensor-network bond dimensions and Monte Carlo sample counts are other costs and are not on this axis. The horizontal line is the instance's record, costed or not.",
+  describe: panels => panels.map(({ inst, pts }) => `${instLabel(inst)}: ${pts.map(p => `${shortLabel(p.r)} ${p.cost.value} parameters ${p.e.toFixed(6)}`).join(", ")}`).join("; "),
+});
+
+console.log(`${OUT}/: ${written.length} files (energy vs compute: ${hoursPanels.length} instances, ${hoursPanels.reduce((a, p) => a + p.pts.length, 0)} rows; ` +
+  `energy vs parameters: ${paramPanels.length} instances, ${paramPanels.reduce((a, p) => a + p.pts.length, 0)} rows)`);

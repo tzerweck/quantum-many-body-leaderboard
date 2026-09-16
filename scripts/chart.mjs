@@ -151,3 +151,15 @@ export const log = Math.log10;
 export const logScale = (v0, v1, p0, p1) => v => p0 + ((log(Math.max(v, v0)) - log(v0)) / (log(v1) - log(v0))) * (p1 - p0);
 const SUP = { "-": "⁻", 0: "⁰", 1: "¹", 2: "²", 3: "³", 4: "⁴", 5: "⁵", 6: "⁶", 7: "⁷", 8: "⁸", 9: "⁹" };
 export const pow10 = k => "10" + String(k).split("").map(c => SUP[c]).join("");
+
+// A row's method, short enough to label a mark with: "Holographic Quantum Transformer
+// (HQT), ..." -> "HQT"; otherwise the text before any parenthesis or comma, which is where
+// method strings put the architecture's name. Says when the number is not a bound.
+export function shortLabel(r) {
+  const acronym = r.method.match(/\(([A-Z][A-Za-z0-9-]{1,7})\)/);
+  let s = acronym ? acronym[1] : r.method.split(/\s*[(,]/)[0].trim();
+  if (r.bound_type === "projected") s += /fixed.?node|\bFN\b/i.test(r.method) ? " + fixed-node" : ", projected";
+  if (r.bound_type === "extrapolated") s += ", extrapolated";
+  if (r.defect) s += ", flagged";
+  return s;
+}
