@@ -311,11 +311,10 @@ The rules are in <a href="${RULES}">RULES.md</a>, the row format in <a href="${D
 }
 
 // ------------------------------------------------------------------------ browse page
-// A row is the instance and its record; clicking it opens the next NEXT energies below it,
-// in rank order, so the shape of the competition on an instance is one click away rather
-// than a page away. The instance page still exists, at its stable URL, linked from the
-// panel; it is what search engines, llms.txt and the API point at.
-const NEXT = 5;
+// A row is the instance and its record; clicking it opens every energy published for it
+// below, in rank order, so the shape of the competition on an instance is one click away
+// rather than a page away. The instance page still exists at its stable URL for search
+// engines, llms.txt and the API, and is not linked from here; the JSON is.
 
 // The badge families: the lattice name without its cell spec (kagome-36a -> kagome), and
 // four size bands. Both are per model, and a band or lattice that no instance of the model
@@ -331,31 +330,29 @@ const sizeBand = inst => SIZE_BANDS.find(([, test]) => test(inst.n_sites))[0];
 
 const BOUND_SHORT = { variational: "variational", projected: "projected", extrapolated: "extrapolated", exact: "exact", null: "unclassified" };
 
-function nextRows(inst) {
+// Every row of the instance, the record marked, challengers with their gap above it. sigma
+// is shown because 62% of rows carry one (2026-09-16); Var(E) and the V-score, on 36%, stay
+// on the instance page.
+function allRows(inst) {
   const rec = recordOf(inst);
   const sorted = [...inst.rows].sort((a, b) => a.energy - b.energy);
-  const start = rec ? sorted.indexOf(rec) + 1 : 0;
-  const next = sorted.slice(start, start + NEXT);
   const f = perSiteDivisor(inst) ?? 1;
   const decimals = rec ? quoteRow(rec, inst).decimals : null;
-  const rows = next.map(r => {
-    const gap = rec && r.bound_type === "variational" && !r.defect ? gapAbove(rec, r, f, decimals) : null;
-    return `<tr class="${r.defect ? "is-flagged" : ""}">
-      <td class="record">${energyCell(r, inst, decimals)}${gap ? ` <span class="muted num">(${esc(gap)})</span>` : ""}</td>
+  const rows = sorted.map(r => {
+    const isRec = r === rec;
+    const gap = rec && !isRec && r.bound_type === "variational" && !r.defect ? gapAbove(rec, r, f, decimals) : null;
+    const { sigma } = perSite(r, inst);
+    return `<tr class="${isRec ? "is-record" : ""}${r.defect ? " is-flagged" : ""}">
+      <td class="record">${energyCell(r, inst, isRec ? null : decimals)}${isRec ? '<span class="tag">record</span>' : gap ? ` <span class="muted num">(${esc(gap)})</span>` : ""}</td>
+      <td class="num">${sigma == null ? '<span class="muted">n/a</span>' : sigma.toExponential(1)}</td>
       <td><span class="badge">${BOUND_SHORT[String(r.bound_type ?? null)]}</span>${r.defect ? ` <span class="badge flag">flagged</span>` : ""}</td>
       <td>${esc(shorten(r.method, 60))}</td>
       <td>${citeHtml(r)}</td>
       <td class="num">${yearOf(r) ?? '<span class="muted">n/a</span>'}</td>
     </tr>`;
   }).join("");
-  const rest = inst.rows.length - start - next.length;
-  const lead = !next.length ? "No other energy is published for this instance."
-    : rec ? `The next ${next.length === 1 ? "energy" : `${next.length} energies`} after the record, in rank order.`
-    : `The lowest ${next.length === 1 ? "energy" : `${next.length} energies`}, in rank order.`;
-  return `<p class="muted">${lead}${rest > 0 ? ` ${rest} more on the instance page.` : ""}</p>
-    ${next.length ? `<table class="next"><thead><tr><th>${perSiteLabel(inst)}</th><th>kind</th><th>method</th><th>source</th><th>year</th></tr></thead><tbody>${rows}</tbody></table>` : ""}
-    <p class="links"><a href="${instUrl(inst)}">Instance page &rarr;</a> <a href="${jsonUrl(inst)}">JSON</a>
-      <span class="muted"><code>${esc(inst.instance_id)}</code></span></p>`;
+  return `<table class="next"><thead><tr><th>${perSiteLabel(inst)}</th><th>&sigma;</th><th>kind</th><th>method</th><th>source</th><th>year</th></tr></thead><tbody>${rows}</tbody></table>
+    <p class="links"><a href="${jsonUrl(inst)}">JSON</a> <span class="muted"><code>${esc(inst.instance_id)}</code></span></p>`;
 }
 
 function instancesPage() {
@@ -374,7 +371,7 @@ function instancesPage() {
       return `<tr class="inst" data-search="${esc(search)}" data-lattice="${esc(latticeOf(inst))}" data-size="${sizeBand(inst)}">
         <th scope="row"><button type="button" aria-expanded="false" aria-controls="${id}">${esc(label)}</button></th>
         ${cells}<td class="num">${inst.rows.length}</td></tr>
-      <tr class="more" id="${id}" hidden><td colspan="4">${nextRows(inst)}</td></tr>`;
+      <tr class="more" id="${id}" hidden><td colspan="4">${allRows(inst)}</td></tr>`;
     });
     const lattices = [...new Set(group.map(latticeOf))].sort();
     const bands = SIZE_BANDS.filter(([key]) => group.some(i => sizeBand(i) === key));
@@ -394,8 +391,8 @@ function instancesPage() {
 
   const body = `
 <h1>All ${summary.instances} instances</h1>
-<p class="lead">One row per Hamiltonian instance with its record; click a row for the energies
-behind it. ${summary.records.held} instances have a record; the rest say why they do not.</p>
+<p class="lead">One row per Hamiltonian instance with its record; click a row for every energy
+published on it. ${summary.records.held} instances have a record; the rest say why they do not.</p>
 <p><input id="filter" type="search" placeholder="Filter by lattice, size, coupling or method…" autocomplete="off" spellcheck="false">
 <span id="filter-count" class="muted"></span></p>
 <nav class="jump">${MODELS.filter(([m]) => instances.some(i => i.model === m))
@@ -832,13 +829,14 @@ tr.inst th button::before {
 }
 tr.inst.open th button::before { transform: rotate(45deg) translateY(-0.2em); }
 tr.inst.open td, tr.inst.open th { background: var(--surface); border-bottom-color: transparent; }
-tr.more > td { padding: 0.2rem 0 1.2rem 1.4rem; background: var(--surface); }
+tr.more > td { padding: 0.6rem 0 1.2rem 1.4rem; background: var(--surface); }
 tr.more:hover { background: none; }
 tr.more p { margin: 0.4rem 0; font-size: 0.88rem; }
 tr.more p.links a { margin-right: 1rem; }
 table.next { width: auto; min-width: 60%; font-size: 0.85rem; margin: 0.4rem 0 0.6rem; }
 table.next th, table.next td { padding: 0.35rem 1.2rem 0.35rem 0; }
 table.next tr.is-flagged td:first-child { box-shadow: inset 3px 0 0 var(--flag); }
+table.next tr.is-record td { background: color-mix(in srgb, var(--accent) 7%, transparent); }
 
 .record-box {
   background: var(--surface); border: 1px solid var(--grid); border-left: 3px solid var(--accent);
