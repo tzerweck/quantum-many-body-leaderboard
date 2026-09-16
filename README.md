@@ -458,28 +458,17 @@ are in [DATA.md](DATA.md).
 
 ## Contributing
 
-**Corrections are the most valuable contribution** and are wanted more than new rows. If
-your work is in this table and the row is wrong (wrong sector, wrong convention, wrong
-`bound_type`, a number attributed to the wrong paper), open an issue against it. An
-objection must be specific and technical; the admissible grounds are listed in
-[§10](RULES.md#10-pending-confirmed-objections), and rulings cite a clause rather than anyone's judgement about anyone's
-work.
+**New entries**: open an issue or a PR with: instance, number, error bar and how it
+was estimated, the `bound_type`, and the primary reference. A row is `pending` for 30
+days and `confirmed` if no objection is unresolved.
+
+**Corrections welcome**: Open an issue against it. Be specific and technical; 
+the admissible grounds are listed in
+[§10](RULES.md#10-pending-confirmed-objections).
 
 **If your row has no error bar, send the error bar.** A sampled energy without one is
 listed but ranks for nothing, and several such rows sit below their instance's current
-record; the count is in the [leaderboard](#leaderboard) section, which is regenerated
-on every build.
-
-**If you have the trained state, we would rather have that than a number.** The energy
-variance almost nobody reports is a byproduct of a single sampling pass: in
-[NetKet](https://github.com/netket/netket), `vstate.expect(H)` returns the mean, the
-error of the mean, the variance, `tau_corr` and `R_hat` in one call. With the checkpoint
-and the model code we can measure it, report `R_hat` and `tau_corr` so the measurement
-is itself auditable, and credit it on your row.
-
-New rows: open an issue or a PR with the instance, the number, the error bar and how it
-was estimated, the `bound_type`, and the primary reference. A row is `pending` for 30
-days and `confirmed` if no objection is unresolved.
+record.
 
 ## Figures
 
