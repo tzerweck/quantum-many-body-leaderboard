@@ -1,5 +1,5 @@
 import fs from "node:fs"; import path from "node:path";
-import { expectedDof, expectedEinf, vScore, perSiteDivisor } from "./units.mjs";
+import { expectedDof, expectedEinf, vScore, perSiteDivisor, SECTOR_RESOLVED } from "./units.mjs";
 const issues = [], rounding = []; let rows = 0, checkedD = 0, checkedE = 0, checkedV = 0, checkedC = 0, checkedCov = 0;
 for (const m of fs.readdirSync("data")) {
   const dir = path.join("data", m);
@@ -19,7 +19,7 @@ for (const m of fs.readdirSync("data")) {
       // instance. Sector-resolved ED rows are excluded - they are the lowest state in
       // ONE symmetry sector, so an unconstrained variational state may legitimately
       // sit below them. Violations under a relative 1e-8 are reported as rounding.
-      if (r.bound_type === "exact" && perSiteDivisor(inst) != null && !/[A-Z][0-9a-z]*\.[A-Z]/.test(r.method)) {
+      if (r.bound_type === "exact" && perSiteDivisor(inst) != null && !SECTOR_RESOLVED.test(r.method)) {
         for (const o of inst.rows) {
           if (o.bound_type !== "variational" || o.energy >= r.energy) continue;
           const rel = (r.energy - o.energy) / Math.abs(r.energy);

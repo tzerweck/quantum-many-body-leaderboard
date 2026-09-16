@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import { perSiteDivisor, perSiteLabel, SPIN_MODELS, isSampled, recordEligible, noErrorMetrics } from "./units.mjs";
+import { exactRecordOf } from "./summary.mjs";
 
 for (const id of process.argv.slice(2)) {
   const d = JSON.parse(fs.readFileSync(`data/${id}.json`, "utf8"));
@@ -22,7 +23,9 @@ for (const id of process.argv.slice(2)) {
   // A flagged row is listed in place but cannot hold the record (RULES.md 6.1). Suspicion is
   // enough to withhold the record, never enough to hide the row; RULES.md 10 is how a flag
   // gets lifted or upheld. A sampled energy with no stated sigma is likewise listed and
-  // ineligible (RULES.md 6); a deterministic one needs no sigma.
+  // ineligible (RULES.md 6); a deterministic one needs no sigma. Where the instance is
+  // solved the exact energy is the record and the best bound is the closest challenger.
+  const exact = exactRecordOf(d);
   const best = sorted.find(recordEligible);
   for (const b of sorted) {
     if (b.bound_type !== "variational" || (best && b.energy >= best.energy)) continue;
@@ -31,7 +34,8 @@ for (const id of process.argv.slice(2)) {
     else if (isSampled(b.method) && b.sigma == null)
       console.log(`  !! excluded from the record: ${(b.energy / f).toFixed(7)} [no-sigma, sampled energy] ${b.method.slice(0, 42)}`);
   }
+  if (exact) console.log(`  --> RECORD (exact, the instance is solved): ${(exact.energy / f).toFixed(7)}  ${exact.method.slice(0, 52)}`);
   console.log(best
-    ? `  --> RECORD (strict variational bound): ${(best.energy / f).toFixed(7)}  ${best.method.slice(0, 52)}`
-    : `  --> NO RECORD: every variational row is flagged or absent`);
+    ? `  --> ${exact ? "BEST VARIATIONAL BOUND" : "RECORD (strict variational bound)"}: ${(best.energy / f).toFixed(7)}  ${best.method.slice(0, 52)}`
+    : `  --> ${exact ? "no eligible variational bound" : "NO RECORD"}: every variational row is flagged or absent`);
 }

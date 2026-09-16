@@ -13,7 +13,7 @@
 // are decided by reading the paper (RULES.md 2, 5); this only says which paper to open.
 import fs from "node:fs";
 import path from "node:path";
-import { perSiteDivisor, recordEligible } from "./units.mjs";
+import { perSiteDivisor, recordEligible, SECTOR_RESOLVED } from "./units.mjs";
 
 const tsv = f => {
   const [h, ...rest] = fs.readFileSync(f, "utf8").split("\n").filter(Boolean);
@@ -228,14 +228,17 @@ for (const inst of instances) {
   const div = perSiteDivisor(inst);
   if (div == null) continue;
   const sorted = [...inst.rows].sort((a, b) => a.energy - b.energy);
-  // An instance with no eligible record (solved exactly, or every variational row
-  // flagged) still takes rows, so under --all the reference is its best number.
+  // The reference for matching is the best variational bound, not the record: on a
+  // solved instance the exact energy is the record, but a paper's number is judged by
+  // where it sits relative to the field and to the exact floor separately. An instance
+  // with no eligible bound (every variational row flagged) still takes rows, so under
+  // --all the reference is its best number.
   const rec = sorted.find(recordEligible) ?? (ALL ? sorted[0] : null);
   if (!rec) continue;
   const recEps = rec.energy / div;
   // Sector-resolved ED rows are lowest-in-sector energies, not ground states, and are
   // excluded from the floor for the same reason validate.mjs excludes them.
-  const exactRow = sorted.find(r => r.bound_type === "exact" && !/[A-Z][0-9a-z]*\.[A-Z]/.test(r.method));
+  const exactRow = sorted.find(r => r.bound_type === "exact" && !SECTOR_RESOLVED.test(r.method));
   const exactEps = exactRow ? exactRow.energy / div : null;
   const onInstance = inst.rows.map(r => r.energy / div);
   const fresh = inst.rows.some(r => r.source !== "varbench@2024-10-22");

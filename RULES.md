@@ -89,9 +89,28 @@ Any submitted number is converted by the loader, never by hand.
 
 ## 6. Records and ties
 
-The record for an instance is the **lowest eligible `variational` energy**.
-`projected`, `extrapolated` and `exact` rows are displayed alongside but never hold it.
+The record for an instance is its **state-of-the-art energy**: the `exact` energy where the
+instance is solved, otherwise the **lowest eligible `variational` energy**. `projected` and
+`extrapolated` rows are displayed alongside but never hold it.
 
+- **A solved instance has a record, and exact diagonalization holds it.** The exact energy is
+  the answer, so it is the state of the art on that instance by definition; the variational
+  rows on it are ranked below it by their distance to it, and the best of them is the closest
+  challenger, not the record. Until 2026-09-16 this document said the opposite ("`exact` rows
+  never hold it") and the table reported solved instances as having "nothing to compete for".
+  That was inherited from VarBench, which uses exact energies as references for the V-score
+  rather than as results, and it misread ED as something other than the state of the art.
+- **Among several exact rows the most precise holds the record, not the lowest.** Exact rows
+  are estimates of one number, so the lowest of them is the luckiest, not the best: exact
+  diagonalization (no error bar) outranks sign-problem-free QMC, and a smaller error bar
+  outranks a larger one. Two exact rows that disagree beyond their stated precision are a
+  `defect` to raise on the row (11), not a ranking question.
+- **Sector-resolved exact diagonalization does not hold the record.** A row such as
+  `Exact Diagonalization Gamma.D6.A1 1` states the lowest energy in one symmetry sector, which
+  is the ground-state energy only if that sector is the ground state's. An instance carrying
+  only such rows has no record until an unconstrained exact energy is stated
+  (`SECTOR_RESOLVED` in `scripts/units.mjs`; the validator excludes the same rows from the
+  variational-principle check for the same reason).
 - Rows whose error bars overlap at **2 sigma** share the rank.
 - **A sampled energy must state its `sigma` to be eligible.** `sigma` must also state how it
   was estimated. An error bar that ignores autocorrelation understates by around an order of
@@ -141,6 +160,13 @@ numbers that are wrong, because being wrong downward is what makes a number look
 The headline is **records held**: the number of instances where a group holds the record.
 There is no cross-instance score. The V-score is shown where `energy_variance` is present
 and is never ranked on.
+
+**Aggregates over methods count only records held by a `variational` bound.** The medal
+table, records by ansatz family and records by year are statements about ansätze competing;
+an exact energy is the answer rather than an ansatz, and counting it would hand the most
+records to whoever ran exact diagonalization on the most small instances. The per-instance
+record is still the exact energy where one exists (6); the aggregates simply say over which
+instances they are computed.
 
 ## 8. Provenance
 
@@ -262,9 +288,10 @@ Three things make this the sharpest case in this document:
    an upper bound too, so an energy below it is not evidence of error; ordinarily it is just
    a better state. There is no exact reference at 108 sites. The refutation had to come from
    the *sampler*, which is why §10 now admits non-ergodic sampling as its own ground.
-2. **The instance ends with no record at all.** Its only `variational` row is flagged, and the
-   DMRG row is `extrapolated`: Depenbrock et al. state their energies are "extrapolated in
-   the truncation error of single-site DMRG", which lies below any energy an MPS achieved.
+2. **The instance ends with no record at all.** There is no exact energy at 108 sites, its only
+   `variational` row is flagged, and the DMRG row is `extrapolated`: Depenbrock et al. state
+   their energies are "extrapolated in the truncation error of single-site DMRG", which lies
+   below any energy an MPS achieved.
    "No eligible record" is the correct answer here, and a table ranking on energy alone would
    instead have printed a refuted number as the record.
 3. **DMRG is not one `bound_type`.** At a *stated bond dimension* it is a strict variational

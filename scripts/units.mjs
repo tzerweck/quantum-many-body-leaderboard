@@ -28,9 +28,24 @@ export const isSampled = method => !DETERMINISTIC.test(method || "");
 export const noErrorMetrics = r =>
   r.bound_type !== "exact" && r.sigma == null && r.energy_variance == null;
 
-// A row may hold its instance's record only if it is a strict variational bound,
-// carries no unresolved defect (RULES.md 6.1), and - when its energy was sampled -
-// states the error bar the tie rule needs (RULES.md 6).
+// Sector-resolved exact diagonalization, as VarBench labels it: "Exact Diagonalization
+// Gamma.D6.A1 1" is the lowest state in ONE symmetry sector, not the ground state, so an
+// unconstrained variational energy may legitimately sit below it and it cannot stand in for
+// the instance's exact energy. One regex, used by the record, the validator and the table
+// matcher alike.
+export const SECTOR_RESOLVED = /[A-Z][0-9a-z]*\.[A-Z]/;
+
+// An exact row that states the instance's ground-state energy: exact diagonalization, an
+// exact solution, or sign-problem-free QMC where that is established (RULES.md 4). Such a
+// row IS the record wherever one exists (RULES.md 6): the answer outranks every claim
+// about it. A flagged exact row is skipped like any other (6.1).
+export const exactEligible = r =>
+  r.bound_type === "exact" && !r.defect && !SECTOR_RESOLVED.test(r.method || "");
+
+// A row may hold its instance's VARIATIONAL record only if it is a strict variational
+// bound, carries no unresolved defect (RULES.md 6.1), and - when its energy was sampled -
+// states the error bar the tie rule needs (RULES.md 6). On an instance with an eligible
+// exact row this decides the best variational bound, not the record.
 export function recordEligible(r) {
   if (r.bound_type !== "variational" || r.defect) return false;
   return !isSampled(r.method) || r.sigma != null;

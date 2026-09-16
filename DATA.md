@@ -40,9 +40,12 @@ This is the row currently holding the 10×10 J1-J2 record, in full:
 `baseline: true` marks a row VarBench **computed itself** rather than collected from a
 paper: a reference calculation run across the instance set so the V-score would have
 something to measure against, not a published state-of-the-art claim. 369 of the 578
-imported rows are of this kind, and 96 of them currently hold a record, which means
-*no published result has ever beaten the benchmark's own reference run on those
-instances*. See [§8.2](RULES.md#82-baseline-collected-versus-computed).
+imported rows are of this kind. 75 of VarBench's own exact diagonalizations hold their
+instance's record, as any exact energy does ([§6](RULES.md#6-records-and-ties)), and 28
+of its variational reference runs do, which means *no published result has ever beaten the
+benchmark's own reference run on those instances*
+(`baseline_records` in `data/_summary.json` counts the latter). See
+[§8.2](RULES.md#82-baseline-collected-versus-computed).
 
 `energy` and `sigma` are stored in the instance's own convention; `v_score` is derived,
 never supplied. `verified` records where the number was read from and how: table

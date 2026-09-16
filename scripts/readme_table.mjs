@@ -10,7 +10,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { perSiteDivisor, perSiteLabel, isSampled, noErrorMetrics } from "./units.mjs";
-import { collect, recordOf, summarize } from "./summary.mjs";
+import { collect, recordOf, summarize, noRecordKey } from "./summary.mjs";
 import { citeCell } from "./cite.mjs";
 import { sources } from "./enrich_sources.mjs";
 
@@ -107,14 +107,34 @@ export function byGeometry(a, b) {
   return 0;
 }
 
-// Why an instance has no record, tested in the order summary.mjs counts it, so the cells
-// agree with the totals under the table.
+// Why an instance has no record, in the words the table prints. The test order is
+// summary.mjs's (noRecordKey), so the cells agree with the totals under the table.
+const NO_RECORD = {
+  no_sigma: "sampled rows carry no error bar",
+  flagged: "every variational row is flagged",
+  sector_only: "exact rows are sector-resolved, no ground-state energy stated",
+  no_variational: "no variational row",
+};
 export function noRecordReason(inst) {
-  const v = inst.rows.filter(r => r.bound_type === "variational");
-  if (v.some(r => !r.defect && isSampled(r.method) && r.sigma == null)) return "sampled rows carry no error bar";
-  if (inst.rows.some(r => r.bound_type === "exact")) return "solved exactly";
-  if (v.some(r => r.defect)) return "every variational row is flagged";
-  return "no variational row";
+  return NO_RECORD[noRecordKey(inst)];
+}
+
+// The closest challenger: the lowest unflagged variational row above the record. On a
+// solved instance that is the best variational bound anyone has published, and the
+// number a new method has to beat to become the best variational one.
+export function challengerOf(inst, rec) {
+  const sorted = [...inst.rows].sort((a, b) => a.energy - b.energy);
+  return sorted.slice(sorted.indexOf(rec) + 1).find(r => r.bound_type === "variational" && !r.defect) ?? null;
+}
+
+// How far above the record the challenger sits, per site, to two figures: "+1.7e-3".
+// Relative to nothing, because the table is already per site in the papers' convention
+// and that is the number a reader subtracts by hand. A gap under the record's quoted
+// precision - DMRG converged to the exact energy at 1e-13 - is not a number the table
+// stands behind, so it prints as below that precision rather than as twelve-digit noise.
+export function gapAbove(rec, next, f, decimals) {
+  const gap = (next.energy - rec.energy) / f;
+  return gap < 10 ** -decimals ? `+<1e-${decimals}` : `+${gap.toExponential(1)}`;
 }
 
 const HEADER = ["| instance | record | method | closest challenger |", "|---|---|---|---|"];
@@ -124,15 +144,13 @@ function row(inst, label, cache) {
   if (!rec) return `| ${label} | no record | ${noRecordReason(inst)} | |`;
   const f = perSiteDivisor(inst) ?? 1;
   const q = quote(rec.energy / f, rec.sigma == null ? null : rec.sigma / f);
-  const sorted = [...inst.rows].sort((a, b) => a.energy - b.energy);
-  const next = sorted
-    .slice(sorted.indexOf(rec) + 1)
-    .find(r => r.bound_type === "variational" && !r.defect);
+  const next = challengerOf(inst, rec);
   // Quoted at the record's precision so the two are readable against each other, with
-  // the same markers the record cell uses. Each method carries its own source link, so
-  // the challenger is as checkable as the record.
+  // the same markers the record cell uses and the gap above the record spelled out.
+  // Each method carries its own source link, so the challenger is as checkable as the
+  // record.
   const challenger = next
-    ? `${(next.energy / f).toFixed(q.decimals)}${marks(next)} ${shorten(next.method, 34)} ${citeCell(next, cache)}`
+    ? `${(next.energy / f).toFixed(q.decimals)}${marks(next)} (${gapAbove(rec, next, f, q.decimals)}) ${shorten(next.method, 34)} ${citeCell(next, cache)}`
     : "none";
   return `| ${label} | **${q.text}**${marks(rec)} | ${shorten(rec.method, 46)} ${citeCell(rec, cache)} | ${challenger} |`;
 }
@@ -157,7 +175,9 @@ function main() {
   lines.push(`Energies are per site: spin models as \`${spin}\`, Hubbard as \`${site}\` (see`);
   lines.push("[units and conventions](DATA.md#units-and-conventions)). **Bold** is the record under");
   // Tristan's wording and line breaks from the same GitHub edit.
-  lines.push("[the ranking rules](RULES.md#6-records-and-ties). ");
+  lines.push("[the ranking rules](RULES.md#6-records-and-ties): the exact energy where the instance is");
+  lines.push("solved, otherwise the lowest eligible variational bound. The last column is the closest");
+  lines.push("variational challenger and how far above the record it sits, per site. ");
   lines.push("**&#9675;** marks a row where **we found no error");
   lines.push("metric** (neither an error bar nor an energy variance) in the source we read; ");
   lines.push("**&dagger;** marks a");
@@ -178,11 +198,22 @@ function main() {
     lines.push(`<summary><b>${name}</b>: ${group.length} instances, energies as <code>${perSiteLabel(group[0])}</code></summary>`);
     lines.push("", ...HEADER, ...group.map(i => row(i, instanceLabel(i), cache)), "", "</details>", "");
   }
-  const b = s.blocked_on_sigma;
-  lines.push(`Across the whole table: **${s.records.held} of ${s.instances} instances have a record**, from ${s.rows} energies.`);
-  lines.push(`Of the ${s.instances - s.records.held} instances without one, ${s.records.none_exact_only} are solved exactly and have nothing to compete`);
-  lines.push(`for. Separately, **${b.rows} sampled variational energies across ${b.instances} instances carry no error bar**, so`);
-  lines.push(`they are listed and rank for nothing, and ${b.would_take_record} of them sit below their instance's current`);
+  const b = s.blocked_on_sigma, r = s.records;
+  // The no-record reasons are a sentence, not a list, so each takes a verb that agrees
+  // with its count; zero counts are left out rather than printed as "0 have".
+  const v = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  const why = [
+    r.none_no_sigma && `${v(r.none_no_sigma, "has", "have")} only sampled rows without an error bar`,
+    r.none_flagged && `${v(r.none_flagged, "has", "have")} every variational row flagged`,
+    r.none_sector_only && `${v(r.none_sector_only, "carries", "carry")} only sector-resolved exact rows`,
+    r.none_no_variational && `${v(r.none_no_variational, "has", "have")} no variational row at all`,
+  ].filter(Boolean);
+  const without = s.instances - r.held;
+  lines.push(`Across the whole table: **${r.held} of ${s.instances} instances have a record**, from ${s.rows} energies:`);
+  lines.push(`${r.held_by_exact} are solved, so the exact energy is the state of the art there, and ${r.held_by_variational} are held`);
+  lines.push(`by a variational bound.${without ? ` Of the ${without} without one, ${why.join(", ")}.` : ""}`);
+  lines.push(`Separately, **${b.rows} sampled variational energies across ${b.instances} instances carry no error bar**,`);
+  lines.push(`so they are listed and rank for nothing, and ${b.would_take_record} of them sit below their instance's current`);
   lines.push("record. If one of those is your paper, the error bar is the only thing missing.");
   lines.push("");
   lines.push(`And **${s.no_error_metrics} energies carry no error metric we could find** (&#9675;). Those numbers stay in the`);

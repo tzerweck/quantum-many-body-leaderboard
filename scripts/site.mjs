@@ -16,7 +16,7 @@ import { collect, recordOf, summarize } from "./summary.mjs";
 import { citeRef } from "./cite.mjs";
 import { sources, sourceOf } from "./enrich_sources.mjs";
 import { FRONTIER } from "./views.mjs";
-import { quote, marks, shorten, MODELS, BOUNDARY, instanceLabel, byGeometry, noRecordReason } from "./readme_table.mjs";
+import { quote, marks, shorten, MODELS, BOUNDARY, instanceLabel, byGeometry, noRecordReason, challengerOf, gapAbove } from "./readme_table.mjs";
 
 const OUT = "_site";
 const REPO = "https://github.com/tzerweck/quantum-many-body-leaderboard";
@@ -218,10 +218,10 @@ const BOUND_LABEL = {
   null: "Not yet classified",
 };
 const BOUND_NOTE = {
-  variational: "The record is the lowest eligible energy in this group, and only this group.",
+  variational: "Where the instance is not solved, the record is the lowest eligible energy in this group; where it is, the lowest eligible energy here is the best variational bound and the closest challenger to the exact one.",
   projected: "Variational only within a constraint: fixed-node, constrained-path, GFMC on a trial state. Node- or constraint-dependent, so not cleanly comparable to each other or to the group above, and never the record.",
   extrapolated: "Zero-variance, bond-dimension or Trotter-error extrapolations. Not a bound: no ansatz ever reached the number, so it cannot hold the record.",
-  exact: "Exact diagonalization, an exact solution, or sign-problem-free QMC where that is established: the answer, not a claim about it.",
+  exact: "Exact diagonalization, an exact solution, or sign-problem-free QMC where that is established: the answer, not a claim about it, and therefore the record wherever one exists. Sector-resolved diagonalizations state the lowest energy in one symmetry sector and do not hold it.",
   null: "The method string does not say whether the energy is sign-problem-free or constrained, so no bound_type could be assigned without guessing.",
 };
 
@@ -317,12 +317,12 @@ function frontierTable() {
     const link = `<a href="${instUrl(inst)}">${esc(label)}</a>`;
     if (!rec) return `<tr><th scope="row">${link}</th><td class="none">no record</td><td>${esc(noRecordReason(inst))}</td><td></td></tr>`;
     const q = quoteRow(rec, inst);
-    const sorted = [...inst.rows].sort((a, b) => a.energy - b.energy);
-    const next = sorted.slice(sorted.indexOf(rec) + 1).find(r => r.bound_type === "variational" && !r.defect);
+    const next = challengerOf(inst, rec);
+    const f = perSiteDivisor(inst) ?? 1;
     return `<tr><th scope="row">${link}</th>
       <td class="record"><span class="num">${q.text}</span>${marks(rec)}</td>
       <td>${esc(shorten(rec.method, 46))} ${citeHtml(rec)}</td>
-      <td>${next ? `${energyCell(next, inst, q.decimals)} ${esc(shorten(next.method, 34))} ${citeHtml(next)}` : '<span class="muted">none</span>'}</td></tr>`;
+      <td>${next ? `${energyCell(next, inst, q.decimals)} <span class="muted num">(${esc(gapAbove(rec, next, f, q.decimals))})</span> ${esc(shorten(next.method, 34))} ${citeHtml(next)}` : '<span class="muted">none</span>'}</td></tr>`;
   });
   return `<div class="scroll"><table class="leaderboard">
     <thead><tr><th>instance</th><th>record</th><th>method</th><th>closest challenger</th></tr></thead>
@@ -334,21 +334,24 @@ function homePage() {
   const b = summary.blocked_on_sigma;
   const body = `
 <h1>The best published ground-state energies, in one table</h1>
-<p class="lead">QMBL is a record book for variational quantum many-body simulation: one row per
-published energy, ranked within each Hamiltonian instance, every row citing the paper that
-produced the number and declaring what kind of quantity it is.</p>
+<p class="lead">QMBL is a record book of the state of the art in quantum many-body simulation: one row
+per published energy, ranked within each Hamiltonian instance, every row citing the paper that
+produced the number and declaring what kind of quantity it is. Where an instance is solved, the
+exact energy is the record; everywhere else the best variational bound is.</p>
 
 <ul class="tiles">
   <li><b>${summary.instances}</b><span>Hamiltonian instances</span></li>
   <li><b>${summary.rows}</b><span>published energies</span></li>
-  <li><b>${summary.records.held}</b><span>instances with a record</span></li>
+  <li><b>${summary.records.held}</b><span>instances with a record, ${summary.records.held_by_exact} of them solved</span></li>
   <li><b>${current}</b><span>with a 2025&ndash;26 result</span></li>
 </ul>
 
 <h2>The frontier</h2>
 <p>The instances the field actually competes on. Energies are per site, in the convention the
 papers use (<a href="/data/#units-and-conventions">units and conventions</a>).
-<b>Bold</b> is the record under <a href="/rules/#6-records-and-ties">the ranking rules</a>.</p>
+<b>Bold</b> is the record under <a href="/rules/#6-records-and-ties">the ranking rules</a>: the exact
+energy where the instance is solved, otherwise the lowest eligible variational bound. The last column
+is the closest variational challenger and how far above the record it sits, per site.</p>
 ${frontierTable()}
 <p class="legend"><b>&#9675;</b> we found no error metric in the source we read, neither an error
 bar nor an energy variance. <b>&dagger;</b> a sampled energy with a variance but no error bar.
@@ -370,8 +373,9 @@ below their instance's current record. If one of those is your paper,
 <p>Every row is one published claim about one Hamiltonian instance: the energy, its error bar, the
 method, the primary reference, and a declared <code>bound_type</code> saying what the number
 actually is &mdash; a strict variational bound, a projected or fixed-node estimate, a zero-variance
-extrapolation, or a numerically exact result. Only strict variational bounds compete for a record,
-which is what keeps an extrapolated number from beating a measured one.
+extrapolation, or a numerically exact result. An exact result is the record wherever one exists;
+on every other instance only strict variational bounds compete for it, which is what keeps an
+extrapolated number from beating a measured one.
 The rules are in <a href="/rules/">RULES.md</a>, the row format in <a href="/data/">DATA.md</a>.</p>
 
 <section class="cite">
@@ -515,7 +519,9 @@ function instancePage(inst) {
         <p class="big"><span class="num">${quoteRow(rec, inst).text}</span>${marks(rec)}
           <span class="unit">${perSiteLabel(inst)}</span></p>
         <p>${esc(rec.method)}</p>
-        <p class="muted">${citeHtml(rec)} &middot; lowest eligible strict variational bound
+        <p class="muted">${citeHtml(rec)} &middot; ${rec.bound_type === "exact"
+          ? "exact energy: the instance is solved, and this is the state of the art on it"
+          : "lowest eligible strict variational bound"}
           (<a href="/rules/#6-records-and-ties">rules &sect;6</a>)</p>
       </div>`
     : `<div class="record-box none">
@@ -659,7 +665,7 @@ function apiInstance(inst) {
     per_site_label: perSiteLabel(inst),
     record: rec ? {
       energy: rec.energy, sigma: rec.sigma, method: rec.method, reference: rec.reference,
-      energy_per_site: f == null ? null : rec.energy / f,
+      bound_type: rec.bound_type, energy_per_site: f == null ? null : rec.energy / f,
     } : null,
     no_record_reason: rec ? null : noRecordReason(inst),
   };
@@ -669,12 +675,13 @@ function llmsTxt() {
   const lines = [
     "# QMBL - the Quantum Many-Body Leaderboard",
     "",
-    `> The best published variational ground-state energies for ${summary.instances} lattice Hamiltonian instances (${summary.rows} energies, ${summary.records.held} with a record). Read-only, generated from the repository's data/ directory, Apache-2.0.`,
+    `> The best published ground-state energies for ${summary.instances} lattice Hamiltonian instances (${summary.rows} energies, ${summary.records.held} with a record, ${summary.records.held_by_exact} of them solved exactly). Read-only, generated from the repository's data/ directory, Apache-2.0.`,
     "",
     "Every row is one published claim about one Hamiltonian instance and carries the energy, its",
     "error bar, the method, the primary reference, and a `bound_type`: strict variational bound,",
-    "projected/fixed-node estimate, zero-variance extrapolation, or numerically exact. Only strict",
-    "variational bounds can hold a record. Energies are stored as totals in VarBench's convention",
+    "projected/fixed-node estimate, zero-variance extrapolation, or numerically exact. An exact",
+    "energy is the record wherever one exists; otherwise only a strict variational bound can hold",
+    "it. Energies are stored as totals in VarBench's convention",
     "and quoted per site; the conversion is in DATA.md. Individual energies must be cited to the",
     "primary paper named on the row, not to this site.",
     "",
@@ -892,6 +899,7 @@ write("api/instances.json", JSON.stringify(instances.map(i => {
     url: `https://qmbl.org${instUrl(i)}`, json: `https://qmbl.org${jsonUrl(i)}`,
     record_energy_per_site: rec && f != null ? rec.energy / f : null,
     record_method: rec?.method ?? null,
+    record_bound_type: rec?.bound_type ?? null,
   };
 }), null, 2) + "\n");
 write("api/qmbl.json", JSON.stringify({
