@@ -1071,7 +1071,7 @@ footer.site {
   border-top: 1px solid var(--grid); padding: 1.6rem clamp(1rem, 4vw, 3rem) 3rem;
   font-size: 0.9rem; color: var(--ink2); text-align: center;
 }
-footer.site p { margin: 0.3rem 0; }
+footer.site p { margin: 0.3rem auto; }
 
 figure { margin: 2.2rem 0 0; }
 figure picture, figure img, figure.chart svg { display: block; width: 100%; max-width: 920px; height: auto; }
