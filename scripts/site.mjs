@@ -483,7 +483,6 @@ function instancesPage() {
   const sections = MODELS.map(([model, name]) => {
     const group = instances.filter(i => i.model === model).sort(byGeometry);
     if (!group.length) return "";
-    const held = group.filter(recordOf).length;
     const rows = group.map(inst => {
       const rec = recordOf(inst);
       const label = instanceLabel(inst);
@@ -505,7 +504,7 @@ function instancesPage() {
     </div>`;
     return `<section data-model="${model}">
       <h2 id="${model.toLowerCase()}">${esc(name)}<a class="anchor" href="#${model.toLowerCase()}" aria-label="Link to this section">#</a></h2>
-      <p class="muted"><span class="count">${group.length} instances</span>, ${held} with a record, energies as <code>${perSiteLabel(group[0])}</code></p>
+      <p class="muted"><span class="count">${group.length} instances</span>, energies as <code>${perSiteLabel(group[0])}</code></p>
       ${badges}
       <div class="scroll"><table class="leaderboard">
         <thead><tr><th>instance</th><th>record</th><th>method</th><th>rows</th></tr></thead>
