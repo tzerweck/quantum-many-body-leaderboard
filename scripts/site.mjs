@@ -269,7 +269,7 @@ function variantNote(inst) {
 // light one and the stylesheet recolours it in dark mode (FIG_DARK). One entry per figure.
 const FIGURES = [
   ["size-vs-accuracy", "The best published energies, by system size",
-    "Every energy on an instance with an exact ground-state energy, placed by its relative gap to it so that different Hamiltonians share one axis; a better energy is higher. Colour is the kind of number; filled marks can hold a record, hollow ones cannot."],
+    "The energies on instances with an exact ground-state energy, placed by its relative gap to it so that different Hamiltonians share one axis; a better energy is higher. Colour is the kind of number; filled marks can hold a record, hollow ones cannot."],
   ["size-vs-accuracy-by-family", "The best energies by system size, one panel per method family",
     "Each panel colours one family's energies over all the others in grey and joins the family's best energy at each size."],
 ];
