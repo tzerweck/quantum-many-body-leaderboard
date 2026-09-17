@@ -103,7 +103,7 @@ function page({ url, title, description, body, wide = false }) {
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://qmbl.org${url}">
 <header class="site">
-  <a class="wordmark" href="/">${logoSvg()}<b>QMBL<span class="badge beta" title="QMBL is in beta: the data and the site are still being checked and re-cut">beta</span><span class="tagline">the quantum many-body leaderboard</span></b></a>
+  <a class="wordmark" href="/">${logoSvg()}<b>QMBL<span class="tagline">the quantum many-body leaderboard</span></b><span class="badge beta" title="QMBL is in beta: the data and the site are still being checked and re-cut">beta</span></a>
   <nav>${NAV.map(([href, label]) =>
     `<a href="${href}"${href === url ? ' aria-current="page"' : ""}>${label}</a>`).join("")}
     <a class="ext" href="${REPO}" aria-label="QMBL on GitHub" title="Source and data on GitHub">${GITHUB_MARK}</a>
@@ -1122,7 +1122,7 @@ td.none { color: var(--muted); }
 }
 .badge.flag { color: var(--flag); border-color: var(--flag); }
 .badge.flag[title] { cursor: help; }
-.wordmark .badge.beta { margin-left: 0.6rem; vertical-align: 0.2em; font-family: var(--sans); font-weight: 400; font-size: 0.75rem; padding: 0.15rem 0.6rem; color: var(--flag); border-color: var(--flag); letter-spacing: 0.06em; text-transform: uppercase; }
+.wordmark .badge.beta { margin-left: 0.3rem; font-family: var(--sans); font-weight: 400; font-size: 0.75rem; padding: 0.15rem 0.6rem; color: var(--flag); border-color: var(--flag); letter-spacing: 0.06em; text-transform: uppercase; }
 .legend { font-size: 0.9rem; color: var(--ink2); max-width: 46em; }
 .citation { max-width: none; }
 
