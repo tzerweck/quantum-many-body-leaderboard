@@ -3,10 +3,11 @@
 // question the field asks is how a method's accuracy holds up as N grows, and n_sites is
 // on every instance, so this view needs nothing the rows do not already carry.
 //
-// Size runs along x and accuracy up y (Tristan, 2026-09-16): the distance axis is a log
-// scale turned upside down, 10^0 at the bottom and 10^-8 at the top, so a better energy
-// is higher on the page and the reference itself - distance zero, off any log scale -
-// is the line or band above the plot.
+// Size runs along x and the distance up y. The two exact-referenced figures draw it as a
+// plain log scale (Tristan, 2026-09-17), 10^-8 at the bottom and 10^0 at the top, so a
+// better energy is lower and the exact energy - distance zero, off any log scale - is the
+// line below the plot. The per-Hamiltonian figures keep the scale turned upside down
+// (Tristan, 2026-09-16), a better energy higher and the record holders in a band above.
 //
 // The question every figure here asks is which published results are the best (Tristan,
 // 2026-09-16); the relative gap is only the mechanic that lets Hamiltonians of different
@@ -18,7 +19,7 @@
 // the top. A row below the energy it is measured against is a triangle there, as the log
 // scale shows only the size of the distance.
 //
-// The two exact-referenced figures draw an "exact" line above the 10^-8 gridline instead
+// The two exact-referenced figures draw an "exact" line below the 10^-8 gridline instead
 // (Tristan, 2026-09-17), with sign-problem-free QMC counted as exact. A row closer than
 // 10^-8 sits on that line, above or below. A row below the exact energy within twice the
 // joint error bar is placed by the size of its gap, since inside the error bar the sign
@@ -38,7 +39,7 @@ const instances = collect();
 const { write, written } = writer(OUT);
 
 const BOUNDS = { variational: 0, projected: 1, extrapolated: 2 };
-const FLOOR = 1e-8; // relative gaps below this are drawn at the top edge, and counted
+const FLOOR = 1e-8; // relative gaps below this are drawn on the exact line, and counted
 
 // The reference an instance's rows are measured against, and what kind it is.
 function referenceOf(inst) {
@@ -67,24 +68,27 @@ const mark = (t, x, y, color, p) => (p.below ? tri : dot)(t, x, y, color, p.elig
 const pin = (t, x, y, color, p) => dot(t, x, y, color, p.eligible, rowHref(p.inst, p.r));
 const BELOW = t => ({ kind: "tri", color: t.ink2, label: "Below the energy it is measured against" });
 
-// A log-log plot area: size along x with the ticks given, distance up y on the inverted
-// decade scale (y0 is the top, y1 the bottom). With `exact`, a gap below y0 is placed on an
-// "exact" line EXACT_RISE above the top gridline, and the Y returned does so.
+// A log-log plot area: size along x with the ticks given, distance up y on a decade scale.
+// Without `exact` the scale is inverted (y0 at the top, y1 at the bottom). With `exact` it
+// is not (y0 at the bottom, y1 at the top), a gap below y0 is placed on an "exact" line
+// EXACT_RISE below the bottom gridline, and the Y returned does so; the size labels move
+// down under that line.
 const EXACT_RISE = 24;
 function logPlot(t, parts, { left, right, top, bottom, x0, x1, y0, y1, xTicks, xLabel, yLabel, exact }) {
-  const X = logScale(x0, x1, left, right), scale = logScale(y0, y1, top, bottom);
-  const Y = exact ? g => (g < y0 ? top - EXACT_RISE : scale(g)) : scale;
+  const X = logScale(x0, x1, left, right), scale = exact ? logScale(y0, y1, bottom, top) : logScale(y0, y1, top, bottom);
+  const Y = exact ? g => (g < y0 ? bottom + EXACT_RISE : scale(g)) : scale;
+  const below = exact ? bottom + EXACT_RISE : bottom;
   if (exact) {
-    parts.push(hline(left, right, top - EXACT_RISE, t.muted));
-    parts.push(text(left - 8, top - EXACT_RISE + 4, "exact", { size: 11, fill: t.ink2, anchor: "end" }));
+    parts.push(hline(left, right, bottom + EXACT_RISE, t.muted));
+    parts.push(text(left - 8, bottom + EXACT_RISE + 4, "exact", { size: 11, fill: t.ink2, anchor: "end" }));
   }
   for (let k = Math.ceil(log(y0)); k <= Math.floor(log(y1)); k++) {
     const v = 10 ** k;
     parts.push(hline(left, right, Y(v), t.grid));
     parts.push(text(left - 8, Y(v) + 4, pow10(k), { size: 11, fill: t.muted, anchor: "end", nums: true }));
   }
-  for (const v of xTicks) parts.push(text(X(v), bottom + 18, String(v), { size: 11, fill: t.muted, anchor: "middle", nums: true }));
-  if (xLabel) parts.push(text((left + right) / 2, bottom + 38, xLabel, { size: 12, fill: t.ink2, anchor: "middle" }));
+  for (const v of xTicks) parts.push(text(X(v), below + 18, String(v), { size: 11, fill: t.muted, anchor: "middle", nums: true }));
+  if (xLabel) parts.push(text((left + right) / 2, below + 38, xLabel, { size: 12, fill: t.ink2, anchor: "middle" }));
   if (yLabel) parts.push(`<text transform="translate(${n(left - 46)} ${n((top + bottom) / 2)}) rotate(-90)" font-size="12" fill="${t.ink2}" text-anchor="middle">${yLabel}</text>`);
   return { X, Y };
 }
@@ -109,32 +113,32 @@ const Y0 = FLOOR, Y1 = 1;
 const XT = [10, 30, 100, 300, 1000].filter(v => v <= X1);
 const floored = all.filter(p => p.gap < FLOOR).length;
 const UNDER = `${under} ${under === 1 ? "row lies" : "rows lie"} below the exact energy by more than twice the error bar and ${under === 1 ? "is" : "are"} not drawn.`;
-const Y_LABEL = "relative gap to the instance's exact energy (better is higher)";
+const Y_LABEL = "relative gap to the instance's exact energy (better is lower)";
 
 // ------------------------------------------------------ 1. every row against an exact energy
 write("size-vs-accuracy", t => {
   const h = header(t, "The best published energies, by system size",
     `${all.length} energies on the ${exactRef.length} instances that have an exact ground-state energy, ` +
-    "placed by their relative gap to it so that different Hamiltonians share one axis; a better energy is higher. Colour is the kind of number; filled marks can hold a record, hollow ones cannot.");
+    "placed by their relative gap to it so that different Hamiltonians share one axis; a better energy is lower. Colour is the kind of number; filled marks can hold a record, hollow ones cannot.");
   const lg = legend(t, [
     { kind: "dot", color: t.series[0], label: "Variational bound" },
     { kind: "dot", color: t.series[1], label: "Projected (fixed-node)" },
     { kind: "dot", color: t.series[2], label: "Extrapolated" },
     { kind: "ring", color: t.ink2, label: "Listed, cannot hold a record" },
   ], h.bottom + 34);
-  const top = lg.bottom + 28 + EXACT_RISE, bottom = top + 380, left = PAD + 62, right = W - PAD - 8;
+  const top = lg.bottom + 28, bottom = top + 380, left = PAD + 62, right = W - PAD - 8;
   const parts = [h.svg, lg.svg];
   const { X, Y } = logPlot(t, parts, { left, right, top, bottom, x0: X0, x1: X1, y0: Y0, y1: Y1, xTicks: XT, xLabel: "sites", yLabel: Y_LABEL, exact: true });
   // Hollow first, then filled; within each, extrapolated and projected under variational.
   const order = [...all].sort((a, b) => (a.eligible - b.eligible) || (BOUNDS[b.r.bound_type] - BOUNDS[a.r.bound_type]));
   for (const p of order) parts.push(pin(t, X(p.inst.n_sites), Y(p.gap), t.series[BOUNDS[p.r.bound_type]], p));
-  const fn = footnote(t, `Height is |E − E_exact| / |E_exact| on an inverted log scale, so that a better energy is higher; ${floored} rows closer than ${pow10(log(FLOOR))}, ` +
+  const fn = footnote(t, `Height is |E − E_exact| / |E_exact| on a log scale, so that a better energy is lower; ${floored} rows closer than ${pow10(log(FLOOR))}, ` +
     `above or below, sit on the exact line. A row below the exact energy within twice the error bar is placed by the size of its gap. ${UNDER} ` +
     "No line joins the sizes: the instances at one size are different Hamiltonians, and a frontier across them would compare a Hubbard " +
-    "energy with a Heisenberg one. Exact references are exact diagonalization or sign-problem-free QMC, exact within its error bar; flagged rows are not shown.", bottom + 58);
+    "energy with a Heisenberg one. Exact references are exact diagonalization or sign-problem-free QMC, exact within its error bar; flagged rows are not shown.", bottom + EXACT_RISE + 58);
   parts.push(fn.svg);
   return doc(t, fn.bottom + 24, "The best published energies, by system size",
-    `Number of sites (x) against relative gap to the exact ground-state energy (y, inverted log scale, better is higher) for ${all.length} published energies on ${exactRef.length} exactly solved instances.`, parts);
+    `Number of sites (x) against relative gap to the exact ground-state energy (y, log scale, better is lower) for ${all.length} published energies on ${exactRef.length} exactly solved instances.`, parts);
 });
 
 // ------------------------------------------------------------- 2. the same, by method family
@@ -152,9 +156,9 @@ write("size-vs-accuracy-by-family", t => {
     "Each panel colours one family's energies over all the others in grey and joins the family's best energy at each size. " +
     "A method that only ever ran at one size is a lone mark.");
   const panelW = (W - 2 * PAD - 40) / cols, plotH = 160, pitch = plotH + 78 + EXACT_RISE;
-  const top0 = h.bottom + 40 + EXACT_RISE, left0 = PAD + 58, cloudId = "size-vs-accuracy-by-family-grey";
-  const CX = logScale(X0, X1, left0, PAD + panelW - 4), CYlog = logScale(Y0, Y1, top0, top0 + plotH);
-  const CY = g => (g < Y0 ? top0 - EXACT_RISE : CYlog(g));
+  const top0 = h.bottom + 40, left0 = PAD + 58, cloudId = "size-vs-accuracy-by-family-grey";
+  const CX = logScale(X0, X1, left0, PAD + panelW - 4), CYlog = logScale(Y0, Y1, top0 + plotH, top0);
+  const CY = g => (g < Y0 ? top0 + plotH + EXACT_RISE : CYlog(g));
   const parts = [h.svg, `<defs><g id="${cloudId}" fill="${t.recessive[0]}">` +
     all.map(p => `<circle cx="${n(CX(p.inst.n_sites))}" cy="${n(CY(p.gap))}" r="2.5"/>`).join("") + "</g></defs>"];
   names.forEach((name, k) => {
@@ -162,16 +166,16 @@ write("size-vs-accuracy-by-family", t => {
     const px = PAD + col * (panelW + 40), left = px + 58, right = px + panelW - 4;
     const top = top0 + row * pitch, bottom = top + plotH;
     const mine = all.filter(p => p.fam === name);
-    parts.push(text(left, top - 12 - EXACT_RISE, `${name} (${mine.length})`, { size: 13, fill: t.ink, weight: 600 }));
+    parts.push(text(left, top - 12, `${name} (${mine.length})`, { size: 13, fill: t.ink, weight: 600 }));
     const { X, Y } = logPlot(t, parts, { left, right, top, bottom, x0: X0, x1: X1, y0: Y0, y1: Y1, xTicks: XT,
       xLabel: row === rows - 1 ? "sites" : null, yLabel: null, exact: true });
     parts.push(`<use href="#${cloudId}" x="${n(left - left0)}" y="${n(top - top0)}"/>`);
     parts.push(frontier(mine, X, Y, t.series[0]));
     for (const p of [...mine].sort((a, b) => a.eligible - b.eligible)) parts.push(pin(t, X(p.inst.n_sites), Y(p.gap), t.series[0], p));
   });
-  const y = top0 + (rows - 1) * pitch + plotH + 62;
+  const y = top0 + (rows - 1) * pitch + plotH + EXACT_RISE + 62;
   const fn = footnote(t, "Each method name belongs to one family (scripts/method_names.mjs); 'other' holds exact methods and names no family covers. " +
-    `Filled marks can hold a record, hollow ones cannot. Axes, the exact line included, as in the figure above: a better energy is higher. ${UNDER}`, y);
+    `Filled marks can hold a record, hollow ones cannot. Axes, the exact line included, as in the figure above: a better energy is lower. ${UNDER}`, y);
   parts.push(fn.svg);
   return doc(t, fn.bottom + 24, "The best published energies by system size, one panel per method family",
     names.map(f => `${f}: ${all.filter(p => p.fam === f).length} energies`).join("; "), parts);
