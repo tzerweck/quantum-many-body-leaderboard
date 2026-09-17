@@ -44,7 +44,10 @@ const cffField = k => CFF.match(new RegExp(`^${k}:\\s*"?([^"\\n]+)"?\\s*$`, "m")
 const VERSION = cffField("version");
 const RELEASED = cffField("date-released");
 if (!VERSION || !RELEASED) throw new Error("CITATION.cff: version or date-released not found");
-const CITATION = `Tristan Zerweck, QMBL - the Quantum Many-Body Leaderboard, v${VERSION}, Zenodo (${RELEASED.slice(0, 4)}). https://doi.org/${DOI}`;
+const CITE_HEAD = "T. Zerweck";
+const CITE_TITLE = "QMBL - the Quantum Many-Body Leaderboard";
+const CITE_TAIL = `v${VERSION}, Zenodo (${RELEASED.slice(0, 4)}).`;
+const CITATION = `${CITE_HEAD}, ${CITE_TITLE}, ${CITE_TAIL} https://doi.org/${DOI}`;
 
 const cache = sources();
 const instances = collect();
@@ -443,8 +446,8 @@ The rules are in <a href="${RULES}">RULES.md</a>, the row format in <a href="${D
 <section class="cite" id="cite">
   <h2>Citing QMBL</h2>
   <p>Cite the dataset by its concept DOI, which always resolves to the latest release:</p>
-  <p class="citation">${esc(CITATION.slice(0, CITATION.indexOf(" https://")))}
-  <a href="https://doi.org/${DOI}"><code>${DOI}</code></a></p>
+  <blockquote class="citation">${esc(CITE_HEAD)}, <em>${esc(CITE_TITLE)}</em>, ${esc(CITE_TAIL)}
+  <a href="https://doi.org/${DOI}">${DOI}</a></blockquote>
   <p>Individual energies should cite the primary paper named on the row, not this site.</p>
 </section>`;
   return page({
@@ -1054,6 +1057,7 @@ details.defect summary b { color: var(--flag); }
 
 .cite { background: var(--surface); border: 1px solid var(--grid); border-radius: 3px; padding: 0.4rem 1.2rem 1.2rem; margin-top: 2.4rem; }
 .cite h2 { margin-top: 1.2rem; }
+blockquote.citation { margin: 1rem 0; padding: 0 1em; border-left: 0.25em solid var(--muted); color: var(--ink2); max-width: 46em; }
 
 p.search { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 1rem; max-width: none; }
 #filter {
