@@ -434,6 +434,16 @@ Check [RULES.md](RULES.md) for how a record is decided.
 
 Check [DATA.md](DATA.md) for stored units, conventions, error-metrics, and provenance and defect handling.
 
+## Roadmap
+
+| Item | Status |
+|---|---|
+| Ground-state energy dataset | ✅ Live in [`data/`](data/) |
+| Interactive website | ✅ [qmbl.org](https://qmbl.org) |
+| Versioned releases with a DOI | ✅ [Zenodo](https://doi.org/10.5281/zenodo.22753734) |
+| Checking newer papers for every instance | 🔄 Ongoing |
+| arXiv posting | ⏳ Planned |
+
 ## Contributing
 
 **New entries**: open an issue or a PR with: instance, number, error bar and how it
