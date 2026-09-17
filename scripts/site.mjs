@@ -27,7 +27,6 @@ import { quote, shorten, MODELS, BOUNDARY, instanceLabel, byGeometry, noRecordRe
 import { logoSvg, faviconSvg, LOGO_CSS } from "./logo.mjs";
 import { hoursOf, costFigureName } from "./cost.mjs";
 import { FRONTIER } from "./views.mjs";
-import { ladderFigures } from "./ladders.mjs";
 
 const OUT = "_site";
 const REPO = "https://github.com/tzerweck/quantum-many-body-leaderboard";
@@ -288,24 +287,6 @@ const tabRules = (id, count) => Array.from({ length: count }, (_, k) =>
 #${id}-${k}:checked ~ .tab-labels > label[for="${id}-${k}"] { color: #fff; background: var(--accent); border-color: var(--accent); }
 #${id}-${k}:focus-visible ~ .tab-labels > label[for="${id}-${k}"] { outline: 2px solid var(--accent); outline-offset: 2px; }`).join("\n");
 
-// The per-Hamiltonian size figures: one per model and lattice, a panel per ladder of sizes,
-// drawn by size_accuracy.mjs into figures/size/, which it empties first; which exist is
-// read off the directory, as for the cost figures. Two rows of badges, the model and then
-// its lattices, rather than one badge per ladder.
-const SIZE_FIGS = [...Map.groupBy(ladderFigures(instances).filter(f => fs.existsSync(`figures/${f.name}.svg`)), f => f.model)];
-const sizeEntry = f => [f.name, `${f.title}: the best energies at each size`,
-  "One panel per Hamiltonian published at two or more sizes; each size is placed against its exact energy where it has one, otherwise against the standing record, whose holder then sits in the band above the plot."];
-function sizeSwitcher() {
-  if (!SIZE_FIGS.length) return "";
-  return `<section class="tabs" id="size-vs-accuracy-ladders">
-  <h2>The best energies as each Hamiltonian grows<a class="anchor" href="#size-vs-accuracy-ladders" aria-label="Link to this section">#</a></h2>
-  <p class="muted">Every Hamiltonian with published results at two or more sizes, including the ones nobody can solve exactly at scale: a size is
-  placed against its exact energy where it has one and against the standing record otherwise.</p>
-  ${tabs("size-model", SIZE_FIGS.map(([model, figs], j) =>
-    [esc(modelName(model)), `<div class="tabs">${tabs(`size-${j}`, figs.map(f => [esc(f.label), figure(sizeEntry(f))]))}</div>`]))}
-</section>`;
-}
-
 // The cost figures: one per instance with enough energies costed in hours, drawn by
 // pareto.mjs into figures/cost/. Which instances have one is read off the directory, which
 // pareto.mjs empties before writing, so the site never shows a figure for an instance that
@@ -329,8 +310,7 @@ function costSwitcher() {
   ${tabs("cost-tab", COST_FIGS.map(inst => [`${esc(modelName(inst.model))} ${esc(instanceLabel(inst))}`, figure(costEntry(inst))]))}
 </section>`;
 }
-const TAB_CSS = [tabRules("cost-tab", COST_FIGS.length), tabRules("size-model", SIZE_FIGS.length),
-  ...SIZE_FIGS.map(([, figs], j) => tabRules(`size-${j}`, figs.length))].join("\n");
+const TAB_CSS = tabRules("cost-tab", COST_FIGS.length);
 
 // Leaderboard: the instance's cost figure above its rows, or how many of its energies state
 // a cost when that is too few to draw; nothing when none does.
@@ -429,7 +409,7 @@ function homePage() {
   const figures = [figure(overview), `<details class="fig-more">
   <summary>Look at the dissection per method family</summary>
 ${figure(byFamily)}
-</details>`, sizeSwitcher(), costSwitcher()].join("\n");
+</details>`, costSwitcher()].join("\n");
   const linked = new Set([...figures.matchAll(/href="\/instances\/#(r-[\w-]+)"/g)].map(m => m[1]));
   const cards = instances.flatMap(inst => inst.rows.filter(r => linked.has(rowId(inst, r)))
     .map(r => `<div data-row="${rowId(inst, r)}">${rowCard(r, inst)}</div>`));
