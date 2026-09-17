@@ -3,7 +3,13 @@
 import fs from "node:fs";
 const CHECKED = "2026-09-13";
 const CNNMPS = { ref: "arXiv:2603.14425, Disentangling Tensor Network States with Deep Neural Networks", pr: false };
-const CTWF   = { ref: "Chen, Naik & Heyl, Convolutional transformer wave functions, arXiv:2503.10462", pr: false };
+// A number the CTWF paper quotes, not one it produced (Tristan, 2026-09-17): Sec. III of
+// arXiv:2503.10462 gives -0.4976764(7) as the factored attention "with more samples Ns = 2^14
+// and more parameters Np = 434760 ... [48]", ref. [48] being a private communication, and the
+// authors' Zenodo CSV labels it "Improved factored attention (not shown in figure)". Table 1 of
+// arXiv:2603.14425, where the sweep read it, credits it to CTWF. CTWF's own energy is only
+// plotted; it comes from the same CSV in add_repo_data_rows.mjs.
+const VRB    = { ref: "L. L. Viteritti, R. Rende, and F. Becca, private communication (2024) (cited as ref [48] in Sec. III of arXiv:2503.10462)", pr: null };
 const HFPS   = { ref: "Chen, Wan, Sengupta & Georges, Neural network-augmented Pfaffian wave-functions for scalable simulations of interacting fermions, Proc. Natl. Acad. Sci. U.S.A. 123, e2535288123 (2026), arXiv:2507.10705", pr: true };
 const HQT    = { ref: "Holographic Quantum Transformer, arXiv:2607.00398 (conference proceedings)", pr: true };
 const VIT26  = { ref: "Approaching the Thermodynamic Limit with Neural-Network Quantum States, arXiv:2602.02665", pr: false };
@@ -14,7 +20,8 @@ const ADD = {
     { eps:-0.4976939, err:2e-7, m:"CNN-MPS (h,D,l)=(32,20,20), Marshall sign transformation", src:CNNMPS,
       note:TBL+' Claim: "the best energy obtained by CNN-MPS is -0.4976939(2) ... which is lower than the best previously reported result". Supersedes Chen & Heyl -0.4976921(4) as the record for this instance.' },
     { eps:-0.4976923, err:2e-7, m:"T-MPS", src:CNNMPS, note:TBL },
-    { eps:-0.4976764, err:7e-7, m:"Convolutional transformer wave function (CTWF)", src:CTWF, note:TBL+" Cross-checked against the CTWF paper's own text." },
+    { eps:-0.4976764, err:7e-7, m:"Factored-attention transformer (improved, Ns = 2^14, Np = 434760)", src:VRB, secondaryOf:"arXiv:2503.10462",
+      note:TBL+" Credited there to CTWF, but arXiv:2503.10462 Sec. III prints it as the factored attention of ref. [48] (private communication): \"With more samples Ns = 2^14 and more parameters Np = 434760, the factored attention is possible to reach variational energy -0.4976764(7) ... while still less accurate than CTWF\"; the authors' Zenodo CSV (10.5281/zenodo.14035975, sources/2503.10462-zenodo-10x10_J1J2.csv) lists it as \"Improved factored attention (not shown in figure), 434760, -0.4976764(7)\". Relabelled 2026-09-17 (Tristan)." },
   ]},
   "J1J2/square_256_P_0.5": { rows: [
     { eps:-0.4969140, err:5e-7, m:"CNN-MPS", src:CNNMPS, note:TBL+' Claim: "For L=16, CNN-MPS yields the lowest variational energy, -0.4969140(5), compared with the previously best reported value -0.4967163(8)".' },
@@ -48,9 +55,9 @@ for (const [id, spec] of Object.entries(ADD)) {
       energy_variance: varTot, dof, einf,
       v_score: varTot == null ? null : (dof * varTot) / (energy - einf) ** 2, method:r.m, bound_type:"variational",
       bound_type_reason:"variational ansatz; energy is a strict upper bound (assigned during source verification)",
-      reference:r.src.ref, peer_reviewed:r.src.pr, source:"sweep-2026-09-13", provenance:"primary",
+      reference:r.src.ref, peer_reviewed:r.src.pr, source:"sweep-2026-09-13", provenance:r.secondaryOf ? "secondary" : "primary",
       verified:{ checked_on:CHECKED, method:"arXiv HTML parsed locally, no LLM transcription",
-        reported_as:`${r.eps}${r.err!=null?` (+/- ${r.err})`:``} per site${spec.hubbard?``:` in S.S units`}`, note:r.note, secondary_of:null } });
+        reported_as:`${r.eps}${r.err!=null?` (+/- ${r.err})`:``} per site${spec.hubbard?``:` in S.S units`}`, note:r.note, secondary_of:r.secondaryOf ?? null } });
     n++;
   }
   fs.mkdirSync(`data/${id.split("/")[0]}`,{recursive:true});

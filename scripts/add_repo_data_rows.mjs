@@ -149,3 +149,53 @@ if (process.env.QMBL_VERBOSE) skipped.forEach(s => console.log("  dup", s));
     console.log(`added 1 repository-data row (arXiv:2505.20406): ${id} ${r.energy_per_site.toFixed(7)}(${Math.round(r.std_error * 1e7)})`);
   }
 }
+
+// CTWF's own 10x10 J1-J2 energy (arXiv:2503.10462). The paper plots it in Fig. 2 as a relative
+// error and a rescaled variance, and prints no number for it; the -0.4976764(7) that used to carry
+// the CTWF name is the factored attention it quotes (add_sweep_rows.mjs). The authors' Zenodo
+// record (10.5281/zenodo.14035975, 10x10_J1J2.csv, md5 98556b24d20bffeb69bb300bd696bda4, copied
+// verbatim into sources/) holds the plotted values. Its error bar is printed "(0)", i.e. below
+// half a unit in the sixth decimal, which is not a sigma, so none is stored: the row cannot hold a
+// record, and could not anyway (CNN-MPS -0.4976939(2) is lower). The variance column is the
+// paper's "rescaled energy variance sigma^2/N", S.S units: total Pauli = x N x 16.
+{
+  const CSV = "sources/2503.10462-zenodo-10x10_J1J2.csv";
+  const line = fs.readFileSync(CSV, "utf8").split("\n").find(l => l.startsWith("CTWF,"));
+  const [, np, e, v] = line.split(",").map(s => s.trim());
+  const id = "J1J2/square_100_P_0.5";
+  const p = `data/${id}.json`;
+  const inst = JSON.parse(fs.readFileSync(p, "utf8"));
+  const div = perSiteDivisor(inst);
+  const eps = +e.replace(/\(\d+\)$/, "");
+  const varPerN = +v.replace(/\((\d+)\)/, "");
+  if (inst.rows.some(x => Math.abs(x.energy / div - eps) < 5e-7 && /CTWF/.test(x.method))) console.log(`  ${id}: CTWF row already present, not added`);
+  else {
+    const energy = +(eps * div).toPrecision(12);
+    const varTot = +(varPerN * inst.n_sites * 16).toPrecision(8);
+    const dof = expectedDof(inst) ?? inst.rows[0]?.dof ?? null;
+    const einf = expectedEinf(inst) ?? inst.rows[0]?.einf ?? null;
+    inst.rows.push({
+      energy, sigma: null, energy_variance: varTot, dof, einf, v_score: vScore(varTot, dof, energy, einf),
+      method: "Convolutional transformer wave function (CTWF)", bound_type: "variational",
+      bound_type_reason: "variational ansatz at a stated size; energy is an upper bound (assigned during source reading)",
+      reference: "Chen, Naik & Heyl, Convolutional transformer wave functions, arXiv:2503.10462", peer_reviewed: false,
+      source: "repo-data-2026-09-17", provenance: "primary",
+      verified: {
+        checked_on: "2026-09-17",
+        method: "authors' Zenodo data record read locally (CSV), values copied by column, no transcription; the file is committed as sources/2503.10462-zenodo-10x10_J1J2.csv",
+        reported_as: line.trim(),
+        note: `Zenodo 10.5281/zenodo.14035975 (2024-11-04), 10x10_J1J2.csv, row "CTWF", Np = ${np}: E/N = ${e}, sigma^2/N = ${v} (S.S). Plotted in Fig. 2 of arXiv:2503.10462, printed nowhere. The printed error bar "(0)" is below half a unit in the last digit and is not stored as a sigma. Same file: "Improved factored attention (not shown in figure), 434760, -0.4976764(7)", the row formerly credited to CTWF.`,
+        secondary_of: null,
+      },
+      compute: {
+        parameters: +np, gpu_hours: null, device: null, n_devices: null, samples: 10000, wall_clock: null, cpu_core_hours: null, bond_dimension: null, iterations: null,
+        reported_as: "Sec. III: As a next step we now challenge the performance of the CTWF for the 10×10 J1-J2 Heisenberg model at J2/J1 = 0.5 in Fig. 2, choosing n = 5, c = 48, d = 12, h = 4, and Np = 255440. ... Here, the optimization is performed with 10^4 Monte-Carlo samples and MinSR [4].",
+        source: "Sec. III (10×10 paragraph), arXiv:2503.10462 (compute pass 2026-09-16, moved to this row 2026-09-17)",
+        scope: "row", confidence: "medium",
+        note: "The CTWF 10×10 run as stated: Np = 255440 (n = 5 layers, c = 48 channels, d = 12, h = 4 heads), 10^4 Monte-Carlo samples per step, MinSR, 16-element symmetry projection. Optimisation steps for 10×10, hardware and wall-clock are not stated.",
+      },
+    });
+    fs.writeFileSync(p, JSON.stringify(inst, null, 2) + "\n");
+    console.log(`added 1 repository-data row (arXiv:2503.10462): ${id} CTWF ${e}, sigma^2/N ${v}`);
+  }
+}
