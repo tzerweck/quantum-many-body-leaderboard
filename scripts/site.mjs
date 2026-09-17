@@ -474,6 +474,141 @@ const SIZE_BANDS = [
 ];
 const sizeBand = inst => SIZE_BANDS.find(([, test]) => test(inst.n_sites))[0];
 
+// The Table's text box matches words, in any order, against what an instance is (Hamiltonian,
+// lattice, size, boundary, couplings, filling) and against the methods of its rows: "hubbard
+// 16x16 U=8 afqmc" finds the 16x16 U = 8 Hubbard instances carrying an AFQMC energy. The
+// method words have to come from one row, so "variational monte carlo" does not match an
+// instance where one row says variational and another Monte Carlo. A word with a digit has to
+// match whole, so 0.5 does not find J2 = 0.55; any other word matches as a prefix, so "heis"
+// finds Heisenberg. The aliases are the other names a reader types for the same thing, each a
+// fact about the instance or the row (vendor/varbench for the impurity codes).
+//
+// searchWords is the one tokeniser for both sides - the page embeds its source - so a query is
+// cut into words exactly as the index was: "U = 8", "U=8" and "u=8.0" are all the word u=8.
+function searchWords(text) {
+  const s = String(text).toLowerCase().normalize("NFKD").replace(/\p{M}/gu, "")
+    .replace(/&asymp;|≈|~/g, "=").replace(/[×*]/g, "x")
+    .replace(/(\d)\s*x\s*(?=\d)/g, "$1x").replace(/(\d)\s+by\s+(?=\d)/g, "$1x")
+    .replace(/\s*([=\/])\s*/g, "$1")
+    .replace(/(\d\.\d*?)0+(?!\d)/g, "$1").replace(/(\d)\.(?!\d)/g, "$1")
+    .replace(/(?<![=\d.])(\d+)[\s-]+sites?\b/g, "n=$1")
+    .replace(/neural[\s-]+quantum[\s-]+states?/g, "nqs").replace(/quantum[\s-]+monte[\s-]+carlo/g, "qmc")
+    .replace(/tensor[\s-]+networks?/g, "tensornetwork");
+  const out = [];
+  for (const raw of s.split(/[\s,;:()[\]{}"'`+&!?]+/)) {
+    const word = raw.replace(/^[^\p{L}\p{N}-]+|[^\p{L}\p{N}]+$/gu, "").replace(/^-(?!\d)/, "");
+    if (!word) continue;
+    const parts = word.split(/[_\/=]+|(?<=\p{L})-|-(?!\d)|(?<=\d)x(?=\d)/u).filter(p => p && p !== word);
+    out.push([word, parts]);
+  }
+  return out;
+}
+
+// Whether an instance matches a query: every query word is among the instance's own words plus
+// one row's method words, the same row for all of them. A word that is not in the index whole
+// may still match by its parts ("open-boundary", "half-filled"), unless it is a coupling or a
+// size, where the parts alone would find the wrong instance ("u=8" is not an 8x8 at U = 4), or
+// a part is one letter, which as a prefix matches nearly anything.
+function searchMatch(sets, query) {
+  const has = (words, w) => /\d/.test(w) && !w.includes("_") ? words.includes(w) : words.some(t => t.startsWith(w));
+  const found = (words, [w, parts]) => has(words, w)
+    || (!/[=\/]|\dx\d/.test(w) && parts.length > 1 && parts.every(p => p.length > 1 && has(words, p)));
+  return sets.some(words => query.every(q => found(words, q)));
+}
+
+// Words a query may carry that name nothing: "square lattice", "at half filling".
+const SEARCH_STOP = ["a", "an", "and", "at", "by", "for", "in", "of", "on", "the", "with", "model", "models", "lattice",
+  "lattices", "hamiltonian", "hamiltonians", "boundary", "boundaries", "condition", "conditions", "system", "size",
+  "instance", "instances"];
+
+const MODEL_WORDS = {
+  Heisenberg: "heisenberg",
+  J1J2: "j1j2 heisenberg",
+  Hubbard: "fermi-hubbard",
+  tV: "spinless-fermions tv",
+  TFIsing: "tfim tfi",
+  Impurity: "anderson dmft bath",
+};
+const SHAPE_WORDS = { chain: "1d one-dimensional", square: "2d", rectangular: "2d rectangle", triangular: "2d triangle",
+  kagome: "2d", shuriken: "2d", pyrochlore: "3d" };
+const BOUNDARY_WORDS = { O: "open obc", P: "periodic pbc", PO: "periodic/open cylinder",
+  PA: "periodic/antiperiodic antiperiodic apbc" };
+// vendor/varbench/Impurity/README.md: SB single-band, TB the three-band Kanamori model of
+// Sr2RuO4, SOC with spin-orbit coupling, MT a metal and MI a Mott insulator on the Bethe
+// lattice, HF at half filling and AHF doped.
+const IMPURITY_WORDS = [
+  [/^SB-/, "single-band"], [/^SB-DMFT/, "bethe"], [/^TB-/, "three-band kanamori sr2ruo4 hund t2g"],
+  [/SOC/, "spin-orbit-coupling"], [/-MT-/, "metal metallic"], [/-MI-/, "mott-insulator insulating"],
+  [/-HF$/, "half-filling half-filled"], [/-AHF$/, "doped doping"],
+];
+// Method families by what the method string says; a row gets every alias whose pattern it matches.
+const NEURAL = /RBM|CNN|ViT|TQS|HQT|CTWF|RNN|GRU|LSTM|\bLRU\b|NQS|\bNN\b|NNB|FNN|FFN|\bMLP\b|GNN|ResNet|ConvNext|\bACE\b|\bSCALE\b|HFDS|HFPS|NAQS|[Tt]ransformer|[Aa]ttention|[Nn]eural|[Cc]onvolution|\bconv\b|[Hh]idden.[Ff]ermion|[Aa]utoregressive/;
+const METHOD_WORDS = [
+  [/[Ee]xact [Dd]iagonali[sz]ation|\bED\b/, "ed exact-diagonalization exact-diagonalisation"],
+  [/QMC|stochastic series|GFMC/i, "qmc monte-carlo"],
+  [/AFQMC/i, "afqmc auxiliary-field"],
+  [/\bSSE\b|stochastic series/, "sse stochastic-series-expansion"],
+  [/VMC|variational monte carlo/i, "vmc variational-monte-carlo"],
+  [/RBM/, "rbm restricted-boltzmann-machine"],
+  [/CNN|[Cc]onvolution|\bconv\b|ConvNext/, "cnn convolutional"],
+  [/ViT/, "vit vision-transformer"],
+  [/ViT|[Tt]ransformer|[Aa]ttention|TQS|HQT|CTWF/, "transformer"],
+  [/RNN|GRU|LSTM|[Rr]ecurrent|\bLRU\b/, "rnn recurrent"],
+  [/GNN|[Gg]raph neural/, "gnn graph-neural-network"],
+  [/DMRG/, "dmrg mps tensor-network"],
+  [/PEPS/, "peps tensor-network"],
+  [/tensor product states|\bT-MPS\b/, "tensor-network"],
+  [/VQE/, "vqe"],
+  [/Hartree|\bHF\b/, "hf hartree-fock"],
+  [NEURAL, "nqs neural-network"],
+];
+
+// The index of one instance: its own words, and one word list per distinct row method, each
+// holding only words that start with a letter so a method's "bond dimension = 100" is not a
+// size of 100. "16 sites" is the word n=16, so it does not find a 16x32 cylinder.
+function searchIndex(inst, name) {
+  const own = new Set();
+  const add = text => { for (const [w, parts] of searchWords(text)) for (const x of [w, ...parts]) own.add(x); };
+  const whole = word => own.add(word.toLowerCase());
+  add(`${name} ${MODEL_WORDS[inst.model] ?? ""} ${instanceLabel(inst)} ${inst.lattice} ${latticeOf(inst)} ${SHAPE_WORDS[latticeOf(inst)] ?? ""}`);
+  whole(inst.instance_id);
+  if (inst.boundary) add(BOUNDARY_WORDS[inst.boundary] ?? "");
+  if (inst.boundary === "P" && /2d/.test(SHAPE_WORDS[latticeOf(inst)] ?? "")) add("torus");
+  const n = inst.n_sites, side = Math.sqrt(n);
+  add(`${n} n=${n} sites`);
+  const dims = inst.lattice.match(/^[a-z]+-(\d+(?:x\d+)+)$/)?.[1].split("x")
+    ?? (/^(square|triangular)$/.test(inst.lattice) && Number.isInteger(side) ? [side, side] : null);
+  if (dims) add(`${dims.join("x")} ${[...dims].reverse().join("x")}`);
+  if (/^(square|triangular)$/.test(inst.lattice) && Number.isInteger(side)) add(`l=${side}`);
+  if (inst.lattice === "chain") add(`l=${n}`);
+  const p = inst.params ?? {};
+  if (p.J2 != null) add(`j2=${p.J2} j2/j1=${p.J2}`);
+  if (p.h != null) add(`h=${p.h} h/j=${p.h} γ=${p.h} gamma=${p.h}`);
+  if (p.U != null) add(`u=${p.U} u/t=${p.U} ${p.U < 0 ? "attractive" : p.U > 0 ? "repulsive" : ""}`);
+  if (p.V != null) add(`v=${p.V} v/t=${p.V}`);
+  if (p.Nf != null) {
+    const fill = Number(((inst.model === "Hubbard" ? 2 * p.Nf : p.Nf) / n).toFixed(4));
+    add(`n=${fill}`);
+    if (fill === (inst.model === "Hubbard" ? 1 : 0.5)) add("half-filling half-filled");
+    else if (inst.model === "Hubbard") {
+      const doping = Number((1 - fill).toFixed(4)), k = Math.round(1 / Math.abs(doping));
+      add(`doped doping=${doping}`);
+      if (Math.abs(1 / Math.abs(doping) - k) < 1e-9) whole(`1/${k}`);
+    }
+  }
+  if (inst.model === "Impurity") for (const [re, words] of IMPURITY_WORDS) if (re.test(inst.lattice)) add(words);
+  if (!recordOf(inst)) add("no record");
+  const methods = new Set(inst.rows.map(r => {
+    const aliases = METHOD_WORDS.filter(([re]) => re.test(r.method)).map(([, words]) => words);
+    if (r.bound_type === "exact" || r.bound_type === "extrapolated") aliases.push(r.bound_type);
+    const words = new Set();
+    for (const [w, parts] of searchWords(`${r.method} ${aliases.join(" ")}`))
+      for (const x of [w, ...parts]) if (/^\p{L}/u.test(x)) words.add(x);
+    return [...words].join(" ");
+  }));
+  return { own: [...own].join(" "), methods: [...methods].join("|") };
+}
+
 
 // Every row of the instance, the record marked, challengers with their gap above it. sigma
 // is shown because 62% of rows carry one (2026-09-16); Var(E) and the V-score, on 36%, stay
@@ -508,12 +643,12 @@ function instancesPage() {
     const rows = group.map(inst => {
       const rec = recordOf(inst);
       const label = instanceLabel(inst);
-      const search = `${name} ${label} ${inst.instance_id} ${rec ? rec.method : "no record"}`.toLowerCase();
+      const search = searchIndex(inst, name);
       const cells = rec
         ? `<td class="record">${energyCell(rec, inst)}</td><td>${esc(shorten(rec.method, 52))} ${citeHtml(rec)}</td>`
         : `<td class="none">no record</td><td>${esc(noRecordReason(inst))}</td>`;
       const id = `x-${inst.instance_id.replace(/[^\w-]/g, "_")}`;
-      return `<tr class="inst" data-search="${esc(search)}" data-lattice="${esc(latticeOf(inst))}" data-size="${sizeBand(inst)}">
+      return `<tr class="inst" data-search="${esc(search.own)}" data-methods="${esc(search.methods)}" data-lattice="${esc(latticeOf(inst))}" data-size="${sizeBand(inst)}">
         <th scope="row"><button type="button" aria-expanded="false" aria-controls="${id}">${esc(label)}</button></th>
         ${cells}<td class="num">${inst.rows.length}</td></tr>
       <tr class="more" id="${id}" hidden><td colspan="4">${allRows(inst)}</td></tr>`;
@@ -546,12 +681,20 @@ const count = document.getElementById("filter-count");
 const sections = [...document.querySelectorAll("section[data-model]")];
 const total = document.querySelectorAll("tr.inst").length;
 
+// The words of the text box against each instance's index; see searchIndex in scripts/site.mjs.
+const searchWords = ${searchWords};
+const searchMatch = ${searchMatch};
+const STOP = new Set(${JSON.stringify(SEARCH_STOP)});
+const index = new Map([...document.querySelectorAll("tr.inst")].map(row => {
+  const own = row.dataset.search.split(" ");
+  return [row, row.dataset.methods ? row.dataset.methods.split("|").map(m => own.concat(m.split(" "))) : [own]];
+}));
+
 // One selection per badge row (the Hamiltonian row on top, lattice and size per section); a badge
 // toggles, and the text box applies on top.
-// Every word of the text box has to occur in the row, in any order: "100 square" finds square_100.
 function apply() {
-  const q = box.value.trim().toLowerCase();
-  const words = q.split(/[\\s,]+/).filter(Boolean);
+  const q = box.value.trim();
+  const words = searchWords(q).filter(([w]) => !STOP.has(w));
   const model = document.querySelector(".models button.on")?.dataset.model;
   let shown = 0;
   for (const section of sections) {
@@ -561,7 +704,7 @@ function apply() {
     const rows = [...section.querySelectorAll("tr.inst")];
     let n = 0;
     for (const row of rows) {
-      const hit = !outside && words.every(w => row.dataset.search.includes(w))
+      const hit = !outside && (!words.length || searchMatch(index.get(row), words))
         && (!lattice || row.dataset.lattice === lattice)
         && (!size || row.dataset.size === size);
       row.hidden = !hit;
@@ -926,7 +1069,7 @@ button.cite-btn {
 button.cite-btn:hover { color: var(--accent); border-color: var(--accent); }
 button.cite-btn.copied { color: var(--exact); border-color: var(--exact); }
 
-main { padding: 2.4rem clamp(1rem, 4vw, 3rem) 4rem; max-width: 52rem; }
+main { padding: 2.4rem clamp(1rem, 4vw, 3rem) 4rem; max-width: 52rem; margin: 0 auto; }
 main.wide { max-width: 78rem; }
 
 footer.site {
