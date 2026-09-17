@@ -511,7 +511,7 @@ function instancesPage() {
   }).join("\n");
 
   const body = `
-<p><input id="filter" type="search" placeholder="Filter by Hamiltonian, lattice, size, coupling or method…" autocomplete="off" spellcheck="false">
+<p class="search"><input id="filter" type="search" placeholder="Filter by Hamiltonian, lattice, size, coupling or method…" autocomplete="off" spellcheck="false">
 <span id="filter-count" class="muted"></span></p>
 <div class="quick models"><span class="muted">Hamiltonian</span>${MODELS.filter(([m]) => instances.some(i => i.model === m))
     .map(([m, n]) => `<button type="button" data-model="${m}">${esc(n)}</button>`).join("")}</div>
@@ -1053,11 +1053,12 @@ details.defect summary b { color: var(--flag); }
 .cite { background: var(--surface); border: 1px solid var(--grid); border-radius: 3px; padding: 0.4rem 1.2rem 1.2rem; margin-top: 2.4rem; }
 .cite h2 { margin-top: 1.2rem; }
 
+p.search { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 1rem; max-width: none; }
 #filter {
-  font: inherit; font-size: 0.95rem; padding: 0.5rem 0.7rem; width: min(28rem, 100%);
+  font: inherit; font-size: 1.25rem; padding: 0.85rem 1.1rem; flex: 1 1 20rem; min-width: 0;
   background: var(--surface); color: var(--ink); border: 1px solid var(--grid); border-radius: 3px;
 }
-#filter-count { margin-left: 0.6rem; font-size: 0.85rem; }
+#filter-count { font-size: 0.95rem; min-width: 11em; }
 .quick.models { margin-top: 1rem; }
 
 .anchor {
