@@ -5,6 +5,8 @@ import { classify } from "./bound_type.mjs";
 // model -> names of the trailing params after lattice_N_BC
 const PARAMS = { J1J2:["J2"], Hubbard:["Nf","U"], tV:["Nf","V"], TFIsing:["h"], Heisenberg:[], Impurity:[] };
 const NEEDS_REVIEW = new Set(["QMC","AFQMC"]); // bare strings: sign-problem-free (exact) vs constrained (projected)
+// ", Extrap Energy = -12.762823 +/- 2.e-6)" and its spellings: minus sign, magnitude, error bar.
+const EXTRAP_IN_METHOD = /,\s*extrap(?:olated)?\s+(?:energy|eng)\s*=?\s*-\s*([\d.]+)\s*\+\/-\s*([\d.]+(?:e[-+]?\d+)?)\s*\)$/i;
 
 // Clean rebuild: data/ is fully derived from vendor/ + scripts/, never edited by hand,
 // so wipe it first. Without this, add_literature.mjs double-appends to instances it created.
@@ -15,9 +17,15 @@ for (const it of instances()) {
   const [lattice, N, BC, ...rest] = it.stem.split("_");
   const params = {};
   (PARAMS[it.model] || []).forEach((k,i) => { if (rest[i] !== undefined) params[k] = num(rest[i]); });
-  const rows = readTable(it.file).rows.map((r) => {
+  const rows = readTable(it.file).rows.flatMap((r) => {
     const method = (r["method"]||"").trim();
-    let { bound_type, reason } = classify(method);
+    // Seven DMRG rows print a second number inside the method string: the energy
+    // extrapolated in the truncation error, with its error bar. The row's own energy is the
+    // one reached at the stated bond dimension, so the row is classified without that clause
+    // (the word "extrapolated" in it made Heisenberg/square_100_O an extrapolated row), and
+    // the extrapolated number becomes a row of its own below (2026-09-17, Tristan).
+    const extrap = method.match(EXTRAP_IN_METHOD);
+    let { bound_type, reason } = classify(extrap ? method.replace(EXTRAP_IN_METHOD, ")") : method);
     const review = NEEDS_REVIEW.has(method) || bound_type === null;
     if (review) { bound_type = null; reason = "ambiguous: bare method string, sign-problem-free vs constrained undetermined"; }
     const energy = num(r["energy"]), sigma = num(r["sigma"]);
@@ -40,10 +48,17 @@ for (const it of instances()) {
     const reference = r["reference"] || "";
     const citesPaper = /\[paper\]|arxiv|doi\.org|10\.\d{4}\//i.test(reference);
     const baseline = !citesPaper && /github\.com\/varbench\/methods/.test(reference);
-    return { energy, sigma, energy_variance: variance, dof, einf, v_score,
+    const row = { energy, sigma, energy_variance: variance, dof, einf, v_score,
              method, bound_type, bound_type_reason: reason,
              reference, source: "varbench@2024-10-22", provenance: "imported",
              ...(baseline ? { baseline: true } : {}) };
+    if (!extrap) return [row];
+    summary.by_bound.extrapolated = (summary.by_bound.extrapolated||0)+1;
+    return [row, { energy: -num(extrap[1]), sigma: num(extrap[2]), energy_variance: null, dof, einf, v_score: null,
+             method, bound_type: "extrapolated",
+             bound_type_reason: "the truncation-error extrapolation printed inside the method string of the DMRG row at the stated bond dimension; carried as its own row (2026-09-17)",
+             reference, source: "varbench@2024-10-22", provenance: "imported",
+             ...(baseline ? { baseline: true } : {}) }];
   });
   const out = { model: it.model, lattice, n_sites: num(N), boundary: BC, params,
                 instance_id: `${it.model}/${it.stem}`, rows };
