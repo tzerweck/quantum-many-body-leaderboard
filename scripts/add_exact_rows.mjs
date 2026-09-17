@@ -105,7 +105,7 @@ console.log(`batch A: ${added} exact rows (${created} new instances)`);
 // already quoted from this paper via arXiv:2605.13807 to the printed digits. Those two
 // instances (square_100_O, square_256_O) are skipped here rather than carrying the same
 // number twice.
-const SANDVIK = { ref: "Sandvik, High-precision ground state parameters of the two-dimensional spin-1/2 Heisenberg model on the square lattice, arXiv:2601.20189 (2026)", pr: false };
+const SANDVIK = { ref: "Sandvik, High-precision ground state parameters of the two-dimensional spin-1/2 Heisenberg model on the square lattice, J. Stat. Mech. (2026) 043101, arXiv:2601.20189", pr: true };
 const SSE = "SSE QMC (stochastic series expansion), T -> 0 converged at beta/L = 32 and 64";
 const SSE_WHY = "sign-problem-free SSE QMC on a bipartite lattice, T -> 0 converged; numerically exact (RULES.md 4)";
 const SSE_READ = "arXiv HTML parsed locally, one value per table cell; no LLM transcription";

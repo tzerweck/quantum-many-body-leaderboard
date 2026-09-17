@@ -265,30 +265,47 @@ function variantNote(inst) {
   return null;
 }
 
+// An instance renamed because VarBench's name carries a different coupling from the one its
+// rows were computed at, and the instance left holding the rows run at the named one
+// (scripts/relabels.mjs).
+function relabelNote(inst) {
+  const link = id => `<a href="/i/${id}/"><code>${esc(id)}</code></a>`;
+  const evidence = `<a href="${REPO}/tree/main/checks/hubbard-u-labels">checks/hubbard-u-labels</a>`;
+  if (inst.relabelled) {
+    const from = instances.some(i => i.instance_id === inst.relabelled.from) ? link(inst.relabelled.from) : `<code>${esc(inst.relabelled.from)}</code>`;
+    return `Upstream this instance is ${from}. ${esc(inst.relabelled.reason)} Evidence: ${evidence}.`;
+  }
+  if (inst.split) return `${esc(inst.split.reason)} The published results for this Hamiltonian are on ${link(inst.split.to)}. Evidence: ${evidence}.`;
+  return null;
+}
+
 // -------------------------------------------------------------------------- home page
 // The front page is the figures. Each is drawn into figures/ by the build (size_accuracy.mjs,
 // pareto.mjs) and committed, in a light and a dark variant for GitHub; the page inlines the
 // light one and the stylesheet recolours it in dark mode (FIG_DARK). One entry per figure.
 const FIGURES = [
   ["size-vs-accuracy", "The best published energies, by system size",
-    "The energies on instances with an exact ground-state energy, placed by its relative gap to it so that different Hamiltonians share one axis; a better energy is higher. Colour is the kind of number; filled marks can hold a record, hollow ones cannot."],
+    "The energies on instances with an exact ground-state energy, placed by its relative gap to it so that different Hamiltonians share one axis; a better energy is lower. Colour is the kind of number; filled marks can hold a record, hollow ones cannot."],
   ["size-vs-accuracy-by-family", "The best energies by system size, one panel per method family",
     "Each panel colours one family's energies over all the others in grey and joins the family's best energy at each size."],
 ];
 
 // A row of badges switching between panels, CSS-only: a radio input per badge, the checked
 // one showing its panel, so the switch works without the script and the inputs stay in the
-// keyboard order. The first badge is checked. The stylesheet is written before any page, so
-// the rules for each switch come from tabRules() at module level, into TAB_CSS.
-function tabs(id, items) {
-  return `${items.map((_, k) => `<input type="radio" name="${id}" id="${id}-${k}"${k ? "" : " checked"}>`).join("")}
-  <div class="tab-labels">${items.map(([label], k) => `<label for="${id}-${k}">${label}</label>`).join("")}</div>
+// keyboard order. The first badge is checked. With `all`, an "All" badge leads the row and is
+// the checked one, showing every panel at once (Tristan, 2026-09-17: less clicking to start).
+// The stylesheet is written before any page, so the rules for each switch come from
+// tabRules() at module level, into TAB_CSS, given the same `all`.
+function tabs(id, items, { all = false } = {}) {
+  const keys = [...(all ? ["all"] : []), ...items.keys()], labels = [...(all ? ["All"] : []), ...items.map(([label]) => label)];
+  return `${keys.map((key, k) => `<input type="radio" name="${id}" id="${id}-${key}"${k ? "" : " checked"}>`).join("")}
+  <div class="tab-labels">${keys.map((key, k) => `<label for="${id}-${key}">${labels[k]}</label>`).join("")}</div>
   <div class="tab-panels">${items.map(([, html]) => html).join("\n")}</div>`;
 }
-const tabRules = (id, count) => Array.from({ length: count }, (_, k) =>
-  `#${id}-${k}:checked ~ .tab-panels > :nth-child(${k + 1}) { display: block; }
-#${id}-${k}:checked ~ .tab-labels > label[for="${id}-${k}"] { color: #fff; background: var(--accent); border-color: var(--accent); }
-#${id}-${k}:focus-visible ~ .tab-labels > label[for="${id}-${k}"] { outline: 2px solid var(--accent); outline-offset: 2px; }`).join("\n");
+const tabRules = (id, count, { all = false } = {}) => [...(all ? ["all"] : []), ...Array(count).keys()].map(key =>
+  `#${id}-${key}:checked ~ .tab-panels > ${key === "all" ? "*" : `:nth-child(${key + 1})`} { display: block; }
+#${id}-${key}:checked ~ .tab-labels > label[for="${id}-${key}"] { color: #fff; background: var(--accent); border-color: var(--accent); }
+#${id}-${key}:focus-visible ~ .tab-labels > label[for="${id}-${key}"] { outline: 2px solid var(--accent); outline-offset: 2px; }`).join("\n");
 
 // The cost figures: one per instance with enough energies costed in hours, drawn by
 // pareto.mjs into figures/cost/. Which instances have one is read off the directory, which
@@ -316,7 +333,8 @@ function costSwitcher() {
 // The published energies of every Hamiltonian, drawn by size_energy.mjs into figures/energy/:
 // a figure per model and lattice with a panel per ladder of sizes, and per model an "other"
 // figure for what was published at one size only. Which exist is read off the directory, as
-// for the cost figures. Two rows of badges, the model (and Other) and then its figures.
+// for the cost figures. Two rows of badges, the model (and Other) and then its figures, all of
+// them shown until one is picked.
 const ENERGY_FIGS = [...Map.groupBy(energyFigures(instances).filter(f => fs.existsSync(`figures/${f.name}.svg`)), f => f.group)];
 const energyEntry = f => [f.name, f.group === "other" ? f.title : `${f.title}: the published energies at each size`,
   f.group === "other" ? "Energies on Hamiltonians published at one size, with the coupling or filling that differs between them along x."
@@ -327,12 +345,12 @@ function energySwitcher() {
   <h2>The published energies, Hamiltonian by Hamiltonian<a class="anchor" href="#energy-by-hamiltonian" aria-label="Link to this section">#</a></h2>
   <p class="muted">Every energy on the table, on its own Hamiltonian's axis: by size where it was published at several, under Other where at one.</p>
   ${tabs("energy-group", ENERGY_FIGS.map(([group, figs], j) =>
-    [group === "other" ? "Other" : esc(modelName(group)), `<div class="tabs">${tabs(`energy-${j}`, figs.map(f => [esc(f.label), figure(energyEntry(f))]))}</div>`]))}
+    [group === "other" ? "Other" : esc(modelName(group)), `<div class="tabs">${tabs(`energy-${j}`, figs.map(f => [esc(f.label), figure(energyEntry(f))]), { all: true })}</div>`]))}
 </section>`;
 }
 
 const TAB_CSS = [tabRules("cost-tab", COST_FIGS.length), tabRules("energy-group", ENERGY_FIGS.length),
-  ...ENERGY_FIGS.map(([, figs], j) => tabRules(`energy-${j}`, figs.length))].join("\n");
+  ...ENERGY_FIGS.map(([, figs], j) => tabRules(`energy-${j}`, figs.length, { all: true }))].join("\n");
 
 // Leaderboard: the instance's cost figure above its rows, or how many of its energies state
 // a cost when that is too few to draw; nothing when none does.
@@ -803,7 +821,7 @@ function instancePage(inst) {
   const label = `${modelName(inst.model)} ${instanceLabel(inst)}`;
   const rec = recordOf(inst);
   const ham = hamiltonian(inst);
-  const variant = variantNote(inst);
+  const variant = variantNote(inst), relabel = relabelNote(inst);
   const sorted = [...inst.rows].sort((a, b) => a.energy - b.energy);
 
   const groups = BOUND_ORDER.map(bound => {
@@ -867,6 +885,7 @@ ${recordBox}
   ${ham.formula ? `<p class="formula">${ham.formula}</p>` : ""}
   <p>${ham.note}</p>
   ${variant ? `<p>${variant}</p>` : ""}
+  ${relabel ? `<p>${relabel}</p>` : ""}
   <dl class="facts">
     <div><dt>lattice</dt><dd>${esc(inst.lattice)}</dd></div>
     <div><dt>sites</dt><dd class="num">${inst.n_sites}</dd></div>

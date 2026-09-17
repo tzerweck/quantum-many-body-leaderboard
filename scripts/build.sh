@@ -16,8 +16,11 @@ node scripts/add_repo_data_rows.mjs
 node scripts/add_error_metrics.mjs
 node scripts/add_compute.mjs
 node scripts/add_coverage.mjs
+# After every script that attaches by VarBench's instance names; everything below uses the new ones.
+node scripts/apply_relabels.mjs
 node scripts/apply_defects.mjs
 node scripts/apply_removals.mjs
+node scripts/apply_corrections.mjs
 # After every script that matches rows by their published method string.
 node scripts/apply_method_names.mjs
 node scripts/validate.mjs
