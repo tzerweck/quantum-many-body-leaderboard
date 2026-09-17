@@ -240,7 +240,13 @@ Rows that fail are **flagged in place, never silently corrected and never delete
 duplicate, or a number that is not an energy of its instance, is removed under
 [RULES.md §11](RULES.md#11-corrections)). The
 flag withholds the record and nothing else; [§10](RULES.md#10-pending-confirmed-objections) is the process for lifting
-or upholding it. One worked case is resolved in [`checks/`](checks/): three TFIsing
+or upholding it. A value the maintainers corrected is listed in `corrections` on the row,
+each entry with the value it replaced (`from`), where the new one was read, and why;
+`verified` records a check that found nothing wrong, and an independent re-read of a row
+QMBL added itself is `verified.second_read`. An instance renamed because its upstream name
+carries the wrong coupling has `relabelled` (the old id and the reason); the old id, where
+rows were computed at that coupling, stays with `split` and an exact row QMBL computed
+([`checks/hubbard-u-labels/`](checks/hubbard-u-labels/)). One worked case is resolved in [`checks/`](checks/): three TFIsing
 `RBM (alpha = 1)` energies sit up to 10 sigma below an exact solution, and a rerun with
 full summation over all 1024 basis states shows the published values are minima of the
 optimization trace rather than converged measurements.

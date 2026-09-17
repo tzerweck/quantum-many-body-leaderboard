@@ -64,3 +64,35 @@ so the reference is sound and only the RBM rows are at fault.
 ```bash
 CUDA_VISIBLE_DEVICES="" JAX_PLATFORMS=cpu python tfising_rbm_check.py   # ~45 min, CPU, 16 cores
 ```
+
+## `hubbard-u-labels/`: which U were the 4x4 and 14-site chain Hubbard rows computed at?
+
+**Question.** Four VarBench exact diagonalizations on 4x4 Hubbard instances sat *below* the
+ground state of the Hamiltonian their instance names (U = 3.5981 and 7.74264, 8 and 10
+electrons), which no eigenvalue can. Is the energy wrong, or the name?
+
+**Design.** Lanczos ground state over the full fixed-(N_up, N_dn) space, no symmetry, t = 1,
+`H = -sum (c+c + h.c.) + U sum n_up n_dn` on the periodic 4x4 lattice (32 bonds) and the
+periodic 14-site chain, at the U in each instance name and at the grid value
+10^(k/9) it rounds. Two independent codes: `ed_check.py` (numpy/scipy) and `ed_lib.mjs` with
+`run_fermions.mjs` (node), plus `skeptic_ed.py` for the 5+5, U = 2.1544 case. Self-tests at
+U = 0 reproduce free fermions, and `skeptic_ed.py` reproduces the paper's U = 10 value.
+
+**Result.** Every stored exact energy is the ground state at the grid U, to 1e-10 or better
+(`ed_results_hypothesis.jsonl`, `logs_fermions_altU.log`); at the named U it is off by up to
+3.4e-3. The HFDS rows of Robledo Moreno et al. (PNAS 119, e2122059119), whose supplement
+prints the same exact energies at "U = 2.15, 3.6, 7.75", are at the grid U too. The DMRG run
+scripts set the named U, and each DMRG energy sits just above the ground state at that U
+(`ed_results.jsonl`, `logs_fermions_small.log`, `logs_fermions_16_5.log`).
+
+**Conclusion.** The names are wrong, not the energies. `scripts/relabels.mjs` moves the six
+instances to the grid U and keeps the DMRG rows, with the ground state at their own U as the
+exact row, on the old names where the two ground states differ by more than the DMRG rows
+resolve.
+
+**Reproduce.**
+
+```bash
+node run_fermions.mjs Hubbard/square_16_P_5_2.1544 Hubbard/square_16_P_5_2.1544@2.15443469   # ~4 min each, ~1 GB
+python ed_check.py '[{"lattice":"square","L":4,"n":5,"U":2.15443469}]' out.jsonl
+```

@@ -256,9 +256,7 @@ worth attacking, and one of those readings finds them and the other does not.
    among near-degenerate stripe states. Their variance per unit energy error is 0.18-1.6,
    against 6-80 for every other Hubbard row with an exact or DMRG reference - including on
    the open-boundary instances, where extrapolated DMRG is an independent check. HFPS sits
-   0.47% below HFDS on 4x8 with 25x its variance, and is the better state. Two VarBench DMRG
-   rows on 4x4 (U = 3.5981, 8 and 10 electrons) show the same signature from having
-   converged to an excited state. The check stands; what it establishes is a question to
+   0.47% below HFDS on 4x8 with 25x its variance, and is the better state. The check stands; what it establishes is a question to
    the authors, which is how the HQT case in 8.1 is carried.
 4. **The variational principle**: no `variational` row may sit below an `exact` row in the
    same instance. Sector-resolved ED rows are excluded, since an unconstrained state may
@@ -335,4 +333,7 @@ that meets the same bar. Rulings cite a clause.
 Errors found by the maintainers are corrected in public with the reason recorded on the row.
 Rows are never silently corrected. A row that duplicates another, or is not an energy of its
 instance, is removed, with the ruling and reason listed in `scripts/removals.mjs`. Every other
-correction keeps the old value on the row.
+correction keeps the old value on the row, listed with its source and reason in
+`scripts/corrections.mjs`. An instance whose name carries a different parameter from the
+one its rows were computed at is renamed, with the old name and the reason recorded on it
+(`scripts/relabels.mjs`); rows computed at the named parameter keep the old name.
