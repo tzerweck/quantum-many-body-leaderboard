@@ -771,11 +771,11 @@ function contributePage() {
 <h2>Open an issue</h2>
 <p>All of it goes through <a href="${REPO}/issues">GitHub issues</a>.</p>
 <ul>
-  <li><b>A number is wrong, or attributed to the wrong paper.</b> Name the instance and what it
-  should be. Rows are corrected in place and the history stays in git.</li>
   <li><b>A missing result.</b> The instance, the energy, its error bar, the method, and the paper
   it was published in. Anything missing renders as <code>n/a</code> rather than blocking the row
   (<a href="${RULES}#3-required-fields">rules &sect;3</a>).</li>
+  <li><b>A number is wrong, or attributed to the wrong paper.</b> Name the instance and what it
+  should be. Rows are corrected in place and the history stays in git.</li>
   <li><b>An error bar we could not find.</b> ${b.rows} sampled energies across ${b.instances}
   instances are listed but rank for nothing because no error bar was found in the source we read,
   and ${b.would_take_record} of them sit below their instance's current record. One message closes
