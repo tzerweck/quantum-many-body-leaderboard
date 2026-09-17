@@ -768,13 +768,8 @@ function contributePage() {
   const b = summary.blocked_on_sigma;
   const costed = instances.flatMap(i => i.rows).filter(r => r.compute?.gpu_hours != null || r.compute?.cpu_core_hours != null || r.compute?.parameters != null).length;
   const body = `
-<h1>Contribute</h1>
-<p class="lead">Everything here is someone else's published work. Corrections are the most valuable
-thing you can send, and a correction about your own paper gets acted on the same day.</p>
-
 <h2>Open an issue</h2>
-<p>All of it goes through <a href="${REPO}/issues">GitHub issues</a>. There is no form and no
-account to create beyond GitHub.</p>
+<p>All of it goes through <a href="${REPO}/issues">GitHub issues</a>.</p>
 <ul>
   <li><b>A number is wrong, or attributed to the wrong paper.</b> Name the instance and what it
   should be. Rows are corrected in place and the history stays in git.</li>
@@ -787,8 +782,7 @@ account to create beyond GitHub.</p>
   that (<a href="${RULES}#6-records-and-ties">rules &sect;6</a>).</li>
   <li><b>An objection to a row.</b> Wrong symmetry sector, a mis-declared <code>bound_type</code>,
   an error bar with no autocorrelation correction: these are technical disputes with a process,
-  <a href="${RULES}#10-pending-confirmed-objections">rules &sect;10</a>. Rulings cite a clause
-  rather than anyone's judgement about anyone's work.</li>
+  <a href="${RULES}#10-pending-confirmed-objections">rules &sect;10</a>.</li>
   <li><b>What a number cost.</b> GPU-hours &times; device, parameter count, wall-clock. ${costed}
   rows state at least one of these, which is what the <a href="/#energy-vs-compute">energy-versus-cost
   figure</a> is drawn from; yours can join them
