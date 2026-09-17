@@ -3,7 +3,7 @@ import { isSampled, recordEligible, perSiteDivisor, perSiteLabel } from "./units
 import { collect, recordOf } from "./summary.mjs";
 import { sources } from "./enrich_sources.mjs";
 import { citeRef, paperYear } from "./cite.mjs";
-import { CONTESTED, FAMILIES, family, variationalRows } from "./views.mjs";
+import { CONTESTED, FAMILIES, variationalRows } from "./views.mjs";
 import { W, PAD, n, text, hline, hbar, vbar, onFill, dot, legend, header, footnote, doc, textWidth, pct, niceStep, writer, shortLabel } from "./chart.mjs";
 
 const OUT = "figures";
@@ -220,7 +220,7 @@ write("records-by-family", t => {
   for (const i of instances) {
     const rec = recordOf(i);
     if (!rec || rec.bound_type !== "variational") continue;
-    const f = family(rec.method);
+    const f = rec.family;
     allCount[f] = (allCount[f] || 0) + 1;
     if (i.rows.length >= CONTESTED) hard[f] = (hard[f] || 0) + 1;
   }
@@ -251,7 +251,7 @@ write("records-by-family", t => {
     parts.push(text(X(f.hard) + 6, y + bh + 12.5, String(f.hard), { size: 11.5, fill: t.ink2, nums: true }));
   });
   parts.push(`<path d="M${n(left) - 0.5} ${n(top - 6)}V${n(top + fams.length * pitch - 8)}" stroke="${t.grid}" stroke-width="1"/>`);
-  const fn = footnote(t, "Families are matched by regular expression against the method string, first match wins, so read them as indicative.",
+  const fn = footnote(t, "Each method name belongs to one family (scripts/method_names.mjs); where names blur, read the families as indicative.",
     top + fams.length * pitch + 16);
   parts.push(fn.svg);
   return doc(t, fn.bottom + 24, "Records by ansatz family",

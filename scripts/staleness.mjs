@@ -2,7 +2,7 @@
 // Signal 1: no post-2024 row at all (nothing from the 2025-26 sweep).
 // Signal 2: the record's V-score - high means lots of room, so the frontier moved.
 import fs from "node:fs"; import path from "node:path";
-import { perSiteDivisor, perSiteLabel } from "./units.mjs";
+import { perSiteDivisor, perSiteLabel, methodLabel } from "./units.mjs";
 const rows = [];
 for (const m of fs.readdirSync("data")) {
   const dir = path.join("data", m); if (!fs.statSync(dir).isDirectory()) continue;
@@ -13,7 +13,7 @@ for (const m of fs.readdirSync("data")) {
     const fresh = i.rows.some(r => r.source === "literature-2025-26");
     const d = perSiteDivisor(i);
     rows.push({ id: i.instance_id, n: i.n_sites, fresh, v: rec.v_score,
-      eps: d ? rec.energy/d : null, unit: perSiteLabel(i), method: rec.method.slice(0,44) });
+      eps: d ? rec.energy/d : null, unit: perSiteLabel(i), method: methodLabel(rec).slice(0,44) });
   }
 }
 const stale = rows.filter(r => !r.fresh && r.v != null).sort((a,b)=>b.v-a.v);

@@ -8,7 +8,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
-import { recordEligible, exactEligible, isSampled, noErrorMetrics } from "./units.mjs";
+import { recordEligible, exactEligible, isSampled, noErrorMetrics, publishedMethod, methodLabel } from "./units.mjs";
 
 export function collect() {
   const instances = [];
@@ -27,8 +27,9 @@ export function collect() {
 // different row without anything failing. A hash moves only with the row itself, and a
 // figure left older than its data then links an id no row has, which site.mjs refuses to
 // build. Identical rows would share a hash, so a repeat is numbered in file order (none
-// exist as of 2026-09-16).
-const rowKey = r => `${r.energy}|${r.method}|${r.reference}`;
+// exist as of 2026-09-16). The published method string, not the short name, so the ids that
+// existed before the names (2026-09-17) still land on their rows.
+const rowKey = r => `${r.energy}|${publishedMethod(r)}|${r.reference}`;
 export function rowId(inst, r) {
   const key = rowKey(r), repeat = inst.rows.filter(x => rowKey(x) === key).indexOf(r);
   const hash = createHash("sha1").update(key).digest("hex").slice(0, 8);
@@ -102,12 +103,12 @@ export function summarize(instances) {
       if (noErrorMetrics(r)) s.no_error_metrics++;
       if (r.baseline) s.baseline_rows++;
       if (r.defect) s.flagged++;
-      if (!r.bound_type) s.needs_review.push(`${inst.instance_id}: "${r.method}"`);
+      if (!r.bound_type) s.needs_review.push(`${inst.instance_id}: "${methodLabel(r)}"`);
     }
     const rec = recordOf(inst);
     let blockedHere = 0;
     for (const r of inst.rows) {
-      if (r.bound_type !== "variational" || r.defect || !isSampled(r.method) || r.sigma != null) continue;
+      if (r.bound_type !== "variational" || r.defect || !isSampled(publishedMethod(r)) || r.sigma != null) continue;
       blockedHere++;
       if (!rec || r.energy < rec.energy) s.blocked_on_sigma.would_take_record++;
     }
@@ -133,7 +134,7 @@ export function summarize(instances) {
 // reasons under the table and the counts beneath it are one computation.
 export function noRecordKey(inst) {
   const v = inst.rows.filter(r => r.bound_type === "variational");
-  if (v.some(r => !r.defect && isSampled(r.method) && r.sigma == null)) return "no_sigma";
+  if (v.some(r => !r.defect && isSampled(publishedMethod(r)) && r.sigma == null)) return "no_sigma";
   if (v.some(r => r.defect)) return "flagged";
   if (inst.rows.some(r => r.bound_type === "exact")) return "sector_only";
   return "no_variational";

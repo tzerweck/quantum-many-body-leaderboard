@@ -169,13 +169,21 @@ export const logScale = (v0, v1, p0, p1) => v => p0 + ((log(Math.max(v, v0)) - l
 const SUP = { "-": "⁻", 0: "⁰", 1: "¹", 2: "²", 3: "³", 4: "⁴", 5: "⁵", 6: "⁶", 7: "⁷", 8: "⁸", 9: "⁹" };
 export const pow10 = k => "10" + String(k).split("").map(c => SUP[c]).join("");
 
-// A row's method, short enough to label a mark with: "Holographic Quantum Transformer
-// (HQT), ..." -> "HQT"; otherwise the text before any parenthesis or comma, which is where
-// method strings put the architecture's name. Says when the number is not a bound.
+// A row's method, short enough to label a mark with: the method name, abbreviated where it
+// runs long, with its detail when both fit in a label ("GCNN (1 Lanczos step)"), and for a
+// projection the trial state it projects ("ACE + fixed-node"). Says when the number is not a
+// bound.
+const ABBREVIATED = { "Hierarchical backflow": "HB", "Residual hierarchical backflow": "RHB",
+  "Transformer backflow": "Transformer BF", "Tensor backflow": "Tensor BF", "Slater-backflow-Jastrow": "SBJ" };
+const LABEL_MAX = 26;
 export function shortLabel(r) {
-  const acronym = r.method.match(/\(([A-Z][A-Za-z0-9-]{1,7})\)/);
-  let s = acronym ? acronym[1] : r.method.split(/\s*[(,]/)[0].trim();
-  if (r.bound_type === "projected") s += /fixed.?node|\bFN\b/i.test(r.method) ? " + fixed-node" : ", projected";
+  let s = ABBREVIATED[r.method] ?? r.method;
+  const withDetail = `${s} (${r.method_detail})`;
+  if (r.method_detail && withDetail.length <= LABEL_MAX) s = withDetail;
+  if (r.bound_type === "projected") {
+    const trial = (r.method_detail || "").match(/^trial state: ([^,]+)/)?.[1];
+    s = /fixed.?node/i.test(r.method) ? `${trial ?? "trial state"} + fixed-node` : `${s}, projected`;
+  }
   if (r.bound_type === "extrapolated") s += ", extrapolated";
   if (r.defect) s += ", flagged";
   return s;

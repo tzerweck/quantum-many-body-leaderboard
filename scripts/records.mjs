@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import { perSiteDivisor, perSiteLabel, SPIN_MODELS, isSampled, recordEligible, noErrorMetrics, boundLabel } from "./units.mjs";
+import { perSiteDivisor, perSiteLabel, SPIN_MODELS, isSampled, recordEligible, noErrorMetrics, boundLabel, publishedMethod, methodLabel } from "./units.mjs";
 import { exactRecordOf } from "./summary.mjs";
 
 for (const id of process.argv.slice(2)) {
@@ -16,7 +16,7 @@ for (const id of process.argv.slice(2)) {
     // "baseline" says more than "imported": the number is VarBench's own reference run,
     // not a result someone published as state of the art.
     const prov = r.baseline ? "baseline" : (r.provenance || "");
-    console.log(`  ${mark}${err} ${(r.energy / f).toFixed(7)}  V=${v}  ${prov.padEnd(9)} ${r.method.slice(0, 50)}`);
+    console.log(`  ${mark}${err} ${(r.energy / f).toFixed(7)}  V=${v}  ${prov.padEnd(9)} ${methodLabel(r).slice(0, 50)}`);
   }
   console.log("  legend: ! flagged  P projected  X extrapolated  ? unclassified"
     + "\n          o no error metric found in the source read - needs verification, not a criticism");
@@ -30,12 +30,12 @@ for (const id of process.argv.slice(2)) {
   for (const b of sorted) {
     if (b.bound_type !== "variational" || (best && b.energy >= best.energy)) continue;
     if (b.defect)
-      console.log(`  !! excluded from the record: ${(b.energy / f).toFixed(7)} [${b.defect.flag}] ${b.method.slice(0, 42)}`);
-    else if (isSampled(b.method) && b.sigma == null)
-      console.log(`  !! excluded from the record: ${(b.energy / f).toFixed(7)} [no-sigma, sampled energy] ${b.method.slice(0, 42)}`);
+      console.log(`  !! excluded from the record: ${(b.energy / f).toFixed(7)} [${b.defect.flag}] ${methodLabel(b).slice(0, 42)}`);
+    else if (isSampled(publishedMethod(b)) && b.sigma == null)
+      console.log(`  !! excluded from the record: ${(b.energy / f).toFixed(7)} [no-sigma, sampled energy] ${methodLabel(b).slice(0, 42)}`);
   }
-  if (exact) console.log(`  --> RECORD (${boundLabel(exact)}, the instance is solved): ${(exact.energy / f).toFixed(7)}  ${exact.method.slice(0, 52)}`);
+  if (exact) console.log(`  --> RECORD (${boundLabel(exact)}, the instance is solved): ${(exact.energy / f).toFixed(7)}  ${methodLabel(exact).slice(0, 52)}`);
   console.log(best
-    ? `  --> ${exact ? "BEST VARIATIONAL BOUND" : "RECORD (strict variational bound)"}: ${(best.energy / f).toFixed(7)}  ${best.method.slice(0, 52)}`
+    ? `  --> ${exact ? "BEST VARIATIONAL BOUND" : "RECORD (strict variational bound)"}: ${(best.energy / f).toFixed(7)}  ${methodLabel(best).slice(0, 52)}`
     : `  --> ${exact ? "no eligible variational bound" : "NO RECORD"}: every variational row is flagged or absent`);
 }

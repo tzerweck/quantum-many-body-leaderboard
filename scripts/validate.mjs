@@ -1,5 +1,7 @@
 import fs from "node:fs"; import path from "node:path";
 import { expectedDof, expectedEinf, vScore, perSiteDivisor, groundStateExact, stochasticExact } from "./units.mjs";
+import { FAMILIES } from "./views.mjs";
+const FAMILY_NAMES = new Set([...FAMILIES.map(([f]) => f), "other"]);
 const issues = [], rounding = []; let rows = 0, checkedD = 0, checkedE = 0, checkedV = 0, checkedC = 0, checkedCov = 0;
 for (const m of fs.readdirSync("data")) {
   const dir = path.join("data", m);
@@ -10,6 +12,11 @@ for (const m of fs.readdirSync("data")) {
     for (const [i, r] of inst.rows.entries()) {
       rows++;
       const at = `${inst.instance_id}[${i}]`;
+      // Every row is named (scripts/method_names.mjs): a short name, a detail that may be
+      // empty, the published string, and a family the figures know.
+      if (!r.method || typeof r.method_detail !== "string" || !r.method_as_published)
+        issues.push(`METHOD ${at}: not named, published "${r.method_as_published ?? r.method}" (add it to scripts/method_names.mjs)`);
+      else if (!FAMILY_NAMES.has(r.family)) issues.push(`FAMILY ${at}: "${r.family}" for "${r.method}"`);
       if (eD != null && r.dof != null) { checkedD++; if (r.dof !== eD) issues.push(`DOF   ${at}: stored ${r.dof}, expected ${eD}`); }
       if (eE != null && r.einf != null) { checkedE++; if (Math.abs(r.einf - eE) > 1e-9 * Math.max(1, Math.abs(eE))) issues.push(`EINF  ${at}: stored ${r.einf}, expected ${eE}`); }
       if (r.v_score != null) { checkedV++;

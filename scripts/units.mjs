@@ -36,33 +36,47 @@ export const noErrorMetrics = r =>
 
 // Sign-problem-free QMC is `exact` within its statistical error bar, not to the printed
 // digits (RULES.md 4): such a row must state sigma, and every surface prints its class as
-// "exact (stochastic)" (Tristan, 2026-09-16). The method string tells it apart from exact
-// diagonalization and exact solutions.
+// "exact (stochastic)" (Tristan, 2026-09-16). The method name (AFQMC, SSE QMC, QMC) tells it
+// apart from exact diagonalization and exact solutions.
 const STOCHASTIC = /\bqmc\b|\bafqmc\b|monte carlo|stochastic series/i;
 export const stochasticExact = r => r.bound_type === "exact" && STOCHASTIC.test(r.method || "");
 
 // A row's bound_type as the site, the figures and records.mjs print it.
 export const boundLabel = r => stochasticExact(r) ? "exact (stochastic)" : (r.bound_type ?? "unclassified");
 
-// Sector-resolved exact diagonalization, as VarBench labels it: "Exact Diagonalization
-// 0.C1.A -1" is the lowest state in ONE symmetry sector, not the ground state, so an
-// unconstrained variational energy may legitimately sit below it and it cannot stand in for
-// the instance's exact energy. One regex, used by the record, the validator and the table
-// matcher alike.
-export const SECTOR_RESOLVED = /[A-Z][0-9a-z]*\.[A-Z]/;
+// The method string exactly as the source printed it. Rows carry a short `method` name and a
+// `method_detail` (scripts/method_names.mjs, 2026-09-17); the published string stays on the
+// row, and the rules written against it (isSampled, the row id) keep reading it.
+export const publishedMethod = r => r.method_as_published ?? r.method;
 
+// A row's method as every surface prints it: the name, then what tells it apart from other
+// rows of that name - the bond dimension from `compute`, the detail, the symmetry sector. An
+// extrapolation's bond dimension is the largest it was fitted from, a cost and not the state,
+// so its detail says what went to the limit instead.
+export function methodLabel(r) {
+  const bd = r.bound_type !== "extrapolated" && r.compute?.bond_dimension;
+  const parts = [bd != null && bd !== false && `bond dimension ${bd}`,
+    r.method_detail, r.sector && `sector ${r.sector}`].filter(Boolean);
+  return parts.length ? `${r.method} (${parts.join(", ")})` : r.method;
+}
+
+// Sector-resolved exact diagonalization: VarBench's "Exact Diagonalization 0.C1.A -1" is the
+// lowest state in ONE symmetry sector, not the ground state, so an unconstrained variational
+// energy may legitimately sit below it and it cannot stand in for the instance's exact
+// energy. Such a row carries `sector` (scripts/method_names.mjs), and the record, the
+// validator and the table matcher all ask groundStateExact.
+//
 // The one sector row that IS the ground state. J1J2/triangular_48_P_0.125 carries all 48
 // (k.irrep, spin-flip) sectors of the Sz = 0 space from Wietek et al., PRX 14, 021010, whose
 // App. B names Gamma.A1 (spin-flip +1) as the ground state; the qmbl-verify pass of
 // 2026-09-15 confirmed the number against the paper's own upload, and Tristan ruled on
 // 2026-09-16 (qmbl-verify DECISIONS.md, 3c) that this row stays and the other 47 move to a
-// per-instance spectrum record. Until that move lands the row is named here, because the
-// regex above cannot tell the ground-state sector from the others.
-const RULED_GROUND_STATE = new Set(["Exact Diagonalization Gamma.D6.A1 1"]);
+// per-instance spectrum record. Until that move lands the sector is named here.
+const RULED_GROUND_STATE_SECTOR = "Gamma.D6.A1, spin flip +1";
 
 // Does this exact row state the ground-state energy, rather than a sector minimum?
 export const groundStateExact = r =>
-  r.bound_type === "exact" && (!SECTOR_RESOLVED.test(r.method || "") || RULED_GROUND_STATE.has(r.method));
+  r.bound_type === "exact" && (!r.sector || r.sector === RULED_GROUND_STATE_SECTOR);
 
 // An exact row that states the instance's ground-state energy: exact diagonalization, an
 // exact solution, or sign-problem-free QMC where that is established (RULES.md 4). Such a
@@ -76,7 +90,7 @@ export const exactEligible = r => groundStateExact(r) && !r.defect;
 // exact row this decides the best variational bound, not the record.
 export function recordEligible(r) {
   if (r.bound_type !== "variational" || r.defect) return false;
-  return !isSampled(r.method) || r.sigma != null;
+  return !isSampled(publishedMethod(r)) || r.sigma != null;
 }
 
 // VarBench writes spin Hamiltonians with PAULI matrices (sigma.sigma) and stores

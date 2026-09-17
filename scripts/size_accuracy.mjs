@@ -29,7 +29,7 @@
 import fs from "node:fs";
 import { recordEligible } from "./units.mjs";
 import { collect, recordOf, exactRecordOf } from "./summary.mjs";
-import { FAMILIES, family } from "./views.mjs";
+import { FAMILIES } from "./views.mjs";
 import { ladderFigures } from "./ladders.mjs";
 import { W, PAD, n, text, hline, dot, tri, legend, header, footnote, doc, textWidth, writer, log, logScale, pow10, rowHref } from "./chart.mjs";
 
@@ -60,7 +60,7 @@ function points(inst, ref) {
     .map(r => {
       const gap = Math.abs(r.energy - ref.row.energy) / Math.abs(ref.row.energy);
       const under = gap >= FLOOR && ref.row.energy - r.energy > 2 * Math.hypot(r.sigma ?? 0, ref.row.sigma ?? 0);
-      return { r, inst, fam: family(r.method), eligible: recordEligible(r), below: r.energy < ref.row.energy, under, gap };
+      return { r, inst, fam: r.family, eligible: recordEligible(r), below: r.energy < ref.row.energy, under, gap };
     });
 }
 const mark = (t, x, y, color, p) => (p.below ? tri : dot)(t, x, y, color, p.eligible, rowHref(p.inst, p.r));
@@ -170,7 +170,7 @@ write("size-vs-accuracy-by-family", t => {
     for (const p of [...mine].sort((a, b) => a.eligible - b.eligible)) parts.push(pin(t, X(p.inst.n_sites), Y(p.gap), t.series[0], p));
   });
   const y = top0 + (rows - 1) * pitch + plotH + 62;
-  const fn = footnote(t, "Families are assigned from the method string (views.mjs), first match wins; 'other' is what none of the patterns name. " +
+  const fn = footnote(t, "Each method name belongs to one family (scripts/method_names.mjs); 'other' holds exact methods and names no family covers. " +
     `Filled marks can hold a record, hollow ones cannot. Axes, the exact line included, as in the figure above: a better energy is higher. ${UNDER}`, y);
   parts.push(fn.svg);
   return doc(t, fn.bottom + 24, "The best published energies by system size, one panel per method family",

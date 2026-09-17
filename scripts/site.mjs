@@ -19,7 +19,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
-import { perSiteDivisor, perSiteLabel, isSampled, recordEligible, boundLabel, stochasticExact } from "./units.mjs";
+import { perSiteDivisor, perSiteLabel, isSampled, recordEligible, boundLabel, stochasticExact, publishedMethod, methodLabel } from "./units.mjs";
 import { collect, recordOf, summarize, rowId } from "./summary.mjs";
 import { THEMES } from "./chart.mjs";
 import { citeRef, paperYear } from "./cite.mjs";
@@ -179,8 +179,9 @@ function energyCell(row, inst, decimals) {
 }
 
 // The site prints none of the README's markers for a missing error bar (the circle, the
-// dagger): the sigma column says n/a. A method loses the source's own "(this work)" or
-// "(Ours)", since the source column names the paper (Tristan, 2026-09-17).
+// dagger): the sigma column says n/a. Methods print as methodLabel (units.mjs); the published
+// string, searched but not shown, loses the source's own "(this work)" or "(Ours)", since the
+// source column names the paper (Tristan, 2026-09-17).
 const methodText = method => method.replace(/\s*\((?:this work|ours)\)/gi, "");
 
 // A flagged row's badge names its flag, and hovering it says what that kind of flag means in
@@ -384,7 +385,7 @@ ${svg}
 // written here, from the same helpers as the table the link lands on.
 function rowCard(r, inst) {
   return `<b>${esc(modelName(inst.model))} ${esc(instanceLabel(inst))}</b>
-<span>${esc(shorten(methodText(r.method), 90))}</span>
+<span>${esc(shorten(methodLabel(r), 90))}</span>
 <span class="e">${energyCell(r, inst)} <span class="muted">${perSiteLabel(inst)} &middot; ${boundLabel(r)}</span>${recordOf(inst) === r ? '<span class="tag">record</span>' : ""}</span>
 <span class="muted">${cardSource(r)}</span>`;
 }
@@ -601,10 +602,13 @@ function searchIndex(inst, name) {
   if (inst.model === "Impurity") for (const [re, words] of IMPURITY_WORDS) if (re.test(inst.lattice)) add(words);
   if (!recordOf(inst)) add("no record");
   const methods = new Set(inst.rows.map(r => {
-    const aliases = METHOD_WORDS.filter(([re]) => re.test(r.method)).map(([, words]) => words);
+    // The short name and detail, and the string as published, so a search for a paper's own
+    // spelling ("HB K=1", "Exact Diagonalization") still finds the row.
+    const text = `${methodLabel(r)} ${methodText(publishedMethod(r))}`;
+    const aliases = METHOD_WORDS.filter(([re]) => re.test(text)).map(([, words]) => words);
     if (r.bound_type === "exact" || r.bound_type === "extrapolated") aliases.push(r.bound_type);
     const words = new Set();
-    for (const [w, parts] of searchWords(`${methodText(r.method)} ${aliases.join(" ")}`))
+    for (const [w, parts] of searchWords(`${text} ${aliases.join(" ")}`))
       for (const x of [w, ...parts]) if (/^\p{L}/u.test(x)) words.add(x);
     return [...words].join(" ");
   }));
@@ -628,7 +632,7 @@ function allRows(inst) {
       <td class="record">${energyCell(r, inst, isRec ? null : decimals)}${isRec ? '<span class="tag">record</span>' : gap ? ` <span class="muted num">(${esc(gap)})</span>` : ""}</td>
       <td class="num">${sigma == null ? '<span class="muted">n/a</span>' : sigma.toExponential(1)}</td>
       <td><span class="badge">${boundLabel(r)}</span>${r.defect ? ` ${flagBadge(r)}` : ""}</td>
-      <td>${esc(shorten(methodText(r.method), 60))}</td>
+      <td>${esc(shorten(methodLabel(r), 60))}</td>
       <td>${citeHtml(r)}</td>
       <td class="num">${yearOf(r) ?? '<span class="muted">n/a</span>'}</td>
     </tr>`;
@@ -647,7 +651,7 @@ function instancesPage() {
       const label = instanceLabel(inst);
       const search = searchIndex(inst, name);
       const cells = rec
-        ? `<td class="record">${energyCell(rec, inst)}</td><td>${esc(shorten(methodText(rec.method), 52))} ${citeHtml(rec)}</td>`
+        ? `<td class="record">${energyCell(rec, inst)}</td><td>${esc(shorten(methodLabel(rec), 52))} ${citeHtml(rec)}</td>`
         : `<td class="none">no record</td><td>${esc(noRecordReason(inst))}</td>`;
       const id = `x-${inst.instance_id.replace(/[^\w-]/g, "_")}`;
       return `<tr class="inst" data-search="${esc(search.own)}" data-methods="${esc(search.methods)}" data-lattice="${esc(latticeOf(inst))}" data-size="${sizeBand(inst)}">
@@ -776,7 +780,7 @@ function rowTable(rows, inst) {
       r.provenance === "secondary" ? '<span class="badge">quoted from another paper</span>' : "",
       r.peer_reviewed === true ? '<span class="badge">peer reviewed</span>' : "",
       r.peer_reviewed === false ? '<span class="badge">preprint</span>' : "",
-      !r.defect && r.bound_type === "variational" && !recordEligible(r) && isSampled(r.method) && r.sigma == null
+      !r.defect && r.bound_type === "variational" && !recordEligible(r) && isSampled(publishedMethod(r)) && r.sigma == null
         ? '<span class="badge">ineligible: sampled, no error bar</span>' : "",
     ].filter(Boolean).join(" ");
     const { sigma } = perSite(r, inst);
@@ -785,7 +789,7 @@ function rowTable(rows, inst) {
       <td class="num">${sigma == null ? '<span class="muted">n/a</span>' : sigma.toExponential(1)}</td>
       <td class="num">${r.energy_variance == null ? '<span class="muted">n/a</span>' : r.energy_variance.toExponential(2)}</td>
       <td class="num">${r.v_score == null ? '<span class="muted">n/a</span>' : r.v_score.toExponential(1)}</td>
-      <td>${esc(methodText(r.method))}${badges ? `<div class="badges">${badges}</div>` : ""}</td>
+      <td>${esc(methodLabel(r))}${badges ? `<div class="badges">${badges}</div>` : ""}</td>
       <td>${citeHtml(r)}</td>
       <td class="num">${yearOf(r) ?? '<span class="muted">n/a</span>'}</td>
     </tr>`;
@@ -814,7 +818,7 @@ function instancePage(inst) {
 
   const flagged = sorted.filter(r => r.defect).map(r => `
     <details class="defect">
-      <summary><b>${esc(flagLabel(r))}</b> &mdash; ${esc(shorten(methodText(r.method), 60))}, ${energyCell(r, inst)}</summary>
+      <summary><b>${esc(flagLabel(r))}</b> &mdash; ${esc(shorten(methodLabel(r), 60))}, ${energyCell(r, inst)}</summary>
       <p><b>Finding.</b> ${esc(r.defect.finding)}</p>
       ${r.defect.diagnosis ? `<p><b>Diagnosis.</b> ${esc(r.defect.diagnosis)}</p>` : ""}
       ${r.defect.ruled_out ? `<p><b>Ruled out.</b> ${esc(r.defect.ruled_out)}</p>` : ""}
@@ -823,7 +827,7 @@ function instancePage(inst) {
 
   const verified = sorted.filter(r => r.verified).map(r => `
     <details class="verified">
-      <summary>${energyCell(r, inst)} &mdash; ${esc(shorten(methodText(r.method), 60))}</summary>
+      <summary>${energyCell(r, inst)} &mdash; ${esc(shorten(methodLabel(r), 60))}</summary>
       <p class="muted">Checked ${esc(r.verified.checked_on)} &middot; ${esc(r.verified.method)}</p>
       ${r.verified.reported_as ? `<p><b>Reported as.</b> ${esc(r.verified.reported_as)}</p>` : ""}
       ${r.verified.note ? `<p>${esc(r.verified.note)}</p>` : ""}
@@ -834,7 +838,7 @@ function instancePage(inst) {
         <p class="eyebrow">Record</p>
         <p class="big"><span class="num">${quoteRow(rec, inst).text}</span>
           <span class="unit">${perSiteLabel(inst)}</span></p>
-        <p>${esc(methodText(rec.method))}</p>
+        <p>${esc(methodLabel(rec))}</p>
         <p class="muted">${citeHtml(rec)} &middot; ${rec.bound_type === "exact"
           ? stochasticExact(rec)
             ? "exact (stochastic) energy: sign-problem-free QMC, exact within its error bar, and the state of the art on this instance"
@@ -903,7 +907,7 @@ ${verified ? `<section><h2>How these numbers were read</h2>
      <a href="${REPO}/issues/new?title=${encodeURIComponent(`[${inst.instance_id}] `)}">open an issue about this instance</a></p>
 </section>`;
 
-  const recText = rec ? `Record ${quoteRow(rec, inst).text} ${perSiteLabel(inst)} by ${shorten(methodText(rec.method), 40)}.` : "No row currently holds the record.";
+  const recText = rec ? `Record ${quoteRow(rec, inst).text} ${perSiteLabel(inst)} by ${shorten(methodLabel(rec), 40)}.` : "No row currently holds the record.";
   return page({ url: instUrl(inst), title: label, body, wide: true,
     description: `${label}: ${inst.rows.length} published ground-state energies. ${recText}` });
 }
@@ -963,7 +967,7 @@ function apiInstance(inst) {
     per_site_divisor: f,
     per_site_label: perSiteLabel(inst),
     record: rec ? {
-      energy: rec.energy, sigma: rec.sigma, method: rec.method, reference: rec.reference,
+      energy: rec.energy, sigma: rec.sigma, method: rec.method, method_detail: rec.method_detail, reference: rec.reference,
       bound_type: rec.bound_type, energy_per_site: f == null ? null : rec.energy / f,
     } : null,
     no_record_reason: rec ? null : noRecordReason(inst),
@@ -1285,7 +1289,7 @@ write("api/instances.json", JSON.stringify(instances.map(i => {
     n_sites: i.n_sites, boundary: i.boundary ?? null, params: i.params ?? {}, rows: i.rows.length,
     url: `https://qmbl.org${instUrl(i)}`, json: `https://qmbl.org${jsonUrl(i)}`,
     record_energy_per_site: rec && f != null ? rec.energy / f : null,
-    record_method: rec?.method ?? null,
+    record_method: rec?.method ?? null, record_method_detail: rec?.method_detail ?? null,
     record_bound_type: rec?.bound_type ?? null,
   };
 }), null, 2) + "\n");

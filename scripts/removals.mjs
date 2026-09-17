@@ -19,6 +19,11 @@ export const REMOVALS = [
     ruled: "2026-09-17 (Tristan): duplicate, the original paper's row stays",
     reason: "The energy of Sharir, Levine, Wies, Carleo & Shashua, PRL 124, 020503 (2020) as quoted in a later paper's table; the row read from that paper itself (NAQS) stays.",
   },
+  {
+    match: { instance: "J1J2/square_100_P_0.5", method: "VMC (p = 2)", energy: -199.0196 },
+    ruled: "2026-09-17 (Tristan): duplicate, the original paper's row stays",
+    reason: "The two-Lanczos-step energy of Hu, Becca, Parola & Sorella, PRB 88, 060402 (2013), as Table I of arXiv:2310.05715 quotes it (-0.4975490(2) per site); the row read from Table III of arXiv:1304.2630 itself (-0.49755(1) per site) stays.",
+  },
   // Not an energy of the instance.
   ...["J1J2/triangular_108_P_0.125", "J1J2/triangular_144_P_0.125"].map(instance => ({
     match: { instance, method: "Thermodynamic-limit estimate interpolated to this size (1/L^3)" },

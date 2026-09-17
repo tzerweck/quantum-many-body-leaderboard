@@ -18,6 +18,8 @@ node scripts/add_compute.mjs
 node scripts/add_coverage.mjs
 node scripts/apply_defects.mjs
 node scripts/apply_removals.mjs
+# After every script that matches rows by their published method string.
+node scripts/apply_method_names.mjs
 node scripts/validate.mjs
 # Last, and in this order: the summary counts the final tree, and the README table is
 # generated from it. Neither is ever hand-edited.

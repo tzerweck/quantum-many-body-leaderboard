@@ -70,7 +70,7 @@ for (const p of files.sort()) {
 
 for (const [m, n] of unmapped) console.log(`UNMAPPED ${n}x "${m}"`);
 for (const c of conflicts) console.log(`CONFLICT ${c}`);
-for (const c of collisions) console.log(`SAME-LOOKING ${c}`);
+if (dry) for (const c of collisions) console.log(`SAME-LOOKING ${c}`);
 if (dry) {
   const lines = [...review].map(([k, n]) => `${n}\t${k}`)
     .sort((a, b) => a.split("\t")[2].localeCompare(b.split("\t")[2]) || a.split("\t")[3].localeCompare(b.split("\t")[3]));

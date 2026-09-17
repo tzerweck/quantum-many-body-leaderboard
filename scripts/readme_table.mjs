@@ -9,7 +9,7 @@
 // compared the README against the front page.
 import fs from "node:fs";
 import path from "node:path";
-import { perSiteDivisor, perSiteLabel, isSampled, noErrorMetrics } from "./units.mjs";
+import { perSiteDivisor, perSiteLabel, isSampled, noErrorMetrics, publishedMethod, methodLabel } from "./units.mjs";
 import { collect, recordOf, summarize, noRecordKey } from "./summary.mjs";
 import { citeCell } from "./cite.mjs";
 import { sources } from "./enrich_sources.mjs";
@@ -45,7 +45,7 @@ export function shorten(method, max) {
 // sampled row with no variance has no sigma either.
 export function marks(r) {
   if (noErrorMetrics(r)) return " &#9675;";
-  if (isSampled(r.method) && r.sigma == null) return " &dagger;";
+  if (isSampled(publishedMethod(r)) && r.sigma == null) return " &dagger;";
   return "";
 }
 
@@ -150,9 +150,9 @@ function row(inst, label, cache) {
   // Each method carries its own source link, so the challenger is as checkable as the
   // record.
   const challenger = next
-    ? `${(next.energy / f).toFixed(q.decimals)}${marks(next)} (${gapAbove(rec, next, f, q.decimals)}) ${shorten(next.method, 34)} ${citeCell(next, cache)}`
+    ? `${(next.energy / f).toFixed(q.decimals)}${marks(next)} (${gapAbove(rec, next, f, q.decimals)}) ${shorten(methodLabel(next), 34)} ${citeCell(next, cache)}`
     : "none";
-  return `| ${label} | **${q.text}**${marks(rec)} | ${shorten(rec.method, 46)} ${citeCell(rec, cache)} | ${challenger} |`;
+  return `| ${label} | **${q.text}**${marks(rec)} | ${shorten(methodLabel(rec), 46)} ${citeCell(rec, cache)} | ${challenger} |`;
 }
 
 function main() {

@@ -52,7 +52,7 @@ export const NAMES = {
   "DMRG, extrapolated in the truncation error (4096-8192 SU(2) states)": ["DMRG", "SU(2), truncation error → 0 from 4096 to 8192 states"],
   "DMRG, truncation-error extrapolated (Torus 4)": ["DMRG", "truncation error → 0"],
   "DMRG, truncation-error extrapolated (Torus 6)": ["DMRG", "truncation error → 0"],
-  "SU(2) DMRG, extrapolated (χ→∞, linear fit vs two-site variance), snake path": ["DMRG", "SU(2), snake path, bond dimension → ∞ linear in the two-site variance"],
+  "SU(2) DMRG, extrapolated (χ→∞, linear fit vs two-site variance), snake path": ["DMRG", "SU(2), snake path, bond dimension → ∞ by a linear fit in the two-site variance"],
   "DMRG on TPU (bond dimension = 32768)": ["DMRG", "on TPUs", { bond_dimension: 32768 }],
   "DMRG (max truncation error ~ 1.0E-12)": ["DMRG", "truncation error ~1e-12"],
   "DMRG (max truncation error ~ 1.0E-13)": ["DMRG", "truncation error ~1e-13"],
