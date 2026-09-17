@@ -19,15 +19,12 @@
 // shows only the size of the distance. None of these draws a V-score, a variance or a
 // distance-to-record for the record itself, so nothing here says how well converged a
 // standing record is - that is the beatable-records question, which stays off the site.
-//
-// figures/size-vs-energy.svg draws the same panels with the energy itself up y and no
-// reference at all. Tristan asked for it on 2026-09-17 to compare; it is not on the site.
 import fs from "node:fs";
-import { recordEligible, exactEligible, perSiteDivisor, perSiteLabel } from "./units.mjs";
+import { recordEligible } from "./units.mjs";
 import { collect, recordOf, exactRecordOf } from "./summary.mjs";
 import { FAMILIES, family } from "./views.mjs";
 import { ladderFigures } from "./ladders.mjs";
-import { W, PAD, n, text, hline, dot, tri, legend, header, footnote, doc, textWidth, niceStep, writer, log, logScale, pow10, rowHref } from "./chart.mjs";
+import { W, PAD, n, text, hline, dot, tri, legend, header, footnote, doc, textWidth, writer, log, logScale, pow10, rowHref } from "./chart.mjs";
 
 const OUT = "figures";
 const instances = collect();
@@ -265,64 +262,6 @@ for (const f of FIGS) write(f.name, t => {
     "reach rather than one calculation. Where the reference is the record, the heights say how far behind the others are and nothing about the record itself.", end + 44);
   parts.push(fn.svg);
   return doc(t, fn.bottom + 24, title, f.panels.map(L => `${L.title}, sizes ${L.sizes.join(", ")}`).join("; "), parts);
-});
-
-// ---------------------------------------------------- 4. the same panels, energy itself
-// Not on the site: Tristan asked on 2026-09-17 to see it first. The ladders and sizes of
-// the figures above, with the energy per site up y on a linear axis (lower is lower, as in
-// the cost figures) and nothing to measure against: every result, an exact one included,
-// is a mark coloured by its kind, and a line joins the record at each size.
-const EBOUNDS = { variational: 0, projected: 1, extrapolated: 2, exact: 3 };
-
-function energyPanel(t, parts, L, { left, right, top, bottom }) {
-  const div = inst => perSiteDivisor(inst) ?? 1;
-  const pts = L.members.filter(i => L.sizes.includes(i.n_sites)).flatMap(inst => inst.rows
-    .filter(r => r.bound_type in EBOUNDS && !r.defect && (r.bound_type !== "exact" || exactEligible(r)))
-    .map(r => ({ r, inst, e: r.energy / div(inst), eligible: r.bound_type === "exact" || recordEligible(r) })));
-  const recs = L.sizes.map(N => [N, Math.min(...L.members.filter(i => i.n_sites === N && recordOf(i)).map(i => recordOf(i).energy / div(i)))])
-    .filter(([, e]) => Number.isFinite(e));
-  parts.push(text(left, top - 14, L.title, { size: 13, fill: t.ink, weight: 600 }));
-  const X = logScale(L.sizes[0] / 1.5, L.sizes.at(-1) * 1.5, left, right);
-  const es = pts.map(p => p.e);
-  const span = Math.max(Math.max(...es) - Math.min(...es), 1e-6), step = niceStep(span / 4);
-  const e0 = Math.floor((Math.min(...es) - span * 0.08) / step) * step, e1 = Math.ceil((Math.max(...es) + span * 0.08) / step) * step;
-  const Y = e => bottom - ((e - e0) / (e1 - e0)) * (bottom - top);
-  const decimals = Math.max(0, -Math.floor(Math.log10(step)));
-  for (let k = 0; k <= Math.round((e1 - e0) / step); k++) {
-    const v = e0 + k * step;
-    parts.push(hline(left, right, Y(v), t.grid));
-    parts.push(text(left - 6, Y(v) + 4, v.toFixed(decimals).replace("-", "−"), { size: 10, fill: t.muted, anchor: "end", nums: true }));
-  }
-  sizeTicks(t, parts, X, L.sizes, bottom, () => t.muted);
-  if (recs.length > 1)
-    parts.push(`<path d="${recs.map(([N, e], k) => `${k ? "L" : "M"}${n(X(N))} ${n(Y(e))}`).join("")}" fill="none" stroke="${t.ink2}" stroke-width="1.5" stroke-linejoin="round" opacity="0.6"/>`);
-  for (const p of [...pts].sort((a, b) => a.eligible - b.eligible || (a.r.bound_type === "exact") - (b.r.bound_type === "exact")))
-    parts.push(dot(t, X(p.inst.n_sites), Y(p.e), t.series[EBOUNDS[p.r.bound_type]], p.eligible, rowHref(p.inst, p.r)));
-}
-
-write("size-vs-energy", t => {
-  const title = "The published energies at each size, Hamiltonian by Hamiltonian";
-  const h = header(t, title, "The panels of the per-Hamiltonian size figures with the energy itself up the axis and nothing to measure it against. " +
-    "Colour is the kind of number; filled marks can hold a record, hollow ones cannot. The line joins the record at each size.");
-  const lg = legend(t, [
-    { kind: "dot", color: t.series[0], label: "Variational bound" },
-    { kind: "dot", color: t.series[1], label: "Projected" },
-    { kind: "dot", color: t.series[2], label: "Extrapolated" },
-    { kind: "dot", color: t.series[3], label: "Exact" },
-    { kind: "ring", color: t.ink2, label: "Cannot hold a record" },
-    { kind: "line", color: t.ink2, label: "Record at each size" },
-  ], h.bottom + 34);
-  const parts = [h.svg, lg.svg];
-  let y = lg.bottom + 30;
-  for (const f of FIGS) {
-    parts.push(text(PAD, y + 20, f.title, { size: 15, fill: t.ink, weight: 600 }));
-    parts.push(text(W - PAD, y + 20, perSiteLabel(f.panels[0].members[0]), { size: 11, fill: t.muted, anchor: "end" }));
-    y = grid(f.panels.length, y + 70, { plotH: 200, gap: 70, draw: (k, box) => energyPanel(t, parts, f.panels[k], box) }) + 44;
-  }
-  const fn = footnote(t, "Energies per site as the table quotes them (the impurity problems in total energy); sites along x on a log scale, at the sizes the " +
-    "per-Hamiltonian figures draw. Flagged rows are not shown.", y);
-  parts.push(fn.svg);
-  return doc(t, fn.bottom + 24, title, FIGS.map(f => `${f.title}: ${f.panels.map(L => L.title).join(", ")}`).join("; "), parts);
 });
 
 console.log(`${OUT}/: ${written.length} files (size vs accuracy: ${all.length} exact-referenced energies on ${exactRef.length} instances, ${floored} at the floor; ` +
