@@ -787,20 +787,7 @@ function contributePage() {
   rows state at least one of these, which is what the <a href="/#energy-vs-compute">energy-versus-cost
   figure</a> is drawn from; yours can join them
   (<a href="${DATA}#what-a-number-cost-the-compute-block">the format is specified</a>).</li>
-</ul>
-
-<h2>The marks on a row are questions, not criticism</h2>
-<p><b>&#9675;</b> means we found no error metric in the source we read. It is a statement about our
-search, not about the authors: the figure may well be in a supplement, a companion paper, or your
-own records. The row stays in the table and stays in the ranking either way
-(<a href="${DATA}#error-metrics">error metrics</a>).</p>
-
-<h2>Variance and checkpoints</h2>
-<p>Var(E) &mdash; the variance of the local energy, not the error bar &mdash; is what the V-score
-needs, and almost nobody reports it. It is a by-product of any sampling pass, so if you send an
-optimized checkpoint and the model code, the variance can be measured and credited on your row.
-A state we retrain ourselves is a new row rather than a variance for yours
-(<a href="${RULES}#11-corrections">rules &sect;11</a>).</p>`;
+</ul>`;
   return page({ url: "/contribute/", title: "Contribute", body,
     description: "How to correct a row, add a published result, supply a missing error bar, or object to a record in QMBL." });
 }
