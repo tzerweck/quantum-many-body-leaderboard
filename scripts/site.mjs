@@ -525,8 +525,10 @@ const sections = [...document.querySelectorAll("section[data-model]")];
 const total = document.querySelectorAll("tr.inst").length;
 
 // One selection per badge row per section; a badge toggles, and the text box applies on top.
+// Every word of the text box has to occur in the row, in any order: "100 square" finds square_100.
 function apply() {
   const q = box.value.trim().toLowerCase();
+  const words = q.split(/[\\s,]+/).filter(Boolean);
   let shown = 0;
   for (const section of sections) {
     const lattice = section.querySelector(".quick button[data-lattice].on")?.dataset.lattice;
@@ -534,7 +536,7 @@ function apply() {
     const rows = [...section.querySelectorAll("tr.inst")];
     let n = 0;
     for (const row of rows) {
-      const hit = (!q || row.dataset.search.includes(q))
+      const hit = words.every(w => row.dataset.search.includes(w))
         && (!lattice || row.dataset.lattice === lattice)
         && (!size || row.dataset.size === size);
       row.hidden = !hit;
