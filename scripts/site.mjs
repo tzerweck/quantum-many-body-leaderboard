@@ -65,7 +65,6 @@ const esc = s => String(s)
 const NAV = [
   ["/", "Leaderboard"],
   ["/instances/", "Table"],
-  ["/contribute/", "Contribute"],
 ];
 
 // GitHub's mark (octicon mark-github, MIT), inline so it takes the nav's colour.
@@ -113,7 +112,7 @@ function page({ url, title, description, body, wide = false }) {
 ${body}
 </main>
 <footer class="site">
-  <p><a href="${REPO}">Source and data on GitHub</a> &middot; Apache-2.0 &middot;
+  <p><a href="${REPO}">Source and data on GitHub</a> &middot; <a href="/contribute/">Contribute</a> &middot; Apache-2.0 &middot;
      cite <a href="https://doi.org/${DOI}">${DOI}</a> &middot;
      <a href="/llms.txt">llms.txt</a></p>
 </footer>
