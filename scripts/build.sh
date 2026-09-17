@@ -24,6 +24,7 @@ node scripts/summary.mjs > /dev/null
 node scripts/readme_table.mjs
 node scripts/figures.mjs
 node scripts/size_accuracy.mjs
+node scripts/size_energy.mjs
 node scripts/pareto.mjs
 node scripts/logo.mjs
 # Generated output, gitignored. Built here too so a site that no longer renders the data

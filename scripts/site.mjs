@@ -27,6 +27,7 @@ import { quote, shorten, MODELS, BOUNDARY, instanceLabel, byGeometry, noRecordRe
 import { logoSvg, faviconSvg, LOGO_CSS } from "./logo.mjs";
 import { hoursOf, costFigureName } from "./cost.mjs";
 import { FRONTIER } from "./views.mjs";
+import { energyFigures } from "./ladders.mjs";
 
 const OUT = "_site";
 const REPO = "https://github.com/tzerweck/quantum-many-body-leaderboard";
@@ -310,7 +311,26 @@ function costSwitcher() {
   ${tabs("cost-tab", COST_FIGS.map(inst => [`${esc(modelName(inst.model))} ${esc(instanceLabel(inst))}`, figure(costEntry(inst))]))}
 </section>`;
 }
-const TAB_CSS = tabRules("cost-tab", COST_FIGS.length);
+// The published energies of every Hamiltonian, drawn by size_energy.mjs into figures/energy/:
+// a figure per model and lattice with a panel per ladder of sizes, and per model an "other"
+// figure for what was published at one size only. Which exist is read off the directory, as
+// for the cost figures. Two rows of badges, the model (and Other) and then its figures.
+const ENERGY_FIGS = [...Map.groupBy(energyFigures(instances).filter(f => fs.existsSync(`figures/${f.name}.svg`)), f => f.group)];
+const energyEntry = f => [f.name, f.group === "other" ? f.title : `${f.title}: the published energies at each size`,
+  f.group === "other" ? "Energies on Hamiltonians published at one size, with the coupling or filling that differs between them along x."
+    : "One panel per Hamiltonian, energy against the number of sites; colour is the kind of number and the line joins the record at each size."];
+function energySwitcher() {
+  if (!ENERGY_FIGS.length) return "";
+  return `<section class="tabs" id="energy-by-hamiltonian">
+  <h2>The published energies, Hamiltonian by Hamiltonian<a class="anchor" href="#energy-by-hamiltonian" aria-label="Link to this section">#</a></h2>
+  <p class="muted">Every energy on the table, on its own Hamiltonian's axis: by size where it was published at several, under Other where at one.</p>
+  ${tabs("energy-group", ENERGY_FIGS.map(([group, figs], j) =>
+    [group === "other" ? "Other" : esc(modelName(group)), `<div class="tabs">${tabs(`energy-${j}`, figs.map(f => [esc(f.label), figure(energyEntry(f))]))}</div>`]))}
+</section>`;
+}
+
+const TAB_CSS = [tabRules("cost-tab", COST_FIGS.length), tabRules("energy-group", ENERGY_FIGS.length),
+  ...ENERGY_FIGS.map(([, figs], j) => tabRules(`energy-${j}`, figs.length))].join("\n");
 
 // Leaderboard: the instance's cost figure above its rows, or how many of its energies state
 // a cost when that is too few to draw; nothing when none does.
@@ -409,7 +429,7 @@ function homePage() {
   const figures = [figure(overview), `<details class="fig-more">
   <summary>Look at the best energies per method family</summary>
 ${figure(byFamily)}
-</details>`, costSwitcher()].join("\n");
+</details>`, energySwitcher(), costSwitcher()].join("\n");
   const linked = new Set([...figures.matchAll(/href="\/instances\/#(r-[\w-]+)"/g)].map(m => m[1]));
   const cards = instances.flatMap(inst => inst.rows.filter(r => linked.has(rowId(inst, r)))
     .map(r => `<div data-row="${rowId(inst, r)}">${rowCard(r, inst)}</div>`));
