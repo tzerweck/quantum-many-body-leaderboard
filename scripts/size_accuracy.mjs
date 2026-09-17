@@ -12,15 +12,22 @@
 // 2026-09-16); the relative gap is only the mechanic that lets Hamiltonians of different
 // energy scales share one axis. It is taken against the exact energy wherever an instance
 // has one. The two exact-referenced figures use
-// only such instances. The ladders fall back to the record where no exact row exists, and
-// say so per size; there the record holder sits in the band at the top. None of the three
-// draws a V-score, a variance or a distance-to-record for the record itself, so nothing
-// here says how well converged a standing record is - that is the beatable-records
-// question, which stays off the site.
-import { recordEligible } from "./units.mjs";
+// only such instances. The per-Hamiltonian figures (figures/size/, one per model, lattice
+// and boundary, a panel per ladder of sizes, see ladders.mjs) fall back to the record where
+// no exact row exists, and say so per size; there the record holder sits in the band at
+// the top. A row below the energy it is measured against is a triangle, as the log scale
+// shows only the size of the distance. None of these draws a V-score, a variance or a
+// distance-to-record for the record itself, so nothing here says how well converged a
+// standing record is - that is the beatable-records question, which stays off the site.
+//
+// figures/size-vs-energy.svg draws the same panels with the energy itself up y and no
+// reference at all. Tristan asked for it on 2026-09-17 to compare; it is not on the site.
+import fs from "node:fs";
+import { recordEligible, exactEligible, perSiteDivisor, perSiteLabel } from "./units.mjs";
 import { collect, recordOf, exactRecordOf } from "./summary.mjs";
 import { FAMILIES, family } from "./views.mjs";
-import { W, PAD, n, text, hline, dot, legend, header, footnote, doc, textWidth, writer, log, logScale, pow10, rowHref } from "./chart.mjs";
+import { ladderFigures } from "./ladders.mjs";
+import { W, PAD, n, text, hline, dot, tri, legend, header, footnote, doc, textWidth, niceStep, writer, log, logScale, pow10, rowHref } from "./chart.mjs";
 
 const OUT = "figures";
 const instances = collect();
@@ -39,14 +46,17 @@ function referenceOf(inst) {
 
 // Every row that is a result rather than the answer: a bound or an extrapolation,
 // unflagged, with a stated bound type. `gap` is relative to the reference energy;
-// extrapolations and projections may land below an exact reference, and the absolute
-// value is what the axis shows, so the colour has to say which kind of row it is.
+// extrapolations and projections may land below an exact reference, and so may a sampled
+// bound without an error bar below a record. The axis shows the absolute value, so such a
+// row is `below` and drawn as a triangle.
 function points(inst, ref) {
   return inst.rows
     .filter(r => r.bound_type in BOUNDS && !r.defect && r !== ref.row)
-    .map(r => ({ r, inst, fam: family(r.method), eligible: recordEligible(r),
+    .map(r => ({ r, inst, fam: family(r.method), eligible: recordEligible(r), below: r.energy < ref.row.energy,
       gap: Math.abs(r.energy - ref.row.energy) / Math.abs(ref.row.energy) }));
 }
+const mark = (t, x, y, color, p) => (p.below ? tri : dot)(t, x, y, color, p.eligible, rowHref(p.inst, p.r));
+const BELOW = t => ({ kind: "tri", color: t.ink2, label: "Below the energy it is measured against" });
 
 // A log-log plot area: size along x with the ticks given, distance up y on the inverted
 // decade scale (y0 is the top, y1 the bottom).
@@ -93,13 +103,14 @@ write("size-vs-accuracy", t => {
     { kind: "dot", color: t.series[1], label: "Projected (fixed-node)" },
     { kind: "dot", color: t.series[2], label: "Extrapolated" },
     { kind: "ring", color: t.ink2, label: "Listed, cannot hold a record" },
+    BELOW(t),
   ], h.bottom + 34);
   const top = lg.bottom + 28, bottom = top + 380, left = PAD + 62, right = W - PAD - 8;
   const parts = [h.svg, lg.svg];
   const { X, Y } = logPlot(t, parts, { left, right, top, bottom, x0: X0, x1: X1, y0: Y0, y1: Y1, xTicks: XT, xLabel: "sites", yLabel: Y_LABEL });
   // Hollow first, then filled; within each, extrapolated and projected under variational.
   const order = [...all].sort((a, b) => (a.eligible - b.eligible) || (BOUNDS[b.r.bound_type] - BOUNDS[a.r.bound_type]));
-  for (const p of order) parts.push(dot(t, X(p.inst.n_sites), Y(p.gap), t.series[BOUNDS[p.r.bound_type]], p.eligible, rowHref(p.inst, p.r)));
+  for (const p of order) parts.push(mark(t, X(p.inst.n_sites), Y(p.gap), t.series[BOUNDS[p.r.bound_type]], p));
   const fn = footnote(t, `Height is |E − E_exact| / |E_exact| on an inverted log scale, so that a better energy is higher; ${floored} rows closer than ${pow10(log(FLOOR))} sit on the top line. ` +
     "No line joins the sizes: the instances at one size are different Hamiltonians, and a frontier across them would compare a Hubbard " +
     "energy with a Heisenberg one. Exact references are exact diagonalization or sign-problem-free QMC, exact within its error bar; flagged rows are not shown.", bottom + 58);
@@ -137,99 +148,182 @@ write("size-vs-accuracy-by-family", t => {
       xLabel: row === rows - 1 ? "sites" : null, yLabel: null });
     parts.push(`<use href="#${cloudId}" x="${n(left - left0)}" y="${n(top - top0)}"/>`);
     parts.push(frontier(mine, X, Y, t.series[0]));
-    for (const p of [...mine].sort((a, b) => a.eligible - b.eligible)) parts.push(dot(t, X(p.inst.n_sites), Y(p.gap), t.series[0], p.eligible, rowHref(p.inst, p.r)));
+    for (const p of [...mine].sort((a, b) => a.eligible - b.eligible)) parts.push(mark(t, X(p.inst.n_sites), Y(p.gap), t.series[0], p));
   });
   const y = top0 + (rows - 1) * pitch + plotH + 62;
   const fn = footnote(t, "Families are assigned from the method string (views.mjs), first match wins; 'other' is what none of the patterns name. " +
-    "Filled marks can hold a record, hollow ones cannot. Axes as in the figure above: a better energy is higher.", y);
+    "Filled marks can hold a record, hollow ones cannot; a triangle lies below the exact energy. Axes as in the figure above: a better energy is higher.", y);
   parts.push(fn.svg);
   return doc(t, fn.bottom + 24, "The best published energies by system size, one panel per method family",
     names.map(f => `${f}: ${all.filter(p => p.fam === f).length} energies`).join("; "), parts);
 });
 
-// ---------------------------------------------------------------- 3. the instance ladders
-// Same Hamiltonian at growing sizes. Where a size has no exact energy the reference is the
-// record, and the size's label says so by colour; the record holder itself sits in the
-// band above the plot. One line per method family through its best row at each size.
-const LADDERS = [
-  ["J1-J2 square, J2 = 0.5, periodic", i => i.model === "J1J2" && i.lattice === "square" && i.boundary === "P" && i.params.J2 === 0.5],
-  ["Heisenberg square, periodic", i => i.model === "Heisenberg" && i.lattice === "square" && i.boundary === "P"],
-  ["Heisenberg triangular, periodic", i => i.model === "Heisenberg" && i.lattice === "triangular" && i.boundary === "P"],
-  ["Heisenberg kagome, periodic", i => i.model === "Heisenberg" && i.lattice.startsWith("kagome") && i.boundary === "P"],
-  ["Heisenberg pyrochlore, periodic", i => i.model === "Heisenberg" && i.lattice.startsWith("pyrochlore")],
-  ["Hubbard U = 8, n = 0.875, periodic", i => i.model === "Hubbard" && i.boundary === "P" && i.params.U === 8 && i.params.Nf === i.n_sites * 0.4375],
-];
+// ----------------------------------------------------------- 3. one figure per Hamiltonian
+// The same Hamiltonian at growing sizes: one panel per ladder (ladders.mjs), one figure per
+// model, lattice and boundary, which the site switches between. Where a size has no exact
+// energy the reference is the record, and the size's label says so by colour; the record
+// holder itself sits in the band above the plot. One line per method family through its
+// best row at each size.
+//
+// A ladder is drawn where rows other than its references sit at two sizes or more, and only
+// those sizes are: one size is the instance's own table, and a size holding nothing but its
+// reference has no result to place. The directory is emptied first, as figures/cost/ is,
+// so the site never inlines a figure for a ladder that no longer qualifies.
+const SIZE_DIR = `${OUT}/size`;
+fs.rmSync(SIZE_DIR, { recursive: true, force: true });
+fs.mkdirSync(SIZE_DIR, { recursive: true });
 
-write("size-vs-accuracy-ladders", t => {
-  const cols = 2, plotH = 200, pitch = plotH + 120, panelW = (W - 2 * PAD - 40) / cols;
-  const h = header(t, "Accuracy as the same Hamiltonian grows",
-    "Six families of instances that differ only in size. Each size is placed against its exact energy where it has one (sizes in grey), " +
-    "otherwise against the standing record (sizes in orange), whose holder then sits in the band above the plot. One line per method family, " +
-    "through its best energy at each size; a family present at one size only is a lone mark. A better energy is higher.");
+function ladderOf({ label, members }) {
+  const withRef = members.map(i => [i, referenceOf(i)]).filter(([, ref]) => ref);
+  const pts = withRef.flatMap(([i, ref]) => points(i, ref).map(p => ({ ...p, ref: ref.kind })));
+  const sizes = [...new Set(pts.map(p => p.inst.n_sites))].sort((a, b) => a - b);
+  const holders = withRef.filter(([i, ref]) => ref.kind === "record" && pts.some(p => p.inst === i)).map(([i, ref]) => ({ inst: i, r: ref.row }));
+  const kind = N => (pts.some(p => p.inst.n_sites === N && p.ref === "record") ? "record" : "exact");
+  const title = [label, `${pts.length + holders.length} energies at ${sizes.length} sizes`].filter(Boolean).join(": ");
+  return { label, title, members, pts, sizes, holders, kind };
+}
+
+// One tick per size, the label coloured as the caller says and dropped where it would run
+// into the previous one (the Heisenberg square has 29 sizes).
+function sizeTicks(t, parts, X, sizes, bottom, fill) {
+  let lastEnd = -Infinity;
+  for (const N of sizes) {
+    const x = X(N), w = textWidth(String(N), 11);
+    parts.push(`<path d="M${n(x)} ${n(bottom)}v4" stroke="${t.grid}" stroke-width="1"/>`);
+    if (x - w / 2 < lastEnd + 6) continue;
+    parts.push(text(x, bottom + 18, String(N), { size: 11, fill: fill(N), anchor: "middle", nums: true }));
+    lastEnd = x + w / 2;
+  }
+}
+
+function ladderPanel(t, parts, L, { left, right, top, bottom }) {
+  const band = top - 22;
+  parts.push(text(left, band - 24, L.title, { size: 13, fill: t.ink, weight: 600 }));
+  const { X, Y } = logPlot(t, parts, { left, right, top, bottom, x0: L.sizes[0] / 1.5, x1: L.sizes.at(-1) * 1.5, y0: Y0, y1: Y1, xTicks: [], xLabel: null, yLabel: null });
+  sizeTicks(t, parts, X, L.sizes, bottom, N => (L.kind(N) === "exact" ? t.muted : t.series[1]));
+  // The record holders' band, above the plot: gap zero by construction.
+  if (L.holders.length) {
+    parts.push(hline(left, right, band, t.grid));
+    parts.push(text(left - 8, band + 4, "holds the record", { size: 9.5, fill: t.muted, anchor: "end" }));
+    for (const hd of L.holders) parts.push(dot(t, X(hd.inst.n_sites), band, t.ink2, true, rowHref(hd.inst, hd.r)));
+  }
+  // One line per family through its best row at each size; the overall best on top.
+  const ends = [];
+  for (const [fam, ps] of Map.groupBy(L.pts, p => p.fam)) {
+    const line = frontier(ps, X, Y, t.recessive[1]);
+    if (line) {
+      parts.push(line);
+      const [N, g] = best(ps).at(-1);
+      ends.push({ fam, x: X(N) + 9, y: Y(g) + 4 });
+    }
+  }
+  parts.push(frontier(L.pts, X, Y, t.series[0]));
+  for (const p of [...L.pts].sort((a, b) => a.eligible - b.eligible)) parts.push(mark(t, X(p.inst.n_sites), Y(p.gap), t.ink2, p));
+  // Family names at the right end of each line, nudged apart where two would collide.
+  ends.sort((a, b) => a.y - b.y);
+  for (let a = 1; a < ends.length; a++) if (ends[a].y - ends[a - 1].y < 13) ends[a].y = ends[a - 1].y + 13;
+  for (const e of ends) {
+    const w = textWidth(e.fam, 10.5);
+    const x = e.x + w > right + 30 ? e.x - 18 - w : e.x;
+    parts.push(text(x, e.y, e.fam, { size: 10.5, fill: t.ink2 }));
+  }
+}
+
+// Panels in two columns, or one full-width panel; `draw` fills a box, and the grid returns
+// the y below its last row.
+function grid(count, top0, { plotH, gap, draw }) {
+  const cols = count === 1 ? 1 : 2, panelW = (W - 2 * PAD - 40 * (cols - 1)) / cols;
+  for (let k = 0; k < count; k++) {
+    const col = k % cols, row = Math.floor(k / cols);
+    const px = PAD + col * (panelW + 40), top = top0 + row * (plotH + gap);
+    draw(k, { px, left: px + 58, right: px + panelW - 4, top, bottom: top + plotH });
+  }
+  return top0 + (Math.ceil(count / cols) - 1) * (plotH + gap) + plotH;
+}
+
+const FIGS = ladderFigures(instances)
+  .map(f => ({ ...f, panels: f.ladders.map(ladderOf).filter(L => L.sizes.length >= 2) }))
+  .filter(f => f.panels.length);
+
+for (const f of FIGS) write(f.name, t => {
+  const title = `${f.title}: the best energies at each size`;
+  const h = header(t, title,
+    `${f.panels.length === 1 ? "One Hamiltonian" : `${f.panels.length} Hamiltonians, one panel per set of couplings`}, at every size with a published result. ` +
+    "Each size is placed against its exact energy where it has one (sizes in grey), otherwise against the standing record (sizes in orange), " +
+    "whose holder then sits in the band above the plot. One line per method family through its best energy at each size; a better energy is higher.");
   const lg = legend(t, [
     { kind: "line", color: t.series[0], label: "Best at each size" },
     { kind: "line", color: t.recessive[1], label: "One method family" },
     { kind: "dot", color: t.ink2, label: "Can hold a record" },
     { kind: "ring", color: t.ink2, label: "Cannot" },
+    BELOW(t),
   ], h.bottom + 34);
-  const top0 = lg.bottom + 64;
   const parts = [h.svg, lg.svg];
-  const descs = [];
-  LADDERS.forEach(([title, pick], k) => {
-    const col = k % cols, row = Math.floor(k / cols);
-    const px = PAD + col * (panelW + 40), left = px + 58, right = px + panelW - 4;
-    const top = top0 + row * pitch, bottom = top + plotH, band = top - 22;
-    const members = instances.filter(pick).map(i => [i, referenceOf(i)]).filter(([, ref]) => ref).sort((a, b) => a[0].n_sites - b[0].n_sites);
-    const sizes = [...new Set(members.map(([i]) => i.n_sites))];
-    const pts = members.flatMap(([i, ref]) => points(i, ref));
-    const holders = members.filter(([, ref]) => ref.kind === "record").map(([i, ref]) => ({ inst: i, r: ref.row, fam: family(ref.row.method) }));
-    parts.push(text(left, band - 24, `${title} (${pts.length + holders.length} energies, ${sizes.length} sizes)`, { size: 13, fill: t.ink, weight: 600 }));
-    const x0 = sizes[0] / 1.5, x1 = sizes.at(-1) * 1.5;
-    const { X, Y } = logPlot(t, parts, { left, right, top, bottom, x0, x1, y0: Y0, y1: Y1, xTicks: [], xLabel: null, yLabel: null });
-    // One tick per size; the label is coloured by what that size is measured against, and
-    // dropped where it would run into the previous one (the Heisenberg square has 29 sizes).
-    let lastEnd = -Infinity;
-    for (const N of sizes) {
-      const kind = members.find(([i]) => i.n_sites === N)[1].kind, x = X(N), w = textWidth(String(N), 11);
-      parts.push(`<path d="M${n(x)} ${n(bottom)}v4" stroke="${t.grid}" stroke-width="1"/>`);
-      if (x - w / 2 < lastEnd + 6) continue;
-      parts.push(text(x, bottom + 18, String(N), { size: 11, fill: kind === "exact" ? t.muted : t.series[1], anchor: "middle", nums: true }));
-      lastEnd = x + w / 2;
-    }
-    // The record holders' band, above the plot: gap zero by construction.
-    if (holders.length) {
-      parts.push(hline(left, right, band, t.grid));
-      parts.push(text(left - 8, band + 4, "holds the record", { size: 9.5, fill: t.muted, anchor: "end" }));
-      for (const hd of holders) parts.push(dot(t, X(hd.inst.n_sites), band, t.ink2, true, rowHref(hd.inst, hd.r)));
-    }
-    // One line per family through its best row at each size; the overall best on top.
-    const fams = Map.groupBy(pts, p => p.fam);
-    const ends = [];
-    for (const [fam, ps] of fams) {
-      const line = frontier(ps, X, Y, t.recessive[1]);
-      if (line) {
-        parts.push(line);
-        const [N, g] = best(ps).at(-1);
-        ends.push({ fam, x: X(N) + 9, y: Y(g) + 4 });
-      }
-    }
-    parts.push(frontier(pts, X, Y, t.series[0]));
-    for (const p of [...pts].sort((a, b) => a.eligible - b.eligible)) parts.push(dot(t, X(p.inst.n_sites), Y(p.gap), t.ink2, p.eligible, rowHref(p.inst, p.r)));
-    // Family names at the right end of each line, nudged apart where two would collide.
-    ends.sort((a, b) => a.y - b.y);
-    for (let a = 1; a < ends.length; a++) if (ends[a].y - ends[a - 1].y < 13) ends[a].y = ends[a - 1].y + 13;
-    for (const e of ends) {
-      const w = textWidth(e.fam, 10.5);
-      const x = e.x + w > right + 30 ? e.x - 18 - w : e.x;
-      parts.push(text(x, e.y, e.fam, { size: 10.5, fill: t.ink2 }));
-    }
-    descs.push(`${title}: ${pts.length} energies at sizes ${sizes.join(", ")}`);
-  });
-  const y = top0 + (Math.ceil(LADDERS.length / cols) - 1) * pitch + plotH + 44;
+  const end = grid(f.panels.length, lg.bottom + 90, { plotH: f.panels.length === 1 ? 240 : 200, gap: 120,
+    draw: (k, box) => ladderPanel(t, parts, f.panels[k], box) });
   const fn = footnote(t, "Sizes are numbers of sites. A family's line joins its best energy at each size, whichever paper set it, so a line is a family's " +
-    "reach rather than one calculation. Where the reference is the record, the heights say how far behind the others are and nothing about the record itself.", y);
+    "reach rather than one calculation. Where the reference is the record, the heights say how far behind the others are and nothing about the record itself.", end + 44);
   parts.push(fn.svg);
-  return doc(t, fn.bottom + 24, "Accuracy as the same Hamiltonian grows: six instance ladders", descs.join("; "), parts);
+  return doc(t, fn.bottom + 24, title, f.panels.map(L => `${L.title}, sizes ${L.sizes.join(", ")}`).join("; "), parts);
 });
 
-console.log(`${OUT}/: ${written.length} files (size vs accuracy: ${all.length} exact-referenced energies on ${exactRef.length} instances, ${floored} at the floor)`);
+// ---------------------------------------------------- 4. the same panels, energy itself
+// Not on the site: Tristan asked on 2026-09-17 to see it first. The ladders and sizes of
+// the figures above, with the energy per site up y on a linear axis (lower is lower, as in
+// the cost figures) and nothing to measure against: every result, an exact one included,
+// is a mark coloured by its kind, and a line joins the record at each size.
+const EBOUNDS = { variational: 0, projected: 1, extrapolated: 2, exact: 3 };
+
+function energyPanel(t, parts, L, { left, right, top, bottom }) {
+  const div = inst => perSiteDivisor(inst) ?? 1;
+  const pts = L.members.filter(i => L.sizes.includes(i.n_sites)).flatMap(inst => inst.rows
+    .filter(r => r.bound_type in EBOUNDS && !r.defect && (r.bound_type !== "exact" || exactEligible(r)))
+    .map(r => ({ r, inst, e: r.energy / div(inst), eligible: r.bound_type === "exact" || recordEligible(r) })));
+  const recs = L.sizes.map(N => [N, Math.min(...L.members.filter(i => i.n_sites === N && recordOf(i)).map(i => recordOf(i).energy / div(i)))])
+    .filter(([, e]) => Number.isFinite(e));
+  parts.push(text(left, top - 14, L.title, { size: 13, fill: t.ink, weight: 600 }));
+  const X = logScale(L.sizes[0] / 1.5, L.sizes.at(-1) * 1.5, left, right);
+  const es = pts.map(p => p.e);
+  const span = Math.max(Math.max(...es) - Math.min(...es), 1e-6), step = niceStep(span / 4);
+  const e0 = Math.floor((Math.min(...es) - span * 0.08) / step) * step, e1 = Math.ceil((Math.max(...es) + span * 0.08) / step) * step;
+  const Y = e => bottom - ((e - e0) / (e1 - e0)) * (bottom - top);
+  const decimals = Math.max(0, -Math.floor(Math.log10(step)));
+  for (let k = 0; k <= Math.round((e1 - e0) / step); k++) {
+    const v = e0 + k * step;
+    parts.push(hline(left, right, Y(v), t.grid));
+    parts.push(text(left - 6, Y(v) + 4, v.toFixed(decimals).replace("-", "−"), { size: 10, fill: t.muted, anchor: "end", nums: true }));
+  }
+  sizeTicks(t, parts, X, L.sizes, bottom, () => t.muted);
+  if (recs.length > 1)
+    parts.push(`<path d="${recs.map(([N, e], k) => `${k ? "L" : "M"}${n(X(N))} ${n(Y(e))}`).join("")}" fill="none" stroke="${t.ink2}" stroke-width="1.5" stroke-linejoin="round" opacity="0.6"/>`);
+  for (const p of [...pts].sort((a, b) => a.eligible - b.eligible || (a.r.bound_type === "exact") - (b.r.bound_type === "exact")))
+    parts.push(dot(t, X(p.inst.n_sites), Y(p.e), t.series[EBOUNDS[p.r.bound_type]], p.eligible, rowHref(p.inst, p.r)));
+}
+
+write("size-vs-energy", t => {
+  const title = "The published energies at each size, Hamiltonian by Hamiltonian";
+  const h = header(t, title, "The panels of the per-Hamiltonian size figures with the energy itself up the axis and nothing to measure it against. " +
+    "Colour is the kind of number; filled marks can hold a record, hollow ones cannot. The line joins the record at each size.");
+  const lg = legend(t, [
+    { kind: "dot", color: t.series[0], label: "Variational bound" },
+    { kind: "dot", color: t.series[1], label: "Projected" },
+    { kind: "dot", color: t.series[2], label: "Extrapolated" },
+    { kind: "dot", color: t.series[3], label: "Exact" },
+    { kind: "ring", color: t.ink2, label: "Cannot hold a record" },
+    { kind: "line", color: t.ink2, label: "Record at each size" },
+  ], h.bottom + 34);
+  const parts = [h.svg, lg.svg];
+  let y = lg.bottom + 30;
+  for (const f of FIGS) {
+    parts.push(text(PAD, y + 20, f.title, { size: 15, fill: t.ink, weight: 600 }));
+    parts.push(text(W - PAD, y + 20, perSiteLabel(f.panels[0].members[0]), { size: 11, fill: t.muted, anchor: "end" }));
+    y = grid(f.panels.length, y + 70, { plotH: 200, gap: 70, draw: (k, box) => energyPanel(t, parts, f.panels[k], box) }) + 44;
+  }
+  const fn = footnote(t, "Energies per site as the table quotes them (the impurity problems in total energy); sites along x on a log scale, at the sizes the " +
+    "per-Hamiltonian figures draw. Flagged rows are not shown.", y);
+  parts.push(fn.svg);
+  return doc(t, fn.bottom + 24, title, FIGS.map(f => `${f.title}: ${f.panels.map(L => L.title).join(", ")}`).join("; "), parts);
+});
+
+console.log(`${OUT}/: ${written.length} files (size vs accuracy: ${all.length} exact-referenced energies on ${exactRef.length} instances, ${floored} at the floor; ` +
+  `${FIGS.length} per-Hamiltonian figures, ${FIGS.reduce((a, f) => a + f.panels.length, 0)} ladders)`);

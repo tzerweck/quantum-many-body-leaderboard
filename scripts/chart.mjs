@@ -89,6 +89,15 @@ export function dot(t, x, y, color, filled, href) {
     : `<circle cx="${n(x)}" cy="${n(y)}" r="4" fill="${t.surface}" stroke="${color}" stroke-width="2"/>`));
 }
 
+// The same mark as a downward triangle, for a row whose energy lies below the energy it is
+// measured against: on a log scale of the distance it would otherwise pass for a close one.
+export function tri(t, x, y, color, filled, href) {
+  const path = s => `M${n(x - s)} ${n(y - 0.6 * s)}H${n(x + s)}L${n(x)} ${n(y + s)}Z`;
+  return linked(href, `<path d="${path(8.5)}" fill="${t.surface}"/>` + (filled
+    ? `<path d="${path(5.5)}" fill="${color}"/>`
+    : `<path d="${path(4.6)}" fill="${t.surface}" stroke="${color}" stroke-width="2" stroke-linejoin="round"/>`));
+}
+
 // A mark that stands for one row links to that row on the table page. Inert where the SVG
 // is shown as an image; on the site the figure is inlined, and site.mjs gives the link its
 // hover card from the row itself, so the file carries the target and nothing else.
@@ -104,6 +113,7 @@ export function legend(t, items, y) {
     const cx = x + 7, cy = row - 4;
     if (it.kind === "line") out.push(`<path d="M${cx - 7} ${cy}H${cx + 7}" stroke="${it.color}" stroke-width="2" stroke-linecap="round"/>`);
     else if (it.kind === "dot" || it.kind === "ring") out.push(dot(t, cx, cy, it.color, it.kind === "dot"));
+    else if (it.kind === "tri") out.push(tri(t, cx, cy, it.color, false));
     else out.push(`<rect x="${cx - 5}" y="${cy - 5}" width="10" height="10" rx="2" fill="${it.color}"/>`);
     out.push(text(x + 20, row, it.label, { size: 12, fill: t.ink2 }));
     x += w;
