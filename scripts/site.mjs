@@ -484,7 +484,7 @@ function instancesPage() {
     const rows = group.map(inst => {
       const rec = recordOf(inst);
       const label = instanceLabel(inst);
-      const search = `${label} ${inst.instance_id} ${rec ? rec.method : "no record"}`.toLowerCase();
+      const search = `${name} ${label} ${inst.instance_id} ${rec ? rec.method : "no record"}`.toLowerCase();
       const cells = rec
         ? `<td class="record">${energyCell(rec, inst)}</td><td>${esc(shorten(rec.method, 52))} ${citeHtml(rec)}</td>`
         : `<td class="none">no record</td><td>${esc(noRecordReason(inst))}</td>`;
@@ -511,10 +511,10 @@ function instancesPage() {
   }).join("\n");
 
   const body = `
-<p><input id="filter" type="search" placeholder="Filter by lattice, size, coupling or method…" autocomplete="off" spellcheck="false">
+<p><input id="filter" type="search" placeholder="Filter by Hamiltonian, lattice, size, coupling or method…" autocomplete="off" spellcheck="false">
 <span id="filter-count" class="muted"></span></p>
-<nav class="jump">${MODELS.filter(([m]) => instances.some(i => i.model === m))
-    .map(([m, n]) => `<a href="#${m.toLowerCase()}">${esc(n)}</a>`).join("")}</nav>
+<div class="quick models"><span class="muted">Hamiltonian</span>${MODELS.filter(([m]) => instances.some(i => i.model === m))
+    .map(([m, n]) => `<button type="button" data-model="${m}">${esc(n)}</button>`).join("")}</div>
 ${sections}
 <script>
 const box = document.getElementById("filter");
@@ -522,19 +522,22 @@ const count = document.getElementById("filter-count");
 const sections = [...document.querySelectorAll("section[data-model]")];
 const total = document.querySelectorAll("tr.inst").length;
 
-// One selection per badge row per section; a badge toggles, and the text box applies on top.
+// One selection per badge row (the Hamiltonian row on top, lattice and size per section); a badge
+// toggles, and the text box applies on top.
 // Every word of the text box has to occur in the row, in any order: "100 square" finds square_100.
 function apply() {
   const q = box.value.trim().toLowerCase();
   const words = q.split(/[\\s,]+/).filter(Boolean);
+  const model = document.querySelector(".models button.on")?.dataset.model;
   let shown = 0;
   for (const section of sections) {
+    const outside = model && section.dataset.model !== model;
     const lattice = section.querySelector(".quick button[data-lattice].on")?.dataset.lattice;
     const size = section.querySelector(".quick button[data-size].on")?.dataset.size;
     const rows = [...section.querySelectorAll("tr.inst")];
     let n = 0;
     for (const row of rows) {
-      const hit = words.every(w => row.dataset.search.includes(w))
+      const hit = !outside && words.every(w => row.dataset.search.includes(w))
         && (!lattice || row.dataset.lattice === lattice)
         && (!size || row.dataset.size === size);
       row.hidden = !hit;
@@ -543,15 +546,15 @@ function apply() {
       if (hit) n++;
     }
     shown += n;
-    section.hidden = !n && !lattice && !size;
+    section.hidden = outside || (!n && !lattice && !size);
     section.querySelector(".count").textContent = (n === rows.length ? "" : n + " of ") + rows.length + " instances";
   }
-  count.textContent = q ? shown + " of " + total + " instances" : "";
+  count.textContent = q || model ? shown + " of " + total + " instances" : "";
 }
 box.addEventListener("input", apply);
 for (const b of document.querySelectorAll(".quick button")) b.addEventListener("click", () => {
   const on = b.classList.contains("on");
-  const key = "lattice" in b.dataset ? "lattice" : "size";
+  const key = ["model", "lattice", "size"].find(k => k in b.dataset);
   for (const o of b.parentElement.querySelectorAll("button[data-" + key + "]")) o.classList.remove("on");
   if (!on) b.classList.add("on");
   apply();
@@ -1055,7 +1058,7 @@ details.defect summary b { color: var(--flag); }
   background: var(--surface); color: var(--ink); border: 1px solid var(--grid); border-radius: 3px;
 }
 #filter-count { margin-left: 0.6rem; font-size: 0.85rem; }
-nav.jump { display: flex; flex-wrap: wrap; gap: 1rem; font-size: 0.9rem; margin: 1rem 0 0; }
+.quick.models { margin-top: 1rem; }
 
 .anchor {
   margin-left: 0.4rem; color: var(--grid); text-decoration: none; font-size: 0.8em;
