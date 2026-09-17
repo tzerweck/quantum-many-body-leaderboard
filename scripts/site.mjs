@@ -514,8 +514,6 @@ function instancesPage() {
   }).join("\n");
 
   const body = `
-<p class="lead">${summary.instances} Hamiltonian instances, one row each with its record; click a row for every energy
-published on it. ${summary.records.held} instances have a record; the rest say why they do not.</p>
 <p><input id="filter" type="search" placeholder="Filter by lattice, size, coupling or method…" autocomplete="off" spellcheck="false">
 <span id="filter-count" class="muted"></span></p>
 <nav class="jump">${MODELS.filter(([m]) => instances.some(i => i.model === m))
