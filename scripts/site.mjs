@@ -423,8 +423,13 @@ const FIG_SCRIPT = `<script>
 })();
 </script>`;
 
+// The per-family panels sit folded under the overview figure, behind a link-styled summary.
 function homePage() {
-  const figures = [...FIGURES.map(figure), sizeSwitcher(), costSwitcher()].join("\n");
+  const [overview, byFamily] = FIGURES;
+  const figures = [figure(overview), `<details class="fig-more">
+  <summary>Look at the dissection per method family</summary>
+${figure(byFamily)}
+</details>`, sizeSwitcher(), costSwitcher()].join("\n");
   const linked = new Set([...figures.matchAll(/href="\/instances\/#(r-[\w-]+)"/g)].map(m => m[1]));
   const cards = instances.flatMap(inst => inst.rows.filter(r => linked.has(rowId(inst, r)))
     .map(r => `<div data-row="${rowId(inst, r)}">${rowCard(r, inst)}</div>`));
@@ -1189,6 +1194,12 @@ details summary { cursor: pointer; }
 details[open] summary { margin-bottom: 0.4rem; }
 details p { max-width: 46em; font-size: 0.92rem; }
 details.defect summary b { color: var(--flag); }
+details.fig-more { border-top: 0; padding: 0; margin-top: 0.6rem; }
+details.fig-more summary { display: inline; list-style: none; color: var(--accent); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; }
+details.fig-more summary::-webkit-details-marker { display: none; }
+details.fig-more summary:hover { text-decoration-thickness: 2px; }
+details.fig-more summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+details.fig-more figure { margin-top: 1rem; }
 
 .cite { background: var(--surface); border: 1px solid var(--grid); border-radius: 3px; padding: 0.4rem 1.2rem 1.2rem; margin-top: 2.4rem; }
 .cite h2 { margin-top: 1.2rem; }
