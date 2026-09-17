@@ -359,8 +359,6 @@ function figure([name, title, caption]) {
   const id = name.replace(/[^\w-]/g, "-");
   return `<figure id="${id}" class="chart">
 ${svg}
-  <figcaption><a href="#${id}" class="anchor" aria-label="Link to this figure">#</a>
-    <a href="${REPO}/blob/main/figures/${name}.svg">SVG</a></figcaption>
 </figure>`;
 }
 
@@ -1075,9 +1073,6 @@ figure.chart a.pt:hover > :nth-child(2) { transform: scale(1.45); }
 #fig-tip .e { margin: 0.2rem 0; }
 #fig-tip .e .num { font-weight: 600; color: var(--record); }
 #fig-tip .go { margin-top: 0.3rem; font-size: 0.75rem; color: var(--accent); }
-figcaption { font-size: 0.8rem; margin-top: 0.3rem; }
-figcaption .anchor { margin: 0 0.4rem 0 0; opacity: 1; color: var(--grid); }
-figcaption a:not(.anchor) { color: var(--muted); }
 
 .scroll { overflow-x: auto; margin: 1.2rem 0; }
 table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
