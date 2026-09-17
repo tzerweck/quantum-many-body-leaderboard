@@ -18,6 +18,7 @@
 // output and is never committed.
 import fs from "node:fs";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import { perSiteDivisor, perSiteLabel, isSampled, recordEligible, boundLabel, stochasticExact } from "./units.mjs";
 import { collect, recordOf, summarize, rowId } from "./summary.mjs";
 import { THEMES } from "./chart.mjs";
@@ -93,7 +94,7 @@ function page({ url, title, description, body, wide = false }) {
 <title>${head}</title>
 <meta name="description" content="${esc(description)}">
 <link rel="canonical" href="https://qmbl.org${url}">
-<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/style.css?v=${CSS_VERSION}">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml" sizes="any">
 <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -1237,6 +1238,11 @@ tr.more figure.chart { margin: 0.4rem 0 0.8rem; }
 ${FIG_DARK}
 }
 ` + LOGO_CSS;
+
+// The stylesheet's URL carries a hash of its contents. Pages serves both the page and the
+// stylesheet with a ten-minute cache, and they expire separately: a new page on an old
+// stylesheet had its new switch sections unstyled and hidden (2026-09-17).
+const CSS_VERSION = createHash("sha1").update(CSS).digest("hex").slice(0, 10);
 
 // ----------------------------------------------------------------------------- output
 function write(rel, content) {
