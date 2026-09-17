@@ -112,9 +112,8 @@ function page({ url, title, description, body, wide = false }) {
 ${body}
 </main>
 <footer class="site">
-  <p><a href="${REPO}">Source and data on GitHub</a> &middot; <a href="/contribute/">Contribute</a> &middot; Apache-2.0 &middot;
-     cite <a href="https://doi.org/${DOI}">${DOI}</a> &middot;
-     <a href="/llms.txt">llms.txt</a></p>
+  <p><a href="/contribute/">Contribute</a> &middot; <a href="${REPO}">Source and data on GitHub</a> &middot;
+     Apache-2.0 &middot; <a href="/llms.txt">llms.txt</a></p>
 </footer>
 ${CITE_SCRIPT}
 </html>
@@ -1070,7 +1069,7 @@ main.wide { max-width: 78rem; }
 
 footer.site {
   border-top: 1px solid var(--grid); padding: 1.6rem clamp(1rem, 4vw, 3rem) 3rem;
-  font-size: 0.9rem; color: var(--ink2);
+  font-size: 0.9rem; color: var(--ink2); text-align: center;
 }
 footer.site p { margin: 0.3rem 0; }
 
