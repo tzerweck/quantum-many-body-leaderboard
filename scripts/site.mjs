@@ -413,11 +413,9 @@ function homePage() {
   if (cards.length !== linked.size) throw new Error(`figures link ${linked.size} rows, ${cards.length} found in data/: a figure is older than the data`);
   const body = `
 <h1>The best published ground-state energies</h1>
-<p class="lead">QMBL is a record book of the state of the art in quantum many-body simulation: one row
-per published energy, ranked within each Hamiltonian instance, every row citing the paper that
-produced the number and declaring what kind of quantity it is. Where an instance is solved, the
-exact energy is the record; everywhere else the best variational bound is.
-<a href="/instances/">All ${summary.instances} instances and their ${summary.rows} energies &rarr;</a></p>
+<p class="lead">QMBL is a record book of the state of the art in quantum many-body simulation. Browse
+through the leaderboard figures below interactively or look at the pure data in the
+<a href="/instances/">table</a>.</p>
 
 ${figures}
 <template id="fig-cards">${cards.join("\n")}</template>
