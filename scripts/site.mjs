@@ -407,8 +407,6 @@ const FIG_SCRIPT = `<script>
 </script>`;
 
 function homePage() {
-  const current = instances.filter(i => i.rows.some(r => (yearOf(r) ?? 0) >= 2025)).length;
-  const b = summary.blocked_on_sigma;
   const figures = [...FIGURES.map(figure), sizeSwitcher(), costSwitcher()].join("\n");
   const linked = new Set([...figures.matchAll(/href="\/instances\/#(r-[\w-]+)"/g)].map(m => m[1]));
   const cards = instances.flatMap(inst => inst.rows.filter(r => linked.has(rowId(inst, r)))
@@ -423,25 +421,6 @@ through the leaderboard figures below interactively or look at the pure data in 
 ${figures}
 <template id="fig-cards">${cards.join("\n")}</template>
 ${FIG_SCRIPT}
-
-<h2>How current this is</h2>
-<p>${current} of ${summary.instances} instances carry a result published in 2025 or 2026; the rest
-stand where the <a href="https://doi.org/10.1126/science.adg9774">VarBench</a> compilation left
-them on 2024-10-22. Every instance page says which of the two it is, because a website that says
-nothing about its own currency reads as more authoritative than it is.</p>
-<p>Separately, <b>${b.rows} sampled variational energies across ${b.instances} instances carry no
-error bar</b>, so they are listed and rank for nothing &mdash; and ${b.would_take_record} of them sit
-below their instance's current record. If one of those is your paper,
-<a href="/contribute/">the error bar is the only thing missing</a>.</p>
-
-<h2>What a row claims</h2>
-<p>Every row is one published claim about one Hamiltonian instance: the energy, its error bar, the
-method, the primary reference, and a declared <code>bound_type</code> saying what the number
-actually is &mdash; a strict variational bound, a projected or fixed-node estimate, a zero-variance
-extrapolation, or a numerically exact result. An exact result is the record wherever one exists;
-on every other instance only strict variational bounds compete for it, which is what keeps an
-extrapolated number from beating a measured one.
-The rules are in <a href="${RULES}">RULES.md</a>, the row format in <a href="${DATA}">DATA.md</a>.</p>
 
 <section class="cite" id="cite">
   <h2>Citing QMBL</h2>
