@@ -18,7 +18,7 @@
 // output and is never committed.
 import fs from "node:fs";
 import path from "node:path";
-import { perSiteDivisor, perSiteLabel, isSampled, recordEligible, boundLabel, stochasticExact } from "./units.mjs";
+import { perSiteDivisor, perSiteLabel, isSampled, recordEligible, boundLabel, stochasticExact, noErrorMetrics } from "./units.mjs";
 import { collect, recordOf, summarize, rowId } from "./summary.mjs";
 import { THEMES } from "./chart.mjs";
 import { citeRef, paperYear } from "./cite.mjs";
@@ -176,8 +176,12 @@ const quoteRow = (row, inst) => quote(perSite(row, inst).energy, perSite(row, in
 function energyCell(row, inst, decimals) {
   const { energy, sigma } = perSite(row, inst);
   const q = decimals == null ? quote(energy, sigma) : { text: energy.toFixed(decimals) };
-  return `<span class="num">${q.text}</span>${marks(row)}`;
+  return `<span class="num">${q.text}</span>${siteMarks(row)}`;
 }
+
+// The README's markers without its circle for "no error metric found": on the site the
+// sigma column already says n/a (Tristan, 2026-09-17).
+const siteMarks = row => noErrorMetrics(row) ? "" : marks(row);
 
 function citeHtml(row) {
   const r = citeRef(row, cache);
@@ -314,11 +318,11 @@ const TAB_CSS = [tabRules("cost-tab", COST_FIGS.length), tabRules("size-model", 
   ...SIZE_FIGS.map(([, figs], j) => tabRules(`size-${j}`, figs.length))].join("\n");
 
 // Leaderboard: the instance's cost figure above its rows, or how many of its energies state
-// a cost when that is too few to draw.
+// a cost when that is too few to draw; nothing when none does.
 function costSlot(inst) {
   if (COST_FIGS.includes(inst)) return figure(costEntry(inst));
   const k = inst.rows.filter(r => hoursOf(r.compute)).length;
-  return `<p class="muted cost-none">${k ? `${k} of ${inst.rows.length} energies here state a compute cost; a cost figure is drawn from two.` : "No energy on this instance states its compute cost yet."}</p>`;
+  return k ? `<p class="muted cost-none">${k} of ${inst.rows.length} energies here state a compute cost; a cost figure is drawn from two.</p>` : "";
 }
 
 // Dark mode for an inlined figure: an attribute selector per light colour, which beats the
@@ -612,7 +616,7 @@ function allRows(inst) {
   }).join("");
   return `${costSlot(inst)}
     <table class="next"><thead><tr><th>${perSiteLabel(inst)}</th><th>&sigma;</th><th>kind</th><th>method</th><th>source</th><th>year</th></tr></thead><tbody>${rows}</tbody></table>
-    <p class="links"><a href="${jsonUrl(inst)}">JSON</a> <span class="muted"><code>${esc(inst.instance_id)}</code></span></p>`;
+    <p class="links"><a href="${jsonUrl(inst)}">JSON</a></p>`;
 }
 
 function instancesPage() {
@@ -809,7 +813,7 @@ function instancePage(inst) {
   const recordBox = rec
     ? `<div class="record-box">
         <p class="eyebrow">Record</p>
-        <p class="big"><span class="num">${quoteRow(rec, inst).text}</span>${marks(rec)}
+        <p class="big"><span class="num">${quoteRow(rec, inst).text}</span>${siteMarks(rec)}
           <span class="unit">${perSiteLabel(inst)}</span></p>
         <p>${esc(rec.method)}</p>
         <p class="muted">${citeHtml(rec)} &middot; ${rec.bound_type === "exact"
@@ -832,7 +836,6 @@ function instancePage(inst) {
   const body = `
 <p class="crumbs"><a href="/instances/">All instances</a> / <a href="/instances/#${inst.model.toLowerCase()}">${esc(modelName(inst.model))}</a></p>
 <h1>${esc(label)}</h1>
-<p class="muted id"><code>${esc(inst.instance_id)}</code></p>
 
 ${recordBox}
 
@@ -1157,7 +1160,6 @@ table.next tr.target > td:first-child, .rows tr:target > td:first-child { box-sh
 
 .crumbs { font-size: 0.85rem; color: var(--muted); margin: 0 0 0.6rem; }
 .crumbs a { color: var(--muted); }
-.id { margin-top: -0.3rem; }
 .formula {
   font-family: var(--mono); font-size: 1.05rem; background: var(--surface);
   border: 1px solid var(--grid); border-radius: 3px; padding: 0.9rem 1rem; overflow-x: auto;
