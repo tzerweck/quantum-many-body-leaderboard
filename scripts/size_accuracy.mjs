@@ -24,15 +24,20 @@
 // 10^-8 sits on that line, above or below. A row below the exact energy within twice the
 // joint error bar is placed by the size of its gap, since inside the error bar the sign
 // says nothing. A row further below than that has no place on either axis, so it is not
-// drawn and the footnote counts it. None of these draws a V-score, a variance or a
+// drawn and the footnote counts it. No row is drawn closer to exact than its own error bar
+// allows: its height is the larger of the gap and sigma / |E_exact| (so a VMC energy that
+// lands within 1e-8 by chance is not drawn as exact). The overview draws the exact rows
+// themselves on the line. Marks that would cover each other at one size are merged into
+// one mark showing how many rows it holds; on the site it lists them (site.mjs, FIG_SCRIPT).
+// None of these draws a V-score, a variance or a
 // distance-to-record for the record itself, so nothing here says how well converged a
 // standing record is - that is the beatable-records question, which stays off the site.
 import fs from "node:fs";
-import { recordEligible } from "./units.mjs";
-import { collect, recordOf, exactRecordOf } from "./summary.mjs";
+import { recordEligible, exactEligible } from "./units.mjs";
+import { collect, recordOf, exactRecordOf, rowId } from "./summary.mjs";
 import { FAMILIES } from "./views.mjs";
 import { ladderFigures } from "./ladders.mjs";
-import { W, PAD, n, text, hline, dot, tri, legend, header, footnote, doc, textWidth, writer, log, logScale, pow10, rowHref } from "./chart.mjs";
+import { W, PAD, n, text, hline, dot, tri, legend, header, footnote, doc, textWidth, writer, log, logScale, pow10, rowHref, linked, onFill } from "./chart.mjs";
 
 const OUT = "figures";
 const instances = collect();
@@ -54,19 +59,58 @@ function referenceOf(inst) {
 // extrapolations and projections may land below an exact reference, and so may a sampled
 // bound without an error bar below a record. The axis shows the absolute value, so such a
 // row is `below`; it is `under` when it lies below by more than twice the joint error bar
-// and further than the floor, which the exact-referenced figures leave undrawn.
+// and further than the floor, which the exact-referenced figures leave undrawn. `shown` is
+// the height those figures draw: the gap, but never less than the row's own relative error bar.
 function points(inst, ref) {
   return inst.rows
     .filter(r => r.bound_type in BOUNDS && !r.defect && r !== ref.row)
     .map(r => {
       const gap = Math.abs(r.energy - ref.row.energy) / Math.abs(ref.row.energy);
       const under = gap >= FLOOR && ref.row.energy - r.energy > 2 * Math.hypot(r.sigma ?? 0, ref.row.sigma ?? 0);
-      return { r, inst, fam: r.family, eligible: recordEligible(r), below: r.energy < ref.row.energy, under, gap };
+      const shown = Math.max(gap, (r.sigma ?? 0) / Math.abs(ref.row.energy));
+      return { r, inst, fam: r.family, eligible: recordEligible(r), below: r.energy < ref.row.energy, under, gap, shown };
     });
 }
+// The exact rows of an instance, for the overview's exact line: distance zero by definition.
+const exactPoints = inst => inst.rows.filter(exactEligible)
+  .map(r => ({ r, inst, fam: r.family, eligible: true, exact: true, below: false, under: false, gap: 0, shown: 0 }));
 const mark = (t, x, y, color, p) => (p.below ? tri : dot)(t, x, y, color, p.eligible, rowHref(p.inst, p.r));
-const pin = (t, x, y, color, p) => dot(t, x, y, color, p.eligible, rowHref(p.inst, p.r));
 const BELOW = t => ({ kind: "tri", color: t.ink2, label: "Below the energy it is measured against" });
+
+// Marks at one size that would cover each other are drawn once: at the best row, in that
+// row's colour, with the count inside. Groups are taken best first (lowest on the page), each
+// holding the rows within MERGE px above its best one, so no two drawn marks are closer than
+// MERGE, which is a count mark's outer diameter. The mark links to the best row, and
+// `data-rows` names every row in the group, best first, for the site's list. A group of one
+// is an ordinary dot.
+const MERGE = 16, COUNT_R = 6.5;
+function marks(t, pts, X, Y, colorOf) {
+  const out = [];
+  for (const [N, ps] of Map.groupBy(pts, p => p.inst.n_sites)) {
+    const order = (a, b) => (b.exact ?? false) - (a.exact ?? false) || a.shown - b.shown || b.eligible - a.eligible;
+    const placed = [...ps].sort(order).map(p => ({ p, y: Y(p.shown) }));
+    const groups = [];
+    for (const q of placed) {
+      const g = groups.find(g => g[0].y - q.y <= MERGE && q.y <= g[0].y);
+      if (g) g.push(q); else groups.push([q]);
+    }
+    for (const g of groups) {
+      const rows = g.map(q => q.p);
+      const [head] = rows, x = X(N), y = g[0].y, color = colorOf(head);
+      if (rows.length === 1) { out.push([head, dot(t, x, y, color, head.eligible, rowHref(head.inst, head.r))]); continue; }
+      const filled = rows.some(p => p.eligible), r = COUNT_R;
+      const ink = filled ? (onFill(color) === "#ffffff" ? t.surface : t.ink) : color;
+      const svg = `<circle cx="${n(x)}" cy="${n(y)}" r="${r + 1.5}" fill="${t.surface}"/>` + (filled
+        ? `<circle cx="${n(x)}" cy="${n(y)}" r="${r}" fill="${color}"/>`
+        : `<circle cx="${n(x)}" cy="${n(y)}" r="${r - 1}" fill="${t.surface}" stroke="${color}" stroke-width="2"/>`) +
+        `<text x="${n(x)}" y="${n(y + 3)}" font-size="8.5" font-weight="600" fill="${ink}" text-anchor="middle" style="font-variant-numeric:tabular-nums">${rows.length}</text>`;
+      const a = linked(rowHref(head.inst, head.r), svg).replace('<a class="pt"', `<a class="pt" data-rows="${rows.map(p => rowId(p.inst, p.r)).join(" ")}"`);
+      out.push([head, a]);
+    }
+  }
+  // Hollow first, then filled, so a record-eligible mark is never covered by one that is not.
+  return out.sort((a, b) => a[0].eligible - b[0].eligible).map(([, svg]) => svg);
+}
 
 // A log-log plot area: size along x with the ticks given, distance up y on a decade scale.
 // Without `exact` the scale is inverted (y0 at the top, y1 at the bottom). With `exact` it
@@ -93,12 +137,13 @@ function logPlot(t, parts, { left, right, top, bottom, x0, x1, y0, y1, xTicks, x
   return { X, Y };
 }
 
-// The best gap at each size among a set of points, joined from size to size.
-function best(pts) {
-  return [...Map.groupBy(pts, p => p.inst.n_sites)].map(([N, ps]) => [N, Math.min(...ps.map(p => p.gap))]).sort((a, b) => a[0] - b[0]);
+// The best gap at each size among a set of points, joined from size to size. `key` is the
+// height a figure draws: `gap`, or `shown` where the error bar floors it.
+function best(pts, key = "gap") {
+  return [...Map.groupBy(pts, p => p.inst.n_sites)].map(([N, ps]) => [N, Math.min(...ps.map(p => p[key]))]).sort((a, b) => a[0] - b[0]);
 }
-function frontier(pts, X, Y, color) {
-  const steps = best(pts);
+function frontier(pts, X, Y, color, key = "gap") {
+  const steps = best(pts, key);
   if (steps.length < 2) return "";
   const d = steps.map(([N, g], k) => `${k ? "L" : "M"}${n(X(N))} ${n(Y(g))}`).join("");
   return `<path d="${d}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" opacity="0.85"/>`;
@@ -107,11 +152,14 @@ function frontier(pts, X, Y, color) {
 const exactRef = instances.map(i => [i, referenceOf(i)]).filter(([, ref]) => ref?.kind === "exact");
 const all = exactRef.flatMap(([i, ref]) => points(i, ref)).filter(p => !p.under);
 const under = exactRef.flatMap(([i, ref]) => points(i, ref)).filter(p => p.under).length;
-const NS = all.map(p => p.inst.n_sites);
+// Only the instances something is drawn for: an exact energy nobody has published against compares nothing.
+const exacts = exactRef.filter(([i]) => all.some(p => p.inst === i)).flatMap(([i]) => exactPoints(i));
+const NS = [...all, ...exacts].map(p => p.inst.n_sites);
 const X0 = 8, X1 = Math.max(...NS) * 1.4;
 const Y0 = FLOOR, Y1 = 1;
 const XT = [10, 30, 100, 300, 1000].filter(v => v <= X1);
-const floored = all.filter(p => p.gap < FLOOR).length;
+const floored = all.filter(p => p.shown < FLOOR).length;
+const lifted = all.filter(p => p.shown > p.gap).length;
 const UNDER = `${under} ${under === 1 ? "row lies" : "rows lie"} below the exact energy by more than twice the error bar and ${under === 1 ? "is" : "are"} not drawn.`;
 const Y_LABEL = "relative gap to the instance's exact energy (better is lower)";
 
@@ -119,26 +167,28 @@ const Y_LABEL = "relative gap to the instance's exact energy (better is lower)";
 write("size-vs-accuracy", t => {
   const h = header(t, "The best published energies, by system size",
     `${all.length} energies on the ${exactRef.length} instances that have an exact ground-state energy, ` +
-    "placed by their relative gap to it so that different Hamiltonians share one axis; a better energy is lower. Colour is the kind of number; filled marks can hold a record, hollow ones cannot.");
+    `placed by their relative gap to it so that different Hamiltonians share one axis, and their ${exacts.length} exact energies on the exact line; a better energy is lower. ` +
+    "Colour is the kind of number; filled marks can hold a record, hollow ones cannot, and a number counts the rows a mark holds.");
   const lg = legend(t, [
     { kind: "dot", color: t.series[0], label: "Variational bound" },
     { kind: "dot", color: t.series[1], label: "Projected (fixed-node)" },
     { kind: "dot", color: t.series[2], label: "Extrapolated" },
+    { kind: "dot", color: t.series[3], label: "Exact (diagonalization or QMC)" },
     { kind: "ring", color: t.ink2, label: "Listed, cannot hold a record" },
   ], h.bottom + 34);
   const top = lg.bottom + 28, bottom = top + 380, left = PAD + 62, right = W - PAD - 8;
   const parts = [h.svg, lg.svg];
   const { X, Y } = logPlot(t, parts, { left, right, top, bottom, x0: X0, x1: X1, y0: Y0, y1: Y1, xTicks: XT, xLabel: "sites", yLabel: Y_LABEL, exact: true });
-  // Hollow first, then filled; within each, extrapolated and projected under variational.
-  const order = [...all].sort((a, b) => (a.eligible - b.eligible) || (BOUNDS[b.r.bound_type] - BOUNDS[a.r.bound_type]));
-  for (const p of order) parts.push(pin(t, X(p.inst.n_sites), Y(p.gap), t.series[BOUNDS[p.r.bound_type]], p));
-  const fn = footnote(t, `Height is |E − E_exact| / |E_exact| on a log scale, so that a better energy is lower; ${floored} rows closer than ${pow10(log(FLOOR))}, ` +
-    `above or below, sit on the exact line. A row below the exact energy within twice the error bar is placed by the size of its gap. ${UNDER} ` +
+  parts.push(...marks(t, [...all, ...exacts], X, Y, p => t.series[p.exact ? 3 : BOUNDS[p.r.bound_type]]));
+  const fn = footnote(t, `Height is |E − E_exact| / |E_exact| on a log scale, so that a better energy is lower, but never less than the row's own error bar ` +
+    `relative to E_exact (${lifted} rows are drawn at their error bar); ${floored} rows closer than ${pow10(log(FLOOR))}, above or below, sit on the exact line with the exact energies. ` +
+    `A row below the exact energy within twice the error bar is placed by the size of its gap. ${UNDER} ` +
+    "Marks that would cover each other at one size are drawn once, at the best of them, with the number of rows inside; on the site, hovering lists them. " +
     "No line joins the sizes: the instances at one size are different Hamiltonians, and a frontier across them would compare a Hubbard " +
     "energy with a Heisenberg one. Exact references are exact diagonalization or sign-problem-free QMC, exact within its error bar; flagged rows are not shown.", bottom + EXACT_RISE + 58);
   parts.push(fn.svg);
   return doc(t, fn.bottom + 24, "The best published energies, by system size",
-    `Number of sites (x) against relative gap to the exact ground-state energy (y, log scale, better is lower) for ${all.length} published energies on ${exactRef.length} exactly solved instances.`, parts);
+    `Number of sites (x) against relative gap to the exact ground-state energy (y, log scale, better is lower) for ${all.length} published energies and ${exacts.length} exact energies on ${exactRef.length} exactly solved instances.`, parts);
 });
 
 // ------------------------------------------------------------- 2. the same, by method family
@@ -160,7 +210,7 @@ write("size-vs-accuracy-by-family", t => {
   const CX = logScale(X0, X1, left0, PAD + panelW - 4), CYlog = logScale(Y0, Y1, top0 + plotH, top0);
   const CY = g => (g < Y0 ? top0 + plotH + EXACT_RISE : CYlog(g));
   const parts = [h.svg, `<defs><g id="${cloudId}" fill="${t.recessive[0]}">` +
-    all.map(p => `<circle cx="${n(CX(p.inst.n_sites))}" cy="${n(CY(p.gap))}" r="2.5"/>`).join("") + "</g></defs>"];
+    all.map(p => `<circle cx="${n(CX(p.inst.n_sites))}" cy="${n(CY(p.shown))}" r="2.5"/>`).join("") + "</g></defs>"];
   names.forEach((name, k) => {
     const col = k % cols, row = Math.floor(k / cols);
     const px = PAD + col * (panelW + 40), left = px + 58, right = px + panelW - 4;
@@ -170,12 +220,13 @@ write("size-vs-accuracy-by-family", t => {
     const { X, Y } = logPlot(t, parts, { left, right, top, bottom, x0: X0, x1: X1, y0: Y0, y1: Y1, xTicks: XT,
       xLabel: row === rows - 1 ? "sites" : null, yLabel: null, exact: true });
     parts.push(`<use href="#${cloudId}" x="${n(left - left0)}" y="${n(top - top0)}"/>`);
-    parts.push(frontier(mine, X, Y, t.series[0]));
-    for (const p of [...mine].sort((a, b) => a.eligible - b.eligible)) parts.push(pin(t, X(p.inst.n_sites), Y(p.gap), t.series[0], p));
+    parts.push(frontier(mine, X, Y, t.series[0], "shown"));
+    parts.push(...marks(t, mine, X, Y, () => t.series[0]));
   });
   const y = top0 + (rows - 1) * pitch + plotH + EXACT_RISE + 62;
   const fn = footnote(t, "Each method name belongs to one family (scripts/method_names.mjs); 'other' holds exact methods and names no family covers. " +
-    `Filled marks can hold a record, hollow ones cannot. Axes, the exact line included, as in the figure above: a better energy is lower. ${UNDER}`, y);
+    "Filled marks can hold a record, hollow ones cannot, and a number counts the rows a mark holds. Axes, the exact line and the error-bar floor as in the figure above: " +
+    `a better energy is lower. ${UNDER}`, y);
   parts.push(fn.svg);
   return doc(t, fn.bottom + 24, "The best published energies by system size, one panel per method family",
     names.map(f => `${f}: ${all.filter(p => p.fam === f).length} energies`).join("; "), parts);
