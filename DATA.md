@@ -7,7 +7,7 @@ What the files in `data/` contain and how to read them. The leaderboard is in
 
 `data/<Model>/<instance>.json`, one file per instance, plus `data/_summary.json`.
 
-This is the row currently holding the 10×10 J1-J2 record, in full:
+This is the row currently holding the 10×10 J1-J2 record, with its long text fields cut:
 
 ```json
 {
@@ -18,9 +18,12 @@ This is the row currently holding the 10×10 J1-J2 record, in full:
     {
       "energy": -199.07756, "sigma": 0.00008, "energy_variance": null,
       "dof": 100, "einf": 0, "v_score": null,
-      "method": "CNN-MPS (h,D,l)=(32,20,20), Marshall sign transformation",
+      "method": "CNN-MPS",
+      "method_detail": "h = 32, l = 20, Marshall sign",
+      "method_as_published": "CNN-MPS (h,D,l)=(32,20,20), Marshall sign transformation",
+      "family": "tensor network",
       "bound_type": "variational",
-      "bound_type_reason": "variational ansatz; energy is a strict upper bound",
+      "bound_type_reason": "variational ansatz; energy is a strict upper bound (assigned during source verification)",
       "reference": "arXiv:2603.14425, Disentangling Tensor Network States with Deep Neural Networks",
       "peer_reviewed": false,
       "source": "sweep-2026-09-13",
@@ -31,15 +34,30 @@ This is the row currently holding the 10×10 J1-J2 record, in full:
         "reported_as": "-0.4976939 (+/- 2e-7) per site in S.S units",
         "note": "Read from Table 1 of arXiv:2603.14425 ... Supersedes Chen & Heyl -0.4976921(4) as the record for this instance.",
         "secondary_of": null
+      },
+      "compute": {
+        "parameters": 200000, "samples": 4096, "bond_dimension": 20, "iterations": 15000,
+        "reported_as": "...", "source": "Supplementary Material Sec. S3.A and Table S1, arXiv:2603.14425 (compute pass 2026-09-16)",
+        "scope": "ansatz", "confidence": "medium", "note": "..."
       }
     }
   ]
 }
 ```
 
+A method is stored three ways. `method` is its name alone. `method_detail` holds what tells
+the row apart from other rows of that name (architecture size, projection, Lanczos steps,
+trial state, what an extrapolation sends to zero) and never repeats the kind, the instance
+or the source. `method_as_published` is the string exactly as the source printed it. A bond
+dimension, parameter count or sample count lives in `compute`, not in the detail, and the
+site prints the three as one label: "CNN-MPS (bond dimension 20, h = 32, l = 20, Marshall
+sign)". `family` groups methods for the figures, and `sector` marks an exact diagonalization
+restricted to one symmetry sector. All of these are assigned in
+[`scripts/method_names.mjs`](scripts/method_names.mjs), one entry per published string.
+
 `baseline: true` marks a row VarBench **computed itself** rather than collected from a
 paper: a reference calculation run across the instance set so the V-score would have
-something to measure against, not a published state-of-the-art claim. 369 of the 578
+something to measure against, not a published state-of-the-art claim. 376 of the 583
 imported rows are of this kind. 75 of VarBench's own exact diagonalizations hold their
 instance's record, as any exact energy does ([§6](RULES.md#6-records-and-ties)), and 27
 of its variational reference runs do, which means *no published result has ever beaten the
@@ -218,7 +236,9 @@ own inputs, the row's energy against its own reported variance, and the variatio
 principle against any exact row in the same instance (combining the two error bars where
 the exact row is stochastic QMC), and that every stochastic exact row states its sigma.
 
-Rows that fail are **flagged in place, never silently corrected and never deleted**. The
+Rows that fail are **flagged in place, never silently corrected and never deleted** (a
+duplicate, or a number that is not an energy of its instance, is removed under
+[RULES.md §11](RULES.md#11-corrections)). The
 flag withholds the record and nothing else; [§10](RULES.md#10-pending-confirmed-objections) is the process for lifting
 or upholding it. One worked case is resolved in [`checks/`](checks/): three TFIsing
 `RBM (alpha = 1)` energies sit up to 10 sigma below an exact solution, and a rerun with

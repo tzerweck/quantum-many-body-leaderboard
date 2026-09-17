@@ -29,7 +29,9 @@ different sector, the row moves rather than competes.
 | `energy` | yes | in the instance's stored convention (§5) |
 | `sigma` | for a ranked row | the error bar on the mean, with §6 |
 | `bound_type` | yes | one of §4; never guessed |
-| `method` | yes | enough to identify the ansatz and any projection |
+| `method` | yes | the method's name alone: `DMRG`, `HFPS`, `AFQMC` |
+| `method_detail` | yes, may be empty | what tells this row apart from other rows of that method: architecture size, projection, Lanczos steps, trial state, what an extrapolation sends to zero. Never the kind, the instance or the source |
+| `method_as_published` | yes | the method string exactly as the source printed it |
 | `reference` | yes | §8 |
 | `dof`, `einf` | yes | checked against the instance (§9) |
 | `energy_variance` | no | renders `n/a`; enables the V-score |
@@ -51,8 +53,9 @@ energies from different classes are not comparable and mixing them manufactures 
   energies from different trial states are not cleanly comparable to each other or to
   variational ones.
 - **`extrapolated`**: the reported number is an extrapolation, not an achieved energy:
-  zero-variance, bond-dimension, or Trotter-error extrapolation. **Not a bound.** No
-  ansatz ever reached it.
+  zero-variance or bond-dimension extrapolation. **Not a bound.** No ansatz ever reached it.
+  Sign-problem-free QMC taken to its own limits (Δτ → 0, β → ∞) stays `exact`; its detail
+  says so (Tristan, 2026-09-17).
 - **`exact`**: numerically exact for this instance: exact diagonalization, exact solution,
   sign-problem-free QMC where that is established. QMC is exact only within its statistical
   error bar, not to the printed digits: such a row must state `sigma`, and is shown
@@ -127,7 +130,7 @@ instance is solved, otherwise the **lowest eligible `variational` energy**. `pro
 - **A deterministic energy needs no `sigma`.** DMRG at a stated bond dimension, exact
   diagonalization, statevector circuits and tensor-network contractions carry no statistical
   error, so there is no error bar to withhold; their convergence control is the bond dimension
-  or truncation error carried in `method`. 144 of the 399 variational rows are of this kind.
+  (`compute.bond_dimension`) or the truncation error (`method_detail`). 144 of the 399 variational rows are of this kind.
   Requiring `sigma` of them would vacate more than half the table's records over a field that
   cannot exist. `scripts/units.mjs` draws the line by explicit deterministic markers, and
   anything not so marked counts as sampled.
@@ -330,4 +333,6 @@ that meets the same bar. Rulings cite a clause.
 ## 11. Corrections
 
 Errors found by the maintainers are corrected in public with the reason recorded on the row.
-Rows are never silently deleted; superseded ones are marked and kept.
+Rows are never silently corrected. A row that duplicates another, or is not an energy of its
+instance, is removed, with the ruling and reason listed in `scripts/removals.mjs`. Every other
+correction keeps the old value on the row.
