@@ -111,9 +111,7 @@ ${body}
 <footer class="site">
   <p><a href="${REPO}">Source and data on GitHub</a> &middot; Apache-2.0 &middot;
      cite <a href="https://doi.org/${DOI}">${DOI}</a> &middot;
-     <a href="/api/qmbl.json">JSON</a> &middot; <a href="/llms.txt">llms.txt</a></p>
-  <p class="muted">Every energy on this site is someone else's published result, cited on its row.
-     Built ${BUILT} from <a href="${REPO}/tree/main/data">data/</a>.</p>
+     <a href="/llms.txt">llms.txt</a></p>
 </footer>
 ${CITE_SCRIPT}
 </html>
