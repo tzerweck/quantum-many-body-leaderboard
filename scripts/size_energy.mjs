@@ -110,10 +110,8 @@ for (const f of figures) write(f.name, t => {
   const parts = [h.svg, lg.svg];
   parts.push(text(W - PAD, lg.bottom + 30, perSiteLabel(f.ladders?.[0].members[0] ?? f.scans[0].slots[0].members[0]), { size: 11, fill: t.muted, anchor: "end" }));
   const end = grid(t, parts, specs, lg.bottom + 70, other ? 3 : specs.length === 1 ? 1 : 2);
-  const fn = footnote(t, "Energies per site as the table quotes them (the impurity problems in total energy), on each panel's own linear scale. " +
-    "Flagged rows, rows without a declared kind and exact diagonalizations of a single symmetry sector are not drawn.", end + 50);
-  parts.push(fn.svg);
-  return doc(t, fn.bottom + 24, title, specs.map(s => `${s.title}: ${s.slots.map(x => x.label).join(", ")}`).join("; "), parts);
+  // No footnote (Tristan, 2026-09-18); the per-site label above the panels says the unit.
+  return doc(t, end + 50, title, specs.map(s => `${s.title}: ${s.slots.map(x => x.label).join(", ")}`).join("; "), parts);
 });
 
 console.log(`${DIR}/: ${written.length} files (${figures.filter(f => f.group !== "other").length} figures with ${figures.reduce((a, f) => a + (f.ladders?.length ?? 0), 0)} ladders; ` +
