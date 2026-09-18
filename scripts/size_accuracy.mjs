@@ -162,13 +162,16 @@ const floored = all.filter(p => p.shown < FLOOR).length;
 const lifted = all.filter(p => p.shown > p.gap).length;
 const UNDER = `${under} ${under === 1 ? "row lies" : "rows lie"} below the exact energy by more than twice the error bar and ${under === 1 ? "is" : "are"} not drawn.`;
 const Y_LABEL = "relative gap to the instance's exact energy (better is lower)";
+// The largest size at which the overview draws a model other than Heisenberg or Hubbard
+// (Tristan, 2026-09-18: the subtitle says so, and points to the per-Hamiltonian figures).
+const LAST_OTHER = Math.max(...all.filter(p => !["Heisenberg", "Hubbard"].includes(p.inst.model)).map(p => p.inst.n_sites));
 
 // ------------------------------------------------------ 1. every row against an exact energy
 write("size-vs-accuracy", t => {
   const h = header(t, "The best published energies, by system size",
-    `${all.length} energies on the ${exactRef.length} instances that have an exact ground-state energy, ` +
-    `placed by their relative gap to it so that different Hamiltonians share one axis, and their ${exacts.length} exact energies on the exact line; a better energy is lower. ` +
-    "Colour is the kind of number; filled marks can hold a record, hollow ones cannot, and a number counts the rows a mark holds.");
+    `${all.length} energies on the ${exactRef.length} instances that have an exact ground-state energy. ` +
+    "Results are placed by their relative gap to it so that different Hamiltonians share one axis. A better energy is lower. " +
+    `Above size ${LAST_OTHER} there are only Heisenberg and Hubbard model results. For other Hamiltonians at larger system sizes, see below.`);
   const lg = legend(t, [
     { kind: "dot", color: t.series[0], label: "Variational bound" },
     { kind: "dot", color: t.series[1], label: "Projected (fixed-node)" },
