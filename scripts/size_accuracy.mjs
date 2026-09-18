@@ -183,12 +183,8 @@ write("size-vs-accuracy", t => {
   const parts = [h.svg, lg.svg];
   const { X, Y } = logPlot(t, parts, { left, right, top, bottom, x0: X0, x1: X1, y0: Y0, y1: Y1, xTicks: XT, xLabel: "sites", yLabel: Y_LABEL, exact: true });
   parts.push(...marks(t, [...all, ...exacts], X, Y, p => t.series[p.exact ? 3 : BOUNDS[p.r.bound_type]]));
-  const fn = footnote(t, `Height is |E − E_exact| / |E_exact| on a log scale, so that a better energy is lower, but never less than the row's own error bar ` +
-    `relative to E_exact (${lifted} rows are drawn at their error bar); ${floored} rows closer than ${pow10(log(FLOOR))}, above or below, sit on the exact line with the exact energies. ` +
-    `A row below the exact energy within twice the error bar is placed by the size of its gap. ${UNDER} ` +
-    "Marks that would cover each other at one size are drawn once, at the best of them, with the number of rows inside; on the site, hovering lists them. " +
-    "No line joins the sizes: the instances at one size are different Hamiltonians, and a frontier across them would compare a Hubbard " +
-    "energy with a Heisenberg one. Exact references are exact diagonalization or sign-problem-free QMC, exact within its error bar; flagged rows are not shown.", bottom + EXACT_RISE + 58);
+  const fn = footnote(t, "Height is |E − E_exact| / |E_exact| on a log scale, so that a better energy is lower. " +
+    "Hovering over a dot lists the result and clicking leads to the table entry and source.", bottom + EXACT_RISE + 58);
   parts.push(fn.svg);
   return doc(t, fn.bottom + 24, "The best published energies, by system size",
     `Number of sites (x) against relative gap to the exact ground-state energy (y, log scale, better is lower) for ${all.length} published energies and ${exacts.length} exact energies on ${exactRef.length} exactly solved instances.`, parts);
