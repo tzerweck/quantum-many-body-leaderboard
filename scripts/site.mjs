@@ -501,7 +501,7 @@ const FIG_SCRIPT = `<script>
 function homePage() {
   const [overview, byFamily] = FIGURES;
   const figures = [figure(overview), `<details class="fig-more">
-  <summary>Look at the best energies per method family</summary>
+  <summary>Look at the best published energies, by method family</summary>
 ${figure(byFamily)}
 </details>`, energySwitcher(), costSwitcher()].join("\n");
   const linked = new Set([...[...figures.matchAll(/href="\/instances\/#(r-[\w-]+)"/g)].map(m => m[1]),
