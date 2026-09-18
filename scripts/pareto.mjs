@@ -156,12 +156,13 @@ const HOURS_LEGEND = t => [
   { kind: "ring", color: t.ink2, label: "Cannot hold a record" },
   { kind: "line", color: t.series[0], label: "Frontier" },
 ];
+// Cut to the marks and the whisker (Tristan, 2026-09-18): the no-conversion rule and the
+// bound kinds are said in the page text and the legend.
 function HOURS_FOOTER(all) {
   const cpu = all.filter(p => p.cost.unit === "cpu").length, der = all.filter(p => p.cost.derived).length;
-  return (cpu ? `Circles are GPU-hours, squares CPU core-hours (${cpu} rows); ` : "Every mark is GPU-hours; ") +
-    (der ? `a whisker under a mark means the hours are devices × wall-clock, multiplied here (${der} rows) - ` : "") +
-    "the stored fields are never derived, GPU generations are not normalised, and a CPU core-hour is not converted into a GPU-hour. " +
-    "Projections and extrapolations are not bounds and never on the frontier.";
+  const rows = k => `${k} row${k === 1 ? "" : "s"}`;
+  return (cpu ? `Circles are GPU-hours, squares CPU core-hours (${rows(cpu)}).` : "Every mark is GPU-hours.") +
+    (der ? ` A whisker under a mark means the hours are devices × wall-clock, multiplied here (${rows(der)}).` : "");
 }
 const describeHours = panels => panels.map(({ inst, pts }) => `${instLabel(inst)}: ${pts.map(p => `${shortLabel(p.r)} ${Math.round(p.cost.value)} ${p.cost.unit === "cpu" ? "CPU-h" : "GPU-h"}${p.cost.derived ? " (derived)" : ""} ${p.e.toFixed(6)}`).join(", ")}`).join("; ");
 
