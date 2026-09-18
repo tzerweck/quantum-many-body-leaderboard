@@ -344,7 +344,6 @@ function energySwitcher() {
   if (!ENERGY_FIGS.length) return "";
   return `<section class="tabs" id="energy-by-hamiltonian">
   <h2>The published energies, by Hamiltonian</h2>
-  <p class="muted">Every energy on the table, on its own Hamiltonian's axis: by size where it was published at several, under Other where at one.</p>
   ${tabs("energy-group", ENERGY_FIGS.map(([group, figs], j) =>
     [group === "other" ? "Other" : esc(modelName(group)), `<div class="tabs">${tabs(`energy-${j}`, figs.map(f => [esc(f.label), figure(energyEntry(f))]), { all: true })}</div>`]))}
 </section>`;
