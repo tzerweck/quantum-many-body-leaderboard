@@ -416,10 +416,10 @@ const cardSource = r => { const c = citeRef(r, cache); return esc(c.note ? `${c.
 // other) names them in `data-rows`, best first: hovering lists their cards, each a link to
 // its row. A single card follows the pointer and goes when the pointer leaves its mark,
 // but a list sits still beside its mark and takes the pointer, so the reader can move onto
-// it by any path, scroll it and pick a row: it stays while the pointer is anywhere in the
-// figure or on the list, closes a moment after the pointer has left both, and is replaced
-// only when the pointer rests on another mark rather than passes over one. Clicking the
-// mark keeps the list open regardless, until a click elsewhere or Escape.
+// it by any path, scroll it and pick a row: it closes 400 ms after the pointer has left
+// both mark and list, a moment that a return to either cancels, and a mark the pointer
+// passes over on the way takes over only if the pointer rests on it. Clicking the mark
+// keeps the list open regardless, until a click elsewhere or Escape.
 const FIG_SCRIPT = `<script>
 (() => {
   const cards = new Map([...document.getElementById("fig-cards").content.children].map(c => [c.dataset.row, c.innerHTML]));
@@ -446,12 +446,13 @@ const FIG_SCRIPT = `<script>
   const stay = () => { clearTimeout(leaving); leaving = 0; };
   const unrest = () => { clearTimeout(resting); next = null; };
   const hide = () => { stay(); unrest(); on = null; list = false; pinned = false; tip.hidden = true; tip.classList.remove("list"); };
-  // Called when the pointer leaves the figure or the list: a list closes only if it has not
-  // come back to either within the moment, and the moment is not restarted by later moves.
-  const leave = () => { if (list && !pinned && !leaving) leaving = setTimeout(hide, 300); };
+  // Called when the pointer leaves the mark or the list: the moment runs from the first
+  // leaving, is not restarted by later moves, and is cancelled by a return to either.
+  const leave = () => { if (list && !pinned && !leaving) leaving = setTimeout(hide, 400); };
   const show = (a, e, pin) => {
     const rows = rowsOf(a);
     if (!rows.length) return;
+    stay();
     list = rows.length > 1;
     tip.innerHTML = !list
       ? cards.get(rows[0]) + '<span class="go">Click to open this row in the table</span>'
@@ -462,12 +463,11 @@ const FIG_SCRIPT = `<script>
     tip.hidden = false;
     if (list) beside(a); else follow(e);
   };
-  const inFigure = el => !!(el && el.closest && el.closest("figure.chart"));
   for (const fig of document.querySelectorAll("figure.chart")) {
     fig.addEventListener("pointerover", e => {
-      stay();
       const a = e.target.closest("a.pt");
-      if (pinned || !a || a === on) return;
+      if (pinned || !a) return;
+      if (a === on) { stay(); return; }
       if (!list) { on = a; show(a, e, false); return; }
       // With a list open, a mark on the pointer's way to it must not take over: only a
       // mark the pointer rests on does.
@@ -477,9 +477,9 @@ const FIG_SCRIPT = `<script>
     fig.addEventListener("pointermove", e => { if (on && !list) follow(e); });
     fig.addEventListener("pointerout", e => {
       if (next && next === e.target.closest("a.pt") && !next.contains(e.relatedTarget)) unrest();
-      if (on && !list && !on.contains(e.relatedTarget)) hide();
+      if (!on || pinned || on.contains(e.relatedTarget) || tip.contains(e.relatedTarget)) return;
+      if (list) leave(); else hide();
     });
-    fig.addEventListener("pointerleave", e => { if (!tip.contains(e.relatedTarget)) leave(); });
     fig.addEventListener("click", e => {
       const a = e.target.closest("a.pt[data-rows]");
       if (!a) return;
@@ -489,7 +489,7 @@ const FIG_SCRIPT = `<script>
     });
   }
   tip.addEventListener("pointerenter", stay);
-  tip.addEventListener("pointerleave", e => { if (!inFigure(e.relatedTarget)) leave(); });
+  tip.addEventListener("pointerleave", e => { if (!(on && on.contains(e.relatedTarget))) leave(); });
   document.addEventListener("click", e => { if (list && !tip.contains(e.target) && !e.target.closest("a.pt[data-rows]")) hide(); });
   document.addEventListener("keydown", e => { if (e.key === "Escape" && list) hide(); });
 })();
