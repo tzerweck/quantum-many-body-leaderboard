@@ -332,7 +332,11 @@ that meets the same bar. Rulings cite a clause.
 
 Errors found by the maintainers are corrected in public with the reason recorded on the row.
 Rows are never silently corrected. A row that duplicates another, or is not an energy of its
-instance, is removed, with the ruling and reason listed in `scripts/removals.mjs`. Every other
+instance, is removed, with the ruling and reason listed in `scripts/removals.mjs`. A row declared
+`exact` that independent recomputation places above the ground-state energy, by more than the
+precision it is printed to, is removed on the same footing (Tristan, 2026-09-18): the table carries
+one exact energy per instance and a number that is not it states nothing an exact row may claim.
+The removal names the recomputation and the value that stands. Every other
 correction keeps the old value on the row, listed with its source and reason in
 `scripts/corrections.mjs`. An instance whose name carries a different parameter from the
 one its rows were computed at is renamed, with the old name and the reason recorded on it

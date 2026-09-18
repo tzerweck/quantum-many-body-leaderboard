@@ -188,7 +188,6 @@ const methodText = method => method.replace(/\s*\((?:this work|ours)\)/gi, "");
 // one sentence; the row's own finding is under Flagged rows on the instance page.
 const FLAGS = {
   "below-exact": ["below exact energy", "The energy lies below the exact ground-state energy, which no variational result can."],
-  "exact-above-exact": ["above exact energy", "The row is declared exact, but its energy lies above the ground-state energy, so it is not the exact answer it states."],
   "below-exact-suspected": ["likely below exact", "The energy appears to lie below the exact ground-state energy, but the evidence is not conclusive."],
   "energy-variance-inconsistent": ["energy and variance disagree", "The energy is lower than its own reported variance or error bar supports."],
   "dof-mismatch": ["wrong site count (dof)", "The stored degrees of freedom do not match the instance's site count, so a V-score computed from them would be wrong."],
