@@ -39,7 +39,7 @@ export const VERIFICATIONS = [
       checked_on: "2026-09-17", scope: "value",
       method: "arXiv:2502.17144v3 PDF (pypdf layout and plain) and v3 HTML table cells, parsed locally; a skeptic re-read the v3 PDF",
       location: "Table III", reported_as: moss, conversion: `x 4 x ${L * L}`,
-      note: "Transcribed correctly, in Sandvik's convention (H = sum S_i.S_j per spin). Its printed bar is a bootstrap standard error; see corrections[] for the sigma the row carries.",
+      note: "Transcribed correctly, in Sandvik's convention (H = sum S_i.S_j per spin). Its printed bar is a bootstrap standard error, about 30x below the bootstrap spread; the row keeps it and is flagged sigma-understated.",
       source_entry: "RP1-heisenberg (qmbl-verify 2026-09-17)" },
     { match: { instance: `Heisenberg/square_${L * L}_P`, method: SSE, energy: eSse },
       checked_on: "2026-09-17", scope: "value",

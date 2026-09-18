@@ -115,3 +115,28 @@ DEFECTS.push(
     flag: "below-exact",
     finding: "E/N = -0.6735 printed without an error bar, 1.3e-5 per site below the stochastic-series-expansion ground state carried on this instance. With no sigma the gap cannot be read as sampling noise." },
 );
+// Moss et al., Phys. Rev. B 112, 134450 (arXiv:2502.17144), Table III: the zero-variance
+// energies on the periodic square lattice. qmbl-verify 2026-09-17 read the authors' notebook
+// (sources/2502.17144-repo-get_zer_var_energies.ipynb): the printed bar is the spread of the
+// 1000 bootstrap intercepts divided by sqrt(1000), the standard error of their mean, which
+// shrinks with more resamples and is not the uncertainty of the extrapolated energy. The
+// spread itself is about 30x larger. The rows keep the printed bar (Tristan, 2026-09-18) and
+// are flagged; the authors have been asked which bar they intend.
+{
+  const M = "2D RNN wavefunction, zero-variance extrapolation";
+  // L, energy, printed sigma per site, bootstrap spread per site, printed / spread sigma below SSE
+  const ROWS = [
+    [8, -172.4172032, "2e-7", "6.6e-6", "73", "2.2"],
+    [10, -268.638, "5e-7", "1.5e-5", "85", "2.9"],
+    [12, -386.3236608, "1e-7", "3.6e-6", "185", "5.2"],
+    [14, -525.5224128, "5e-7", "1.5e-5", "154", "5.0"],
+    [20, -1071.5872, "6e-7", "1.5e-5", "37", "1.5"],
+    [24, -1542.7876608, "5e-7", "1.6e-5", "17", "0.5"],
+    [28, -2099.733888, "4e-7", "1.3e-5", "33", "1.0"],
+  ];
+  for (const [L, energy, printed, spread, sigP, sigB] of ROWS) DEFECTS.push({
+    match: { instance: `Heisenberg/square_${L * L}_P`, method: M, energy },
+    flag: "sigma-understated",
+    finding: `The printed bar, ${printed} per site, is the standard error of the mean of 1000 bootstrap refits (authors' notebook, cell 13), not the spread of the refits, ${spread} per site. Against Sandvik's SSE energy on this instance the row sits ${sigP} printed sigma below, ${sigB} of the bootstrap spread below.`,
+  });
+}

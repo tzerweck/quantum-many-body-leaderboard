@@ -193,6 +193,7 @@ const FLAGS = {
   "dof-mismatch": ["wrong site count (dof)", "The stored degrees of freedom do not match the instance's site count, so a V-score computed from them would be wrong."],
   "wrong-instance": ["wrong instance", "The numbers were uploaded to the wrong instance and belong to another one."],
   "sampling-nonergodic": ["non-ergodic sampling", "The Monte Carlo chains did not sample ergodically, so the low energy is a sampling artifact."],
+  "sigma-understated": ["error bar understated", "The printed error bar is a standard error of a resampling mean, not the uncertainty of the energy; the authors have been asked which they intend."],
 };
 const flagLabel = r => FLAGS[r.defect.flag]?.[0] ?? r.defect.flag;
 const flagBadge = r => {
