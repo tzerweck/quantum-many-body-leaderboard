@@ -324,8 +324,7 @@ function costSwitcher() {
   if (!COST_FIGS.length) return "";
   return `<section class="tabs" id="energy-vs-compute">
   <h2>The best published energies, by cost</h2>
-  <p class="muted">What the published results on one instance cost in compute, and which of them nothing beats for less. Drawn for the
-  ${COST_FIGS.length} instances where at least two energies state their cost; GPU-hours and CPU core-hours are never converted into each other.</p>
+  <p class="muted">What the published results on one instance cost in compute. Drawn for the few instances (${COST_FIGS.length}) which state their cost.</p>
   ${tabs("cost-tab", COST_FIGS.map(inst => [`${esc(modelName(inst.model))} ${esc(instanceLabel(inst))}`, figure(costEntry(inst))]))}
 </section>`;
 }
