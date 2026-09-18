@@ -86,6 +86,23 @@ export const SHARED = {
       "Not an autocorrelation-underestimated error bar: tau_corr <= 0.05 and R_hat = 1.0000 across all six runs.",
     evidence: "checks/results-tfising-rbm.json, checks/tfising_rbm_check.py",
   },
+  "exact-above-exact": {
+    diagnosis:
+      "A row declared exact whose energy lies above the ground-state energy of the same Hamiltonian, by more than " +
+      "the precision it is printed to. Such a number is an eigenvalue estimate that did not reach the ground state - " +
+      "an unconverged solve, or a diagonalization restricted to a sector the ground state is not in - so it does not " +
+      "state what an exact row claims. The energy stays as published (RULES.md 11); the flag says it is not the " +
+      "ground-state energy.",
+    ruled_out:
+      "NOT a transcription or unit error: the stored totals are the printed per-site values times 144, and the same " +
+      "column reproduces the exact energies at J2 = 0, 0.3, 0.5 and 0.6. NOT a sector reading of OUR value either: a " +
+      "full scan of every spin-inversion-even sector of the 6x6 torus (all ten momentum stars, every irrep) finds " +
+      "nothing below the values carried here at J2 = 0.4, 0.7 and 1.0.",
+    evidence:
+      "qmbl-runs/qmbl-verify-2026-09-17-j1j2-36 (RP1 reading, skeptic, RE-exact-recompute sectors.md); Schulz, Ziman " +
+      "& Poilblanc, J. Phys. I 6, 675 (1996), cond-mat/9402061v2 Table II, 36(A1) and 36(B1); Choo et al. " +
+      "arXiv:1903.06713 and Chen et al. arXiv:2206.14307 print the same values.",
+  },
 };
 
 // All-results pass, 2026-09-15: two finite-PEPS energies on the 6x6 open cluster that sit
@@ -114,4 +131,23 @@ DEFECTS.push(
   { match: { instance: "Heisenberg/square_64_P", method: "HQT (Ours)" },
     flag: "below-exact",
     finding: "E/N = -0.6735 printed without an error bar, 1.3e-5 per site below the stochastic-series-expansion ground state carried on this instance. With no sigma the gap cannot be read as sampling noise." },
+);
+
+// Verification run 2026-09-17 (Tristan ruled: flag, do not remove). Golubev, Iakovlev & Mazurenko,
+// arXiv:2606.04558 Table I, column "6x6, ED (this work)": four cells sit above the ground-state
+// energy of the same instance. Transcription is correct and the J2 = 0.4 cell is within its
+// printed precision, so it is not flagged.
+DEFECTS.push(
+  { match: { instance: "J1J2/square_36_P_0.7", method: "ED (this work)", energy: -76.318416 },
+    flag: "exact-above-exact",
+    finding: "Printed -0.529989 per site, 1.223e-5 per site (1.761e-3 on the total) above the ground state -76.320176597454 = -0.5300012264 per site, which is 24.5x the half-width of the printed 6 decimals. The k=0 B1 ground state is reproduced independently to 1e-13 (qmbl-verify 2026-09-17) and by Schulz et al. 1996 Table II, 36(B1) -0.530001. The printed value lies between the B1 ground state and the k=0 A1 level -76.312934937432." },
+  { match: { instance: "J1J2/square_36_P_0.8", method: "ED (this work)", energy: -84.45384 },
+    flag: "exact-above-exact",
+    finding: "Printed -0.586485 per site, 1.600e-6 per site (2.304e-4 on the total) above the ground state -84.45407039473 = -0.5864866 per site, 3.2x the half-width of the printed 6 decimals and 1.6x the margin if the column truncates rather than rounds. Schulz et al. 1996 Table II 36(B1) prints -0.586487, as do Choo et al. 2019 and Chen et al. 2022." },
+  { match: { instance: "J1J2/square_36_P_0.9", method: "ED (this work)", energy: -93.462912 },
+    flag: "exact-above-exact",
+    finding: "Printed -0.649048 per site, 4.011e-6 per site (5.776e-4 on the total) above the ground state -93.463489624054 = -0.6490520113 per site, 8.0x the half-width of the printed 6 decimals. Schulz et al. 1996 Table II 36(B1) prints -0.649052." },
+  { match: { instance: "J1J2/square_36_P_1", method: "ED (this work)", energy: -102.867264 },
+    flag: "exact-above-exact",
+    finding: "Printed -0.714356 per site, 4.433e-6 per site (6.383e-4 on the total) above the ground state -102.867902314985 = -0.7143604327 per site, 8.9x the half-width of the printed 6 decimals. Schulz et al. 1996 Table II 36(B1) prints -0.714360, as do Choo et al. 2019 and Chen et al. 2022." },
 );
