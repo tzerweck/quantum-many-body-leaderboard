@@ -26,6 +26,11 @@ export const REMOVALS = [
   },
   // Declared exact, but above the exact energy (RULES.md 11).
   {
+    match: { instance: "J1J2/square_36_P_0.4", method: "ED (this work)", energy: -76.283136 },
+    ruled: "2026-09-18 (Tristan): not the exact energy, removed; the exact result stays",
+    reason: "Table I of arXiv:2606.04558 prints -0.529744 per site. The ground state -76.283280827996 carried on this instance is -0.529745006 per site, which prints as -0.529745 whether rounded or truncated, so the printed number is not the exact energy at its own precision: it sits 1.006e-6 per site above it, from the same run as the four rows below (every value in that column lies above the exact energy, as a Lanczos stopped short does). The ground state is reproduced independently by our symmetric-basis Lanczos on 99problems to 1e-13 (qmbl-runs/qmbl-verify-2026-09-17-j1j2-36) and printed as -0.529745 by Schulz, Ziman & Poilblanc, J. Phys. I 6, 675 (1996), Table II, 36(A1).",
+  },
+  {
     match: { instance: "J1J2/square_36_P_0.7", method: "ED (this work)", energy: -76.318416 },
     ruled: "2026-09-18 (Tristan): not the exact energy, removed; the exact result stays",
     reason: "Table I of arXiv:2606.04558 prints -0.529989 per site, which is 1.223e-5 per site (24.5x the half-width of its 6 printed decimals) above the ground state -76.320176597454 carried on this instance. Transcribed correctly; the calculation, not the reading, is off. The ground state is reproduced independently by our symmetric-basis Lanczos on 99problems to 1e-13 (qmbl-runs/qmbl-verify-2026-09-17-j1j2-36) and printed as -0.530001 by Schulz, Ziman & Poilblanc, J. Phys. I 6, 675 (1996), Table II, 36(B1) - the paper's own reference for its ED. A scan of every spin-inversion-even sector of the 6x6 torus finds nothing lower.",
