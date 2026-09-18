@@ -337,7 +337,7 @@ function costSwitcher() {
 // for the cost figures. Two rows of badges, the model (and Other) and then its figures, all of
 // them shown until one is picked.
 const ENERGY_FIGS = [...Map.groupBy(energyFigures(instances).filter(f => fs.existsSync(`figures/${f.name}.svg`)), f => f.group)];
-const energyEntry = f => [f.name, f.group === "other" ? f.title : `${f.title}: the published energies at each size`,
+const energyEntry = f => [f.name, f.title,
   f.group === "other" ? "Energies on Hamiltonians published at one size, with the coupling or filling that differs between them along x."
     : "One panel per Hamiltonian, energy against the number of sites; colour is the kind of number and the line joins the record at each size."];
 function energySwitcher() {

@@ -100,10 +100,12 @@ for (const f of figures) write(f.name, t => {
       const count = L.members.reduce((a, i) => a + drawnRows(i).length, 0);
       return { title: [L.label, `${count} energies at ${slots.length} sizes`].filter(Boolean).join(": "), log: true, xLabel: "sites", slots };
     });
-  const title = other ? f.title : `${f.title}: the published energies at each size`;
+  // The ladder figures carry the model and lattice alone as their title, and no subtitle
+  // (Tristan, 2026-09-18); the legend says what the marks are.
+  const title = f.title;
   const h = header(t, title, other
     ? "Every Hamiltonian of this model with energies published at only one size, grouped where they share lattice, boundary and size; the coupling or filling that differs between them runs along x. Colour is the kind of number; filled marks can hold a record, hollow ones cannot."
-    : "One panel per Hamiltonian, at every size with a published energy. Colour is the kind of number; filled marks can hold a record, hollow ones cannot; the line joins the record at each size.");
+    : "");
   const lg = legend(t, LEGEND(t), h.bottom + 34);
   const parts = [h.svg, lg.svg];
   parts.push(text(W - PAD, lg.bottom + 30, perSiteLabel(f.ladders?.[0].members[0] ?? f.scans[0].slots[0].members[0]), { size: 11, fill: t.muted, anchor: "end" }));
