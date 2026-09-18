@@ -416,10 +416,11 @@ const cardSource = r => { const c = citeRef(r, cache); return esc(c.note ? `${c.
 // other) names them in `data-rows`, best first: hovering lists their cards, each a link to
 // its row. A single card follows the pointer and goes when the pointer leaves its mark,
 // but a list sits still beside its mark and takes the pointer, so the reader can move onto
-// it by any path, scroll it and pick a row: it closes 400 ms after the pointer has left
+// it by any path, scroll it and pick a row: it closes 200 ms after the pointer has left
 // both mark and list, a moment that a return to either cancels, and a mark the pointer
 // passes over on the way takes over only if the pointer rests on it. Clicking the mark
-// keeps the list open regardless, until a click elsewhere or Escape.
+// keeps the list open regardless, until a click elsewhere or Escape. Scrolling the page
+// closes whatever is open: the box is fixed and would part from its mark.
 const FIG_SCRIPT = `<script>
 (() => {
   const cards = new Map([...document.getElementById("fig-cards").content.children].map(c => [c.dataset.row, c.innerHTML]));
@@ -448,7 +449,7 @@ const FIG_SCRIPT = `<script>
   const hide = () => { stay(); unrest(); on = null; list = false; pinned = false; tip.hidden = true; tip.classList.remove("list"); };
   // Called when the pointer leaves the mark or the list: the moment runs from the first
   // leaving, is not restarted by later moves, and is cancelled by a return to either.
-  const leave = () => { if (list && !pinned && !leaving) leaving = setTimeout(hide, 400); };
+  const leave = () => { if (list && !pinned && !leaving) leaving = setTimeout(hide, 200); };
   const show = (a, e, pin) => {
     const rows = rowsOf(a);
     if (!rows.length) return;
@@ -492,6 +493,7 @@ const FIG_SCRIPT = `<script>
   tip.addEventListener("pointerleave", e => { if (!(on && on.contains(e.relatedTarget))) leave(); });
   document.addEventListener("click", e => { if (list && !tip.contains(e.target) && !e.target.closest("a.pt[data-rows]")) hide(); });
   document.addEventListener("keydown", e => { if (e.key === "Escape" && list) hide(); });
+  addEventListener("scroll", () => { if (on) hide(); }, { passive: true });
 })();
 </script>`;
 
