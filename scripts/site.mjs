@@ -413,57 +413,77 @@ const cardSource = r => { const c = citeRef(r, cache); return esc(c.note ? `${c.
 // One card per row a figure links to, in a <template> so it is neither rendered nor read
 // out; the script below moves a card into the floating box while its mark is hovered.
 // A mark that stands for several rows (size_accuracy.mjs merges marks that would cover each
-// other) names them in `data-rows`, best first: hovering lists their cards, and clicking
-// keeps the list open, each card a link to its row, until a click elsewhere or Escape.
+// other) names them in `data-rows`, best first: hovering lists their cards, each a link to
+// its row. A single card follows the pointer, but a list sits still beside its mark and
+// takes the pointer, so the reader can move onto it, scroll it and pick a row; it closes
+// only once the pointer has left both mark and list. Clicking the mark keeps the list open
+// regardless, until a click elsewhere or Escape.
 const FIG_SCRIPT = `<script>
 (() => {
   const cards = new Map([...document.getElementById("fig-cards").content.children].map(c => [c.dataset.row, c.innerHTML]));
   const tip = document.createElement("div");
   tip.id = "fig-tip"; tip.hidden = true; tip.setAttribute("role", "tooltip");
   document.body.append(tip);
-  let on = null, pinned = false;
-  const place = e => {
+  let on = null, list = false, pinned = false, leaving = 0;
+  const follow = e => {
     const gap = 14, w = tip.offsetWidth, h = tip.offsetHeight;
     const x = e.clientX + gap + w > innerWidth - 8 ? e.clientX - gap - w : e.clientX + gap;
     const y = e.clientY + gap + h > innerHeight - 8 ? e.clientY - gap - h : e.clientY + gap;
     tip.style.left = Math.max(8, x) + "px"; tip.style.top = Math.max(8, y) + "px";
   };
+  // Right of the mark, its top a little above the mark, so the pointer crosses a few pixels
+  // onto the list's head; left of it near the right edge, and pushed up to fit the viewport.
+  const beside = a => {
+    const r = a.getBoundingClientRect(), gap = 4, w = tip.offsetWidth, h = tip.offsetHeight;
+    const x = r.right + gap + w > innerWidth - 8 ? r.left - gap - w : r.right + gap;
+    const y = Math.min(r.top - 6, innerHeight - 8 - h);
+    tip.style.left = Math.max(8, x) + "px"; tip.style.top = Math.max(8, y) + "px";
+  };
   // An SVG <a> has no .hash, unlike an HTML one: read the attribute.
   const rowsOf = a => (a.dataset.rows ? a.dataset.rows.split(" ") : [a.getAttribute("href").split("#")[1]]).filter(r => cards.has(r));
-  const unpin = () => { pinned = false; on = null; tip.hidden = true; tip.classList.remove("pinned"); };
+  const stay = () => clearTimeout(leaving);
+  const hide = () => { stay(); on = null; list = false; pinned = false; tip.hidden = true; tip.classList.remove("list"); };
+  // The pointer needs a moment to cross the gap from the mark to its list.
+  const leave = () => { if (!pinned) { stay(); leaving = setTimeout(hide, 250); } };
   const show = (a, e, pin) => {
     const rows = rowsOf(a);
     if (!rows.length) return;
-    tip.innerHTML = rows.length === 1
+    list = rows.length > 1;
+    tip.innerHTML = !list
       ? cards.get(rows[0]) + '<span class="go">Click to open this row in the table</span>'
       : '<b class="count">' + rows.length + ' rows at this point, best first</b><div class="list">' +
-        rows.map(r => (pin ? '<a class="card" href="/instances/#' + r + '">' : '<div class="card">') + cards.get(r) + (pin ? "</a>" : "</div>")).join("") +
-        '</div><span class="go">' + (pin ? "Click a row to open it in the table" : "Click to keep this list open") + "</span>";
-    tip.classList.toggle("pinned", pin);
+        rows.map(r => '<a class="card" href="/instances/#' + r + '">' + cards.get(r) + "</a>").join("") +
+        '</div><span class="go">' + (pin ? "Click a row to open it in the table; Escape closes the list" : "Click a row to open it in the table, or the mark to keep the list open") + "</span>";
+    tip.classList.toggle("list", list);
     tip.hidden = false;
-    place(e);
+    if (list) beside(a); else follow(e);
   };
   for (const fig of document.querySelectorAll("figure.chart")) {
     fig.addEventListener("pointerover", e => {
       const a = e.target.closest("a.pt");
-      if (pinned || !a || a === on) return;
+      if (pinned || !a) return;
+      stay();
+      if (a === on) return;
       on = a;
       show(a, e, false);
     });
-    fig.addEventListener("pointermove", e => { if (on && !pinned) place(e); });
+    fig.addEventListener("pointermove", e => { if (on && !list) follow(e); });
     fig.addEventListener("pointerout", e => {
-      if (on && !pinned && !on.contains(e.relatedTarget)) { on = null; tip.hidden = true; }
+      if (!on || pinned || on.contains(e.relatedTarget) || tip.contains(e.relatedTarget)) return;
+      if (list) leave(); else hide();
     });
     fig.addEventListener("click", e => {
       const a = e.target.closest("a.pt[data-rows]");
       if (!a) return;
       e.preventDefault();
-      on = a; pinned = true;
+      stay(); on = a; pinned = true;
       show(a, e, true);
     });
   }
-  document.addEventListener("click", e => { if (pinned && !tip.contains(e.target) && !e.target.closest("a.pt[data-rows]")) unpin(); });
-  document.addEventListener("keydown", e => { if (e.key === "Escape" && pinned) unpin(); });
+  tip.addEventListener("pointerenter", stay);
+  tip.addEventListener("pointerleave", e => { if (list && !(on && on.contains(e.relatedTarget))) leave(); });
+  document.addEventListener("click", e => { if (pinned && !tip.contains(e.target) && !e.target.closest("a.pt[data-rows]")) hide(); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && pinned) hide(); });
 })();
 </script>`;
 
@@ -1143,7 +1163,7 @@ figure.chart a.pt:hover > :nth-child(2) { transform: scale(1.45); }
 #fig-tip .e { margin: 0.2rem 0; }
 #fig-tip .e .num { font-weight: 600; color: var(--record); }
 #fig-tip .go { margin-top: 0.3rem; font-size: 0.75rem; color: var(--accent); }
-#fig-tip.pinned { pointer-events: auto; }
+#fig-tip.list { pointer-events: auto; }
 #fig-tip .list { max-height: 22rem; overflow-y: auto; margin-top: 0.3rem; }
 #fig-tip .card { display: block; padding: 0.35rem 0; border-top: 1px solid var(--grid); color: inherit; text-decoration: none; }
 #fig-tip .card > b, #fig-tip .card > span { display: block; }
