@@ -12,14 +12,15 @@
 //
 // Energy is per site (the impurity problems in total energy) on a linear axis, lower is
 // lower as in the cost figures. Every drawn row (ladders.mjs, drawnRows) is a mark coloured
-// by its kind, filled where it can hold a record, and a line joins the record at each size
-// or coupling. The directory is emptied first, as figures/cost/ is, so the site never
+// by its kind, filled where it can hold a record, slashed where the row is flagged, and a
+// line joins the record at each size or coupling; a flagged row cannot hold a record
+// (RULES.md 6.1), so the line passes it by. The directory is emptied first, as figures/cost/ is, so the site never
 // inlines a figure whose panels have gone.
 import fs from "node:fs";
 import { recordEligible, perSiteDivisor, perSiteLabel } from "./units.mjs";
 import { collect, recordOf } from "./summary.mjs";
 import { energyFigures, drawnRows, STRIP, stripX } from "./ladders.mjs";
-import { W, PAD, n, text, hline, dot, legend, header, doc, textWidth, wrap, niceStep, writer, logScale, rowHref } from "./chart.mjs";
+import { W, PAD, n, text, hline, dot, slashed, legend, header, doc, textWidth, wrap, niceStep, writer, logScale, rowHref } from "./chart.mjs";
 
 const OUT = "figures";
 const DIR = `${OUT}/energy`;
@@ -64,7 +65,7 @@ function yAxis(t, parts, es, { left, right, top, bottom }) {
 function panel(t, parts, { title, slots, X, xLabel }, box) {
   const { px, left, right, top, bottom } = box;
   const pts = slots.flatMap(s => s.members.flatMap(inst => drawnRows(inst).map(r => ({ r, inst, x: X(s), e: r.energy / perSite(inst),
-    eligible: r.bound_type === "exact" || recordEligible(r) }))));
+    flagged: !!r.defect, eligible: !r.defect && (r.bound_type === "exact" || recordEligible(r)) }))));
   const recs = slots.map(s => [X(s), recordAt(s.members)]).filter(([, e]) => Number.isFinite(e));
   // A title too long for a narrow panel breaks onto a second line above the first.
   const lines = title ? wrap(title, 12, right - px) : [];
@@ -74,9 +75,12 @@ function panel(t, parts, { title, slots, X, xLabel }, box) {
   if (xLabel) parts.push(text(right, bottom + 32, xLabel, { size: 10.5, fill: t.ink2, anchor: "end" }));
   if (recs.length > 1)
     parts.push(`<path d="${recs.map(([x, e], k) => `${k ? "L" : "M"}${n(x)} ${n(Y(e))}`).join("")}" fill="none" stroke="${t.ink2}" stroke-width="1.5" stroke-linejoin="round" opacity="0.6"/>`);
-  // Hollow under filled, exact energies on top of the bounds that sit on them.
-  for (const p of [...pts].sort((a, b) => a.eligible - b.eligible || (a.r.bound_type === "exact") - (b.r.bound_type === "exact")))
-    parts.push(dot(t, p.x, Y(p.e), t.series[KIND[p.r.bound_type]], p.eligible, rowHref(p.inst, p.r)));
+  // Hollow under filled, exact energies on top of the bounds that sit on them, and the
+  // flagged outlines last, over whatever they coincide with - set off to the right where a
+  // sound mark would sit under them, as a flagged extrapolation tends to sit on the record.
+  for (const p of [...pts].sort((a, b) => a.flagged - b.flagged || a.eligible - b.eligible || (a.r.bound_type === "exact") - (b.r.bound_type === "exact")))
+    parts.push(p.flagged ? slashed(t, p.x + (pts.some(q => !q.flagged && q.x === p.x && Math.abs(Y(q.e) - Y(p.e)) < 14) ? 11 : 0), Y(p.e), t.series[KIND[p.r.bound_type]], rowHref(p.inst, p.r))
+      : dot(t, p.x, Y(p.e), t.series[KIND[p.r.bound_type]], p.eligible, rowHref(p.inst, p.r)));
 }
 
 // Panels in `cols` columns; returns the y below the last row. Sites sit on a log scale, a
@@ -99,6 +103,7 @@ const LEGEND = t => [
   { kind: "dot", color: t.series[2], label: "Extrapolated" },
   { kind: "dot", color: t.series[3], label: "Exact" },
   { kind: "ring", color: t.ink2, label: "Cannot hold a record" },
+  { kind: "flag", color: t.ink2, label: "Flagged, see the row" },
   { kind: "line", color: t.ink2, label: "Record" },
 ];
 
@@ -168,7 +173,7 @@ for (const f of figures) {
   write(f.name, t => {
     const specs = f.scans.map(s => ({ title: s.label, slots: s.slots, xLabel: s.x }));
     const h = header(t, f.title, "Every Hamiltonian of this model with energies published at only one size and no strip to join, grouped where they " +
-      "share lattice, boundary and size; the coupling or filling that differs between them runs along x. Colour is the kind of number; filled marks can hold a record, hollow ones cannot.");
+      "share lattice, boundary and size; the coupling or filling that differs between them runs along x. Colour is the kind of number; filled marks can hold a record, hollow ones cannot, and a slashed mark is a flagged row.");
     const lg = legend(t, LEGEND(t), h.bottom + 34);
     const parts = [h.svg, lg.svg];
     parts.push(text(W - PAD, lg.bottom + 30, perSiteLabel(f.scans[0].slots[0].members[0]), { size: 11, fill: t.muted, anchor: "end" }));

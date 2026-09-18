@@ -20,7 +20,7 @@
 // slider on the site), and one "other" figure per model for what was published at a single
 // size and shares no strip, so that nothing on the table is missing from the page.
 import { MODELS, BOUNDARY, geometry } from "./readme_table.mjs";
-import { exactEligible } from "./units.mjs";
+import { groundStateExact } from "./units.mjs";
 import { W, PAD } from "./chart.mjs";
 
 const COUPLINGS = ["J2", "h", "U", "V"];
@@ -39,9 +39,12 @@ const variantsOf = inst => inst.instance_id.split("/")[1].split("_").slice(2)
 const gcd = (a, b) => (b ? gcd(b, a % b) : a);
 
 // The rows a figure draws: a bound, a projection, an extrapolation or a ground-state exact
-// energy, unflagged. Rows without a bound type and sector-resolved diagonalizations are not.
+// energy. A flagged row is drawn too, with a slashed mark (Tristan, 2026-09-18: the reader
+// sees the number and that it is contested; RULES.md 6.1 keeps it off the records and so
+// off the record line), except a row flagged wrong-instance, whose energy belongs on
+// another axis. Rows without a bound type and sector-resolved diagonalizations are not.
 const BOUNDS = new Set(["variational", "projected", "extrapolated"]);
-export const drawnRows = inst => inst.rows.filter(r => !r.defect && (r.bound_type === "exact" ? exactEligible(r) : BOUNDS.has(r.bound_type)));
+export const drawnRows = inst => inst.rows.filter(r => r.defect?.flag !== "wrong-instance" && (r.bound_type === "exact" ? groundStateExact(r) : BOUNDS.has(r.bound_type)));
 
 export const modelName = model => MODELS.find(([m]) => m === model)?.[1] ?? model;
 

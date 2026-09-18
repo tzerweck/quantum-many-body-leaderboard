@@ -37,7 +37,7 @@ import { recordEligible, exactEligible } from "./units.mjs";
 import { collect, recordOf, exactRecordOf, rowId } from "./summary.mjs";
 import { FAMILIES } from "./views.mjs";
 import { ladderFigures } from "./ladders.mjs";
-import { W, PAD, n, text, hline, dot, tri, legend, header, footnote, doc, textWidth, writer, log, logScale, pow10, rowHref, linked, onFill } from "./chart.mjs";
+import { W, PAD, n, text, hline, dot, tri, slashed, legend, header, footnote, doc, textWidth, writer, log, logScale, pow10, rowHref, linked, onFill } from "./chart.mjs";
 
 const OUT = "figures";
 const instances = collect();
@@ -54,39 +54,48 @@ function referenceOf(inst) {
   return rec ? { row: rec, kind: "record" } : null;
 }
 
-// Every row that is a result rather than the answer: a bound or an extrapolation,
-// unflagged, with a stated bound type. `gap` is relative to the reference energy;
+// Every row that is a result rather than the answer: a bound or an extrapolation with a
+// stated bound type, flagged rows included and marked as such (Tristan, 2026-09-18), except
+// a row flagged wrong-instance, whose energy belongs on another axis. `gap` is relative to the reference energy;
 // extrapolations and projections may land below an exact reference, and so may a sampled
 // bound without an error bar below a record. The axis shows the absolute value, so such a
 // row is `below`; it is `under` when it lies below by more than twice the joint error bar
-// and further than the floor, which the exact-referenced figures leave undrawn. `shown` is
+// and further than the floor, which the exact-referenced figures leave undrawn unless the
+// row is flagged. `shown` is
 // the height those figures draw: the gap, but never less than the row's own relative error bar.
 function points(inst, ref) {
   return inst.rows
-    .filter(r => r.bound_type in BOUNDS && !r.defect && r !== ref.row)
+    .filter(r => r.bound_type in BOUNDS && r.defect?.flag !== "wrong-instance" && r !== ref.row)
     .map(r => {
       const gap = Math.abs(r.energy - ref.row.energy) / Math.abs(ref.row.energy);
       const under = gap >= FLOOR && ref.row.energy - r.energy > 2 * Math.hypot(r.sigma ?? 0, ref.row.sigma ?? 0);
       const shown = Math.max(gap, (r.sigma ?? 0) / Math.abs(ref.row.energy));
-      return { r, inst, fam: r.family, eligible: recordEligible(r), below: r.energy < ref.row.energy, under, gap, shown };
+      return { r, inst, fam: r.family, eligible: recordEligible(r), flagged: !!r.defect, below: r.energy < ref.row.energy, under, gap, shown };
     });
 }
 // The exact rows of an instance, for the overview's exact line: distance zero by definition.
 const exactPoints = inst => inst.rows.filter(exactEligible)
   .map(r => ({ r, inst, fam: r.family, eligible: true, exact: true, below: false, under: false, gap: 0, shown: 0 }));
-const mark = (t, x, y, color, p) => (p.below ? tri : dot)(t, x, y, color, p.eligible, rowHref(p.inst, p.r));
+const mark = (t, x, y, color, p) => (p.flagged ? slashed(t, x, y, color, rowHref(p.inst, p.r), p.below ? "tri" : "dot")
+  : (p.below ? tri : dot)(t, x, y, color, p.eligible, rowHref(p.inst, p.r)));
 const BELOW = t => ({ kind: "tri", color: t.ink2, label: "Below the energy it is measured against" });
+const FLAGGED = t => ({ kind: "flag", color: t.ink2, label: "Flagged, see the row" });
 
 // Marks at one size that would cover each other are drawn once: at the best row, in that
 // row's colour, with the count inside. Groups are taken best first (lowest on the page), each
 // holding the rows within MERGE px above its best one, so no two drawn marks are closer than
 // MERGE, which is a count mark's outer diameter. The mark links to the best row, and
 // `data-rows` names every row in the group, best first, for the site's list. A group of one
-// is an ordinary dot.
-const MERGE = 16, COUNT_R = 6.5;
+// is an ordinary dot. Flagged rows group only with each other, so a slash is never mistaken
+// for a count of sound rows and a count never hides a flag: a group of them is a slashed
+// outline with the count inside, drawn on top of the others and hiding nothing, and set
+// off to the right where a sound mark of the same size would sit under it.
+const MERGE = 16, COUNT_R = 6.5, ASIDE = 11;
 function marks(t, pts, X, Y, colorOf) {
-  const out = [];
-  for (const [N, ps] of Map.groupBy(pts, p => p.inst.n_sites)) {
+  const out = [], soundY = new Map();
+  const grouped = [...Map.groupBy(pts, p => `${p.inst.n_sites} ${p.flagged ? "flagged" : ""}`).values()].sort((a, b) => a[0].flagged - b[0].flagged);
+  for (const ps of grouped) {
+    const { flagged } = ps[0], N = ps[0].inst.n_sites;
     const order = (a, b) => (b.exact ?? false) - (a.exact ?? false) || a.shown - b.shown || b.eligible - a.eligible;
     const placed = [...ps].sort(order).map(p => ({ p, y: Y(p.shown) }));
     const groups = [];
@@ -94,22 +103,34 @@ function marks(t, pts, X, Y, colorOf) {
       const g = groups.find(g => g[0].y - q.y <= MERGE && q.y <= g[0].y);
       if (g) g.push(q); else groups.push([q]);
     }
+    if (!flagged) soundY.set(N, groups.map(g => g[0].y));
     for (const g of groups) {
       const rows = g.map(q => q.p);
-      const [head] = rows, x = X(N), y = g[0].y, color = colorOf(head);
-      if (rows.length === 1) { out.push([head, dot(t, x, y, color, head.eligible, rowHref(head.inst, head.r))]); continue; }
-      const filled = rows.some(p => p.eligible), r = COUNT_R;
-      const ink = filled ? (onFill(color) === "#ffffff" ? t.surface : t.ink) : color;
-      const svg = `<circle cx="${n(x)}" cy="${n(y)}" r="${r + 1.5}" fill="${t.surface}"/>` + (filled
-        ? `<circle cx="${n(x)}" cy="${n(y)}" r="${r}" fill="${color}"/>`
-        : `<circle cx="${n(x)}" cy="${n(y)}" r="${r - 1}" fill="${t.surface}" stroke="${color}" stroke-width="2"/>`) +
-        `<text x="${n(x)}" y="${n(y + 3)}" font-size="8.5" font-weight="600" fill="${ink}" text-anchor="middle" style="font-variant-numeric:tabular-nums">${rows.length}</text>`;
+      const [head] = rows, y = g[0].y, color = colorOf(head), r = COUNT_R;
+      const x = X(N) + (flagged && (soundY.get(N) ?? []).some(sy => Math.abs(sy - y) < MERGE) ? ASIDE : 0);
+      if (rows.length === 1) { out.push([head, flagged ? mark(t, x, y, color, head) : dot(t, x, y, color, head.eligible, rowHref(head.inst, head.r))]); continue; }
+      const count = ink => `<text x="${n(x)}" y="${n(y + 3)}" font-size="8.5" font-weight="600" fill="${ink}" text-anchor="middle" style="font-variant-numeric:tabular-nums">${rows.length}</text>`;
+      let svg;
+      if (flagged) {
+        // The count is haloed so that it reads over the slash.
+        const d = `M${n(x - 8)} ${n(y + 8)}L${n(x + 8)} ${n(y - 8)}`;
+        svg = `<circle cx="${n(x)}" cy="${n(y)}" r="${r - 1}" fill="none" stroke="${color}" stroke-width="2"/>` +
+          `<path d="${d}" stroke="${t.surface}" stroke-width="3.5" stroke-linecap="round"/><path d="${d}" stroke="${color}" stroke-width="2" stroke-linecap="round"/>` +
+          count(color).replace("<text ", `<text paint-order="stroke" stroke="${t.surface}" stroke-width="2.5" stroke-linejoin="round" `);
+      } else {
+        const filled = rows.some(p => p.eligible);
+        const ink = filled ? (onFill(color) === "#ffffff" ? t.surface : t.ink) : color;
+        svg = `<circle cx="${n(x)}" cy="${n(y)}" r="${r + 1.5}" fill="${t.surface}"/>` + (filled
+          ? `<circle cx="${n(x)}" cy="${n(y)}" r="${r}" fill="${color}"/>`
+          : `<circle cx="${n(x)}" cy="${n(y)}" r="${r - 1}" fill="${t.surface}" stroke="${color}" stroke-width="2"/>`) + count(ink);
+      }
       const a = linked(rowHref(head.inst, head.r), svg).replace('<a class="pt"', `<a class="pt" data-rows="${rows.map(p => rowId(p.inst, p.r)).join(" ")}"`);
       out.push([head, a]);
     }
   }
-  // Hollow first, then filled, so a record-eligible mark is never covered by one that is not.
-  return out.sort((a, b) => a[0].eligible - b[0].eligible).map(([, svg]) => svg);
+  // Hollow first, then filled, so a record-eligible mark is never covered by one that is not;
+  // flagged last, drawn as outlines that hide nothing.
+  return out.sort((a, b) => (a[0].flagged ?? false) - (b[0].flagged ?? false) || a[0].eligible - b[0].eligible).map(([, svg]) => svg);
 }
 
 // A log-log plot area: size along x with the ticks given, distance up y on a decade scale.
@@ -138,9 +159,10 @@ function logPlot(t, parts, { left, right, top, bottom, x0, x1, y0, y1, xTicks, x
 }
 
 // The best gap at each size among a set of points, joined from size to size. `key` is the
-// height a figure draws: `gap`, or `shown` where the error bar floors it.
+// height a figure draws: `gap`, or `shown` where the error bar floors it. A flagged row is
+// drawn but is never the best (RULES.md 6.1), so the lines pass it by.
 function best(pts, key = "gap") {
-  return [...Map.groupBy(pts, p => p.inst.n_sites)].map(([N, ps]) => [N, Math.min(...ps.map(p => p[key]))]).sort((a, b) => a[0] - b[0]);
+  return [...Map.groupBy(pts.filter(p => !p.flagged), p => p.inst.n_sites)].map(([N, ps]) => [N, Math.min(...ps.map(p => p[key]))]).sort((a, b) => a[0] - b[0]);
 }
 function frontier(pts, X, Y, color, key = "gap") {
   const steps = best(pts, key);
@@ -150,8 +172,10 @@ function frontier(pts, X, Y, color, key = "gap") {
 }
 
 const exactRef = instances.map(i => [i, referenceOf(i)]).filter(([, ref]) => ref?.kind === "exact");
-const all = exactRef.flatMap(([i, ref]) => points(i, ref)).filter(p => !p.under);
-const under = exactRef.flatMap(([i, ref]) => points(i, ref)).filter(p => p.under).length;
+// A flagged row is drawn however far under it lies: that it sits below the exact energy is
+// the very thing its flag says, and the slashed triangle shows it.
+const all = exactRef.flatMap(([i, ref]) => points(i, ref)).filter(p => !p.under || p.flagged);
+const under = exactRef.flatMap(([i, ref]) => points(i, ref)).filter(p => p.under && !p.flagged).length;
 // Only the instances something is drawn for: an exact energy nobody has published against compares nothing.
 const exacts = exactRef.filter(([i]) => all.some(p => p.inst === i)).flatMap(([i]) => exactPoints(i));
 const NS = [...all, ...exacts].map(p => p.inst.n_sites);
@@ -178,6 +202,7 @@ write("size-vs-accuracy", t => {
     { kind: "dot", color: t.series[2], label: "Extrapolated" },
     { kind: "dot", color: t.series[3], label: "Exact (diagonalization or QMC)" },
     { kind: "ring", color: t.ink2, label: "Listed, cannot hold a record" },
+    FLAGGED(t),
   ], h.bottom + 34);
   const top = lg.bottom + 28, bottom = top + 380, left = PAD + 62, right = W - PAD - 8;
   const parts = [h.svg, lg.svg];
@@ -224,7 +249,7 @@ write("size-vs-accuracy-by-family", t => {
   });
   const y = top0 + (rows - 1) * pitch + plotH + EXACT_RISE + 62;
   const fn = footnote(t, "Each method name belongs to one family (scripts/method_names.mjs); 'other' holds exact methods and names no family covers. " +
-    "Filled marks can hold a record, hollow ones cannot, and a number counts the rows a mark holds. Axes, the exact line and the error-bar floor as in the figure above: " +
+    "Filled marks can hold a record, hollow ones cannot, a slashed mark is a flagged row, and a number counts the rows a mark holds. Axes, the exact line and the error-bar floor as in the figure above: " +
     `a better energy is lower. ${UNDER}`, y);
   parts.push(fn.svg);
   return doc(t, fn.bottom + 24, "The best published energies by system size, one panel per method family",
@@ -291,7 +316,7 @@ function ladderPanel(t, parts, L, { left, right, top, bottom }) {
     }
   }
   parts.push(frontier(L.pts, X, Y, t.series[0]));
-  for (const p of [...L.pts].sort((a, b) => a.eligible - b.eligible)) parts.push(mark(t, X(p.inst.n_sites), Y(p.gap), t.ink2, p));
+  for (const p of [...L.pts].sort((a, b) => a.flagged - b.flagged || a.eligible - b.eligible)) parts.push(mark(t, X(p.inst.n_sites), Y(p.gap), t.ink2, p));
   // Family names at the right end of each line, nudged apart where two would collide.
   ends.sort((a, b) => a.y - b.y);
   for (let a = 1; a < ends.length; a++) if (ends[a].y - ends[a - 1].y < 13) ends[a].y = ends[a - 1].y + 13;
@@ -329,6 +354,7 @@ for (const f of FIGS) write(f.name, t => {
     { kind: "line", color: t.recessive[1], label: "One method family" },
     { kind: "dot", color: t.ink2, label: "Can hold a record" },
     { kind: "ring", color: t.ink2, label: "Cannot" },
+    FLAGGED(t),
     BELOW(t),
   ], h.bottom + 34);
   const parts = [h.svg, lg.svg];

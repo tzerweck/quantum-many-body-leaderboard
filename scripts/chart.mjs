@@ -98,6 +98,20 @@ export function tri(t, x, y, color, filled, href) {
     : `<path d="${path(4.6)}" fill="${t.surface}" stroke="${color}" stroke-width="2" stroke-linejoin="round"/>`));
 }
 
+// A flagged row (RULES.md 6.1) is drawn where its energy puts it, as an outline with a
+// slash across it: the reader sees the number and that it is contested, and the row says
+// why. It is drawn last and has no surface under it, so the mark it sits on - often the
+// record, which a flagged extrapolation tends to coincide with - stays visible through it;
+// the halo under the slash keeps the slash legible on a filled mark of its own colour.
+// `base` is the shape, "dot" or "tri".
+export function slashed(t, x, y, color, href, base = "dot") {
+  const outline = base === "tri"
+    ? `<path d="M${n(x - 4.6)} ${n(y - 2.76)}H${n(x + 4.6)}L${n(x)} ${n(y + 4.6)}Z" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round"/>`
+    : `<circle cx="${n(x)}" cy="${n(y)}" r="4" fill="none" stroke="${color}" stroke-width="2"/>`;
+  const d = `M${n(x - 5.5)} ${n(y + 5.5)}L${n(x + 5.5)} ${n(y - 5.5)}`;
+  return linked(href, outline + `<path d="${d}" stroke="${t.surface}" stroke-width="3.5" stroke-linecap="round"/><path d="${d}" stroke="${color}" stroke-width="2" stroke-linecap="round"/>`);
+}
+
 // A mark that stands for one row links to that row on the table page. Inert where the SVG
 // is shown as an image; on the site the figure is inlined, and site.mjs gives the link its
 // hover card from the row itself, so the file carries the target and nothing else.
@@ -114,6 +128,7 @@ export function legend(t, items, y) {
     if (it.kind === "line") out.push(`<path d="M${cx - 7} ${cy}H${cx + 7}" stroke="${it.color}" stroke-width="2" stroke-linecap="round"/>`);
     else if (it.kind === "dot" || it.kind === "ring") out.push(dot(t, cx, cy, it.color, it.kind === "dot"));
     else if (it.kind === "tri") out.push(tri(t, cx, cy, it.color, false));
+    else if (it.kind === "flag") out.push(slashed(t, cx, cy, it.color));
     else out.push(`<rect x="${cx - 5}" y="${cy - 5}" width="10" height="10" rx="2" fill="${it.color}"/>`);
     out.push(text(x + 20, row, it.label, { size: 12, fill: t.ink2 }));
     x += w;

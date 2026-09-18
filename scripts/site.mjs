@@ -286,7 +286,7 @@ function relabelNote(inst) {
 // light one and the stylesheet recolours it in dark mode (FIG_DARK). One entry per figure.
 const FIGURES = [
   ["size-vs-accuracy", "The best published energies, by system size",
-    "The energies on instances with an exact ground-state energy, placed by its relative gap to it so that different Hamiltonians share one axis; a better energy is lower. Colour is the kind of number; filled marks can hold a record, hollow ones cannot."],
+    "The energies on instances with an exact ground-state energy, placed by its relative gap to it so that different Hamiltonians share one axis; a better energy is lower. Colour is the kind of number; filled marks can hold a record, hollow ones cannot, and a slashed mark is a flagged row."],
   ["size-vs-accuracy-by-family", "The best energies by system size, one panel per method family",
     "Each panel colours one family's energies over all the others in grey and joins the family's best energy at each size."],
 ];
@@ -430,12 +430,13 @@ ${svg}
 }
 
 // The card a figure's mark shows on hover: the instance, the method, the energy as the
-// table quotes it, and the paper. The figure file carries only the link; the words are
-// written here, from the same helpers as the table the link lands on.
+// table quotes it, the flag where the row is flagged (the mark is slashed; the row says
+// why), and the paper. The figure file carries only the link; the words are written here,
+// from the same helpers as the table the link lands on.
 function rowCard(r, inst) {
   return `<b>${esc(modelName(inst.model))} ${esc(instanceLabel(inst))}</b>
 <span>${esc(shorten(methodLabel(r), 90))}</span>
-<span class="e">${energyCell(r, inst)} <span class="muted">${perSiteLabel(inst)} &middot; ${boundLabel(r)}</span>${recordOf(inst) === r ? '<span class="tag">record</span>' : ""}</span>
+<span class="e">${energyCell(r, inst)} <span class="muted">${perSiteLabel(inst)} &middot; ${boundLabel(r)}</span>${r.defect ? ` ${flagBadge(r)}` : ""}${recordOf(inst) === r ? '<span class="tag">record</span>' : ""}</span>
 <span class="muted">${cardSource(r)}</span>`;
 }
 const cardSource = r => { const c = citeRef(r, cache); return esc(c.note ? `${c.text}, ${c.note}` : c.text); };

@@ -4,7 +4,7 @@ import { collect, recordOf } from "./summary.mjs";
 import { sources } from "./enrich_sources.mjs";
 import { citeRef, paperYear } from "./cite.mjs";
 import { CONTESTED, FAMILIES, variationalRows } from "./views.mjs";
-import { W, PAD, n, text, hline, hbar, vbar, onFill, dot, legend, header, footnote, doc, textWidth, pct, niceStep, writer, shortLabel } from "./chart.mjs";
+import { W, PAD, n, text, hline, hbar, vbar, onFill, dot, slashed, legend, header, footnote, doc, textWidth, pct, niceStep, writer, shortLabel } from "./chart.mjs";
 
 const OUT = "figures";
 const cache = sources();
@@ -58,12 +58,13 @@ write("record-over-time", t => {
 
   const h = header(t, "The record over time on two frontier instances",
     "Energy per site of every dated result, by publication year. " +
-    "Filled marks can hold the record; hollow marks are listed but cannot, for want of an error bar or because the row is flagged.");
+    "Filled marks can hold the record; hollow marks are listed but cannot, for want of an error bar; a slashed mark is a flagged row.");
   const lg = legend(t, [
     { kind: "dot", color: t.series[0], label: "Variational bound" },
     { kind: "dot", color: t.series[1], label: "Projected (fixed-node)" },
     { kind: "dot", color: t.series[2], label: "Extrapolated" },
     { kind: "ring", color: t.ink2, label: "Listed, cannot hold the record" },
+    { kind: "flag", color: t.ink2, label: "Flagged, see the row" },
     { kind: "line", color: t.ink2, label: "Standing record" },
   ], h.bottom + 34);
 
@@ -101,9 +102,11 @@ write("record-over-time", t => {
       for (const s of panel.steps.slice(1)) d += `H${n(X(s.year))}V${n(Y(s.e))}`;
       parts.push(`<path d="${d}H${n(right)}" fill="none" stroke="${t.ink2}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`);
     }
-    // Hollow first, so a filled (eligible) mark is never covered by a listed-only one.
-    const order = [...panel.pts].sort((a, b) => a.eligible - b.eligible);
-    for (const p of order) parts.push(dot(t, X(p.year + p.dx), Y(p.e), t.series[BOUNDS[p.r.bound_type]], p.eligible));
+    // Hollow first, so a filled (eligible) mark is never covered by a listed-only one; the
+    // flagged outlines last, over whatever they coincide with.
+    const order = [...panel.pts].sort((a, b) => !!a.r.defect - !!b.r.defect || a.eligible - b.eligible);
+    for (const p of order) parts.push(p.r.defect ? slashed(t, X(p.year + p.dx), Y(p.e), t.series[BOUNDS[p.r.bound_type]])
+      : dot(t, X(p.year + p.dx), Y(p.e), t.series[BOUNDS[p.r.bound_type]], p.eligible));
 
     // Labels only on the marks the story is about: the record, anything below it, and the
     // best projected energy. Nudged apart vertically where two would overlap.
