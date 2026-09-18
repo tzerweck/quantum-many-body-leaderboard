@@ -13,14 +13,15 @@
 //
 // Ladders sharing model and lattice are one figure - an impurity problem's lattice is its
 // first two words - and the site shows one figure at a time behind two rows of badges, the
-// model and then the lattice: one badge per figure rather than per ladder, as the panels of
+// model and then the lattice: one badge per figure rather than per ladder, as the ladders of
 // a figure differ only in boundary and couplings.
 //
-// energyFigures() is what the site shows: those figures with the ladders that have drawn
-// energies at two sizes or more, and one "other" figure per model for everything published
-// at a single size, so that nothing on the table is missing from the page.
+// energyFigures() is what the site shows: each figure as facets of stops along an axis (a
+// slider on the site), and one "other" figure per model for what was published at a single
+// size and shares no strip, so that nothing on the table is missing from the page.
 import { MODELS, BOUNDARY, geometry } from "./readme_table.mjs";
 import { exactEligible } from "./units.mjs";
+import { W, PAD } from "./chart.mjs";
 
 const COUPLINGS = ["J2", "h", "U", "V"];
 
@@ -47,13 +48,15 @@ export const modelName = model => MODELS.find(([m]) => m === model)?.[1] ?? mode
 // The words for a ladder's couplings, empty for a Heisenberg model: "J2 = 0.5",
 // "U = 8, n = 0.875", "4 × L, U = 8, n = 0.875", "L × 2L". The boundary leads where the
 // figure has more than one, and an impurity problem's full name where its figure holds several.
-function couplingLabel(inst, { boundary, lattice, shape }) {
+// With `omit`, that coupling (or the filling, "n") is left out: a facet's label names what its
+// stops share, not the axis they differ in.
+function couplingLabel(inst, { boundary, lattice, shape, omit }) {
   const parts = [];
   if (lattice) parts.push(inst.lattice);
   if (boundary) parts.push(BOUNDARY[inst.boundary] ?? "periodic");
   if (shape) parts.push(shape.label);
-  for (const k of COUPLINGS) if (inst.params?.[k] != null) parts.push(`${k} = ${inst.params[k]}`);
-  if (fillingOf(inst) != null) parts.push(fillingLabel(inst));
+  for (const k of COUPLINGS) if (k !== omit && inst.params?.[k] != null) parts.push(`${k} = ${inst.params[k]}`);
+  if (omit !== "n" && fillingOf(inst) != null) parts.push(fillingLabel(inst));
   return [...parts, ...variantsOf(inst)].join(", ");
 }
 
@@ -95,8 +98,10 @@ export function ladderFigures(instances) {
       label: latticeLabel(members[0], oneBoundary),
       title: `${modelName(members[0].model)} ${latticeLabel(members[0], oneBoundary)}`,
       energies: energies(members),
+      flags: { boundary: !oneBoundary, lattice: !oneLattice },
       ladders: [...Map.groupBy(members, ladderKey).values()]
-        .map(ms => ({ label: couplingLabel(ms[0], { boundary: !oneBoundary, lattice: !oneLattice, shape: shapes.get(ms[0]) }), members: [...ms].sort((a, b) => a.n_sites - b.n_sites) }))
+        .map(ms => ({ label: couplingLabel(ms[0], { boundary: !oneBoundary, lattice: !oneLattice, shape: shapes.get(ms[0]) }),
+          shape: shapes.get(ms[0]), members: [...ms].sort((a, b) => a.n_sites - b.n_sites) }))
         .sort((a, b) => cmp(a.members[0], b.members[0])),
     };
   }).sort((a, b) => MODELS.findIndex(([m]) => m === a.model) - MODELS.findIndex(([m]) => m === b.model) ||
@@ -138,22 +143,60 @@ function scansOf(instances) {
   return panels.sort((a, b) => a.label.localeCompare(b.label, "en", { numeric: true }));
 }
 
-// The figures on the site, in model order with the "other" figures last: every ladder with
-// drawn energies at two sizes or more, and per model one figure for the rest.
+// The strip a slider shows above its panel (size_energy.mjs): its plot box is shared with the
+// site, which sets a badge under each stop at stripX. Stops sit at even spacing in their own
+// order, as the couplings of an "other" panel do: placed by value, the badges for J2 = 0.4,
+// 0.45, 0.5, 0.55, 0.6 ran into each other (Tristan, 2026-09-18).
+export const STRIP = { left: PAD + 56, right: W - PAD - 10, top: 34, bottom: 194 };
+export const stripX = (k, count) => STRIP.left + ((k + 0.5) / count) * (STRIP.right - STRIP.left);
+
+const AXES = ["J2", "h", "U", "V", "n"];
+const slug = s => s.replace(/[^\w.]+/g, "_").replace(/^_+|_+$/g, "");
+const multiSize = L => new Set(L.members.map(i => i.n_sites)).size >= 2;
+const drawnCount = L => L.members.reduce((a, i) => a + drawnRows(i).length, 0);
+const valueLabel = at => (typeof at === "number" ? String(Number(at.toPrecision(3))) : String(at));
+
+// The figures on the site, in model order with the "other" figures last. A figure (a model
+// and lattice) is shown as facets, a facet being the ladders that differ only in the
+// figure's axis: the coupling or filling with most distinct values among the ladders drawn
+// at two sizes or more (J2 for J1-J2, U for Hubbard). On the site a facet is a slider: a
+// strip of the record at each stop and size, and one panel per stop, the stop with most
+// energies shown first. A ladder published at one size is a stop like any other where its
+// facet has a ladder with sizes (Tristan, 2026-09-18: J2 = 0.35 at 36 sites belongs beside
+// J2 = 0.3 and 0.4, not under Other); where nothing in its facet has, it goes to the model's
+// "other" figure, the scan panels of what was published at one size. A figure without an
+// axis is one facet per ladder, each a single stop with no strip.
 export function energyFigures(instances) {
   const figs = [], single = [];
   for (const f of ladderFigures(instances)) {
-    const ladders = [];
-    for (const L of f.ladders) {
-      const members = L.members.filter(i => drawnRows(i).length);
-      if (new Set(members.map(i => i.n_sites)).size >= 2) ladders.push({ ...L, members });
-      else single.push(...members);
+    const ladders = f.ladders.map(L => ({ ...L, members: L.members.filter(i => drawnRows(i).length) })).filter(L => L.members.length);
+    const sized = ladders.filter(multiSize);
+    if (!sized.length) { single.push(...ladders.flatMap(L => L.members)); continue; }
+    const distinct = (ls, k) => new Set(ls.map(L => String(SCAN[k].of(L.members[0]) ?? ""))).size;
+    const [axisKey, values] = AXES.map(k => [k, distinct(sized, k)]).sort((a, b) => b[1] - a[1])[0];
+    const axis = values > 1 ? axisKey : null;
+    const facetKey = L => { const i = L.members[0]; return [i.model === "Impurity" ? i.lattice : "", i.boundary, L.shape?.key, ...AXES.filter(k => k !== axis).map(k => SCAN[k].of(i)), ...variantsOf(i)].join("|"); };
+    const name = f.name.replace(/^size\//, "energy/");
+    const facets = [];
+    for (const group of Map.groupBy(ladders, facetKey).values()) {
+      if (!group.some(multiSize)) { single.push(...group.flatMap(L => L.members)); continue; }
+      const label = couplingLabel(group[0].members[0], { ...f.flags, shape: group[0].shape, omit: axis });
+      const base = [name, slug(label)].filter(Boolean).join("--");
+      const stops = group.map(L => {
+        const at = axis ? SCAN[axis].of(L.members[0]) : null;
+        return { at, label: axis ? valueLabel(at) : L.label, name: axis ? `${base}--${axis}_${valueLabel(at)}` : base, energies: drawnCount(L), ladder: L };
+      }).sort((a, b) => (a.at ?? 0) - (b.at ?? 0));
+      const start = stops.indexOf(stops.reduce((best, s) => (s.energies > best.energies ? s : best), stops[0]));
+      facets.push({ label, stops, start, strip: stops.length > 1 ? `${base}--strip` : null });
     }
-    if (ladders.length) figs.push({ ...f, name: f.name.replace(/^size\//, "energy/"), group: f.model, ladders });
+    figs.push({ name, model: f.model, label: f.label, title: f.title, energies: f.energies, group: f.model, axis: axis && SCAN[axis].label, facets });
   }
   const others = [...Map.groupBy(single, i => i.model)]
     .sort(([a], [b]) => MODELS.findIndex(([m]) => m === a) - MODELS.findIndex(([m]) => m === b))
     .map(([model, members]) => ({ name: `energy/other--${model}`, group: "other", model, label: modelName(model),
       title: `${modelName(model)}: Hamiltonians published at one size`, energies: members.reduce((a, i) => a + drawnRows(i).length, 0), scans: scansOf(members) }));
+  // Every file once: two facets whose labels slug alike would overwrite each other.
+  const names = figs.flatMap(f => f.facets.flatMap(x => [x.strip, ...x.stops.map(s => s.name)])).filter(Boolean);
+  if (new Set(names).size !== names.length) throw new Error("ladders.mjs: two energy figures share a file name");
   return [...figs, ...others];
 }

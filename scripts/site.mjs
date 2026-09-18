@@ -21,14 +21,14 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { perSiteDivisor, perSiteLabel, isSampled, recordEligible, boundLabel, stochasticExact, publishedMethod, methodLabel } from "./units.mjs";
 import { collect, recordOf, summarize, rowId } from "./summary.mjs";
-import { THEMES } from "./chart.mjs";
+import { THEMES, W } from "./chart.mjs";
 import { citeRef, paperYear } from "./cite.mjs";
 import { sources } from "./enrich_sources.mjs";
 import { quote, shorten, MODELS, BOUNDARY, instanceLabel, byGeometry, noRecordReason, gapAbove } from "./readme_table.mjs";
 import { logoSvg, faviconSvg, LOGO_CSS } from "./logo.mjs";
 import { hoursOf, costFigureName } from "./cost.mjs";
 import { FRONTIER } from "./views.mjs";
-import { energyFigures } from "./ladders.mjs";
+import { energyFigures, stripX } from "./ladders.mjs";
 
 const OUT = "_site";
 const REPO = "https://github.com/tzerweck/quantum-many-body-leaderboard";
@@ -293,20 +293,18 @@ const FIGURES = [
 
 // A row of badges switching between panels, CSS-only: a radio input per badge, the checked
 // one showing its panel, so the switch works without the script and the inputs stay in the
-// keyboard order. The first badge is checked. With `all`, an "All" badge leads the row and is
-// the checked one, showing every panel at once (Tristan, 2026-09-17: less clicking to start).
-// The stylesheet is written before any page, so the rules for each switch come from
-// tabRules() at module level, into TAB_CSS, given the same `all`.
-function tabs(id, items, { all = false } = {}) {
-  const keys = [...(all ? ["all"] : []), ...items.keys()], labels = [...(all ? ["All"] : []), ...items.map(([label]) => label)];
-  return `${keys.map((key, k) => `<input type="radio" name="${id}" id="${id}-${key}"${k ? "" : " checked"}>`).join("")}
-  <div class="tab-labels">${keys.map((key, k) => `<label for="${id}-${key}">${labels[k]}</label>`).join("")}</div>
+// keyboard order. The first badge is checked. The stylesheet is written before any page, so
+// the rules for each switch come from tabRules() at module level, into TAB_CSS. (An "All"
+// badge showing every panel at once went with the stacked energy figures, 2026-09-18.)
+function tabs(id, items) {
+  return `${items.map((_, k) => `<input type="radio" name="${id}" id="${id}-${k}"${k ? "" : " checked"}>`).join("")}
+  <div class="tab-labels">${items.map(([label], k) => `<label for="${id}-${k}">${label}</label>`).join("")}</div>
   <div class="tab-panels">${items.map(([, html]) => html).join("\n")}</div>`;
 }
-const tabRules = (id, count, { all = false } = {}) => [...(all ? ["all"] : []), ...Array(count).keys()].map(key =>
-  `#${id}-${key}:checked ~ .tab-panels > ${key === "all" ? "*" : `:nth-child(${key + 1})`} { display: block; }
-#${id}-${key}:checked ~ .tab-labels > label[for="${id}-${key}"] { color: #fff; background: var(--accent); border-color: var(--accent); }
-#${id}-${key}:focus-visible ~ .tab-labels > label[for="${id}-${key}"] { outline: 2px solid var(--accent); outline-offset: 2px; }`).join("\n");
+const tabRules = (id, count) => [...Array(count).keys()].map(k =>
+  `#${id}-${k}:checked ~ .tab-panels > :nth-child(${k + 1}) { display: block; }
+#${id}-${k}:checked ~ .tab-labels > label[for="${id}-${k}"] { color: #fff; background: var(--accent); border-color: var(--accent); }
+#${id}-${k}:focus-visible ~ .tab-labels > label[for="${id}-${k}"] { outline: 2px solid var(--accent); outline-offset: 2px; }`).join("\n");
 
 // The cost figures: one per instance with enough energies costed in hours, drawn by
 // pareto.mjs into figures/cost/. Which instances have one is read off the directory, which
@@ -325,32 +323,66 @@ const costEntry = inst => [costFigureName(inst), `${modelName(inst.model)} ${ins
 function costSwitcher() {
   if (!COST_FIGS.length) return "";
   return `<section class="tabs" id="energy-vs-compute">
-  <h2>The best energies at each cost<a class="anchor" href="#energy-vs-compute" aria-label="Link to this section">#</a></h2>
+  <h2>The best published energies, by cost</h2>
   <p class="muted">What the published results on one instance cost in compute, and which of them nothing beats for less. Drawn for the
   ${COST_FIGS.length} instances where at least two energies state their cost; GPU-hours and CPU core-hours are never converted into each other.</p>
   ${tabs("cost-tab", COST_FIGS.map(inst => [`${esc(modelName(inst.model))} ${esc(instanceLabel(inst))}`, figure(costEntry(inst))]))}
 </section>`;
 }
-// The published energies of every Hamiltonian, drawn by size_energy.mjs into figures/energy/:
-// a figure per model and lattice with a panel per ladder of sizes, and per model an "other"
-// figure for what was published at one size only. Which exist is read off the directory, as
-// for the cost figures. Two rows of badges, the model (and Other) and then its figures, all of
-// them shown until one is picked.
-const ENERGY_FIGS = [...Map.groupBy(energyFigures(instances).filter(f => fs.existsSync(`figures/${f.name}.svg`)), f => f.group)];
-const energyEntry = f => [f.name, f.title,
-  f.group === "other" ? "Energies on Hamiltonians published at one size, with the coupling or filling that differs between them along x."
-    : "One panel per Hamiltonian, energy against the number of sites; colour is the kind of number and the line joins the record at each size."];
+// The published energies of every Hamiltonian, drawn by size_energy.mjs into figures/energy/
+// in the shape ladders.mjs gives them: per model and lattice a figure of facets, each a strip
+// and its stops; per model an "other" figure for what was published at one size and shares
+// no strip. Which exist is read off the directory, as for the cost figures. Two rows of
+// badges, the model (and Other) and then the lattice; under them each facet as a slider
+// (Tristan, 2026-09-18, in place of a stack of panels): the strip is the record at each stop
+// and size, a badge under each stop picks its panel, and the stop with most energies is the
+// one shown first. Radio inputs, as the badges are, so the arrow keys walk the stops and it
+// works without the script; the strip's cursor for the chosen stop is a group the stylesheet
+// shows. The badges sit at the strip's x positions, in per cent of its width, as the strip
+// is drawn at 920 px and shown at whatever width the column has.
+const ENERGY_FIGS = [...Map.groupBy(energyFigures(instances)
+  .filter(f => fs.existsSync(`figures/${f.group === "other" ? f.name : f.facets[0].stops[0].name}.svg`)), f => f.group)];
+const otherEntry = f => [f.name, f.title, "Energies on Hamiltonians published at one size, with the coupling or filling that differs between them along x."];
+const stopEntry = (f, facet, s) => [s.name, [f.title, facet.label, f.axis && `${f.axis} = ${s.label}`].filter(Boolean).join(", "),
+  "Energy against the number of sites; colour is the kind of number and the line joins the record at each size."];
+const stripEntry = (f, facet) => [facet.strip, `${[f.title, facet.label].filter(Boolean).join(", ")}: the record at each ${f.axis} and size`,
+  "One line per size, the larger the darker; the marked stop is the one whose energies are shown below."];
+
+// Every slider on the page with its id, so that the HTML and the stylesheet agree.
+const SLIDERS = ENERGY_FIGS.flatMap(([group, figs], j) => (group === "other" ? [] : figs.flatMap((f, k) =>
+  f.facets.map((facet, g) => ({ id: `slide-${j}-${k}-${g}`, f, facet })))));
+
+function slider({ id, f, facet }) {
+  const heading = f.facets.length > 1 && facet.label ? `<p class="facet">${esc(facet.label)}</p>` : "";
+  if (!facet.strip) return heading + figure(stopEntry(f, facet, facet.stops[0]));
+  const stops = facet.stops;
+  // The pitch between stops as a share of the strip's width sizes the badges, so that none
+  // touches its neighbour at any column width; a dense row staggers over two rows on a phone.
+  const pitch = (100 * (stripX(1, stops.length) - stripX(0, stops.length)) / W).toFixed(3);
+  return `<div class="slider${stops.length > 10 ? " dense" : ""}" style="--pitch:${pitch}%">${stops.map((s, k) => `<input type="radio" name="${id}" id="${id}-${k}"${k === facet.start ? " checked" : ""}>`).join("")}
+${heading}<div class="track">${figure(stripEntry(f, facet), "strip")}
+${stops.map((s, k) => `<label for="${id}-${k}" style="left:${(100 * stripX(k, stops.length) / W).toFixed(2)}%"><b>${esc(s.label)}</b><small>${s.energies}</small></label>`).join("")}</div>
+<div class="panels">${stops.map(s => figure(stopEntry(f, facet, s))).join("\n")}</div>
+</div>`;
+}
+const sliderRules = ({ id, facet }) => (facet.strip ? facet.stops.map((s, k) =>
+  `#${id}-${k}:checked ~ .panels > :nth-child(${k + 1}) { display: block; }
+#${id}-${k}:checked ~ .track .cur-${k} { display: inline; }
+#${id}-${k}:checked ~ .track label[for="${id}-${k}"] { color: #fff; background: var(--accent); border-color: var(--accent); }
+#${id}-${k}:focus-visible ~ .track label[for="${id}-${k}"] { outline: 2px solid var(--accent); outline-offset: 2px; }`).join("\n") : "");
+
 function energySwitcher() {
   if (!ENERGY_FIGS.length) return "";
   return `<section class="tabs" id="energy-by-hamiltonian">
   <h2>The published energies, by Hamiltonian</h2>
   ${tabs("energy-group", ENERGY_FIGS.map(([group, figs], j) =>
-    [group === "other" ? "Other" : esc(modelName(group)), `<div class="tabs">${tabs(`energy-${j}`, figs.map(f => [esc(f.label), figure(energyEntry(f))]), { all: true })}</div>`]))}
+    [group === "other" ? "Other" : esc(modelName(group)), `<div class="tabs">${tabs(`energy-${j}`, figs.map(f =>
+      [esc(f.label), group === "other" ? figure(otherEntry(f)) : `<div class="facets">${SLIDERS.filter(s => s.f === f).map(slider).join("\n")}</div>`]))}</div>`]))}
 </section>`;
 }
 
 const TAB_CSS = [tabRules("cost-tab", COST_FIGS.length), tabRules("energy-group", ENERGY_FIGS.length),
-  ...ENERGY_FIGS.map(([, figs], j) => tabRules(`energy-${j}`, figs.length, { all: true }))].join("\n");
+  ...ENERGY_FIGS.map(([, figs], j) => tabRules(`energy-${j}`, figs.length)), ...SLIDERS.map(sliderRules)].join("\n");
 
 // Leaderboard: the instance's cost figure above its rows, or how many of its energies state
 // a cost when that is too few to draw; nothing when none does.
@@ -381,7 +413,7 @@ const FIG_DARK = [...FIG_COLOURS].filter(([l, d]) => l !== d)
 // dropped here and the entry's title and caption label the figure instead. Marks are
 // links but not tab stops: four hundred of them per figure would bury the page's keyboard
 // order, and the table they point to is the accessible form of the same rows.
-function figure([name, title, caption]) {
+function figure([name, title, caption], cls = "") {
   const file = `figures/${name}.svg`;
   for (const v of [name, `${name}-dark`])
     if (!fs.existsSync(`figures/${v}.svg`)) throw new Error(`figures/${v}.svg is missing; run the build first`);
@@ -393,7 +425,7 @@ function figure([name, title, caption]) {
   for (const [, hex] of svg.matchAll(/(?:fill|stroke)="(#[0-9a-fA-F]{6})"/g))
     if (!FIG_COLOURS.has(hex)) throw new Error(`${file}: ${hex} is not a chart.mjs theme colour, so dark mode cannot recolour it`);
   const id = name.replace(/[^\w-]/g, "-");
-  return `<figure id="${id}" class="chart">
+  return `<figure id="${id}" class="chart${cls ? ` ${cls}` : ""}">
 ${svg}
 </figure>`;
 }
@@ -1313,6 +1345,30 @@ pre.ticks { font-family: var(--mono); font-size: clamp(7px, 1.6vw, 13px); line-h
 .tab-labels label:hover { border-color: var(--accent); color: var(--accent); }
 .tab-panels > * { display: none; }
 .tab-panels > .tabs > .tab-labels { margin-top: 0; }
+.facets > figure { margin-top: 0.6rem; }
+p.facet { margin: 1.4rem 0 0.2rem; font-size: 0.85rem; font-weight: 600; color: var(--ink2); }
+.slider { position: relative; max-width: 920px; }
+.slider > input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.slider .track { position: relative; padding-bottom: 2.5rem; }
+.slider .track figure, .slider .panels figure { margin: 0.6rem 0 0; }
+.slider .track .cur { display: none; }
+.slider .track label {
+  position: absolute; bottom: 0; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center;
+  box-sizing: border-box; width: calc(var(--pitch) - 0.3rem); max-width: 4rem; padding: 0.1rem 0; white-space: nowrap;
+  line-height: 1.15; font-size: 0.8rem; cursor: pointer;
+  color: var(--ink2); background: var(--surface); border: 1px solid var(--grid); border-radius: 999px;
+}
+.slider .track label small { font-size: 0.65rem; color: inherit; opacity: 0.7; }
+.slider .track label:hover { border-color: var(--accent); color: var(--accent); }
+.slider .panels > * { display: none; }
+@media (max-width: 900px) { .slider.dense .track label { font-size: 0.72rem; } }
+@media (max-width: 640px) {
+  .slider .track label { font-size: 0.7rem; }
+  .slider .track label small { display: none; }
+  .slider.dense .track { padding-bottom: 4rem; }
+  .slider.dense .track label { width: calc(2 * var(--pitch) - 0.3rem); }
+  .slider.dense .track label:nth-child(odd of label) { bottom: 1.6rem; }
+}
 ${TAB_CSS}
 tr.more figure.chart { margin: 0.4rem 0 0.8rem; }
 .cost-none { font-size: 0.8rem; margin: 0.2rem 0 0.5rem; }
