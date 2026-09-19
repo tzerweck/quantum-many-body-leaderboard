@@ -140,3 +140,11 @@ DEFECTS.push(
     finding: `The printed bar, ${printed} per site, is the standard error of the mean of 1000 bootstrap refits (authors' notebook, cell 13), not the spread of the refits, ${spread} per site. Against Sandvik's SSE energy on this instance the row sits ${sigP} printed sigma below, ${sigB} of the bootstrap spread below.`,
   });
 }
+
+// qmbl-verify 2026-09-18 (RA1), ruling 2a (Tristan, 2026-09-19): the row stays exact (the method is) and
+// the flag keeps it off the record; DMRG holds it.
+DEFECTS.push(
+  { match: { instance: "tV/square_64_P_32_4", method: "QMC (continuous-time expansion)", energy: -9.7906046108775 },
+    flag: "exact-above-variational-bound",
+    finding: "Stored -9.7906 +- 0.166 sits 0.458 ABOVE the variational DMRG row -10.2486 (2.76 sigma) and 0.430 above Hartree-Fock (2.59 sigma), which an unbiased ground-state estimate can only do by fluctuation. The committed h5 is a second run of the same estimator: -10.0373 +- 0.1194, again 1.77 sigma above DMRG; the two runs combined, -9.953 +- 0.097, are 3.05 sigma above. On that h5 the vertex-count estimator (KinE + IntE2, error 20x smaller) gives -10.2491 +- 0.0069, 0.08 sigma from DMRG: the projection and the sign are fine and E0 is about -10.249; it is the single-random-site Wick Energy estimator whose error bar is understated at V = 4 (per-measurement variance 1096, binning reports no autocorrelation where the vertex observables show tau = 137). Below the 3 sigma of RULES.md 9.4, so not a validator issue; held off the record at its stated sigma." },
+);

@@ -9,11 +9,11 @@ export const RULES = [
   //    describes how the gradient was computed, not the energy. 21 VQE rows depend on this.
   [/\bvqe\b|\bcircuit\b|\bpqc\b|variational quantum/i, "variational"],
   // 3. Numerically exact / exactly solved.
-  //    NOTE: "QMC (continuous-time expansion)" is deliberately NOT here. It is
-  //    numerically exact for impurity models, but on the t-V lattice instances its
-  //    rows sit ABOVE exact diagonalization (tV/chain_32_P_16_4) and above DMRG by
-  //    4.7e-2 (tV/square_64_P_32_4), so it cannot be treated as a ground-state
-  //    reference. Falls through to needs-review until someone classifies it per model.
+  //    NOTE: "QMC (continuous-time expansion)" and bare "QMC" are deliberately NOT here:
+  //    the string does not say ground-state projector vs finite temperature. Both fall
+  //    through to null and are classified per row in corrections.mjs (the six t-V rows are
+  //    VarBench's own sign-free projector LCT-INT runs, the Heisenberg square_100_O row the
+  //    ALPS loop algorithm at T = 1e-4; exact (stochastic) since 2026-09-19).
   [/exact diagonalization|exact solution|numerically exact|full configuration interaction|\bfci\b|\bbethe ansatz\b/i, "exact"],
   // 4. Extrapolation is the reported number (bond dim, zero-variance, Trotter)
   [/extrapolat/i, "extrapolated"],

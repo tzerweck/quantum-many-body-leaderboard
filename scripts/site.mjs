@@ -194,6 +194,7 @@ const FLAGS = {
   "wrong-instance": ["wrong instance", "The numbers were uploaded to the wrong instance and belong to another one."],
   "sampling-nonergodic": ["non-ergodic sampling", "The Monte Carlo chains did not sample ergodically, so the low energy is a sampling artifact."],
   "sigma-understated": ["error bar understated", "The printed error bar is a standard error of a resampling mean, not the uncertainty of the energy; the authors have been asked which they intend."],
+  "exact-above-variational-bound": ["above a variational bound", "This exact (stochastic) energy sits above a variational upper bound by more than its error bar explains, so the bar is understated; the bound keeps the record."],
 };
 const flagLabel = r => FLAGS[r.defect.flag]?.[0] ?? r.defect.flag;
 const flagBadge = r => {

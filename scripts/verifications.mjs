@@ -61,4 +61,27 @@ export const VERIFICATIONS = [
     location: "line setting U", reported_as: "U = 10", conversion: "none",
     note: "The linked script is a copy of the U = 10 file, so it did not produce this number. The energy sits 1.2e-7 above the ground state at U = 7.74264 and 7.3e-7 above the one at 7.74263683: a valid bound at either, and too close to both to say which it was run at, so it stays on this instance.",
     source_entry: "B2-baseline-hubbard (qmbl-verify 2026-09-16)" },
+  // qmbl-verify 2026-09-18 (RA1): the t-V rows whose committed LCT-INT output reproduces the stored
+  // total through the code's V (n - 1/2)(n - 1/2) shift, and the square V = 2 row, whose committed
+  // output is a sibling run 0.75 sigma away (ruling 3a, Tristan 2026-09-19: the table's value stays).
+  ...[
+    ["tV/chain_32_P_16_1", -15.946206847643403, "value", "Energy/mean/value = -0.7483189639888563, error 0.0000316265616252196 (per site)", "32 * (-0.7483189639888563) + 1 * 32 / 4 = -15.946206847643403"],
+    ["tV/chain_32_P_16_2", -12.32494350621494, "value", "Energy/mean/value = -0.8851544845692169, error 0.0001579602347377329 (per site)", "32 * (-0.8851544845692169) + 2 * 32 / 4 = -12.32494350621494"],
+    ["tV/chain_32_P_16_4", -7.48840482444892, "value", "Energy/mean/value = -1.2340126507640288, error 0.0006419694839270352 (per site)", "32 * (-1.2340126507640288) + 4 * 32 / 4 = -7.488404824448921 (9e-16)"],
+    ["tV/square_64_P_32_1", -29.48192676807227, "value", "Energy/mean/value = -0.9606551057511292, error 0.0003595724232837266 (per site)", "64 * (-0.9606551057511292) + 2 * 1 * 64 / 4 = -29.48192676807227"],
+    ["tV/square_64_P_32_2", -18.71359791545498, "config", "Energy/mean/value = -1.2910776412131288, error 0.0009907324643544017 (per site), count 317232454", "64 * (-1.2910776412131288) + 2 * 2 * 64 / 4 = -18.6290 +- 0.0634: a different run of the same input (params.in identical, half the samples), 0.75 combined sigma from the stored -18.7136 +- 0.0932; the stored run is not in the methods repo"],
+  ].map(([instance, energy, scope, reported_as, conversion]) => ({
+    match: { instance, method: "QMC (continuous-time expansion)", energy },
+    checked_on: "2026-09-18", scope,
+    method: "varbench/methods 3edb6a9 scripts/tV/" + instance.split("/")[1] + "/lct_int_inputs/{params.in,test.out.h5}, read with h5py; the shift from programs/SpinlesstV-LCT-INT/README.md and PRB 91, 235151 Eq. 3",
+    location: "test.out.h5 group simulation/results/Energy; params.in", reported_as, conversion,
+    note: scope === "value" ? "chain periodic (BCmodifier empty), N_f = N/2, V as the instance; Sign = 1 exactly" : "instance, boundary, filling, V and method confirmed from params.in and the source; the number itself is a sibling run's",
+  })),
+  { match: { instance: "Heisenberg/square_100_O", method: "QMC", energy: -251.46248 },
+    checked_on: "2026-09-18", scope: "value",
+    method: "arXiv:1405.3259v2 PDF, pypdf layout mode (Lubasch, Cirac & Banuls, PRB 90, 064425); v1 checked for the digit",
+    location: "Appendix C, Table III, column 10 x 10",
+    reported_as: "-0.628656(2) (per site, S.S units)",
+    conversion: "-0.628656 * 100 * 4 = -251.4624; the stored -251.46248 carries a seventh digit no version of the paper prints (8e-5 = 0.1 sigma), kept under the 2026-09-16 precision ruling (ruling 4a, Tristan 2026-09-19)",
+    note: "open 10x10, S = 1/2 Heisenberg, loop algorithm at T = 1e-4; Liu et al. PRB 95, 195154 and Sharir et al. quote the same -0.628656(2)" },
 ];

@@ -75,11 +75,18 @@ Worked cases that fixed the boundaries:
   exact in the sense a diagonalization is. It stays `exact` - unbiased, and on most of its
   instances the most precise number there is - but its label reads `exact (stochastic)` and
   its error bar is required (§9.4), so no reader takes it for a diagonalization (2026-09-16).
-- *A method name is not a guarantee.* `QMC (continuous-time expansion)` is numerically
-  exact for impurity models, but on t-V lattice instances its rows sit above exact
-  diagonalization and 4.7e-2 above DMRG. It is `null` pending per-model classification.
+- *A method name is not a guarantee, so the row is read.* `QMC (continuous-time expansion)`
+  on the six t-V instances sat `null` for a week because the string does not say projector
+  or finite temperature and the rows sit above ED. Reading VarBench's run files settled it:
+  they are VarBench's own ground-state projector LCT-INT runs, sign exactly 1, and the gap
+  to ED is 0.6-0.7 of their own error bar, which had been filed in the variance column. They
+  are `exact (stochastic)` since 2026-09-19; the one that sits 2.76 sigma above a DMRG bound
+  (square, V = 4) is flagged and holds no record. The classifier still returns `null` for
+  the string; the class is set per row in `scripts/corrections.mjs`.
 - *When in doubt, `null`.* Bare `QMC` and `AFQMC` strings are unresolved: sign-problem-free
   (exact) and constrained-path (projected) are different classes and the string does not say.
+  The one bare `QMC` row (Heisenberg, open 10x10) was read the same way: the ALPS loop
+  algorithm at T = 1e-4, converged in T by the authors' statement, exact (stochastic).
 
 ## 5. Units and conventions
 

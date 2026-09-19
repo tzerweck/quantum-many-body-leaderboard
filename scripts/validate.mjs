@@ -25,7 +25,8 @@ for (const m of fs.readdirSync("data")) {
       // Variational principle: no strict bound may sit below an exact row in the same
       // instance. Sector-resolved ED rows are excluded - they are the lowest state in
       // ONE symmetry sector, so an unconstrained variational state may legitimately
-      // sit below them. Violations under a relative 1e-8 are reported as rounding.
+      // sit below them. Violations within 3 sigma, or under a relative 1e-8 where no error
+      // bar is stated, are tolerated and only counted.
       // A stochastic exact energy (sign-problem-free QMC) is exact only within its error bar,
       // so the error bar is required (RULES.md 4).
       if (stochasticExact(r) && r.sigma == null) issues.push(`SIGMA ${at}: exact (stochastic) row without an error bar "${r.method.slice(0,38)}"`);
@@ -127,5 +128,5 @@ for (const f of fs.readdirSync(path.join("data", "TFIsing"))) {
 
 console.log(`rows=${rows}  dof_checked=${checkedD}  einf_checked=${checkedE}  vscore_checked=${checkedV}  tfising_exact_checked=${checkedT}`);
 console.log(`compute_blocks=${checkedC}  coverage_entries=${checkedCov}`);
-console.log(`within-rounding bound violations (rel < 1e-8, ignored): ${rounding.length}`);
+console.log(`tolerated bound violations (within 3 sigma, or rel < 1e-8 where neither states one; ignored): ${rounding.length}`);
 console.log(issues.length ? `\n${issues.length} ISSUES:\n` + issues.slice(0, 25).join("\n") : "\nall checks pass");
