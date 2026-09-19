@@ -6,6 +6,8 @@
 //     stored output) holds the variance or the error bar of the state behind the printed
 //     energy, which the paper itself does not print. The case that opened this: Moss et
 //     al.'s pickle behind arXiv:2505.20406 (see add_repo_data_rows.mjs).
+//     Files the authors sent for the entry count, committed under sources/ as received
+//     (the pyrochlore measurement of arXiv:2509.13746, 2026-09-19).
 //   - "qmbl": we measured it ourselves, on the checkpoint the authors published, with their
 //     network and sampler. Only a measurement on *their* state goes on *their* row; a state
 //     we trained is a new row (hub, Seeding Var(E)).

@@ -51,9 +51,25 @@ const ADD = {
   ]},
 
   "Heisenberg/pyrochlore-4x4x4_256_P": { rows: [
-    { eps: -0.4855, err: null, m: "Generalized RVB ansatz, unrestricted VMC optimization (no quantum-number projection)", bt: "variational", src: RVB,
+    // Energy corrected 2026-09-19 to the authors' own measurement of the fixed optimized state
+    // (Rong Cheng, private correspondence; outputs in sources/2509.13746-authors-*), RULES.md 11:
+    // the paper prints "~ -0.4855", the measurement is -0.4855840(29), one unit of the last printed
+    // digit below it. The printed value stays on the row in `corrections`; sigma and the variance
+    // come from the same files through error-metrics-2026-09-19.json.
+    { eps: -0.48558404568894675, err: null, m: "Generalized RVB ansatz, unrestricted VMC optimization (no quantum-number projection)", bt: "variational", src: RVB,
       reported: "E0 ~ -0.4855 J/site, approximate, no error bar",
-      note: 'Sec. A: "The obtained ground state energy is E0 ~ -0.5118 J/site for the L = 2 cluster and E0 ~ -0.4855 J/site for the L = 4 cluster", periodic boundary conditions on both; the L = 4 cluster carries Nv = 4N^2 = 262144 parameters, so N = 256. Units: the same passage quotes the mVMC energy -0.5162 J/site for L = 2, which is the pyrochlore-2x2x2_32_P record -0.516266 in the S.S per-site convention. Approximate and without an error bar, so it is eligible for nothing (RULES.md 6). It is nonetheless 0.5% below the VarBench mVMC record -0.4830957, although the ansatz has no symmetry projection and sits above mVMC at L = 2 - which says more about that record than about this row.' },
+      corrections: [{
+        field: "energy", to: +((-0.48558404568894675 * 1024).toPrecision(12)),
+        reported_as: "energy_total_J =  -1.2430951569637037E+002 | energy_per_site_J =  -4.8558404568894675E-001",
+        location: "sources/2509.13746-authors-pyro-result.dat, the authors' dedicated Monte Carlo measurement of the optimized L = 4 state (Rong Cheng, 2026-09-19; README in sources/2509.13746-authors-README_QMBL.txt)",
+        version_read: "private correspondence, data files as received 2026-09-19 (zip sha256 da066f4b244e886c82bf347a2b5e43cecd0e12369ccfa240b809170c71b79dcc)",
+        conversion: "S.S total x 4 = Pauli total; per site -0.48558404568894675 x 1024",
+        checked_on: "2026-09-19",
+        reason: "The paper gives the energy as approximate to four decimals; the authors measured the same fixed state with 8,388,608 samples over 256 chains and obtained E/N = -0.4855840(29) J, one unit of the last printed digit below the printed value and 29 sigma of the new error bar, so a sigma cannot sit on the printed number. Corrected to the measured value with the printed one kept here (ruling 2026-09-19, Tristan).",
+        source_entry: "qmbl-runs/repo-data-census/search/replies/2509.13746-cheng-2026-09-19.txt, ruling 1 (2026-09-19)",
+        from: +((-0.4855 * 1024).toPrecision(12)),
+      }],
+      note: 'Sec. A: "The obtained ground state energy is E0 ~ -0.5118 J/site for the L = 2 cluster and E0 ~ -0.4855 J/site for the L = 4 cluster", periodic boundary conditions on both; the L = 4 cluster carries Nv = 4N^2 = 262144 parameters, so N = 256. Units: the same passage quotes the mVMC energy -0.5162 J/site for L = 2, which is the pyrochlore-2x2x2_32_P record -0.516266 in the S.S per-site convention. Approximate and without an error bar, so it is eligible for nothing (RULES.md 6). It is nonetheless 0.5% below the VarBench mVMC record -0.4830957, although the ansatz has no symmetry projection and sits above mVMC at L = 2 - which says more about that record than about this row. 2026-09-19: the authors measured the fixed state on request, E/N = -0.4855840(29) J with Var(H) = 4.894(22) J^2 (see corrections and error_metrics on this row); with a sigma it is eligible and holds the variational record on this instance.' },
   ]},
 };
 
@@ -76,6 +92,7 @@ for (const [id, spec] of Object.entries(ADD)) {
       reference: r.src.ref, peer_reviewed: r.src.pr,
       source: "sweep-worklist-2026-09-15", provenance: "primary",
       verified: { checked_on: CHECKED, method: r.read ?? PDF, reported_as: r.reported, note: r.note, secondary_of: null },
+      ...(r.corrections ? { corrections: r.corrections } : {}),
     });
     added++;
   }

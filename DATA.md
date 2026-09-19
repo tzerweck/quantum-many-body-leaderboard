@@ -208,7 +208,8 @@ came from:
 
 - `fields` names what the block set; nothing a row already carried is overwritten.
 - `measured_by` is `authors` when the number is in the authors' own data release (a
-  repository, a Zenodo record, a notebook's stored output), and `qmbl` when we measured it
+  repository, a Zenodo record, a notebook's stored output, or the output files the authors
+  sent for the entry, committed under `sources/` as received), and `qmbl` when we measured it
   on the checkpoint the authors published, with their network. A state we trained
   ourselves is never attached to someone else's row; it is a row of its own.
 - `source_file` is committed under `sources/`, and every ` | `-separated part of
