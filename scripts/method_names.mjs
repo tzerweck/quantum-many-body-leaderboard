@@ -45,7 +45,7 @@ export const NAMES = {
   // ---------------------------------------------------------------- tensor networks
   "DMRG": ["DMRG", ""],
   "DMRG (8x4)": ["DMRG", ""],
-  "DMRG keeping 4096 states (quoted comparison value, labeled 'Exact' in the source table)": ["DMRG", "", { bond_dimension: 4096 }],
+  "DMRG keeping 4096 states": ["DMRG", "", { bond_dimension: 4096 }],
   "DMRG on the L x L torus, 4096 SU(2) states": ["DMRG", "SU(2)", { bond_dimension: 4096 }],
   "DMRG on the L x L torus, 6144 SU(2) states": ["DMRG", "SU(2)", { bond_dimension: 6144 }],
   "DMRG on the L x L torus, 8192 SU(2) states": ["DMRG", "SU(2)", { bond_dimension: 8192 }],
@@ -123,7 +123,7 @@ export const NAMES = {
   "Factored-attention transformer (improved, Ns = 2^14, Np = 434760)": ["ViT", "factored attention, improved", { parameters: 434760, samples: 16384 }],
   "Convolutional transformer wave function (CTWF)": ["CTWF", ""],
   "Holographic Quantum Transformer (HQT)": ["HQT", ""],
-  "Holographic Quantum Transformer (HQT), zero-shot 8x8->10x10 transfer": ["HQT", "zero-shot transfer from 8x8"],
+  "Holographic Quantum Transformer (HQT), zero-shot 8x8->10x10 transfer": ["HQT", "8x8-trained model projected onto 10x10, then 50 iterations with the backbone frozen and 60 with it unfrozen on 10x10 (110 iterations, Fig. 3)"],
   "HQT (Ours)": ["HQT", ""],
   "HQT (Ours), Cold Start": ["HQT", "cold start"],
   "PITQS": ["PITQS", ""],

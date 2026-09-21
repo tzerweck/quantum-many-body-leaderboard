@@ -27,7 +27,7 @@ independently confirms the instance, the open boundary and the corrected E/N con
 
 **Note.** This is the *second* source reporting a sub-exact variational energy on this one
 10-site instance: VarBench's own `RBM (alpha = 1)` row is 2.3e-5 below exact, resolved
-below as an optimization-trace minimum rather than a converged measurement. Two unrelated
+below (first read as an optimization-trace minimum; withdrawn 2026-09-21, see the next two sections). Two unrelated
 groups making the same class of error on the same tiny instance is a pattern, not a
 coincidence, and it is an argument for reporting converged energies with their variance.
 
@@ -54,16 +54,82 @@ instance; the training trace is kept so its minimum can be compared against the 
 | our training-trace minima | −12.78785 … −12.78835 (**below** ED) | −12.38299 … −12.38433 (**below** ED) |
 | tau_corr / R_hat | ≤ 0.05 / 1.0000 | ≤ 0.05 / 1.0000 |
 
-**Conclusion.** The published values are minima of the optimization trace, not converged
-measurements: each lies between our converged energy and our trace minimum. The
+**Conclusion at the time.** The published values are minima of the optimization trace, not
+converged measurements: each lies between our converged energy and our trace minimum. The
 autocorrelation hypothesis is ruled out. Our ED reproduces both VarBench exact values to 1e-14,
 so the reference is sound and only the RBM rows are at fault.
+
+**Withdrawn 2026-09-21.** This check ran a different program from the one the rows link (a
+complex RBM in netket 3.22, 2000 steps). The rerun below of the linked program itself, plus
+VarBench's upload history, shows the stored numbers are final 2^20-sample estimates (their
+bars equal sqrt(variance / 2^20)), entered in 2023 without code, and that the linked program
+cannot produce them. The flag stands; the "trace minimum" mechanism does not.
 
 **Reproduce.**
 
 ```bash
 CUDA_VISIBLE_DEVICES="" JAX_PLATFORMS=cpu python tfising_rbm_check.py   # ~45 min, CPU, 16 cores
 ```
+
+## `tfising-rbm-varbench-rerun/`: the linked VarBench program, run as pinned
+
+**Question.** Does the program the three `RBM (alpha = 1)` rows cite
+(varbench/methods `programs/vmc_netket`, commit ed31bb0) produce the stored numbers, and can
+it produce a value below the exact energy at all?
+
+**Design.** `run.sh` builds the pinned environment (`requirements.txt`: NetKet 3.13.0,
+jax 0.4.30; Python 3.11 because the pinned etils needs it despite the README's 3.10) and runs
+the three `vmc_rbm.sh` command lines unchanged (real float32 RBM alpha = 1, SR, 10^4 steps,
+1024 chains, seed 123, final estimate with 2^20 samples) on CPU. `eval_final.py` then loads
+the final parameters and computes the exact ground state (ED at N = 10, free fermions at
+N = 32), the full-summation energy of the same parameters (N = 10), and five repeated
+2^20-sample estimates with tau_corr and R_hat. `trace_summary.json` holds the training
+trace minima and every 100th step.
+
+**Result** (99problems, 2026-09-19; `run.log`, `*.eval.json`).
+
+| | chain_10_P_1 | chain_10_O_1 | chain_32_P_0.5 |
+|---|---|---|---|
+| exact | -12.784906443 | -12.381489999655 | -34.033421119168 |
+| VarBench row (2023-01-09, no code) | -12.785231(48) | -12.381718(22) | -34.033633(56) |
+| linked script, final estimate | -12.784382(65) | -12.381393(27) | -34.03197(10) |
+| full summation of the same parameters | -12.784376 | -12.381411 | - |
+| five repeats, scatter about the full sum | <= 1.5 sigma | <= 2.2 sigma | <= 2.2 sigma about the printed value |
+| training-trace minimum | -12.79495 | -12.38785 | -34.04687 |
+
+**Conclusion.** The script's own estimator is unbiased and lands above the exact energy in all
+three cases; the stored values (a better-converged state, variance about half of the rerun's,
+biased 2-3e-4 below exact) are not reproducible from anything published. VarBench history:
+`6e7a021` (2023-01-09) replaced -12.784707(48) and -12.381447(21) of 2022-12-12, both above
+exact; the code links were attached on 2024-07-30 (`5047bfd`) without regenerating a number.
+
+**Reproduce.** `bash checks/tfising-rbm-varbench-rerun/run.sh` in a copy of
+varbench/methods `programs/vmc_netket` (~35 min, CPU, 8 cores; `eval_final.py` goes next
+to `vmc.py`).
+
+## `peps-4x4-open-ed/`: the S.S convention of arXiv:1611.09467
+
+**Question.** Are the two finite-PEPS energies on the open 6x6 cluster (Table II, D = 8 and
+D = 10) in the same convention as the instance's exact row, so that their dip below it is
+real and not a constant shift or a per-bond mislabel?
+
+**Result.** `ed_4x4_open.py` (Lanczos, Sz = 0, H = sum S_i.S_j) reproduces the paper's 4x4
+"Exact" -0.57432544 per site to 1.6e-9, so the table is per site in S.S units with no shift.
+The dip is in the numbers (1.2 sigma at D = 8, 13 sigma at D = 10) on a bar the paper says is
+sampling-only over a PEPS contracted at Dc = 2D.
+
+## `hqt-figure-readings/`: what arXiv:2607.00398 plots against what it prints
+
+**Question.** The paper prints three different variances for its 8x8 J2 = 0.5 state and
+reads its 10x10 number off a training curve. What do the figures actually show?
+
+**Result.** `digitise_figs.py` calibrates the axes of Fig. 2(a) and Fig. 3 from the
+e-print's image files (tick rows and gridlines, checked against matplotlib's 5 % autoscale
+margin and against the Chen & Heyl reference line, which reads -0.497687 against the printed
+-0.497715) and reads every plotted point (`digitise_figs.out.txt`). The J2 = 0.5 scan point
+of Fig. 2(a) sits at E/N ~ -0.485 with sigma^2 ~ 0.094, not at the -0.5001 / 1.4e-3 of
+Table 1; the Fig. 3 trace tail (iterations 80-109) has mean -0.497813, sd 2.4e-5, last
+iterate -0.497827, which is the printed -0.49782(3).
 
 ## `hubbard-u-labels/`: which U were the 4x4 and 14-site chain Hubbard rows computed at?
 

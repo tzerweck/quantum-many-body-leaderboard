@@ -319,7 +319,11 @@ each entry with the value it replaced (`from`), where the new one was read, and 
 QMBL added itself is `verified.second_read`. An instance renamed because its upstream name
 carries the wrong coupling has `relabelled` (the old id and the reason); the old id, where
 rows were computed at that coupling, stays with `split` and an exact row QMBL computed
-([`checks/hubbard-u-labels/`](checks/hubbard-u-labels/)). One worked case is resolved in [`checks/`](checks/): three TFIsing
-`RBM (alpha = 1)` energies sit up to 10 sigma below an exact solution, and a rerun with
-full summation over all 1024 basis states shows the published values are minima of the
-optimization trace rather than converged measurements.
+([`checks/hubbard-u-labels/`](checks/hubbard-u-labels/)). One worked case is in [`checks/`](checks/): three TFIsing `RBM (alpha = 1)` energies
+sit up to 10 sigma below an exact solution; the program the rows link, rerun as pinned,
+gives energies above it, and the stored numbers were uploaded in 2023 without code or log,
+so the flag stays and the mechanism is recorded as unknown. A `defect` carries `flag`,
+`finding` (the evidence, with the source of every claim), optionally `diagnosis`,
+`ruled_out` and `evidence` (a shared block written for that row or group of rows, never
+attached by flag name alone) and `source_entry` (the verification proposal it was
+written from).

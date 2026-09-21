@@ -11,7 +11,7 @@ const CNNMPS = { ref: "arXiv:2603.14425, Disentangling Tensor Network States wit
 // plotted; it comes from the same CSV in add_repo_data_rows.mjs.
 const VRB    = { ref: "L. L. Viteritti, R. Rende, and F. Becca, private communication (2024) (cited as ref [48] in Sec. III of arXiv:2503.10462)", pr: null };
 const HFPS   = { ref: "Chen, Wan, Sengupta & Georges, Neural network-augmented Pfaffian wave-functions for scalable simulations of interacting fermions, Proc. Natl. Acad. Sci. U.S.A. 123, e2535288123 (2026), arXiv:2507.10705", pr: true };
-const HQT    = { ref: "Holographic Quantum Transformer, arXiv:2607.00398 (conference proceedings)", pr: true };
+const HQT    = { ref: "Guo, Xiao, Liu & Li, Holographic Quantum Transformer: A Generalist Neuro-Symbolic Architecture for Solving Frustrated Systems via Generative Attention, Proc. 32nd ACM SIGKDD Conf. on Knowledge Discovery and Data Mining V.2 (KDD '26), pp. 11028-11037, arXiv:2607.00398, doi:10.1145/3770855.3818932", pr: true };
 const VIT26  = { ref: "Approaching the Thermodynamic Limit with Neural-Network Quantum States, arXiv:2602.02665", pr: false };
 const TBL = "Read from Table 1 of arXiv:2603.14425 (square-lattice J1-J2 at J2/J1=0.5, PBC, E per site in S.S units), parsed from the arXiv HTML.";
 

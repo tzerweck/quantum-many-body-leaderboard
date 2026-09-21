@@ -170,8 +170,8 @@ when the record is assigned. Suspicion is enough to withhold a record; it is nev
 hide or delete a row (11). Section 10 is how a flag gets lifted or upheld.
 
 This exists because the opposite happened on first implementation: **5 of 7 flagged rows held
-their instance record**, including the three TFIsing `RBM (alpha = 1)` rows a rerun had already
-shown to be minima of an optimization trace. Ranking purely on energy promotes precisely the
+their instance record**, including the three TFIsing `RBM (alpha = 1)` rows that sit 3.8 to 10.4 sigma
+below an exact solution. Ranking purely on energy promotes precisely the
 numbers that are wrong, because being wrong downward is what makes a number look like a record.
 
 ## 7. Aggregate
@@ -211,7 +211,11 @@ Case: arXiv:2607.00398 (conference proceedings) claims -0.49782(3) on 10x10 J1-J
 its own abstract as "statistically consistent with the variational state of the art". It is 1.3e-4
 below the best variational energy, i.e. an unclaimed record, and on 8x8 it beats the field by
 1.1e-3 while reporting a variance 6x-14x worse - the tension in 9.3. Both rows are listed
-and flagged `energy-variance-inconsistent`. Note what is *not* claimed: there is no exact
+and flagged: the 8x8 row `energy-variance-inconsistent` (the paper prints three different
+variances for the same state and defines none), the 10x10 row `trace-readout` (the number is
+the tail of a 110-iteration training trace, Fig. 3, with a bar the authors call sampling
+fluctuation only; no variance is printed at 10x10; the arXiv LaTeX source's earlier draft
+reports -0.4960 for the same protocol). Note what is *not* claimed: there is no exact
 reference at either size, so nothing here is proof of error, only grounds for objection.
 
 ### 8.2 `baseline`: collected versus computed
@@ -281,15 +285,20 @@ ranks, can hold a record, and is cited to its run script, job and commit.
 Six issues survive these checks on the imported VarBench data. They are carried as known
 defects attached to the row (§11), not silently corrected.
 
-**Resolved case, 2026-09-11: the three TFIsing `RBM (alpha = 1)` rows.** They sit 3.8 to
-10.4 sigma below an exact solution, which no variational state can be. Rerun on three seeds
-each (netket 3.22.4, alpha=1 complex RBM, 2000 SR steps): evaluating the trained parameters
-by **full summation over all 1024 basis states**, with zero Monte-Carlo error, puts every
-converged energy *above* the exact value as the variational principle requires, while every
-training trace dips 1.5e-3 to 3.5e-3 *below* it. Each published value lies between the two.
-The conclusion is that the published number is **a minimum of the optimization trace, not a
-converged measurement**. An underestimated error bar is ruled out: tau_corr <= 0.05 and
-R_hat = 1.0000 across all six runs. Evidence in `checks/`.
+**Case 2026-09-11, reopened 2026-09-21: the three TFIsing `RBM (alpha = 1)` rows.** They
+sit 3.8 to 10.4 sigma below an exact solution, which no variational state can be. A first
+rerun (netket 3.22.4, complex RBM, 2000 SR steps, full summation over all 1024 basis states)
+concluded that the published numbers were minima of the optimization trace. The deep-source
+pass of 2026-09-19 withdrew that diagnosis: the values were entered in VarBench on
+2023-01-09 without code or log, replacing uploads that sat *above* the exact energy; the
+program the rows link was written eighteen months later and, run as pinned, gives energies
+above the exact value with an unbiased final estimate; and the stored error bars identify the
+numbers as final 2^20-sample estimates, not trace points. The flag stands - the numbers
+violate the variational principle and no published source says how they were produced - but
+the mechanism is unknown, not "a trace minimum". Evidence in `checks/` (both reruns) and in
+the defect block on each row. A diagnosis is written for the rows it was established on and
+attached to those rows alone: keying it by flag name put this one on five unrelated rows
+until 2026-09-21.
 
 This is why §6 requires a stated sigma *and* how it was estimated, and why §10 admits
 "violates the variational principle against a known exact reference" as grounds for
