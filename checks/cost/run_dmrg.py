@@ -90,8 +90,10 @@ def main():
     rungs = []
     eng = None
     for chi in args.chi:
+        # max_trunc_err is TeNPy's consistency check, not a convergence target: at chi = 500 on a
+        # torus the truncation error is above its 1e-4 default and the rung is still a row.
         params = dict(trunc_params=dict(chi_max=chi, svd_min=1e-10), mixer=True, max_sweeps=args.max_sweeps,
-                      max_E_err=1e-8, min_sweeps=4, combine=True)
+                      max_E_err=1e-8, min_sweeps=4, combine=True, max_trunc_err=1.0)
         if eng is None:
             eng = dmrg.TwoSiteDMRGEngine(psi, M, params)
         else:

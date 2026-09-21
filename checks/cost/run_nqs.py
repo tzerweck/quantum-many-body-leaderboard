@@ -46,8 +46,9 @@ MODELS = {
     # it changes no number and the wall-clock includes whatever it costs.
     "rbm": dict(label="RBM (alpha = 1)", lr=0.01, diag_shift=0.01, use_ntk=False, chunk=16384),
     "rbmsymm": dict(label="RBM, translation-symmetric (alpha = 4)", lr=0.01, diag_shift=0.01, use_ntk=False, chunk=4096),
-    "gcnn": dict(label="GCNN (translations, 4 layers, 8 features)", lr=0.02, diag_shift=1e-4, use_ntk=True, chunk=1024),
-    "vit": dict(label="ViT (factored attention, 2x2 patches, d = 60, 4 layers, 10 heads)", lr=0.02, diag_shift=1e-4, use_ntk=True, chunk=1024),
+    # lr 0.02 with shift 1e-4 sent the GCNN on 10x10 from -104 to +22 in one step (smoke job).
+    "gcnn": dict(label="GCNN (translations, 4 layers, 8 features)", lr=0.01, diag_shift=1e-3, use_ntk=True, chunk=1024),
+    "vit": dict(label="ViT (factored attention, 2x2 patches, d = 60, 4 layers, 10 heads)", lr=0.01, diag_shift=1e-3, use_ntk=True, chunk=1024),
 }
 
 
@@ -76,7 +77,8 @@ def build_model(name, g):
         # NetKet's default initialisation, summed over the N translations, spreads the initial
         # log-amplitudes over hundreds of nats on 100 sites (step-0 variance 2e10 in the smoke
         # job, NaN at step 1); the kernel starts at 0.01 / sqrt(N) instead.
-        init = nk.nn.initializers.normal(stddev=0.01 / np.sqrt(g.n_nodes))
+        import jax
+        init = jax.nn.initializers.normal(stddev=0.01 / np.sqrt(g.n_nodes))
         return nk.models.RBMSymm(symmetries=g.translation_group(), alpha=4, param_dtype=complex, kernel_init=init, hidden_bias_init=init)
     if name == "gcnn":
         # Translations only: over the full space group (800 elements on 10x10) a step took

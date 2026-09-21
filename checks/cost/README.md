@@ -24,8 +24,8 @@ and the row says so in its method string. Nothing here is attached to anyone els
   fresh chains with 131072 samples (1024 chains, 64 discarded per chain); the row's energy,
   error bar, variance, autocorrelation time and R-hat are the final evaluation's. Stochastic
   reconfiguration with learning rate 0.01 and diagonal shift 0.01 where the Jacobian is
-  tall (RBM, symmetric RBM), minSR (`use_ntk`) with learning rate 0.02 and diagonal shift
-  1e-4 where it is wide (GCNN, ViT). One seed, 20260921. No annealing, no pre-training, no
+  tall (RBM, symmetric RBM), minSR (`use_ntk`) with learning rate 0.01 and diagonal shift
+  1e-3 where it is wide (GCNN, ViT; 0.02 and 1e-4 diverged on 10 x 10 in the smoke job). One seed, 20260921. No annealing, no pre-training, no
   symmetry restoration after the fact, no Lanczos step. The per-step energy trace and the
   final parameters are kept beside the results file.
 - **Ansätze.** `RBM (alpha = 1)`; translation-symmetric `RBM (alpha = 4)`, kernel

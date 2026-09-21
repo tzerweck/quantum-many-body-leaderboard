@@ -3,8 +3,9 @@ of the architecture of Viteritti, Rende & Becca (PRL 130, 236401, 2023) and Rend
 Viteritti (arXiv:2405.18874): an L x L spin configuration is cut into b x b patches, each
 linearly embedded in R^d; n_l pre-LayerNorm encoder layers whose attention weights are
 learned parameters of the relative patch displacement (no queries or keys) and whose MLP
-has a 4d hidden layer; the token sum z in R^d; and a complex hidden layer,
-log psi = sum_k log cosh(W z + c)_k with complex W and c.
+has a 4d hidden layer; the token sum z in R^d; and two real hidden layers of log cosh
+units, one for the log-amplitude and one for the phase, log psi = A(z) + i P(z), so that
+every parameter is real (NetKet's minSR takes all-real or all-complex, not a mixture).
 
 Not the authors' code, and no symmetrisation: a row produced with it says so.
 """
@@ -71,6 +72,6 @@ class ViT(nn.Module):
         for i in range(self.layers):
             x = EncoderLayer(n_x, n_y, self.heads, self.d, name=f"layer{i}")(x)
         z = nn.LayerNorm(name="final_norm")(x).sum(axis=-2)  # (..., d)
-        W = self.param("w_out", nn.initializers.normal(0.05, dtype=jnp.complex128), (self.d, self.d))
-        c = self.param("c_out", nn.initializers.zeros, (self.d,), jnp.complex128)
-        return nk.nn.log_cosh(z.astype(jnp.complex128) @ W + c).sum(axis=-1)
+        amp = nk.nn.log_cosh(nn.Dense(self.d, name="amplitude", kernel_init=nn.initializers.normal(0.05))(z)).sum(axis=-1)
+        phase = nk.nn.log_cosh(nn.Dense(self.d, name="phase", kernel_init=nn.initializers.normal(0.05))(z)).sum(axis=-1)
+        return amp + 1j * phase
