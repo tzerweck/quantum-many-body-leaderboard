@@ -26,6 +26,7 @@ for (const f of files) {
 
   if (res.schema === "qmbl-cost-run-1") {
     const { hardware: h, timing: t, train: tr, software: sw } = res;
+    if (!Number.isFinite(res.energy) || !Number.isFinite(res.sigma)) { console.log(`SKIP ${f}: energy ${res.energy} sigma ${res.sigma} (a run that diverged is not a row)`); continue; }
     const device = h.device_kind.replace(/^NVIDIA /, "NVIDIA ");
     const gpuHours = t.wall_seconds / 3600 * h.n_devices;
     const said = `energy ${res.energy} sigma ${res.sigma} energy_variance ${res.energy_variance} tau_corr ${res.tau_corr} r_hat ${res.r_hat} | ` +

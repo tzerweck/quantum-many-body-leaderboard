@@ -23,10 +23,14 @@ and the row says so in its method string. Nothing here is attached to anyone els
   per step, 16 discarded per chain, **2000 optimisation steps**, then a final evaluation on
   fresh chains with 131072 samples (1024 chains, 64 discarded per chain); the row's energy,
   error bar, variance, autocorrelation time and R-hat are the final evaluation's. Stochastic
-  reconfiguration with learning rate 0.01 and diagonal shift 0.01 where the Jacobian is
-  tall (RBM, symmetric RBM), minSR (`use_ntk`) with learning rate 0.01 and diagonal shift
-  1e-3 where it is wide (GCNN, ViT; 0.02 and 1e-4 diverged on 10 x 10 in the smoke job). One seed, 20260921. No annealing, no pre-training, no
-  symmetry restoration after the fact, no Lanczos step. The per-step energy trace and the
+  reconfiguration, learning rate 0.01, with a shift **relative** to the diagonal of the
+  geometric tensor, S + 1e-6 I + 0.01 diag S (an absolute shift is a per-model guess: the
+  log-derivatives of a translation-symmetric network are N times a dense network's, and
+  0.01 absolute sent the symmetric RBM and the GCNN on 10 x 10 to 1e37 in two steps in the
+  smoke jobs). Solved by Cholesky on the dense S up to 30000 parameters, by conjugate
+  gradients on the Jacobian (300 iterations at most) above; the row records which. One
+  seed, 20260921. No annealing, no pre-training, no symmetry restoration after the fact,
+  no Lanczos step. The per-step energy trace and the
   final parameters are kept beside the results file.
 - **Ansätze.** `RBM (alpha = 1)`; translation-symmetric `RBM (alpha = 4)`, kernel
   initialised at 0.01 / sqrt(N) (NetKet's default start is unsampleable on 100 sites);
