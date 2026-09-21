@@ -11,8 +11,8 @@ and the row says so in its method string. Nothing here is attached to anyone els
 
 ## Protocol (Tristan, 2026-09-21)
 
-- **Hardware.** One NVIDIA A100 80 GB PCIe on Euler (`gpupr` partitions, pinned by GPU
-  type) for the neural states; 8 CPU cores of the same cluster for DMRG. The device model,
+- **Hardware.** One NVIDIA A100 80 GB PCIe on Euler (`gpupr` partitions, pinned with
+  `--gres=gpumem:80g` and checked by the job script; the type request alone once landed on a 40 GB card) for the neural states; 8 CPU cores of the same cluster for DMRG. The device model,
   node, Slurm job id and software versions are in every results file.
 - **Clock.** Wall-clock from process start to the end of the final evaluation, measured in
   the process (`time.perf_counter`), JIT compilation and sampling included. `gpu_hours` is
@@ -28,9 +28,11 @@ and the row says so in its method string. Nothing here is attached to anyone els
   1e-4 where it is wide (GCNN, ViT). One seed, 20260921. No annealing, no pre-training, no
   symmetry restoration after the fact, no Lanczos step. The per-step energy trace and the
   final parameters are kept beside the results file.
-- **Ansätze.** `RBM (alpha = 1)`; translation-symmetric `RBM (alpha = 4)`; `GCNN` over the
-  space group, 4 layers, 6 features (NetKet's); a `ViT` with factored attention, 2 x 2
-  patches, d = 60, 10 heads, 4 layers, QMBL's own implementation of the published
+- **Ansätze.** `RBM (alpha = 1)`; translation-symmetric `RBM (alpha = 4)`, kernel
+  initialised at 0.01 / sqrt(N) (NetKet's default start is unsampleable on 100 sites);
+  NetKet's `GCNN` over the translation group, 4 layers, 8 features (the full space group
+  costs its 8x size squared per step, 78 h on 10 x 10); a `ViT` with factored attention,
+  2 x 2 patches, d = 60, 10 heads, 4 layers, QMBL's own implementation of the published
   architecture (`vit.py`).
 - **DMRG** (`run_dmrg.py`, TeNPy). Two-site DMRG on the torus as a finite MPS with
   long-range couplings, S_z conserved, mixer on, a ladder of maximum bond dimensions
@@ -47,9 +49,9 @@ and the row says so in its method string. Nothing here is attached to anyone els
 
 `scripts/add_cost_runs.mjs` reads `results/*.json` and appends one row per result (per
 rung for DMRG): `bound_type: variational`, `computed_by: "qmbl"`, `reference` naming this
-directory and the job, a `verified` block quoting the script's FINAL line, and a `compute`
+directory and the job, a `verified` block quoting the results file's values, and a `compute`
 block whose every field is measured (`scope: row`, `confidence: high`, `reported_as` the
-FINAL line). The row ranks like any other and can hold a record; a QMBL run beating every
+same values, `source` the results file, job and commit). The row ranks like any other and can hold a record; a QMBL run beating every
 published number would mean nobody has published a good number for that instance, the same
 reading RULES.md 8.2 gives a VarBench baseline.
 

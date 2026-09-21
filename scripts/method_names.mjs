@@ -363,7 +363,7 @@ const QMBL_RUN = ", QMBL cost-to-reproduce run";
 Object.assign(NAMES, {
   ["RBM (alpha = 1)" + QMBL_RUN]: ["RBM", "α = 1, QMBL run"],
   ["RBM, translation-symmetric (alpha = 4)" + QMBL_RUN]: ["RBM", "translation-symmetric, α = 4, QMBL run"],
-  ["GCNN (space group, 4 layers, 6 features)" + QMBL_RUN]: ["GCNN", "space group, 4 layers, 6 features, QMBL run", { family: "CNN / ResNet" }],
+  ["GCNN (translations, 4 layers, 8 features)" + QMBL_RUN]: ["GCNN", "translations, 4 layers, 8 features, QMBL run", { family: "CNN / ResNet" }],
   ["ViT (factored attention, 2x2 patches, d = 60, 4 layers, 10 heads)" + QMBL_RUN]: ["ViT", "factored attention, b = 2, d = 60, 4 layers, 10 heads, QMBL implementation"],
 });
 
