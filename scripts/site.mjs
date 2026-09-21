@@ -313,45 +313,39 @@ const tabRules = (id, count) => [...Array(count).keys()].map(k =>
 // pareto.mjs into figures/cost/. Which instances have one is read off the directory, which
 // pareto.mjs empties before writing, so the site never shows a figure for an instance that
 // has lost its costs. Frontier instances first, in their order, then the rest by id.
-const COST_FIGS = instances
-  .filter(inst => fs.existsSync(`figures/${costFigureName(inst)}.svg`))
-  .sort((a, b) => {
-    const rank = i => { const k = FRONTIER.findIndex(([id]) => id === i.instance_id); return k < 0 ? FRONTIER.length : k; };
-    return rank(a) - rank(b) || a.instance_id.localeCompare(b.instance_id);
-  });
+const byFrontier = (a, b) => {
+  const rank = i => { const k = FRONTIER.findIndex(([id]) => id === i.instance_id); return k < 0 ? FRONTIER.length : k; };
+  return rank(a) - rank(b) || a.instance_id.localeCompare(b.instance_id);
+};
+const COST_FIGS = instances.filter(inst => fs.existsSync(`figures/${costFigureName(inst)}.svg`)).sort(byFrontier);
 const costEntry = inst => [costFigureName(inst), `${modelName(inst.model)} ${instanceLabel(inst)}: the best energies at each cost`,
   "Every energy on this instance whose paper states its compute cost in hours, against that cost; the line is the frontier of results nothing beats for less."];
-
-// Front page: one badge per instance.
-function costSwitcher() {
-  if (!COST_FIGS.length) return "";
-  return `<section class="tabs" id="energy-vs-compute">
-  <h2>The best published energies, by cost</h2>
-  <p class="muted">What the published results on one instance cost in compute. Drawn for the few instances (${COST_FIGS.length}) which state their cost.</p>
-  ${tabs("cost-tab", COST_FIGS.map(inst => [`${esc(modelName(inst.model))} ${esc(instanceLabel(inst))}`, figure(costEntry(inst))]))}
-</section>`;
-}
 
 // The estimated-FLOPs figures (flops.mjs): the same construction on an estimate from the
 // parameter, sample and iteration counts a paper states, for the instances where two or
 // more rows state all three. Never on the hours axis: that would be the conversion DATA.md
 // forbids. Ordered like the cost figures.
-const FLOPS_FIGS = instances
-  .filter(inst => fs.existsSync(`figures/${flopsFigureName(inst)}.svg`))
-  .sort((a, b) => {
-    const rank = i => { const k = FRONTIER.findIndex(([id]) => id === i.instance_id); return k < 0 ? FRONTIER.length : k; };
-    return rank(a) - rank(b) || a.instance_id.localeCompare(b.instance_id);
-  });
+const FLOPS_FIGS = instances.filter(inst => fs.existsSync(`figures/${flopsFigureName(inst)}.svg`)).sort(byFrontier);
 const flopsEntry = inst => [flopsFigureName(inst), `${modelName(inst.model)} ${instanceLabel(inst)}: the best energies at each estimated cost in FLOPs`,
   "Every energy on this instance whose paper states its parameter, sample and iteration counts, against the floating-point operations those imply; the line is the frontier of results nothing beats for less."];
-function flopsSwitcher() {
-  if (!FLOPS_FIGS.length) return "";
-  return `<section class="tabs" id="energy-vs-flops">
-  <h2>The best published energies, by estimated FLOPs</h2>
-  <p class="muted">Most papers state no hours, but many state how many parameters, samples per step and steps an optimisation took. Those imply a count of floating-point
+
+// Front page: one section for both axes (Tristan, 2026-09-21, in place of a section per
+// axis). A badge per instance with a figure on either axis, and under it a badge per axis
+// the instance has, "stated hours" or "estimated FLOPs", so the reader always sees which
+// one is up; an instance with both gets two. The axes stay separate figures: the merge is
+// of the sections, never of the axes.
+const COMPUTE_FIGS = instances.filter(inst => COST_FIGS.includes(inst) || FLOPS_FIGS.includes(inst)).sort(byFrontier);
+const computeAxes = inst => [COST_FIGS.includes(inst) && ["stated hours", costEntry], FLOPS_FIGS.includes(inst) && ["estimated FLOPs", flopsEntry]].filter(Boolean);
+function computeSwitcher() {
+  if (!COMPUTE_FIGS.length) return "";
+  return `<section class="tabs" id="energy-vs-compute">
+  <h2>The best published energies, by cost</h2>
+  <p class="muted">What the published results on one instance cost in compute, on two axes. Hours are what a paper states, GPU or CPU, and few state them
+  (${COST_FIGS.length} instances). Many more state how many parameters, samples per step and steps an optimisation took; those imply a count of floating-point
   operations, estimated here (<a href="${DATA}#how-a-flop-count-is-estimated">how</a>) and good to an order of magnitude: the optimizer's solve, symmetry projections and pre-training
-  are not counted. Drawn for the ${FLOPS_FIGS.length} instances with two or more such rows. Nothing on this axis is a reported number, and it is never mixed with the hours above.</p>
-  ${tabs("flops-tab", FLOPS_FIGS.map(inst => [`${esc(modelName(inst.model))} ${esc(instanceLabel(inst))}`, figure(flopsEntry(inst))]))}
+  are not counted (${FLOPS_FIGS.length} instances). Nothing on the FLOPs axis is a reported number, and turning it into hours would take the conversion the data rules forbid,
+  so the two are never mixed: an instance with both shows them as two figures, a badge each.</p>
+  ${tabs("cost-tab", COMPUTE_FIGS.map((inst, j) => [`${esc(modelName(inst.model))} ${esc(instanceLabel(inst))}`, `<div class="tabs">${tabs(`cost-${j}`, computeAxes(inst).map(([label, entry]) => [label, figure(entry(inst))]))}</div>`]))}
 </section>`;
 }
 // The published energies of every Hamiltonian, drawn by size_energy.mjs into figures/energy/
@@ -409,7 +403,8 @@ function energySwitcher() {
 </section>`;
 }
 
-const TAB_CSS = [tabRules("cost-tab", COST_FIGS.length), tabRules("flops-tab", FLOPS_FIGS.length), tabRules("energy-group", ENERGY_FIGS.length),
+const TAB_CSS = [tabRules("cost-tab", COMPUTE_FIGS.length), ...COMPUTE_FIGS.map((inst, j) => tabRules(`cost-${j}`, computeAxes(inst).length)),
+  tabRules("energy-group", ENERGY_FIGS.length),
   ...ENERGY_FIGS.map(([, figs], j) => tabRules(`energy-${j}`, figs.length)), ...SLIDERS.map(sliderRules)].join("\n");
 
 // Leaderboard: the instance's cost figure above its rows, or how many of its energies state
@@ -574,7 +569,7 @@ function homePage() {
   const figures = [figure(overview), `<details class="fig-more">
   <summary>Look at the best published energies, by method family</summary>
 ${figure(byFamily)}
-</details>`, energySwitcher(), costSwitcher(), flopsSwitcher()].join("\n");
+</details>`, energySwitcher(), computeSwitcher()].join("\n");
   const linked = new Set([...[...figures.matchAll(/href="\/instances\/#(r-[\w-]+)"/g)].map(m => m[1]),
     ...[...figures.matchAll(/data-rows="([\w -]+)"/g)].flatMap(m => m[1].split(" "))]);
   const cards = instances.flatMap(inst => inst.rows.filter(r => linked.has(rowId(inst, r)))
@@ -1082,7 +1077,7 @@ function contributePage() {
   rows state at least one of these, which is what the <a href="/#energy-vs-compute">energy-versus-cost
   figure</a> is drawn from; yours can join them
   (<a href="${DATA}#what-a-number-cost-the-compute-block">the format is specified</a>). Parameter,
-  sample and iteration counts together let the site <a href="/#energy-vs-flops">estimate a FLOP count</a>
+  sample and iteration counts together let the site <a href="/#energy-vs-compute">estimate a FLOP count</a>
   where no hours were stated.</li>
 </ul>`;
   return page({ url: "/contribute/", title: "Contribute", body,
