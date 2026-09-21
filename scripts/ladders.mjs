@@ -172,8 +172,9 @@ const valueLabel = at => (typeof at === "number" ? String(Number(at.toPrecision(
 // sizes (Tristan, 2026-09-18: J2 = 0.35 at 36 sites belongs beside J2 = 0.3 and 0.4, not
 // under Other); where nothing in its facet has, it goes to the model's "other" figure, the
 // scan panels of what was published at one size. A figure without an axis is one facet per
-// ladder, each a single stop that its badge names, with no gaps between them; a figure of
-// one stop has no strip, the panel alone.
+// ladder, each a single stop, and has no strip: its panels are stacked, each under its
+// facet's label (Tristan, 2026-09-21: periodic over open, not a strip of two); nor has a
+// figure of one stop, the panel alone.
 export function energyFigures(instances) {
   const figs = [], single = [];
   for (const f of ladderFigures(instances)) {
@@ -196,15 +197,15 @@ export function energyFigures(instances) {
       }).sort((a, b) => (a.at ?? 0) - (b.at ?? 0));
       facets.push({ label, stops });
     }
-    // The strip's slots: the stops in facet order, an empty slot between facets where the
-    // figure has an axis and the facets are groups along it.
+    // The strip's slots: the stops in facet order, an empty slot between facets, which are
+    // groups along the axis.
     const stops = facets.flatMap(x => x.stops);
-    const total = stops.length + (axis ? facets.length - 1 : 0);
+    const total = stops.length + facets.length - 1, strip = axis && total > 1;
     let slot = 0;
-    facets.forEach((x, g) => { if (g && axis) slot++; for (const s of x.stops) s.x = stripX(slot++, total); });
+    facets.forEach((x, g) => { if (g) slot++; for (const s of x.stops) s.x = stripX(slot++, total); });
     const start = stops.indexOf(stops.reduce((best, s) => (s.energies > best.energies ? s : best), stops[0]));
     figs.push({ name, model: f.model, label: f.label, title: f.title, energies: f.energies, group: f.model, axis: axis && SCAN[axis].label, facets, stops, start,
-      strip: total > 1 ? `${name}--strip` : null, pitch: total > 1 ? stripX(1, total) - stripX(0, total) : null });
+      strip: strip ? `${name}--strip` : null, pitch: strip ? stripX(1, total) - stripX(0, total) : null });
   }
   const others = [...Map.groupBy(single, i => i.model)]
     .sort(([a], [b]) => MODELS.findIndex(([m]) => m === a) - MODELS.findIndex(([m]) => m === b))

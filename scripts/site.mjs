@@ -366,31 +366,30 @@ function flopsSwitcher() {
 // keys walk the stops and it works without the script; the strip's cursor for the chosen
 // stop is a group the stylesheet shows. The badges sit at the strip's x positions, in per
 // cent of its width, as the strip is drawn at 920 px and shown at whatever width the
-// column has; where the figure has an axis, its name stands before each group's badges.
-// With the script, the column of a stop in the strip selects it too, and the count mark
-// over a stop lists its energies as the overview figure's count marks do.
+// column has, and the axis's name stands before each group's badges. With the script, the
+// column of a stop in the strip selects it too, and the count mark over a stop lists its
+// energies as the overview figure's count marks do. A figure without an axis has no strip:
+// its panels are stacked, each under its facet's label (Tristan, 2026-09-21).
 const ENERGY_FIGS = [...Map.groupBy(energyFigures(instances)
   .filter(f => fs.existsSync(`figures/${f.group === "other" ? f.name : f.stops[0].name}.svg`)), f => f.group)];
 const otherEntry = f => [f.name, f.title, "Energies on Hamiltonians published at one size, with the coupling or filling that differs between them along x."];
 const stopEntry = (f, facet, s) => [s.name, [f.title, facet.label, f.axis && `${f.axis} = ${s.label}`].filter(Boolean).join(", "),
   "Energy against the number of sites; colour is the kind of number and the line joins the record at each size."];
-const stripEntry = f => [f.strip, `${f.title}: the record at each ${f.axis ? `${f.axis} and ` : ""}size`,
+const stripEntry = f => [f.strip, `${f.title}: the record at each ${f.axis} and size`,
   "One line per size, the larger the darker, and on each stop the number of energies it stands for; the marked stop is the one whose energies are shown below."];
 
 // Every slider on the page with its id, so that the HTML and the stylesheet agree.
 const SLIDERS = ENERGY_FIGS.flatMap(([group, figs], j) => (group === "other" ? [] : figs.map((f, k) => ({ id: `slide-${j}-${k}`, f }))));
 
 function slider({ id, f }) {
-  if (!f.strip) return figure(stopEntry(f, f.facets[0], f.stops[0]));
+  if (!f.strip) return `<div class="stack">${f.facets.flatMap(x => x.stops.map(s =>
+    (f.facets.length > 1 && x.label ? `<p class="facet">${esc(x.label)}</p>` : "") + figure(stopEntry(f, x, s)))).join("\n")}</div>`;
   // The pitch between stops as a share of the strip's width caps the badges, so that none
-  // touches its neighbour at any column width; a dense row staggers over two rows on a
-  // phone, and a row of long badges (the facet labels of a figure without an axis) may
-  // wrap onto a second line.
+  // touches its neighbour at any column width; a dense row staggers over two rows on a phone.
   const pct = x => (100 * x / W).toFixed(2);
-  const cls = f.stops.length > 10 ? " dense" : f.stops.some(s => s.label.length > 8) ? " wide" : "";
-  return `<div class="slider${cls}" style="--pitch:${pct(f.pitch)}%">${f.stops.map((s, k) => `<input type="radio" name="${id}" id="${id}-${k}"${k === f.start ? " checked" : ""}>`).join("")}
+  return `<div class="slider${f.stops.length > 10 ? " dense" : ""}" style="--pitch:${pct(f.pitch)}%">${f.stops.map((s, k) => `<input type="radio" name="${id}" id="${id}-${k}"${k === f.start ? " checked" : ""}>`).join("")}
 <div class="track">${figure(stripEntry(f), "strip")}
-${f.axis ? f.facets.map(x => `<span class="axis" style="left:${pct(x.stops[0].x - f.pitch / 2)}%">${esc(f.axis)} =</span>`).join("") : ""}${f.stops.map((s, k) => `<label for="${id}-${k}" style="left:${pct(s.x)}%">${esc(s.label)}</label>`).join("")}</div>
+${f.facets.map(x => `<span class="axis" style="left:${pct(x.stops[0].x - f.pitch / 2)}%">${esc(f.axis)} =</span>`).join("")}${f.stops.map((s, k) => `<label for="${id}-${k}" style="left:${pct(s.x)}%">${esc(s.label)}</label>`).join("")}</div>
 <div class="panels">${f.facets.flatMap(x => x.stops.map(s => figure(stopEntry(f, x, s)))).join("\n")}</div>
 </div>`;
 }
@@ -1387,6 +1386,8 @@ pre.ticks { font-family: var(--mono); font-size: clamp(7px, 1.6vw, 13px); line-h
 .tab-labels label:hover { border-color: var(--accent); color: var(--accent); }
 .tab-panels > * { display: none; }
 .tab-panels > .tabs > .tab-labels { margin-top: 0; }
+.stack > figure { margin-top: 0.6rem; }
+p.facet { margin: 1.4rem 0 0.2rem; font-size: 0.85rem; font-weight: 600; color: var(--ink2); }
 .slider { position: relative; max-width: 920px; }
 .slider > input { position: absolute; opacity: 0; width: 1px; height: 1px; }
 .slider .track { position: relative; padding-bottom: 2.5rem; }
@@ -1405,22 +1406,21 @@ pre.ticks { font-family: var(--mono); font-size: clamp(7px, 1.6vw, 13px); line-h
 .slider .track label:hover { border-color: var(--accent); color: var(--accent); }
 .slider .track .axis { transform: translateX(-100%); padding-right: 0.35rem; font-weight: 400; color: var(--muted); }
 .slider .panels > * { display: none; }
-/* The strip's hover states (size_energy.mjs): the size lines move apart over the strip, and a
-   stop's column is a hit area. */
-figure.strip .ex { transition: transform 0.3s ease; }
-figure.strip .exl { opacity: 0; transition: opacity 0.3s ease; }
-figure.strip:hover .ex { transform: translateY(var(--ex)); }
-figure.strip:hover .exl { opacity: var(--o); }
+/* The strip's hover states (size_energy.mjs): over a group its size lines move apart; over
+   a column of a dense group the stop's dots fan out; a column is a hit area. */
+figure.strip .ex, figure.strip .fd { transition: transform 0.3s ease; }
+figure.strip .exl, figure.strip .fl { opacity: 0; transition: opacity 0.3s ease; }
+figure.strip .grp:hover .ex { transform: translateY(var(--ex)); }
+figure.strip .grp:hover .exl { opacity: var(--o); }
+figure.strip .col:hover .fd { transform: translateY(var(--dy)); }
+figure.strip .col:hover .fl { opacity: var(--o); }
 figure.strip .hit { cursor: pointer; }
 .slider.dense .track label { width: calc(var(--pitch) - 0.3rem); padding-left: 0; padding-right: 0; }
-.slider.wide .track { padding-bottom: 3.8rem; }
-.slider.wide .track label { white-space: normal; }
 @media (max-width: 900px) { .slider.dense .track label { font-size: 0.72rem; } }
 @media (max-width: 640px) {
   .slider .track label { font-size: 0.7rem; }
   .slider .track .axis { display: none; }
   .slider.dense .track { padding-bottom: 4rem; }
-  .slider.wide .track { padding-bottom: 4.8rem; }
   .slider.dense .track label { width: calc(2 * var(--pitch) - 0.3rem); max-width: none; }
   .slider.dense .track label:nth-child(odd of label) { bottom: 1.6rem; }
 }
