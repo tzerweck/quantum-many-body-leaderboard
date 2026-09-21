@@ -43,7 +43,7 @@ for (const f of files) {
       verified: { checked_on: day, method: `${sw.script} (NetKet ${sw.netket}, jax ${sw.jax}) on ${h.n_devices} x ${h.device_kind}, protocol checks/cost/README.md`,
         reported_as: said,
         note: `Final evaluation on fresh chains: ${res.eval.samples} samples, ${res.eval.chains} chains, ${res.eval.discard_per_chain} discarded per chain; ` +
-          `tau_corr ${res.tau_corr.toFixed(2)}, R_hat ${res.r_hat.toFixed(3)}. Trained ${tr.steps} steps of ${tr.optimizer}, lr ${tr.lr}, diag_shift ${tr.diag_shift}, ` +
+          `tau_corr ${res.tau_corr.toFixed(2)}, R_hat ${res.r_hat.toFixed(3)}. Trained ${tr.steps} steps of ${tr.optimizer}, lr ${tr.lr}, ` +
           `${tr.n_samples} samples per step, ${tr.sampler}, seed ${tr.seed}. Per-step trace and final parameters beside the results file.`,
         secondary_of: null },
       compute: {
