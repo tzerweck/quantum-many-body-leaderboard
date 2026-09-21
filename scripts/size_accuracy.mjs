@@ -185,7 +185,7 @@ const XT = [10, 30, 100, 300, 1000].filter(v => v <= X1);
 const floored = all.filter(p => p.shown < FLOOR).length;
 const lifted = all.filter(p => p.shown > p.gap).length;
 const UNDER = `${under} ${under === 1 ? "row lies" : "rows lie"} below the exact energy by more than twice the error bar and ${under === 1 ? "is" : "are"} not drawn.`;
-const Y_LABEL = "relative gap to the instance's exact energy (better is lower)";
+const Y_LABEL = "relative gap to the instance's exact energy (lower is better)";
 // The largest size at which the overview draws a model other than Heisenberg or Hubbard
 // (Tristan, 2026-09-18: the subtitle says so, and points to the per-Hamiltonian figures).
 const LAST_OTHER = Math.max(...all.filter(p => !["Heisenberg", "Hubbard"].includes(p.inst.model)).map(p => p.inst.n_sites));
@@ -211,7 +211,7 @@ write("size-vs-accuracy", t => {
     "Hovering over a dot lists the result and clicking leads to the table entry and source.", bottom + EXACT_RISE + 58);
   parts.push(fn.svg);
   return doc(t, fn.bottom + 24, "The best published energies, by system size",
-    `Number of sites (x) against relative gap to the exact ground-state energy (y, log scale, better is lower) for ${all.length} published energies and ${exacts.length} exact energies on ${exactRef.length} exactly solved instances.`, parts);
+    `Number of sites (x) against relative gap to the exact ground-state energy (y, log scale, lower is better) for ${all.length} published energies and ${exacts.length} exact energies on ${exactRef.length} exactly solved instances.`, parts);
 });
 
 // ------------------------------------------------------------- 2. the same, by method family
