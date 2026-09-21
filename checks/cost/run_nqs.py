@@ -33,22 +33,27 @@ INSTANCES = {
     "Heisenberg/triangular_36_P": dict(model="Heisenberg", L=6, n_sites=36),
 }
 
-# One protocol for every ansatz (README.md): the same sampler, sample count, step count and
-# final evaluation. Only the optimizer differs by parameter count (SR where the Jacobian is
-# tall, minSR where it is wide), and that choice is recorded.
-PROTOCOL = dict(n_samples=4096, n_chains=1024, n_discard_per_chain=16, steps=2000,
+# One protocol for every ansatz (README.md): the same sampler, sample count, step count,
+# optimizer and final evaluation. Stochastic reconfiguration with a shift RELATIVE to the
+# diagonal of the quantum geometric tensor (S + 1e-6 I + 0.01 diag S): an absolute shift
+# is a per-model guess, since the log-derivatives of a translation-symmetric network are
+# N times those of a dense one, and 0.01 absolute sent the symmetric RBM and the GCNN on
+# 10x10 to 1e37 in two steps (smoke jobs). The linear system is solved by Cholesky where
+# the dense S fits (up to 30000 parameters) and by conjugate gradients on the Jacobian
+# otherwise; that choice is recorded on the row.
+PROTOCOL = dict(n_samples=4096, n_chains=1024, n_discard_per_chain=16, steps=2000, lr=0.01,
+                diag_shift=1e-6, diag_scale=0.01, dense_solver_max_params=30000, cg_maxiter=300,
                 eval_samples=131072, eval_chains=1024, eval_discard_per_chain=64, seed=20260921)
 
 MODELS = {
-    # name: label, optimizer choice, and the chunk of configurations the network sees at once.
-    # The chunk is memory management only (the local energy of 4096 samples on J1-J2 10x10 is
-    # 1.6 million configurations, and a symmetrised network expands each by the group);
-    # it changes no number and the wall-clock includes whatever it costs.
-    "rbm": dict(label="RBM (alpha = 1)", lr=0.01, diag_shift=0.01, use_ntk=False, chunk=16384),
-    "rbmsymm": dict(label="RBM, translation-symmetric (alpha = 4)", lr=0.01, diag_shift=0.01, use_ntk=False, chunk=4096),
-    # lr 0.02 with shift 1e-4 sent the GCNN on 10x10 from -104 to +22 in one step (smoke job).
-    "gcnn": dict(label="GCNN (translations, 4 layers, 8 features)", lr=0.01, diag_shift=1e-3, use_ntk=True, chunk=1024),
-    "vit": dict(label="ViT (factored attention, 2x2 patches, d = 60, 4 layers, 10 heads)", lr=0.01, diag_shift=1e-3, use_ntk=True, chunk=1024),
+    # name: label, and the chunk of configurations the network sees at once. The chunk is
+    # memory management only (the local energy of 4096 samples on J1-J2 10x10 is 1.6 million
+    # configurations, and a symmetrised network expands each by the group); it changes no
+    # number and the wall-clock includes whatever it costs.
+    "rbm": dict(label="RBM (alpha = 1)", chunk=16384),
+    "rbmsymm": dict(label="RBM, translation-symmetric (alpha = 4)", chunk=4096),
+    "gcnn": dict(label="GCNN (translations, 4 layers, 8 features)", chunk=1024),
+    "vit": dict(label="ViT (factored attention, 2x2 patches, d = 60, 4 layers, 10 heads)", chunk=1024),
 }
 
 
@@ -156,8 +161,15 @@ def main():
     n_params = count_params(vs)
     print(f"{args.model} on {args.instance}: {n_params} parameters, n_conn {n_conn}", flush=True)
 
-    opt = nk.optimizer.Sgd(learning_rate=m["lr"])
-    driver = nk.driver.VMC_SR(H, opt, variational_state=vs, diag_shift=m["diag_shift"], use_ntk=m["use_ntk"], chunk_size_bwd=m["chunk"])
+    import functools
+    opt = nk.optimizer.Sgd(learning_rate=PROTOCOL["lr"])
+    dense = n_params <= PROTOCOL["dense_solver_max_params"]
+    solver = nk.optimizer.solver.cholesky if dense else functools.partial(jax.scipy.sparse.linalg.cg, maxiter=PROTOCOL["cg_maxiter"])
+    sr = nk.optimizer.SR(qgt=nk.optimizer.qgt.QGTJacobianDense(chunk_size=m["chunk"]), solver=solver,
+                         diag_shift=PROTOCOL["diag_shift"], diag_scale=PROTOCOL["diag_scale"])
+    solve_desc = "Cholesky on the dense S" if dense else f"conjugate gradients, {PROTOCOL['cg_maxiter']} iterations max"
+    optimizer_desc = f"SR (QGTJacobianDense, {solve_desc}, diag_shift {PROTOCOL['diag_shift']}, diag_scale {PROTOCOL['diag_scale']})"
+    driver = nk.driver.VMC(H, opt, variational_state=vs, preconditioner=sr)
 
     out_dir = os.path.dirname(os.path.abspath(args.out))
     os.makedirs(out_dir, exist_ok=True)
@@ -207,7 +219,7 @@ def main():
         energy_per_site_SS=float(np.real(E.mean)) / (4 * n_sites),
         eval=dict(samples=int(args.eval_samples), chains=PROTOCOL["eval_chains"], discard_per_chain=PROTOCOL["eval_discard_per_chain"]),
         train=dict(steps=args.steps, n_samples=args.n_samples, n_chains=PROTOCOL["n_chains"], n_discard_per_chain=PROTOCOL["n_discard_per_chain"],
-                   optimizer="minSR (VMC_SR, use_ntk)" if m["use_ntk"] else "SR (VMC_SR)", lr=m["lr"], diag_shift=m["diag_shift"],
+                   optimizer=optimizer_desc, lr=PROTOCOL["lr"], diag_shift=PROTOCOL["diag_shift"], diag_scale=PROTOCOL["diag_scale"],
                    sampler="MetropolisExchange, d_max 2", seed=args.seed, chunk_size=m["chunk"]),
         parameters=n_params, n_conn=n_conn,
         timing=dict(wall_seconds=wall, wall_hms=hms(wall), setup_seconds=t_train0 - T_START, train_seconds=t_train1 - t_train0,
