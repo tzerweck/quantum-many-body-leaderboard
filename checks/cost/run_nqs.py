@@ -40,8 +40,11 @@ INSTANCES = {
 # N times those of a dense one, and 0.01 absolute sent the symmetric RBM and the GCNN on
 # 10x10 to 1e37 in two steps (smoke jobs). The linear system is solved by Cholesky where
 # the dense S fits (up to 30000 parameters) and by conjugate gradients on the Jacobian
-# otherwise; that choice is recorded on the row.
-PROTOCOL = dict(n_samples=4096, n_chains=1024, n_discard_per_chain=16, steps=2000, lr=0.01,
+# otherwise; that choice is recorded on the row. The learning rate ramps linearly from 0 to
+# its value over the first 200 steps: from a near-uniform start S is tiny and the first
+# natural-gradient step at the full rate threw the symmetric RBM on 10x10 to +147 and then
+# to NaN, while lr 0.001 descended cleanly (diagnostic job 14760484).
+PROTOCOL = dict(n_samples=4096, n_chains=1024, n_discard_per_chain=16, steps=2000, lr=0.01, warmup_steps=200,
                 diag_shift=1e-6, diag_scale=0.01, dense_solver_max_params=30000, cg_maxiter=300,
                 eval_samples=131072, eval_chains=1024, eval_discard_per_chain=64, seed=20260921)
 
@@ -162,7 +165,9 @@ def main():
     print(f"{args.model} on {args.instance}: {n_params} parameters, n_conn {n_conn}", flush=True)
 
     import functools
-    opt = nk.optimizer.Sgd(learning_rate=PROTOCOL["lr"])
+    import optax
+    lr = optax.linear_schedule(init_value=0.0, end_value=PROTOCOL["lr"], transition_steps=PROTOCOL["warmup_steps"])
+    opt = nk.optimizer.Sgd(learning_rate=lr)
     dense = n_params <= PROTOCOL["dense_solver_max_params"]
     solver = nk.optimizer.solver.cholesky if dense else functools.partial(jax.scipy.sparse.linalg.cg, maxiter=PROTOCOL["cg_maxiter"])
     sr = nk.optimizer.SR(qgt=nk.optimizer.qgt.QGTJacobianDense(chunk_size=m["chunk"]), solver=solver,
@@ -219,7 +224,7 @@ def main():
         energy_per_site_SS=float(np.real(E.mean)) / (4 * n_sites),
         eval=dict(samples=int(args.eval_samples), chains=PROTOCOL["eval_chains"], discard_per_chain=PROTOCOL["eval_discard_per_chain"]),
         train=dict(steps=args.steps, n_samples=args.n_samples, n_chains=PROTOCOL["n_chains"], n_discard_per_chain=PROTOCOL["n_discard_per_chain"],
-                   optimizer=optimizer_desc, lr=PROTOCOL["lr"], diag_shift=PROTOCOL["diag_shift"], diag_scale=PROTOCOL["diag_scale"],
+                   optimizer=optimizer_desc, lr=PROTOCOL["lr"], warmup_steps=PROTOCOL["warmup_steps"], diag_shift=PROTOCOL["diag_shift"], diag_scale=PROTOCOL["diag_scale"],
                    sampler="MetropolisExchange, d_max 2", seed=args.seed, chunk_size=m["chunk"]),
         parameters=n_params, n_conn=n_conn,
         timing=dict(wall_seconds=wall, wall_hms=hms(wall), setup_seconds=t_train0 - T_START, train_seconds=t_train1 - t_train0,

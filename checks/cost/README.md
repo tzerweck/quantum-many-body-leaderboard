@@ -28,8 +28,10 @@ and the row says so in its method string. Nothing here is attached to anyone els
   log-derivatives of a translation-symmetric network are N times a dense network's, and
   0.01 absolute sent the symmetric RBM and the GCNN on 10 x 10 to 1e37 in two steps in the
   smoke jobs). Solved by Cholesky on the dense S up to 30000 parameters, by conjugate
-  gradients on the Jacobian (300 iterations at most) above; the row records which. One
-  seed, 20260921. No annealing, no pre-training, no symmetry restoration after the fact,
+  gradients on the Jacobian (300 iterations at most) above; the row records which. The
+  learning rate ramps linearly from 0 over the first 200 steps (from a near-uniform start
+  the first full-rate natural-gradient step threw the symmetric RBM on 10 x 10 to NaN; at a
+  tenth of the rate it descended cleanly). One seed, 20260921. No annealing, no pre-training, no symmetry restoration after the fact,
   no Lanczos step. The per-step energy trace and the
   final parameters are kept beside the results file.
 - **Ansätze.** `RBM (alpha = 1)`; translation-symmetric `RBM (alpha = 4)`, kernel
