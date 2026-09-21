@@ -27,8 +27,9 @@ and the row says so in its method string. Nothing here is attached to anyone els
   geometric tensor, S + 1e-6 I + 0.01 diag S (an absolute shift is a per-model guess: the
   log-derivatives of a translation-symmetric network are N times a dense network's, and
   0.01 absolute sent the symmetric RBM and the GCNN on 10 x 10 to 1e37 in two steps in the
-  smoke jobs). Solved by Cholesky on the dense S up to 30000 parameters, by conjugate
-  gradients on the Jacobian (300 iterations at most) above; the row records which. The
+  smoke jobs). Solved by Cholesky on the dense S where there are no more real parameters than
+  samples, by conjugate gradients on the Jacobian (300 iterations at most) where there are
+  more (S is then rank-deficient and its dense form does not fit); the row records which. The
   learning rate ramps linearly from 0 over the first 200 steps (from a near-uniform start
   the first full-rate natural-gradient step threw the symmetric RBM on 10 x 10 to NaN; at a
   tenth of the rate it descended cleanly). One seed, 20260921. No annealing, no pre-training, no symmetry restoration after the fact,

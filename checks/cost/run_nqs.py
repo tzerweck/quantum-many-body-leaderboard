@@ -38,14 +38,16 @@ INSTANCES = {
 # diagonal of the quantum geometric tensor (S + 1e-6 I + 0.01 diag S): an absolute shift
 # is a per-model guess, since the log-derivatives of a translation-symmetric network are
 # N times those of a dense one, and 0.01 absolute sent the symmetric RBM and the GCNN on
-# 10x10 to 1e37 in two steps (smoke jobs). The linear system is solved by Cholesky where
-# the dense S fits (up to 30000 parameters) and by conjugate gradients on the Jacobian
-# otherwise; that choice is recorded on the row. The learning rate ramps linearly from 0 to
+# 10x10 to 1e37 in two steps (smoke jobs). The linear system is solved by Cholesky on the
+# dense S where there are no more real parameters than samples (a complex parameter counts
+# twice) and by conjugate gradients on the Jacobian otherwise, where S is rank-deficient
+# anyway and its dense form does not fit (the GCNN's 40064 x 40064 S asked for 24 GB);
+# that choice is recorded on the row. The learning rate ramps linearly from 0 to
 # its value over the first 200 steps: from a near-uniform start S is tiny and the first
 # natural-gradient step at the full rate threw the symmetric RBM on 10x10 to +147 and then
 # to NaN, while lr 0.001 descended cleanly (diagnostic job 14760484).
 PROTOCOL = dict(n_samples=4096, n_chains=1024, n_discard_per_chain=16, steps=2000, lr=0.01, warmup_steps=200,
-                diag_shift=1e-6, diag_scale=0.01, dense_solver_max_params=30000, cg_maxiter=300,
+                diag_shift=1e-6, diag_scale=0.01, cg_maxiter=300,
                 eval_samples=131072, eval_chains=1024, eval_discard_per_chain=64, seed=20260921)
 
 MODELS = {
@@ -101,6 +103,12 @@ def build_model(name, g):
 def count_params(vs):
     import jax
     return int(sum(x.size for x in jax.tree_util.tree_leaves(vs.parameters)))
+
+
+def count_real_params(vs):
+    import jax
+    import numpy as np
+    return int(sum(x.size * (2 if np.iscomplexobj(x) else 1) for x in jax.tree_util.tree_leaves(vs.parameters)))
 
 
 def git_commit(repo_dir):
@@ -168,7 +176,7 @@ def main():
     import optax
     lr = optax.linear_schedule(init_value=0.0, end_value=PROTOCOL["lr"], transition_steps=PROTOCOL["warmup_steps"])
     opt = nk.optimizer.Sgd(learning_rate=lr)
-    dense = n_params <= PROTOCOL["dense_solver_max_params"]
+    dense = count_real_params(vs) <= args.n_samples
     solver = nk.optimizer.solver.cholesky if dense else functools.partial(jax.scipy.sparse.linalg.cg, maxiter=PROTOCOL["cg_maxiter"])
     sr = nk.optimizer.SR(qgt=nk.optimizer.qgt.QGTJacobianDense(chunk_size=m["chunk"]), solver=solver,
                          diag_shift=PROTOCOL["diag_shift"], diag_scale=PROTOCOL["diag_scale"])
