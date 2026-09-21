@@ -136,13 +136,12 @@ function stopFigure(f, facet, s) {
 // lines move apart, up by EX per size rank, so that seven lines coinciding at this scale
 // read as seven (class `ex`, the shift in `--ex`; the size at each line's end `exl`) - only
 // that group, not the figure. A dense group (more stops than DENSE) does not move apart, its
-// lines being fragments that lose their dots; over a column of it the stop's dots fan out
-// instead, up or down from the count mark, whichever side has room, with the size beside
-// each (`fd` with `--dy`, the labels `fl`). The hit area (`hit`, with the stop's index)
-// selects the stop like its badge, and sits under the marks so that a count mark keeps the
-// pointer. Only theme colours, at varying opacity, so that dark mode recolours the strip
-// like any figure.
-const EX = 7, HEADROOM = 42, COUNT_R = 6.5, DENSE = 10, FAN = 12;
+// lines being fragments that lose their dots, and has no hover state (a fan of the stop's
+// sizes was tried and cut: unnecessary). The hit area (`hit`, with the stop's index) and
+// the count mark both select the stop like its badge; the hit area sits under the marks so
+// that a count mark keeps the pointer and its list. Only theme colours, at varying opacity,
+// so that dark mode recolours the strip like any figure.
+const EX = 7, HEADROOM = 42, COUNT_R = 6.5, DENSE = 10;
 function stripFigure(f) {
   write(f.strip, t => {
     const { left, right, top, bottom, labelY } = STRIP, { stops } = f;
@@ -181,17 +180,9 @@ function stripFigure(f) {
         if (!dense) inner.push(`<text class="ex exl" style="--ex:${-rank(N) * ex}px;--o:${shade(N)};font-variant-numeric:tabular-nums" x="${n(pts.at(-1).x + 7)}" y="${n(pts.at(-1).y + 3)}" font-size="7.5" fill="${t.ink2}">${N}</text>`);
       }
       for (const s of x.stops) {
-        const y = Y(markAt(s)), by = [...recs.get(s)].reverse();
-        // A dense column's fan: the largest size stays under the mark, the rest step away
-        // from it towards the side with more room, closer where the room is short.
-        const up = y - (labelY + 20) >= bottom - y, room = up ? y - (labelY + 20) : bottom - y;
-        const step = Math.min(FAN, by.length > 1 ? room / (by.length - 1) : FAN) * (up ? -1 : 1);
+        const y = Y(markAt(s));
         const col = [`<rect class="hit" data-stop="${k}" x="${n(s.x - f.pitch / 2)}" y="${labelY + 12}" width="${n(f.pitch)}" height="${n(bottom - labelY - 12)}" fill="transparent" pointer-events="all"/>`];
-        by.forEach((p, j) => {
-          const fan = dense ? ` class="fd" style="--dy:${n(y + j * step - Y(p.e))}px"` : shift(p.N);
-          col.push(`<circle${fan} cx="${n(s.x)}" cy="${n(Y(p.e))}" r="3.2" fill="${t.ink}" opacity="${shade(p.N)}"/>`);
-          if (dense) col.push(`<text class="fl" style="--o:${shade(p.N)};font-variant-numeric:tabular-nums" x="${n(s.x + 7)}" y="${n(y + j * step + 3)}" font-size="7.5" fill="${t.ink2}">${p.N}</text>`);
-        });
+        for (const p of recs.get(s)) col.push(`<circle${shift(p.N)} cx="${n(s.x)}" cy="${n(Y(p.e))}" r="3.2" fill="${t.ink}" opacity="${shade(p.N)}"/>`);
         const rows = s.ladder.members.flatMap(inst => drawnRows(inst).map(r => ({ inst, r })))
           .sort((a, b) => b.inst.n_sites - a.inst.n_sites || a.r.energy / perSite(a.inst) - b.r.energy / perSite(b.inst));
         const head = `${rows.length} energies at ${f.axis} = ${s.label}, largest size first`;

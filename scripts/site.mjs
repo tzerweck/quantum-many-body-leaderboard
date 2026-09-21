@@ -483,13 +483,14 @@ const cardSource = r => { const c = citeRef(r, cache); return esc(c.note ? `${c.
 // keeps the list open regardless, until a click elsewhere or Escape. Scrolling the page
 // closes whatever is open: the box is fixed and would part from its mark. A mark's
 // `data-head` replaces the list's heading (the strips' count marks, whose rows span sizes).
-// Clicking a stop's column in a strip (size_energy.mjs, `hit`) checks its radio, as its
-// badge does.
+// Clicking a stop's column in a strip, its count mark included (size_energy.mjs, `col`),
+// checks its radio, as its badge does; a strip's mark does not pin its list, which shows
+// while the pointer is on the mark (Tristan, 2026-09-21).
 const FIG_SCRIPT = `<script>
 (() => {
   document.addEventListener("click", e => {
-    const h = e.target.closest && e.target.closest("figure.strip .hit");
-    const r = h && h.closest(".slider").querySelectorAll(":scope > input")[+h.dataset.stop];
+    const c = e.target.closest && e.target.closest("figure.strip .col");
+    const r = c && c.closest(".slider").querySelectorAll(":scope > input")[+c.querySelector(".hit").dataset.stop];
     if (r) r.checked = true;
   });
   const cards = new Map([...document.getElementById("fig-cards").content.children].map(c => [c.dataset.row, c.innerHTML]));
@@ -554,6 +555,7 @@ const FIG_SCRIPT = `<script>
       const a = e.target.closest("a.pt[data-rows]");
       if (!a) return;
       e.preventDefault();
+      if (fig.classList.contains("strip")) return;
       stay(); unrest(); on = a; pinned = true;
       show(a, e, true);
     });
@@ -1406,14 +1408,12 @@ p.facet { margin: 1.4rem 0 0.2rem; font-size: 0.85rem; font-weight: 600; color: 
 .slider .track label:hover { border-color: var(--accent); color: var(--accent); }
 .slider .track .axis { transform: translateX(-100%); padding-right: 0.35rem; font-weight: 400; color: var(--muted); }
 .slider .panels > * { display: none; }
-/* The strip's hover states (size_energy.mjs): over a group its size lines move apart; over
-   a column of a dense group the stop's dots fan out; a column is a hit area. */
-figure.strip .ex, figure.strip .fd { transition: transform 0.3s ease; }
-figure.strip .exl, figure.strip .fl { opacity: 0; transition: opacity 0.3s ease; }
+/* The strip's hover state (size_energy.mjs): over a group its size lines move apart; a
+   stop's column is a hit area. */
+figure.strip .ex { transition: transform 0.3s ease; }
+figure.strip .exl { opacity: 0; transition: opacity 0.3s ease; }
 figure.strip .grp:hover .ex { transform: translateY(var(--ex)); }
 figure.strip .grp:hover .exl { opacity: var(--o); }
-figure.strip .col:hover .fd { transform: translateY(var(--dy)); }
-figure.strip .col:hover .fl { opacity: var(--o); }
 figure.strip .hit { cursor: pointer; }
 .slider.dense .track label { width: calc(var(--pitch) - 0.3rem); padding-left: 0; padding-right: 0; }
 @media (max-width: 900px) { .slider.dense .track label { font-size: 0.72rem; } }
