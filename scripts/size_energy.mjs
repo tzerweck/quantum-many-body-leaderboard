@@ -1,11 +1,12 @@
 // Generate figures/energy/*.svg, the front page's view of every Hamiltonian: the published
 // energies as they are, with no reference to measure them against (Tristan, 2026-09-17: the
 // direct view instead of the relative gap). The shape is ladders.mjs's, which the site reads
-// the same way: per model and lattice, facets of stops along an axis (J2, U, the filling),
-// each stop a figure of one panel, energy against sites; and per facet with two stops or
-// more a strip, the record at each stop and size, which the site puts above the panel as
-// the slider that picks the stop (Tristan, 2026-09-18: one panel at a time, chosen on the
-// coupling, instead of a stack of panels). Per model one "other" figure for the Hamiltonians
+// the same way: per model and lattice, stops along an axis (J2, U, the filling) grouped in
+// facets, each stop a figure of one panel, energy against sites; and per figure with two
+// stops or more one strip, the record at each stop and size, which the site puts above the
+// panel as the slider that picks the stop (Tristan, 2026-09-18: one panel at a time, chosen
+// on the coupling, instead of a stack of panels; 2026-09-21: one strip for the whole figure,
+// the facets as groups along it, instead of a strip per facet). Per model one "other" figure for the Hamiltonians
 // published at a single size that share no strip - every t-V instance is one of them - with
 // a panel per set that shares lattice, boundary and size, the coupling or filling that
 // varies along x.
@@ -18,8 +19,8 @@
 // inlines a figure whose panels have gone.
 import fs from "node:fs";
 import { recordEligible, perSiteDivisor, perSiteLabel } from "./units.mjs";
-import { collect, recordOf } from "./summary.mjs";
-import { energyFigures, drawnRows, STRIP, stripX } from "./ladders.mjs";
+import { collect, recordOf, rowId } from "./summary.mjs";
+import { energyFigures, drawnRows, STRIP } from "./ladders.mjs";
 import { W, PAD, n, text, hline, dot, slashed, legend, header, doc, textWidth, wrap, niceStep, writer, logScale, rowHref } from "./chart.mjs";
 
 const OUT = "figures";
@@ -123,30 +124,61 @@ function stopFigure(f, facet, s) {
   });
 }
 
-// A facet's strip: the record at each stop and size, one line per size, the larger the
-// darker. The cursor is a group per stop, hidden in the file and shown by the site's
-// stylesheet for the chosen one. Only theme colours, at varying opacity, so that dark mode
-// recolours the strip like any figure.
-function stripFigure(f, facet) {
-  write(facet.strip, t => {
-    const { left, right, top, bottom } = STRIP, stops = facet.stops;
-    const X = k => stripX(k, stops.length);
+// The figure's strip: the record at each stop and size, one line per size within each
+// facet, the larger the darker, and over each stop a count mark as size_accuracy.mjs draws
+// them, the number of energies the stop stands for inside, linking to them all for the
+// site's list (largest size first, lowest energy first at a size). The cursor is a group
+// per stop, hidden in the file and shown by the site's stylesheet for the chosen one. Two
+// hover states the site's stylesheet drives (Tristan, 2026-09-21): over the strip the size
+// lines move apart, up by EX per size rank, so that seven lines coinciding at this scale
+// read as seven (class `ex`, the shift in `--ex`; the size at each line's end `exl`); and
+// the column of each stop is a hit area (`hit`, with the stop's index) that selects the stop
+// like its badge, drawn under the marks so that a count mark keeps the pointer. Only theme
+// colours, at varying opacity, so that dark mode recolours the strip like any figure.
+const EX = 7, COUNT_R = 6.5;
+function stripFigure(f) {
+  write(f.strip, t => {
+    const { left, right, top, bottom, labelY } = STRIP, { stops } = f;
     const sizes = [...new Set(stops.flatMap(s => s.ladder.members.map(i => i.n_sites)))].sort((a, b) => a - b);
     const shade = N => n(sizes.length > 1 ? 0.25 + 0.75 * (sizes.indexOf(N) / (sizes.length - 1)) : 1);
-    const series = sizes.map(N => ({ N, pts: stops.flatMap((s, k) => {
+    const ex = N => `class="ex" style="--ex:${-(sizes.length - 1 - sizes.indexOf(N)) * EX}px"`;
+    const recs = new Map(stops.map(s => [s, sizes.flatMap(N => {
       const e = recordAt(s.ladder.members.filter(i => i.n_sites === N));
-      return Number.isFinite(e) ? [{ x: X(k), e }] : [];
-    }) }));
+      return Number.isFinite(e) ? [{ N, e }] : [];
+    })]));
+    // Where the count mark sits: on the record of the largest size, or, for a stop with
+    // no record at any size (rows that cannot hold one), on its lowest energy there.
+    const markAt = s => recs.get(s).at(-1)?.e ?? Math.min(...drawnRows(s.ladder.members.at(-1)).map(r => r.energy / perSite(s.ladder.members.at(-1))));
     const parts = [];
-    const es = series.flatMap(s => s.pts.map(p => p.e));
+    const es = [...[...recs.values()].flat().map(p => p.e), ...stops.map(markAt)];
     const Y = yAxis(t, parts, es.length ? es : [-1, 0], STRIP);
     parts.push(text(left - 6, 18, perSiteLabel(stops[0].ladder.members[0]), { size: 10, fill: t.muted, anchor: "end" }));
-    stops.forEach((s, k) => parts.push(`<g class="cur cur-${k}"><rect x="${n(X(k) - 9)}" y="${top}" width="18" height="${bottom - top}" rx="4" fill="${t.series[0]}" opacity="0.12"/>` +
-      `<path d="M${n(X(k))} ${top}V${bottom}" stroke="${t.series[0]}" stroke-width="1.5"/></g>`));
-    stops.forEach((s, k) => parts.push(`<path d="M${n(X(k))} ${n(bottom)}v5" stroke="${t.muted}" stroke-width="1"/>`));
-    for (const s of series) {
-      if (s.pts.length > 1) parts.push(`<path d="${s.pts.map((p, k) => `${k ? "L" : "M"}${n(p.x)} ${n(Y(p.e))}`).join("")}" fill="none" stroke="${t.ink}" stroke-width="1.5" stroke-linejoin="round" opacity="${n(0.8 * shade(s.N))}"/>`);
-      for (const p of s.pts) parts.push(`<circle cx="${n(p.x)}" cy="${n(Y(p.e))}" r="3.2" fill="${t.ink}" opacity="${shade(s.N)}"/>`);
+    stops.forEach((s, k) => parts.push(`<g class="cur cur-${k}"><rect x="${n(s.x - 9)}" y="${top}" width="18" height="${bottom - top}" rx="4" fill="${t.series[0]}" opacity="0.12"/>` +
+      `<path d="M${n(s.x)} ${top}V${bottom}" stroke="${t.series[0]}" stroke-width="1.5"/></g>`));
+    for (const s of stops) parts.push(`<path d="M${n(s.x)} ${n(bottom)}v5" stroke="${t.muted}" stroke-width="1"/>`);
+    // With an axis the facets are groups along it: each labelled over its stops, a hairline
+    // between neighbours. Without one each facet is a stop that its badge names.
+    if (f.axis) f.facets.forEach((x, g) => {
+      parts.push(text((x.stops[0].x + x.stops.at(-1).x) / 2, labelY, x.label, { size: 10.5, fill: t.ink2, anchor: "middle", weight: 600 }));
+      if (g) parts.push(`<path d="M${n((f.facets[g - 1].stops.at(-1).x + x.stops[0].x) / 2)} ${labelY + 8}V${bottom}" stroke="${t.grid}" stroke-width="1" stroke-dasharray="3 3"/>`);
+    });
+    stops.forEach((s, k) => parts.push(`<rect class="hit" data-stop="${k}" x="${n(s.x - f.pitch / 2)}" y="${labelY + 12}" width="${n(f.pitch)}" height="${n(bottom - labelY - 12)}" fill="transparent" pointer-events="all"/>`));
+    for (const x of f.facets) for (const N of sizes) {
+      const pts = x.stops.flatMap(s => { const p = recs.get(s).find(p => p.N === N); return p ? [{ x: s.x, y: Y(p.e) }] : []; });
+      if (!pts.length) continue;
+      if (pts.length > 1) parts.push(`<path ${ex(N)} d="${pts.map((p, k) => `${k ? "L" : "M"}${n(p.x)} ${n(p.y)}`).join("")}" fill="none" stroke="${t.ink}" stroke-width="1.5" stroke-linejoin="round" opacity="${n(0.8 * shade(N))}"/>`);
+      const last = pts.at(-1);
+      parts.push(`<text class="ex exl" style="--ex:${-(sizes.length - 1 - sizes.indexOf(N)) * EX}px;--o:${shade(N)};font-variant-numeric:tabular-nums" x="${n(last.x + 7)}" y="${n(last.y + 3)}" font-size="7.5" fill="${t.ink2}">${N}</text>`);
+    }
+    for (const s of stops) for (const p of recs.get(s)) parts.push(`<circle ${ex(p.N)} cx="${n(s.x)}" cy="${n(Y(p.e))}" r="3.2" fill="${t.ink}" opacity="${shade(p.N)}"/>`);
+    for (const s of stops) {
+      const rows = s.ladder.members.flatMap(inst => drawnRows(inst).map(r => ({ inst, r })))
+        .sort((a, b) => b.inst.n_sites - a.inst.n_sites || a.r.energy / perSite(a.inst) - b.r.energy / perSite(b.inst));
+      const y = Y(markAt(s));
+      const head = `${rows.length} energies at ${f.axis ? `${f.axis} = ` : ""}${s.label}, largest size first`;
+      parts.push(`<a class="pt" data-rows="${rows.map(p => rowId(p.inst, p.r)).join(" ")}" data-head="${head}" href="${rowHref(rows[0].inst, rows[0].r)}">` +
+        `<circle cx="${n(s.x)}" cy="${n(y)}" r="${COUNT_R + 1.5}" fill="${t.surface}"/><circle cx="${n(s.x)}" cy="${n(y)}" r="${COUNT_R}" fill="${t.ink}"/>` +
+        `<text x="${n(s.x)}" y="${n(y + 3)}" font-size="8.5" font-weight="600" fill="${t.surface}" text-anchor="middle" style="font-variant-numeric:tabular-nums">${rows.length}</text></a>`);
     }
     let lx = right;
     for (const N of [...sizes].reverse()) {
@@ -154,18 +186,16 @@ function stripFigure(f, facet) {
       parts.push(`<circle cx="${n(lx + 4)}" cy="14" r="3.2" fill="${t.ink}" opacity="${shade(N)}"/>`, text(lx + 11, 18, String(N), { size: 10, fill: t.ink2, nums: true }));
     }
     parts.push(text(lx - 6, 18, "record at each size:", { size: 10, fill: t.muted, anchor: "end" }));
-    parts.push(text(right, bottom + 16, f.axis, { size: 10.5, fill: t.ink2, anchor: "end" }));
-    const title = `${[f.title, facet.label].filter(Boolean).join(", ")}: the record at each ${f.axis} and size`;
-    return doc(t, bottom + 24, title, stops.map(s => `${f.axis} = ${s.label}`).join(", "), parts);
+    if (f.axis) parts.push(text(right, bottom + 16, f.axis, { size: 10.5, fill: t.ink2, anchor: "end" }));
+    const title = `${f.title}: the record at each ${f.axis ? `${f.axis} and ` : ""}size`;
+    return doc(t, bottom + 24, title, stops.map(s => (f.axis ? `${f.axis} = ` : "") + s.label).join(", "), parts);
   });
 }
 
 for (const f of figures) {
   if (f.group !== "other") {
-    for (const facet of f.facets) {
-      if (facet.strip) stripFigure(f, facet);
-      for (const s of facet.stops) stopFigure(f, facet, s);
-    }
+    if (f.strip) stripFigure(f);
+    for (const facet of f.facets) for (const s of facet.stops) stopFigure(f, facet, s);
     continue;
   }
   // The "other" figure: the varying quantity along x, evenly spaced. Title alone, no footnote
@@ -183,7 +213,7 @@ for (const f of figures) {
 }
 
 const sliders = figures.filter(f => f.group !== "other");
-const strips = sliders.reduce((a, f) => a + f.facets.filter(x => x.strip).length, 0);
-const stops = sliders.reduce((a, f) => a + f.facets.reduce((b, x) => b + x.stops.length, 0), 0);
+const strips = sliders.filter(f => f.strip).length;
+const stops = sliders.reduce((a, f) => a + f.stops.length, 0);
 console.log(`${DIR}/: ${written.length} files (${sliders.length} figures with ${strips} strips and ${stops} stops; ` +
   `${figures.length - sliders.length} other figures with ${figures.reduce((a, f) => a + (f.scans?.length ?? 0), 0)} panels)`);

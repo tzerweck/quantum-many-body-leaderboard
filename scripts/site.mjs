@@ -29,7 +29,7 @@ import { logoSvg, faviconSvg, LOGO_CSS } from "./logo.mjs";
 import { hoursOf, costFigureName, flopsFigureName } from "./cost.mjs";
 import { flopsOf } from "./flops.mjs";
 import { FRONTIER } from "./views.mjs";
-import { energyFigures, stripX } from "./ladders.mjs";
+import { energyFigures } from "./ladders.mjs";
 
 const OUT = "_site";
 const REPO = "https://github.com/tzerweck/quantum-many-body-leaderboard";
@@ -354,42 +354,46 @@ function flopsSwitcher() {
 </section>`;
 }
 // The published energies of every Hamiltonian, drawn by size_energy.mjs into figures/energy/
-// in the shape ladders.mjs gives them: per model and lattice a figure of facets, each a strip
-// and its stops; per model an "other" figure for what was published at one size and shares
-// no strip. Which exist is read off the directory, as for the cost figures. Two rows of
-// badges, the model (and Other) and then the lattice; under them each facet as a slider
-// (Tristan, 2026-09-18, in place of a stack of panels): the strip is the record at each stop
-// and size, a badge under each stop picks its panel, and the stop with most energies is the
-// one shown first. Radio inputs, as the badges are, so the arrow keys walk the stops and it
-// works without the script; the strip's cursor for the chosen stop is a group the stylesheet
-// shows. The badges sit at the strip's x positions, in per cent of its width, as the strip
-// is drawn at 920 px and shown at whatever width the column has.
+// in the shape ladders.mjs gives them: per model and lattice a figure, one strip and its
+// stops; per model an "other" figure for what was published at one size and shares no
+// strip. Which exist is read off the directory, as for the cost figures. Two rows of
+// badges, the model (and Other) and then the lattice; under them the figure as a slider
+// (Tristan, 2026-09-18, in place of a stack of panels; 2026-09-21, one slider per figure
+// with the facets as groups along its strip, in place of a slider per facet): the strip is
+// the record at each stop and size, a badge under each stop picks its panel, and the stop
+// with most energies is the one shown first. Radio inputs, as the badges are, so the arrow
+// keys walk the stops and it works without the script; the strip's cursor for the chosen
+// stop is a group the stylesheet shows. The badges sit at the strip's x positions, in per
+// cent of its width, as the strip is drawn at 920 px and shown at whatever width the
+// column has; where the figure has an axis, its name stands before each group's badges.
+// With the script, the column of a stop in the strip selects it too, and the count mark
+// over a stop lists its energies as the overview figure's count marks do.
 const ENERGY_FIGS = [...Map.groupBy(energyFigures(instances)
-  .filter(f => fs.existsSync(`figures/${f.group === "other" ? f.name : f.facets[0].stops[0].name}.svg`)), f => f.group)];
+  .filter(f => fs.existsSync(`figures/${f.group === "other" ? f.name : f.stops[0].name}.svg`)), f => f.group)];
 const otherEntry = f => [f.name, f.title, "Energies on Hamiltonians published at one size, with the coupling or filling that differs between them along x."];
 const stopEntry = (f, facet, s) => [s.name, [f.title, facet.label, f.axis && `${f.axis} = ${s.label}`].filter(Boolean).join(", "),
   "Energy against the number of sites; colour is the kind of number and the line joins the record at each size."];
-const stripEntry = (f, facet) => [facet.strip, `${[f.title, facet.label].filter(Boolean).join(", ")}: the record at each ${f.axis} and size`,
-  "One line per size, the larger the darker; the marked stop is the one whose energies are shown below."];
+const stripEntry = f => [f.strip, `${f.title}: the record at each ${f.axis ? `${f.axis} and ` : ""}size`,
+  "One line per size, the larger the darker, and on each stop the number of energies it stands for; the marked stop is the one whose energies are shown below."];
 
 // Every slider on the page with its id, so that the HTML and the stylesheet agree.
-const SLIDERS = ENERGY_FIGS.flatMap(([group, figs], j) => (group === "other" ? [] : figs.flatMap((f, k) =>
-  f.facets.map((facet, g) => ({ id: `slide-${j}-${k}-${g}`, f, facet })))));
+const SLIDERS = ENERGY_FIGS.flatMap(([group, figs], j) => (group === "other" ? [] : figs.map((f, k) => ({ id: `slide-${j}-${k}`, f }))));
 
-function slider({ id, f, facet }) {
-  const heading = f.facets.length > 1 && facet.label ? `<p class="facet">${esc(facet.label)}</p>` : "";
-  if (!facet.strip) return heading + figure(stopEntry(f, facet, facet.stops[0]));
-  const stops = facet.stops;
-  // The pitch between stops as a share of the strip's width sizes the badges, so that none
-  // touches its neighbour at any column width; a dense row staggers over two rows on a phone.
-  const pitch = (100 * (stripX(1, stops.length) - stripX(0, stops.length)) / W).toFixed(3);
-  return `<div class="slider${stops.length > 10 ? " dense" : ""}" style="--pitch:${pitch}%">${stops.map((s, k) => `<input type="radio" name="${id}" id="${id}-${k}"${k === facet.start ? " checked" : ""}>`).join("")}
-${heading}<div class="track">${figure(stripEntry(f, facet), "strip")}
-${stops.map((s, k) => `<label for="${id}-${k}" style="left:${(100 * stripX(k, stops.length) / W).toFixed(2)}%"><b>${esc(s.label)}</b><small>${s.energies}</small></label>`).join("")}</div>
-<div class="panels">${stops.map(s => figure(stopEntry(f, facet, s))).join("\n")}</div>
+function slider({ id, f }) {
+  if (!f.strip) return figure(stopEntry(f, f.facets[0], f.stops[0]));
+  // The pitch between stops as a share of the strip's width caps the badges, so that none
+  // touches its neighbour at any column width; a dense row staggers over two rows on a
+  // phone, and a row of long badges (the facet labels of a figure without an axis) may
+  // wrap onto a second line.
+  const pct = x => (100 * x / W).toFixed(2);
+  const cls = f.stops.length > 10 ? " dense" : f.stops.some(s => s.label.length > 8) ? " wide" : "";
+  return `<div class="slider${cls}" style="--pitch:${pct(f.pitch)}%">${f.stops.map((s, k) => `<input type="radio" name="${id}" id="${id}-${k}"${k === f.start ? " checked" : ""}>`).join("")}
+<div class="track">${figure(stripEntry(f), "strip")}
+${f.axis ? f.facets.map(x => `<span class="axis" style="left:${pct(x.stops[0].x - f.pitch / 2)}%">${esc(f.axis)} =</span>`).join("") : ""}${f.stops.map((s, k) => `<label for="${id}-${k}" style="left:${pct(s.x)}%">${esc(s.label)}</label>`).join("")}</div>
+<div class="panels">${f.facets.flatMap(x => x.stops.map(s => figure(stopEntry(f, x, s)))).join("\n")}</div>
 </div>`;
 }
-const sliderRules = ({ id, facet }) => (facet.strip ? facet.stops.map((s, k) =>
+const sliderRules = ({ id, f }) => (f.strip ? f.stops.map((s, k) =>
   `#${id}-${k}:checked ~ .panels > :nth-child(${k + 1}) { display: block; }
 #${id}-${k}:checked ~ .track .cur-${k} { display: inline; }
 #${id}-${k}:checked ~ .track label[for="${id}-${k}"] { color: #fff; background: var(--accent); border-color: var(--accent); }
@@ -401,7 +405,7 @@ function energySwitcher() {
   <h2>The published energies, by Hamiltonian</h2>
   ${tabs("energy-group", ENERGY_FIGS.map(([group, figs], j) =>
     [group === "other" ? "Other" : esc(modelName(group)), `<div class="tabs">${tabs(`energy-${j}`, figs.map(f =>
-      [esc(f.label), group === "other" ? figure(otherEntry(f)) : `<div class="facets">${SLIDERS.filter(s => s.f === f).map(slider).join("\n")}</div>`]))}</div>`]))}
+      [esc(f.label), group === "other" ? figure(otherEntry(f)) : slider(SLIDERS.find(s => s.f === f))]))}</div>`]))}
 </section>`;
 }
 
@@ -477,9 +481,17 @@ const cardSource = r => { const c = citeRef(r, cache); return esc(c.note ? `${c.
 // both mark and list, a moment that a return to either cancels, and a mark the pointer
 // passes over on the way takes over only if the pointer rests on it. Clicking the mark
 // keeps the list open regardless, until a click elsewhere or Escape. Scrolling the page
-// closes whatever is open: the box is fixed and would part from its mark.
+// closes whatever is open: the box is fixed and would part from its mark. A mark's
+// `data-head` replaces the list's heading (the strips' count marks, whose rows span sizes).
+// Clicking a stop's column in a strip (size_energy.mjs, `hit`) checks its radio, as its
+// badge does.
 const FIG_SCRIPT = `<script>
 (() => {
+  document.addEventListener("click", e => {
+    const h = e.target.closest && e.target.closest("figure.strip .hit");
+    const r = h && h.closest(".slider").querySelectorAll(":scope > input")[+h.dataset.stop];
+    if (r) r.checked = true;
+  });
   const cards = new Map([...document.getElementById("fig-cards").content.children].map(c => [c.dataset.row, c.innerHTML]));
   const tip = document.createElement("div");
   tip.id = "fig-tip"; tip.hidden = true; tip.setAttribute("role", "tooltip");
@@ -514,7 +526,7 @@ const FIG_SCRIPT = `<script>
     list = rows.length > 1;
     tip.innerHTML = !list
       ? cards.get(rows[0]) + '<span class="go">Click to open this row in the table</span>'
-      : '<b class="count">' + rows.length + ' rows at this point, best first</b><div class="list">' +
+      : '<b class="count">' + (a.dataset.head || rows.length + ' rows at this point, best first') + '</b><div class="list">' +
         rows.map(r => '<a class="card" href="/instances/#' + r + '">' + cards.get(r) + "</a>").join("") +
         '</div><span class="go">' + (pin ? "Click a row to open it in the table; Escape closes the list" : "Click a row to open it in the table, or the mark to keep the list open") + "</span>";
     tip.classList.toggle("list", list);
@@ -1374,28 +1386,41 @@ pre.ticks { font-family: var(--mono); font-size: clamp(7px, 1.6vw, 13px); line-h
 .tab-labels label:hover { border-color: var(--accent); color: var(--accent); }
 .tab-panels > * { display: none; }
 .tab-panels > .tabs > .tab-labels { margin-top: 0; }
-.facets > figure { margin-top: 0.6rem; }
-p.facet { margin: 1.4rem 0 0.2rem; font-size: 0.85rem; font-weight: 600; color: var(--ink2); }
 .slider { position: relative; max-width: 920px; }
 .slider > input { position: absolute; opacity: 0; width: 1px; height: 1px; }
 .slider .track { position: relative; padding-bottom: 2.5rem; }
-.slider .track figure, .slider .panels figure { margin: 0.6rem 0 0; }
+.slider .track figure { margin: 0.6rem 0 0; }
+.slider .panels { margin-top: 1.4rem; }
+.slider .panels figure { margin: 0; }
 .slider .track .cur { display: none; }
-.slider .track label {
-  position: absolute; bottom: 0; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center;
-  box-sizing: border-box; width: calc(var(--pitch) - 0.3rem); max-width: 4rem; padding: 0.1rem 0; white-space: nowrap;
-  line-height: 1.15; font-size: 0.8rem; cursor: pointer;
-  color: var(--ink2); background: var(--surface); border: 1px solid var(--grid); border-radius: 999px;
+.slider .track label, .slider .track .axis {
+  position: absolute; bottom: 0; box-sizing: border-box; padding: 0.15rem 0.5rem; white-space: nowrap;
+  line-height: 1.2; font-size: 0.8rem; font-weight: 600; border: 1px solid transparent;
 }
-.slider .track label small { font-size: 0.65rem; color: inherit; opacity: 0.7; }
+.slider .track label {
+  transform: translateX(-50%); max-width: calc(var(--pitch) - 0.3rem); overflow: hidden; text-overflow: ellipsis; text-align: center; cursor: pointer;
+  color: var(--ink2); background: var(--surface); border-color: var(--grid); border-radius: 999px;
+}
 .slider .track label:hover { border-color: var(--accent); color: var(--accent); }
+.slider .track .axis { transform: translateX(-100%); padding-right: 0.35rem; font-weight: 400; color: var(--muted); }
 .slider .panels > * { display: none; }
+/* The strip's hover states (size_energy.mjs): the size lines move apart over the strip, and a
+   stop's column is a hit area. */
+figure.strip .ex { transition: transform 0.3s ease; }
+figure.strip .exl { opacity: 0; transition: opacity 0.3s ease; }
+figure.strip:hover .ex { transform: translateY(var(--ex)); }
+figure.strip:hover .exl { opacity: var(--o); }
+figure.strip .hit { cursor: pointer; }
+.slider.dense .track label { width: calc(var(--pitch) - 0.3rem); padding-left: 0; padding-right: 0; }
+.slider.wide .track { padding-bottom: 3.8rem; }
+.slider.wide .track label { white-space: normal; }
 @media (max-width: 900px) { .slider.dense .track label { font-size: 0.72rem; } }
 @media (max-width: 640px) {
   .slider .track label { font-size: 0.7rem; }
-  .slider .track label small { display: none; }
+  .slider .track .axis { display: none; }
   .slider.dense .track { padding-bottom: 4rem; }
-  .slider.dense .track label { width: calc(2 * var(--pitch) - 0.3rem); }
+  .slider.wide .track { padding-bottom: 4.8rem; }
+  .slider.dense .track label { width: calc(2 * var(--pitch) - 0.3rem); max-width: none; }
   .slider.dense .track label:nth-child(odd of label) { bottom: 1.6rem; }
 }
 ${TAB_CSS}
