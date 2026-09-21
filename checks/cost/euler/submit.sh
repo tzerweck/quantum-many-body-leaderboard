@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# Submit the first batch of QMBL cost-to-reproduce runs on Euler (README.md, protocol of
+# 2026-09-21). Run ON EULER from ~/agent-runs/qmbl-cost after `sync.sh` copied this directory:
+#     bash euler/submit.sh [nqs|dmrg|all] [--dry]
+# Every job writes to $SCRATCH/agent-runs/qmbl-cost/<job-name>/ and copies its results JSON,
+# trace and parameters into ~/agent-runs/qmbl-cost/results/ when done.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+what="${1:-all}"; dry="${2:-}"
+HERE="$PWD"
+SCR="/cluster/scratch/$USER/agent-runs/qmbl-cost"
+mkdir -p "$SCR" "$HERE/results" "$HERE/euler/logs"
+COMMIT="$(cat "$HERE/COMMIT" 2>/dev/null || echo unknown)"
+
+# name  instance  model  partition  time
+NQS_JOBS=(
+  "rbm-j1j2-100      J1J2/square_100_P_0.5       rbm      gpupr.4h   04:00:00"
+  "rbm-tri-36        Heisenberg/triangular_36_P  rbm      gpupr.4h   04:00:00"
+  "rbmsymm-j1j2-100  J1J2/square_100_P_0.5       rbmsymm  gpupr.4h   04:00:00"
+  "rbmsymm-tri-36    Heisenberg/triangular_36_P  rbmsymm  gpupr.4h   04:00:00"
+  "gcnn-j1j2-100     J1J2/square_100_P_0.5       gcnn     gpupr.24h  24:00:00"
+  "gcnn-tri-36       Heisenberg/triangular_36_P  gcnn     gpupr.24h  24:00:00"
+  "vit-j1j2-100      J1J2/square_100_P_0.5       vit      gpupr.24h  24:00:00"
+  "vit-tri-36        Heisenberg/triangular_36_P  vit      gpupr.24h  24:00:00"
+)
+DMRG_JOBS=(
+  "dmrg-j1j2-100     J1J2/square_100_P_0.5       24:00:00"
+  "dmrg-tri-36       Heisenberg/triangular_36_P  24:00:00"
+)
+
+submit() {  # file
+  if [ -n "$dry" ]; then echo "--- $1"; cat "$1"; else sbatch "$1"; fi
+}
+
+if [ "$what" = nqs ] || [ "$what" = all ]; then
+for spec in "${NQS_JOBS[@]}"; do
+  read -r name inst model part tlim <<<"$spec"
+  f="$HERE/euler/$name.sbatch"
+  cat > "$f" <<SB
+#!/bin/bash
+#SBATCH --job-name=qmbl-cost-$name
+#SBATCH --partition=$part
+#SBATCH --time=$tlim
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --mem-per-cpu=8G
+#SBATCH --gpus=nvidia_a100_80gb_pcie:1
+#SBATCH --output=$HERE/euler/logs/%x-%j.out
+#SBATCH --error=$HERE/euler/logs/%x-%j.err
+set -euo pipefail
+source "\$HOME/agent-runs/env-jax.sh"
+export QMBL_COMMIT="$COMMIT" JAX_ENABLE_X64=1
+OUT="$SCR/$name"; mkdir -p "\$OUT"
+nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
+cd "$HERE"
+python run_nqs.py --instance "$inst" --model "$model" --out "\$OUT/$name.json"
+cp "\$OUT/$name.json" "\$OUT/$name.trace.jsonl" "\$OUT/$name.params.msgpack" "$HERE/results/"
+echo "DONE $name \$(date -u +%FT%TZ)"
+SB
+  submit "$f"
+done
+fi
+
+if [ "$what" = dmrg ] || [ "$what" = all ]; then
+for spec in "${DMRG_JOBS[@]}"; do
+  read -r name inst tlim <<<"$spec"
+  f="$HERE/euler/$name.sbatch"
+  cat > "$f" <<SB
+#!/bin/bash
+#SBATCH --job-name=qmbl-cost-$name
+#SBATCH --partition=hpc.24h
+#SBATCH --time=$tlim
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --mem-per-cpu=8G
+#SBATCH --output=$HERE/euler/logs/%x-%j.out
+#SBATCH --error=$HERE/euler/logs/%x-%j.err
+set -euo pipefail
+source "\$HOME/agent-runs/env-jax.sh"
+export QMBL_COMMIT="$COMMIT" OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 OPENBLAS_NUM_THREADS=8
+OUT="$SCR/$name"; mkdir -p "\$OUT"
+cd "$HERE"
+python run_dmrg.py --instance "$inst" --chi 500 1000 2000 --out "\$OUT/$name.json"
+cp "\$OUT/$name.json" "$HERE/results/"
+echo "DONE $name \$(date -u +%FT%TZ)"
+SB
+  submit "$f"
+done
+fi
