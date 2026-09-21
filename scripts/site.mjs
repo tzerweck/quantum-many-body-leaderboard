@@ -907,6 +907,7 @@ function rowTable(rows, inst) {
     const badges = [
       r.defect ? flagBadge(r) : "",
       r.baseline ? '<span class="badge">VarBench reference run</span>' : "",
+      r.computed_by === "qmbl" ? '<span class="badge">QMBL run</span>' : "",
       r.provenance === "secondary" ? '<span class="badge">quoted from another paper</span>' : "",
       r.peer_reviewed === true ? '<span class="badge">peer reviewed</span>' : "",
       r.peer_reviewed === false ? '<span class="badge">preprint</span>' : "",

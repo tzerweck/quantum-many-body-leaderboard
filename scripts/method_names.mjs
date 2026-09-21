@@ -357,8 +357,19 @@ export const FAMILY = {
   "CNN": "CNN / ResNet", "2D RNN": "RNN", "RNN": "RNN", "HFPS": "backflow / Pfaffian", "ClebschTree": "other NQS", "NAQS": "other NQS",
 };
 
+// QMBL's own cost-to-reproduce runs (checks/cost/README.md): the detail says whose
+// implementation and budget the number is, since a "ViT" row here is not the authors' code.
+const QMBL_RUN = ", QMBL cost-to-reproduce run";
+Object.assign(NAMES, {
+  ["RBM (alpha = 1)" + QMBL_RUN]: ["RBM", "α = 1, QMBL run"],
+  ["RBM, translation-symmetric (alpha = 4)" + QMBL_RUN]: ["RBM", "translation-symmetric, α = 4, QMBL run"],
+  ["GCNN (space group, 4 layers, 6 features)" + QMBL_RUN]: ["GCNN", "space group, 4 layers, 6 features, QMBL run", { family: "CNN / ResNet" }],
+  ["ViT (factored attention, 2x2 patches, d = 60, 4 layers, 10 heads)" + QMBL_RUN]: ["ViT", "factored attention, b = 2, d = 60, 4 layers, 10 heads, QMBL implementation"],
+});
+
 // Systematic families of strings, matched when no exact entry exists.
 export const PATTERNS = [
+  [/^DMRG \(chi = (\d+)\), QMBL cost-to-reproduce run$/, m => ["DMRG", "QMBL run", { bond_dimension: +m[1] }]],
   // "Exact Diagonalization Gamma.D6.A1 -1": the lowest state in one (momentum.irrep, spin flip) sector.
   [/^Exact Diagonalization (\S+\.\S+) (-?1)$/, m => ["ED", "", { sector: `${m[1]}, spin flip ${m[2] === "1" ? "+1" : "−1"}` }]],
   [/^DMRG \((?:bond dimension|Bond dimension) = (\d+)\)$/, m => ["DMRG", "", { bond_dimension: +m[1] }]],

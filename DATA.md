@@ -65,6 +65,21 @@ benchmark's own reference run on those instances*
 (`baseline_records` in `data/_summary.json` counts the latter). See
 [§8.2](RULES.md#82-baseline-collected-versus-computed).
 
+### Rows QMBL computed: `computed_by`
+
+`computed_by: "qmbl"` marks a row QMBL ran itself, under the protocol in
+[`checks/cost/README.md`](checks/cost/README.md): the common ansätze on one machine, so
+that the table has cost figures that are comparable across methods (Tristan, 2026-09-21).
+It is the QMBL analogue of VarBench's `baseline`, and the same reading applies: a QMBL run
+holding a record means nobody has published a better number, not that QMBL claims one. A
+run is QMBL's implementation, hyperparameters and budget, never the authors', and its
+method string says so ("ViT (...), QMBL cost-to-reproduce run"); a state QMBL trained is
+never attached to anyone else's row. The row's `reference` names the run, the Slurm job
+and the commit; `verified.reported_as` and `compute.reported_as` quote the committed
+results file under `checks/cost/results/`; every `compute` field is measured in the
+run's own process, `scope: row`, `confidence: high`. The validator requires all of it.
+Rows are attached by [`scripts/add_cost_runs.mjs`](scripts/add_cost_runs.mjs).
+
 `energy` and `sigma` are stored in the instance's own convention; `v_score` is derived,
 never supplied. `verified` records where the number was read from and how: table
 parsed from arXiv HTML locally, never an LLM's summary of a table, after that was caught

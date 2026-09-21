@@ -241,6 +241,12 @@ that "record held by `RBM (alpha = 1)`" reads as *nobody has published a better 
 for this instance*, rather than as a defended claim - because those are the instances
 worth attacking, and one of those readings finds them and the other does not.
 
+QMBL's own runs carry `computed_by: "qmbl"` instead ([DATA.md](DATA.md#rows-qmbl-computed-computed_by)):
+reference calculations of the common ansätze on one machine under one protocol
+([`checks/cost/`](checks/cost/README.md)), made so the cost axes have points that are
+comparable across methods. The same reading applies, and the same eligibility: the row
+ranks, can hold a record, and is cited to its run script, job and commit.
+
 ## 9. Validation
 
 `scripts/validate.mjs` runs on every change and checks:

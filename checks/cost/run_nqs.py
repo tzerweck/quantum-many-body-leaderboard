@@ -40,11 +40,14 @@ PROTOCOL = dict(n_samples=4096, n_chains=1024, n_discard_per_chain=16, steps=200
                 eval_samples=131072, eval_chains=1024, eval_discard_per_chain=64, seed=20260921)
 
 MODELS = {
-    # name: (published-style label, builder kwargs, optimizer choice)
-    "rbm": dict(label="RBM (alpha = 1)", lr=0.01, diag_shift=0.01, use_ntk=False),
-    "rbmsymm": dict(label="RBM, translation-symmetric (alpha = 4)", lr=0.01, diag_shift=0.01, use_ntk=False),
-    "gcnn": dict(label="GCNN (space group, 4 layers, 6 features)", lr=0.02, diag_shift=1e-4, use_ntk=True),
-    "vit": dict(label="ViT (factored attention, 2x2 patches, d = 60, 4 layers, 10 heads)", lr=0.02, diag_shift=1e-4, use_ntk=True),
+    # name: label, optimizer choice, and the chunk of configurations the network sees at once.
+    # The chunk is memory management only (the local energy of 4096 samples on J1-J2 10x10 is
+    # 1.6 million configurations, and a symmetrised network expands each by the group);
+    # it changes no number and the wall-clock includes whatever it costs.
+    "rbm": dict(label="RBM (alpha = 1)", lr=0.01, diag_shift=0.01, use_ntk=False, chunk=16384),
+    "rbmsymm": dict(label="RBM, translation-symmetric (alpha = 4)", lr=0.01, diag_shift=0.01, use_ntk=False, chunk=4096),
+    "gcnn": dict(label="GCNN (space group, 4 layers, 6 features)", lr=0.02, diag_shift=1e-4, use_ntk=True, chunk=256),
+    "vit": dict(label="ViT (factored attention, 2x2 patches, d = 60, 4 layers, 10 heads)", lr=0.02, diag_shift=1e-4, use_ntk=True, chunk=1024),
 }
 
 
@@ -141,12 +144,12 @@ def main():
 
     sampler = nk.sampler.MetropolisExchange(hi, graph=g, d_max=2, n_chains=PROTOCOL["n_chains"])
     vs = nk.vqs.MCState(sampler, model, n_samples=args.n_samples, n_discard_per_chain=PROTOCOL["n_discard_per_chain"],
-                        seed=args.seed, sampler_seed=args.seed + 1)
+                        seed=args.seed, sampler_seed=args.seed + 1, chunk_size=m["chunk"])
     n_params = count_params(vs)
     print(f"{args.model} on {args.instance}: {n_params} parameters, n_conn {n_conn}", flush=True)
 
     opt = nk.optimizer.Sgd(learning_rate=m["lr"])
-    driver = nk.driver.VMC_SR(H, opt, variational_state=vs, diag_shift=m["diag_shift"], use_ntk=m["use_ntk"])
+    driver = nk.driver.VMC_SR(H, opt, variational_state=vs, diag_shift=m["diag_shift"], use_ntk=m["use_ntk"], chunk_size_bwd=m["chunk"])
 
     out_dir = os.path.dirname(os.path.abspath(args.out))
     os.makedirs(out_dir, exist_ok=True)
@@ -197,7 +200,7 @@ def main():
         eval=dict(samples=int(args.eval_samples), chains=PROTOCOL["eval_chains"], discard_per_chain=PROTOCOL["eval_discard_per_chain"]),
         train=dict(steps=args.steps, n_samples=args.n_samples, n_chains=PROTOCOL["n_chains"], n_discard_per_chain=PROTOCOL["n_discard_per_chain"],
                    optimizer="minSR (VMC_SR, use_ntk)" if m["use_ntk"] else "SR (VMC_SR)", lr=m["lr"], diag_shift=m["diag_shift"],
-                   sampler="MetropolisExchange, d_max 2", seed=args.seed),
+                   sampler="MetropolisExchange, d_max 2", seed=args.seed, chunk_size=m["chunk"]),
         parameters=n_params, n_conn=n_conn,
         timing=dict(wall_seconds=wall, wall_hms=hms(wall), setup_seconds=t_train0 - T_START, train_seconds=t_train1 - t_train0,
                     eval_seconds=t_end - t_train1, seconds_per_step_last_100=float(np.mean(np.diff(step_times[-101:]))) if len(step_times) > 101 else None,

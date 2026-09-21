@@ -44,14 +44,17 @@ for spec in "${NQS_JOBS[@]}"; do
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem-per-cpu=8G
-#SBATCH --gpus=nvidia_a100_80gb_pcie:1
+#SBATCH --gpus=1
+#SBATCH --gres=gpumem:80g
 #SBATCH --output=$HERE/euler/logs/%x-%j.out
 #SBATCH --error=$HERE/euler/logs/%x-%j.err
 set -euo pipefail
 source "\$HOME/agent-runs/env-jax.sh"
 export QMBL_COMMIT="$COMMIT" JAX_ENABLE_X64=1
 OUT="$SCR/$name"; mkdir -p "\$OUT"
-nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
+GPU=\$(nvidia-smi --query-gpu=name,memory.total --format=csv,noheader); echo "\$GPU"
+# The protocol is one A100 80 GB; the type request alone once landed on a 40 GB card (smoke job 14756346).
+case "\$GPU" in *A100*80GB*) ;; *) echo "wrong GPU for the protocol: \$GPU" >&2; exit 3;; esac
 cd "$HERE"
 python run_nqs.py --instance "$inst" --model "$model" --out "\$OUT/$name.json"
 cp "\$OUT/$name.json" "\$OUT/$name.trace.jsonl" "\$OUT/$name.params.msgpack" "$HERE/results/"

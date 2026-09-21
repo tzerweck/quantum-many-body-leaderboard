@@ -64,6 +64,17 @@ for (const m of fs.readdirSync("data")) {
             if (/normali[sz]ed|equivalent|h100_eq/i.test(k)) issues.push(`COMPUTE ${at}: normalised field ${k}; DATA.md forbids normalisation`);
         }
       }
+      // A row QMBL computed itself (DATA.md, `computed_by`) must name its run and carry the
+      // measured cost that is its reason to exist; anything else claiming the field is wrong.
+      if (r.computed_by != null) {
+        if (r.computed_by !== "qmbl") issues.push(`RUN ${at}: computed_by ${r.computed_by}`);
+        if (!/checks\/cost\//.test(r.reference || "")) issues.push(`RUN ${at}: reference does not name checks/cost/`);
+        if (r.baseline) issues.push(`RUN ${at}: both computed_by and baseline`);
+        const c = r.compute;
+        if (!c || (c.gpu_hours == null && c.cpu_core_hours == null) || !c.device || c.scope !== "row" || !/checks\/cost\/results\//.test(c.source || ""))
+          issues.push(`RUN ${at}: QMBL run without a measured compute block (hours, device, scope row, results file)`);
+        if (!r.verified?.reported_as) issues.push(`RUN ${at}: QMBL run without verified.reported_as`);
+      }
       // An error bar or variance the paper does not print must say who produced it and be
       // checkable against a committed file (DATA.md, the `error_metrics` block).
       if (r.error_metrics != null) {
