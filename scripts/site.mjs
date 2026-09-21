@@ -26,7 +26,8 @@ import { citeRef, paperYear } from "./cite.mjs";
 import { sources } from "./enrich_sources.mjs";
 import { quote, shorten, MODELS, BOUNDARY, instanceLabel, byGeometry, noRecordReason, gapAbove } from "./readme_table.mjs";
 import { logoSvg, faviconSvg, LOGO_CSS } from "./logo.mjs";
-import { hoursOf, costFigureName } from "./cost.mjs";
+import { hoursOf, costFigureName, flopsFigureName } from "./cost.mjs";
+import { flopsOf } from "./flops.mjs";
 import { FRONTIER } from "./views.mjs";
 import { energyFigures, stripX } from "./ladders.mjs";
 
@@ -329,6 +330,29 @@ function costSwitcher() {
   ${tabs("cost-tab", COST_FIGS.map(inst => [`${esc(modelName(inst.model))} ${esc(instanceLabel(inst))}`, figure(costEntry(inst))]))}
 </section>`;
 }
+
+// The estimated-FLOPs figures (flops.mjs): the same construction on an estimate from the
+// parameter, sample and iteration counts a paper states, for the instances where two or
+// more rows state all three. Never on the hours axis: that would be the conversion DATA.md
+// forbids. Ordered like the cost figures.
+const FLOPS_FIGS = instances
+  .filter(inst => fs.existsSync(`figures/${flopsFigureName(inst)}.svg`))
+  .sort((a, b) => {
+    const rank = i => { const k = FRONTIER.findIndex(([id]) => id === i.instance_id); return k < 0 ? FRONTIER.length : k; };
+    return rank(a) - rank(b) || a.instance_id.localeCompare(b.instance_id);
+  });
+const flopsEntry = inst => [flopsFigureName(inst), `${modelName(inst.model)} ${instanceLabel(inst)}: the best energies at each estimated cost in FLOPs`,
+  "Every energy on this instance whose paper states its parameter, sample and iteration counts, against the floating-point operations those imply; the line is the frontier of results nothing beats for less."];
+function flopsSwitcher() {
+  if (!FLOPS_FIGS.length) return "";
+  return `<section class="tabs" id="energy-vs-flops">
+  <h2>The best published energies, by estimated FLOPs</h2>
+  <p class="muted">Most papers state no hours, but many state how many parameters, samples per step and steps an optimisation took. Those imply a count of floating-point
+  operations, estimated here (<a href="${DATA}#how-a-flop-count-is-estimated">how</a>) and good to an order of magnitude: the optimizer's solve, symmetry projections and pre-training
+  are not counted. Drawn for the ${FLOPS_FIGS.length} instances with two or more such rows. Nothing on this axis is a reported number, and it is never mixed with the hours above.</p>
+  ${tabs("flops-tab", FLOPS_FIGS.map(inst => [`${esc(modelName(inst.model))} ${esc(instanceLabel(inst))}`, figure(flopsEntry(inst))]))}
+</section>`;
+}
 // The published energies of every Hamiltonian, drawn by size_energy.mjs into figures/energy/
 // in the shape ladders.mjs gives them: per model and lattice a figure of facets, each a strip
 // and its stops; per model an "other" figure for what was published at one size and shares
@@ -381,15 +405,16 @@ function energySwitcher() {
 </section>`;
 }
 
-const TAB_CSS = [tabRules("cost-tab", COST_FIGS.length), tabRules("energy-group", ENERGY_FIGS.length),
+const TAB_CSS = [tabRules("cost-tab", COST_FIGS.length), tabRules("flops-tab", FLOPS_FIGS.length), tabRules("energy-group", ENERGY_FIGS.length),
   ...ENERGY_FIGS.map(([, figs], j) => tabRules(`energy-${j}`, figs.length)), ...SLIDERS.map(sliderRules)].join("\n");
 
 // Leaderboard: the instance's cost figure above its rows, or how many of its energies state
-// a cost when that is too few to draw; nothing when none does.
+// a cost when that is too few to draw; nothing when none does. The estimated-FLOPs figure
+// follows it where one exists.
 function costSlot(inst) {
-  if (COST_FIGS.includes(inst)) return figure(costEntry(inst));
-  const k = inst.rows.filter(r => hoursOf(r.compute)).length;
-  return k ? `<p class="muted cost-none">${k} of ${inst.rows.length} energies here state a compute cost; a cost figure is drawn from two.</p>` : "";
+  const hours = COST_FIGS.includes(inst) ? figure(costEntry(inst)) : (k => k ? `<p class="muted cost-none">${k} of ${inst.rows.length} energies here state a compute cost; a cost figure is drawn from two.</p>` : "")(inst.rows.filter(r => hoursOf(r.compute)).length);
+  const flops = FLOPS_FIGS.includes(inst) ? figure(flopsEntry(inst)) : (k => k ? `<p class="muted cost-none">${k} of ${inst.rows.length} energies here state enough to estimate their cost in FLOPs; a figure is drawn from two.</p>` : "")(inst.rows.filter(r => flopsOf(r, inst)).length);
+  return hours + flops;
 }
 
 // Dark mode for an inlined figure: an attribute selector per light colour, which beats the
@@ -535,7 +560,7 @@ function homePage() {
   const figures = [figure(overview), `<details class="fig-more">
   <summary>Look at the best published energies, by method family</summary>
 ${figure(byFamily)}
-</details>`, energySwitcher(), costSwitcher()].join("\n");
+</details>`, energySwitcher(), costSwitcher(), flopsSwitcher()].join("\n");
   const linked = new Set([...[...figures.matchAll(/href="\/instances\/#(r-[\w-]+)"/g)].map(m => m[1]),
     ...[...figures.matchAll(/data-rows="([\w -]+)"/g)].flatMap(m => m[1].split(" "))]);
   const cards = instances.flatMap(inst => inst.rows.filter(r => linked.has(rowId(inst, r)))
@@ -1041,7 +1066,9 @@ function contributePage() {
   <li><b>What a number cost.</b> GPU-hours &times; device, parameter count, wall-clock. ${costed}
   rows state at least one of these, which is what the <a href="/#energy-vs-compute">energy-versus-cost
   figure</a> is drawn from; yours can join them
-  (<a href="${DATA}#what-a-number-cost-the-compute-block">the format is specified</a>).</li>
+  (<a href="${DATA}#what-a-number-cost-the-compute-block">the format is specified</a>). Parameter,
+  sample and iteration counts together let the site <a href="/#energy-vs-flops">estimate a FLOP count</a>
+  where no hours were stated.</li>
 </ul>`;
   return page({ url: "/contribute/", title: "Contribute", body,
     description: "How to correct a row, add a published result, supply a missing error bar, or object to a record in QMBL." });

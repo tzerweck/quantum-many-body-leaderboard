@@ -35,7 +35,7 @@ different sector, the row moves rather than competes.
 | `reference` | yes | §8 |
 | `dof`, `einf` | yes | checked against the instance (§9) |
 | `energy_variance` | no | renders `n/a`; enables the V-score |
-| compute | no, requested | GPU-hours x device, parameter count, samples, wall-clock |
+| compute | no, requested | GPU-hours x device, parameter count, samples, iterations, wall-clock; parameters, samples and iterations together let the site estimate a FLOP count ([DATA.md](DATA.md#how-a-flop-count-is-estimated)) |
 
 A missing field never excludes a row. Only §6 and §7 govern what can hold a record.
 

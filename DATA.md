@@ -124,9 +124,66 @@ Three rules, and they are the whole design:
   "20 A100 GPUs for four days" fills `n_devices`, `device` and `wall_clock` and leaves
   `gpu_hours` null; a figure gives its own "GPU-days" as hours and the note says so. A view
   that multiplies devices by wall-clock does that at draw time and marks the point as
-  derived; the stored fields stay as reported.
+  derived; the stored fields stay as reported. The one estimate QMBL makes, a FLOP count
+  from stated parameter, sample and iteration counts, is evaluated at build time and never
+  stored (next section).
 
 A missing `compute` block excludes nothing, exactly like a missing variance.
+
+### How a FLOP count is estimated
+
+Ten rows state hours on a named GPU; 58 more state how many parameters the ansatz had,
+how many samples each optimisation step drew and how many steps were taken. Those three
+numbers, with the instance, fix the number of network evaluations an optimisation took, and
+[`scripts/flops.mjs`](scripts/flops.mjs) turns them into floating-point operations at
+build time (Tristan, 2026-09-21):
+
+    FLOPs = iterations × samples × (n_conn + k_sample + 3) × FLOPs_forward
+    FLOPs_forward = 2 × parameters × reuse (+ 2/3 N_e³ for a determinant or Pfaffian)
+
+`n_conn` is the number of off-diagonal Hamiltonian terms connected to one configuration,
+which is what one local energy costs in network evaluations: the bonds of a Heisenberg
+instance, bonds plus next-nearest bonds for J1-J2, the sites for the transverse-field Ising
+model, four per bond for Hubbard. `k_sample` is one sweep of N single-site proposals for
+Markov-chain sampling and one pass for an autoregressive draw. The 3 is the forward and
+backward pass of the gradient. `reuse` is how many times a weight is applied in one
+forward pass: once in a dense network, once per site in a convolution or a recurrent cell,
+once per patch in a vision transformer; it is declared per architecture in `ARCH`, one
+line each, with the sampling scheme and whether a determinant is evaluated.
+
+What is not counted, and is said under every figure that shows an estimate: the
+stochastic-reconfiguration solve, symmetry projections that sum the network over a point
+group, attention scores, and pre-training on smaller lattices. Against the ten rows that
+also state GPU-hours the model implies these achieved rates:
+
+| instance | method | estimated FLOPs | stated | achieved |
+|---|---|---|---|---|
+| Heisenberg 10×10 open | minGRU, 3 layers, C4v | 7.8e18 | 108 h, L40S | 20 TFLOP/s |
+| Heisenberg 16×16 open | minGRU, 3 layers, C4v | 5.3e19 | 696 h, L40S | 21 TFLOP/s |
+| J1-J2 10×10, J2 = 0.5 | ViT, T5 / decoupled attention | 1.4e17 | 28 h, A100 | 1.4 TFLOP/s |
+| J1-J2 10×10, J2 = 0.5 | ViT, factored attention | 1.2e17 | 12.5 h, A100 | 2.6 TFLOP/s |
+| J1-J2 6×6, J2 = 0.5 | ViT, T5 / decoupled attention | 1.8e16 | 10 h, A100 | 0.5 TFLOP/s |
+| J1-J2 6×6, J2 = 0.5 | ViT, factored attention | 1.5e16 | 6 h, A100 | 0.7 TFLOP/s |
+| J1-J2 20×20, J2 = 0.5 | ViT, symmetry restoration | 6.6e19 | 25000 h, GH200 (whole paper) | ≥ 0.7 TFLOP/s |
+
+Consistent within a paper, a factor of forty across papers: **an estimate is good to an order
+of magnitude and never better**, which is why it has its own axis and its own figures
+(`figures/flops/`, `figures/energy-vs-flops.svg`) and is never placed on the hours axis.
+Turning FLOPs into hours would need exactly the conversion factor the first rule forbids.
+
+Three rules, the same shape as the block's own:
+
+- **An input nobody stated is never guessed.** Parameters, samples and iterations must all
+  be on the row, the architecture must be in `ARCH`, and the instance must be on a lattice
+  whose bond count the script writes. Otherwise there is no estimate. The estimate is
+  `medium` confidence when those hold and `low` when an architectural assumption was needed
+  (a transformer whose patch size the paper does not state) or the block itself is `low`.
+- **Nothing is stored.** The estimate is a function of the row and its instance, recomputed
+  on every build; changing the model changes every figure at once and no data file.
+- **No tensor-network model yet.** A bond dimension alone does not fix a DMRG cost; the
+  sweep count is stated for none of the lattice rows, and a PEPS needs its contraction
+  dimension. The four exact diagonalizations that state seconds per matrix-vector product do
+  not state the Lanczos iteration count.
 
 ## When the literature was last checked: `coverage`
 
