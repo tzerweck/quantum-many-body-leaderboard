@@ -71,7 +71,7 @@ for spec in "${DMRG_JOBS[@]}"; do
   cat > "$f" <<SB
 #!/bin/bash
 #SBATCH --job-name=qmbl-cost-$name
-#SBATCH --partition=hpc.24h
+#SBATCH --partition=normal.24h
 #SBATCH --time=$tlim
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
