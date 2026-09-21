@@ -15,7 +15,8 @@ const two = x => (x == null ? null : +x.toPrecision(2));
 const label = r => `${r.label}, QMBL cost-to-reproduce run`;
 
 for (const f of files) {
-  const res = JSON.parse(fs.readFileSync(path.join(DIR, f), "utf8"));
+  let res;
+  try { res = JSON.parse(fs.readFileSync(path.join(DIR, f), "utf8")); } catch (e) { console.log(`SKIP ${f}: ${e.message.slice(0, 60)}`); continue; }
   const p = `data/${res.instance_id}.json`;
   if (!fs.existsSync(p)) { console.log(`SKIP ${f}: no instance ${res.instance_id}`); continue; }
   const inst = JSON.parse(fs.readFileSync(p, "utf8"));
@@ -26,7 +27,10 @@ for (const f of files) {
 
   if (res.schema === "qmbl-cost-run-1") {
     const { hardware: h, timing: t, train: tr, software: sw } = res;
-    if (!Number.isFinite(res.energy) || !Number.isFinite(res.sigma)) { console.log(`SKIP ${f}: energy ${res.energy} sigma ${res.sigma} (a run that diverged is not a row)`); continue; }
+    if (!Number.isFinite(res.energy) || !Number.isFinite(res.sigma) || res.diverged) { console.log(`SKIP ${f}: energy ${res.energy} sigma ${res.sigma} (a run that diverged is not a row)`); continue; }
+    if (!(res.r_hat < 1.05)) { console.log(`SKIP ${f}: R_hat ${res.r_hat} (the final evaluation's chains had not equilibrated; not a row)`); continue; }
+    const recovered = (res.recoveries || []).map(r => `energy not finite at step ${r.step}, parameters restored from step ${r.restored_from}, learning rate ${r.lr} from there`).join("; ");
+    const chains = res.eval.chains_from === "training" ? "the training chains carried on" : "fresh chains";
     const device = h.device_kind.replace(/^NVIDIA /, "NVIDIA ");
     const gpuHours = t.wall_seconds / 3600 * h.n_devices;
     const said = `energy ${res.energy} sigma ${res.sigma} energy_variance ${res.energy_variance} tau_corr ${res.tau_corr} r_hat ${res.r_hat} | ` +
@@ -42,9 +46,9 @@ for (const f of files) {
       peer_reviewed: false, source: `qmbl-cost-${day}`, provenance: "primary", computed_by: "qmbl",
       verified: { checked_on: day, method: `${sw.script} (NetKet ${sw.netket}, jax ${sw.jax}) on ${h.n_devices} x ${h.device_kind}, protocol checks/cost/README.md`,
         reported_as: said,
-        note: `Final evaluation on fresh chains: ${res.eval.samples} samples, ${res.eval.chains} chains, ${res.eval.discard_per_chain} discarded per chain; ` +
-          `tau_corr ${res.tau_corr.toFixed(2)}, R_hat ${res.r_hat.toFixed(3)}. Trained ${tr.steps} steps of ${tr.optimizer}, lr ${tr.lr}, ` +
-          `${tr.n_samples} samples per step, ${tr.sampler}, seed ${tr.seed}. Per-step trace and final parameters beside the results file.`,
+        note: `Final evaluation, ${chains}: ${res.eval.samples} samples, ${res.eval.chains} chains, ${res.eval.discard_per_chain} discarded per chain; ` +
+          `tau_corr ${res.tau_corr.toFixed(2)}, R_hat ${res.r_hat.toFixed(3)}. Trained ${tr.steps} steps of ${tr.optimizer}, lr ${tr.lr}${tr.warmup_steps ? ` after a ${tr.warmup_steps}-step linear warmup` : ""}, ` +
+          `${tr.n_samples} samples per step, ${tr.sampler}, seed ${tr.seed}.${recovered ? ` Divergence rule applied: ${recovered}.` : ""} Per-step trace and final parameters beside the results file.`,
         secondary_of: null },
       compute: {
         parameters: res.parameters, gpu_hours: +gpuHours.toFixed(3), device, n_devices: h.n_devices, samples: tr.n_samples,

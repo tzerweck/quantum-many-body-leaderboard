@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 # Submit the first batch of QMBL cost-to-reproduce runs on Euler (README.md, protocol of
 # 2026-09-21). Run ON EULER from ~/agent-runs/qmbl-cost after `sync.sh` copied this directory:
-#     bash euler/submit.sh [nqs|dmrg|all] [--dry]
+#     bash euler/submit.sh [nqs|dmrg|all] [--dry] [job-name ...]     (names restrict the batch)
 # Every job writes to $SCRATCH/agent-runs/qmbl-cost/<job-name>/ and copies its results JSON,
 # trace and parameters into ~/agent-runs/qmbl-cost/results/ when done.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-what="${1:-all}"; dry="${2:-}"
+what="${1:-all}"; shift || true
+dry=""; [ "${1:-}" = "--dry" ] && { dry=1; shift; }
+ONLY=("$@")
+wanted() { [ ${#ONLY[@]} -eq 0 ] && return 0; for n in "${ONLY[@]}"; do [ "$n" = "$1" ] && return 0; done; return 1; }
 HERE="$PWD"
 SCR="/cluster/scratch/$USER/agent-runs/qmbl-cost"
 mkdir -p "$SCR" "$HERE/results" "$HERE/euler/logs"
@@ -24,8 +27,8 @@ NQS_JOBS=(
   "vit-tri-36        Heisenberg/triangular_36_P  vit      gpupr.24h  24:00:00"
 )
 DMRG_JOBS=(
-  "dmrg-j1j2-100     J1J2/square_100_P_0.5       24:00:00"
-  "dmrg-tri-36       Heisenberg/triangular_36_P  24:00:00"
+  "dmrg-j1j2-100     J1J2/square_100_P_0.5       100:00:00"
+  "dmrg-tri-36       Heisenberg/triangular_36_P  60:00:00"
 )
 
 submit() {  # file
@@ -35,6 +38,7 @@ submit() {  # file
 if [ "$what" = nqs ] || [ "$what" = all ]; then
 for spec in "${NQS_JOBS[@]}"; do
   read -r name inst model part tlim <<<"$spec"
+  wanted "$name" || continue
   f="$HERE/euler/$name.sbatch"
   cat > "$f" <<SB
 #!/bin/bash
@@ -67,11 +71,12 @@ fi
 if [ "$what" = dmrg ] || [ "$what" = all ]; then
 for spec in "${DMRG_JOBS[@]}"; do
   read -r name inst tlim <<<"$spec"
+  wanted "$name" || continue
   f="$HERE/euler/$name.sbatch"
   cat > "$f" <<SB
 #!/bin/bash
 #SBATCH --job-name=qmbl-cost-$name
-#SBATCH --partition=normal.24h
+#SBATCH --partition=normal.120h
 #SBATCH --time=$tlim
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
@@ -83,7 +88,7 @@ source "\$HOME/agent-runs/env-jax.sh"
 export QMBL_COMMIT="$COMMIT" OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 OPENBLAS_NUM_THREADS=8
 OUT="$SCR/$name"; mkdir -p "\$OUT"
 cd "$HERE"
-python run_dmrg.py --instance "$inst" --chi 500 1000 2000 --out "\$OUT/$name.json"
+python run_dmrg.py --instance "$inst" --chi 500 1000 2000 --out "\$OUT/$name.json" 2>&1 | grep -v "^INFO\|^DEBUG\|^=====\|^$"
 cp "\$OUT/$name.json" "$HERE/results/"
 echo "DONE $name \$(date -u +%FT%TZ)"
 SB

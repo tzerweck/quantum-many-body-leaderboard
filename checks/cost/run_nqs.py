@@ -174,15 +174,22 @@ def main():
 
     import functools
     import optax
-    lr = optax.linear_schedule(init_value=0.0, end_value=PROTOCOL["lr"], transition_steps=PROTOCOL["warmup_steps"])
-    opt = nk.optimizer.Sgd(learning_rate=lr)
     dense = count_real_params(vs) <= args.n_samples
     solver = nk.optimizer.solver.cholesky if dense else functools.partial(jax.scipy.sparse.linalg.cg, maxiter=PROTOCOL["cg_maxiter"])
     sr = nk.optimizer.SR(qgt=nk.optimizer.qgt.QGTJacobianDense(chunk_size=m["chunk"]), solver=solver,
                          diag_shift=PROTOCOL["diag_shift"], diag_scale=PROTOCOL["diag_scale"])
     solve_desc = "Cholesky on the dense S" if dense else f"conjugate gradients, {PROTOCOL['cg_maxiter']} iterations max"
     optimizer_desc = f"SR (QGTJacobianDense, {solve_desc}, diag_shift {PROTOCOL['diag_shift']}, diag_scale {PROTOCOL['diag_scale']})"
-    driver = nk.driver.VMC(H, opt, variational_state=vs, preconditioner=sr)
+
+    def make_driver(lr_now, warmup_from):
+        # The warmup as a schedule over this driver's own steps; after a recovery the rate is
+        # constant at the halved value (the warmup is over by then, or restarts flat).
+        if warmup_from < PROTOCOL["warmup_steps"]:
+            start = lr_now * warmup_from / PROTOCOL["warmup_steps"]
+            lr = optax.linear_schedule(init_value=start, end_value=lr_now, transition_steps=PROTOCOL["warmup_steps"] - warmup_from)
+        else:
+            lr = lr_now
+        return nk.driver.VMC(H, nk.optimizer.Sgd(learning_rate=lr), variational_state=vs, preconditioner=sr)
 
     out_dir = os.path.dirname(os.path.abspath(args.out))
     os.makedirs(out_dir, exist_ok=True)
@@ -191,35 +198,74 @@ def main():
     trace = open(trace_path, "w")
     t_train0 = time.perf_counter()
     step_times = []
+    done = 0                       # optimisation steps completed, across recoveries
+    lr_now = PROTOCOL["lr"]
+    recoveries = []                # {step, restored_from, lr}: the divergence rule (README)
+    good = dict(step=0, variables=vs.variables)   # last finite state, kept every 50 steps
+    diverged = dict(at=None)
 
-    def cb(step, log_data, driver):
+    def cb(step_local, log_data, driver):
+        nonlocal done
         e = log_data["Energy"]
         now = time.perf_counter()
+        step = done
+        mean = float(np.real(e.mean))
+        if not np.isfinite(mean):
+            diverged["at"] = step
+            trace.write(json.dumps(dict(step=step, t=now - T_START, mean=None, diverged=True)) + "\n")
+            trace.flush()
+            return False
         step_times.append(now)
-        rec = dict(step=step, t=now - T_START, mean=float(np.real(e.mean)), sigma=float(e.error_of_mean),
+        rec = dict(step=step, t=now - T_START, mean=mean, sigma=float(e.error_of_mean),
                    variance=float(e.variance), tau=float(e.tau_corr), r_hat=float(e.R_hat))
         trace.write(json.dumps(rec) + "\n")
         if step % 20 == 0:
             trace.flush()
             print(f"step {step:5d}  t={rec['t']:8.1f}s  E={rec['mean']:.6f} ± {rec['sigma']:.6f}  var={rec['variance']:.4f}  tau={rec['tau']:.2f}  Rhat={rec['r_hat']:.3f}", flush=True)
+        if step % 50 == 0:
+            good.update(step=step, variables=vs.variables)
         if args.checkpoint_every and step and step % args.checkpoint_every == 0:
             with open(ckpt_path, "wb") as f:
                 f.write(flax.serialization.to_bytes(vs.variables))
+        done += 1
         return True
 
-    driver.run(n_iter=args.steps, callback=cb, show_progress=False)
+    while done < args.steps:
+        driver = make_driver(lr_now, done)
+        driver.run(n_iter=args.steps - done, callback=cb, show_progress=False)
+        if diverged["at"] is None:
+            break
+        # The divergence rule: restore the last finite state, halve the learning rate, go on;
+        # give up after three. Everything spent is on the clock.
+        if len(recoveries) >= 3:
+            print(f"DIVERGED at step {diverged['at']} after three recoveries; no row", flush=True)
+            break
+        lr_now /= 2
+        recoveries.append(dict(step=diverged["at"], restored_from=good["step"], lr=lr_now))
+        print(f"RECOVER: energy not finite at step {diverged['at']}; parameters restored from step {good['step']}, learning rate {lr_now}", flush=True)
+        vs.variables = good["variables"]
+        vs.reset()
+        done = good["step"]
+        diverged["at"] = None
     t_train1 = time.perf_counter()
     trace.close()
     with open(ckpt_path, "wb") as f:
         f.write(flax.serialization.to_bytes(vs.variables))
 
-    # Final evaluation: fresh, longer chains, many more samples, NetKet's own error of the
-    # mean (blocked, autocorrelation-corrected), tau and R-hat reported with it.
+    # Final evaluation: the training chains carried on (no fresh start: from a random
+    # configuration the symmetric RBM's chains on 10x10 had not equilibrated after 64
+    # discards, R-hat 1.41, job 14765875), many more samples, NetKet's own error of the mean
+    # (blocked, autocorrelation-corrected), tau and R-hat reported with it. If R-hat is still
+    # above 1.05 the chains are run 1024 more sweeps and the evaluation repeated, once.
+    eval_attempts = []
     vs.n_samples = args.eval_samples
     vs.n_discard_per_chain = PROTOCOL["eval_discard_per_chain"]
-    vs.sampler = nk.sampler.MetropolisExchange(hi, graph=g, d_max=2, n_chains=PROTOCOL["eval_chains"])
-    vs.reset()
     E = vs.expect(H)
+    eval_attempts.append(dict(discard_per_chain=PROTOCOL["eval_discard_per_chain"], r_hat=float(E.R_hat), tau_corr=float(E.tau_corr)))
+    if not (float(E.R_hat) < 1.05):
+        vs.n_discard_per_chain = 1024
+        E = vs.expect(H)
+        eval_attempts.append(dict(discard_per_chain=1024, r_hat=float(E.R_hat), tau_corr=float(E.tau_corr)))
     t_end = time.perf_counter()
 
     wall = t_end - T_START
@@ -230,7 +276,9 @@ def main():
         energy=float(np.real(E.mean)), sigma=float(E.error_of_mean), energy_variance=float(E.variance),
         tau_corr=float(E.tau_corr), r_hat=float(E.R_hat),
         energy_per_site_SS=float(np.real(E.mean)) / (4 * n_sites),
-        eval=dict(samples=int(args.eval_samples), chains=PROTOCOL["eval_chains"], discard_per_chain=PROTOCOL["eval_discard_per_chain"]),
+        eval=dict(samples=int(args.eval_samples), chains=PROTOCOL["n_chains"], discard_per_chain=eval_attempts[-1]["discard_per_chain"],
+                  chains_from="training", attempts=eval_attempts),
+        recoveries=recoveries, diverged=diverged["at"] is not None,
         train=dict(steps=args.steps, n_samples=args.n_samples, n_chains=PROTOCOL["n_chains"], n_discard_per_chain=PROTOCOL["n_discard_per_chain"],
                    optimizer=optimizer_desc, lr=PROTOCOL["lr"], warmup_steps=PROTOCOL["warmup_steps"], diag_shift=PROTOCOL["diag_shift"], diag_scale=PROTOCOL["diag_scale"],
                    sampler="MetropolisExchange, d_max 2", seed=args.seed, chunk_size=m["chunk"]),
@@ -244,8 +292,13 @@ def main():
                       script="checks/cost/run_nqs.py", commit=os.environ.get("QMBL_COMMIT") or git_commit(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")), argv=sys.argv[1:]),
         files=dict(trace=os.path.basename(trace_path), params=os.path.basename(ckpt_path)),
     )
+    def finite(x):  # NaN is not JSON; a diverged run writes null and add_cost_runs skips it
+        if isinstance(x, float) and not np.isfinite(x): return None
+        if isinstance(x, dict): return {k: finite(v) for k, v in x.items()}
+        if isinstance(x, list): return [finite(v) for v in x]
+        return x
     with open(args.out, "w") as f:
-        json.dump(result, f, indent=1)
+        json.dump(finite(result), f, indent=1)
     print(f"FINAL {args.model} {args.instance}: E = {result['energy']:.6f} ± {result['sigma']:.6f} (Pauli, total), "
           f"E/N = {result['energy_per_site_SS']:.7f} S.S, var {result['energy_variance']:.4f}, tau {result['tau_corr']:.2f}, Rhat {result['r_hat']:.3f}; "
           f"wall {hms(wall)} on {len(devices)} x {devices[0].device_kind}; {n_params} parameters, {args.steps} steps x {args.n_samples} samples", flush=True)

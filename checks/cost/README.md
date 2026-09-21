@@ -20,9 +20,11 @@ and the row says so in its method string. Nothing here is attached to anyone els
   allocated (not utilised: a Slurm allocation is what a user pays for).
 - **Neural states** (`run_nqs.py`, NetKet 3.22.4). One protocol for every ansatz:
   Metropolis exchange sampler (`d_max` 2) in the S_z = 0 sector, 1024 chains, 4096 samples
-  per step, 16 discarded per chain, **2000 optimisation steps**, then a final evaluation on
-  fresh chains with 131072 samples (1024 chains, 64 discarded per chain); the row's energy,
-  error bar, variance, autocorrelation time and R-hat are the final evaluation's. Stochastic
+  per step, 16 discarded per chain, **2000 optimisation steps**, then a final evaluation
+  with 131072 samples on the training chains carried on (64 more discarded per chain; if
+  R-hat is still above 1.05, 1024 more and one repeat); the row's energy, error bar,
+  variance, autocorrelation time and R-hat are the final evaluation's, and a run whose
+  final R-hat is not below 1.05 is not a row. Stochastic
   reconfiguration, learning rate 0.01, with a shift **relative** to the diagonal of the
   geometric tensor, S + 1e-6 I + 0.01 diag S (an absolute shift is a per-model guess: the
   log-derivatives of a translation-symmetric network are N times a dense network's, and
@@ -32,9 +34,13 @@ and the row says so in its method string. Nothing here is attached to anyone els
   more (S is then rank-deficient and its dense form does not fit); the row records which. The
   learning rate ramps linearly from 0 over the first 200 steps (from a near-uniform start
   the first full-rate natural-gradient step threw the symmetric RBM on 10 x 10 to NaN; at a
-  tenth of the rate it descended cleanly). One seed, 20260921. No annealing, no pre-training, no symmetry restoration after the fact,
-  no Lanczos step. The per-step energy trace and the
-  final parameters are kept beside the results file.
+  tenth of the rate it descended cleanly). **Divergence rule:** if the energy is not
+  finite at a step, the parameters are restored from the last state kept (every 50 steps),
+  the learning rate is halved for the rest of the run, and the run goes on; after three
+  such recoveries it stops and is not a row. Everything spent is on the clock and the row's
+  note says what happened. One seed, 20260921. No annealing, no pre-training, no symmetry
+  restoration after the fact, no Lanczos step. The per-step energy trace and the final
+  parameters are kept beside the results file.
 - **Ansätze.** `RBM (alpha = 1)`; translation-symmetric `RBM (alpha = 4)`, kernel
   initialised at 0.01 / sqrt(N) (NetKet's default start is unsampleable on 100 sites);
   NetKet's `GCNN` over the translation group, 4 layers, 8 features (the full space group
@@ -43,14 +49,32 @@ and the row says so in its method string. Nothing here is attached to anyone els
   architecture (`vit.py`).
 - **DMRG** (`run_dmrg.py`, TeNPy). Two-site DMRG on the torus as a finite MPS with
   long-range couplings, S_z conserved, mixer on, a ladder of maximum bond dimensions
-  500, 1000, 2000 in one process, at most 20 sweeps per rung, converged at 1e-8 in the
-  energy. Each rung is a row; its cost is the wall-clock since process start, so reaching
-  chi = 2000 is costed with the rungs before it.
+  500, 1000, 2000 in one process, a new engine per rung on the previous rung's state, at
+  most 15 sweeps per rung or converged at 1e-6 in the energy. Each rung is a row; its cost
+  is the wall-clock since process start, so reaching chi = 2000 is costed with the rungs
+  before it. On the 120 h CPU partition: a sweep scales as chi^3, and the 10 x 10 torus took
+  6 min per sweep at chi = 500.
 - **Instances.** `J1J2/square_100_P_0.5` and `Heisenberg/triangular_36_P` (exact energy
   known, -80.6937689612426 Pauli total) in the first batch.
 - **Units.** NetKet's `Heisenberg` and TeNPy's spin couplings differ by the factor 4 between
   Pauli and S.S; both scripts write Pauli totals, the instances' stored convention, and
   `run_nqs.py --ed-check` asserts the convention on a 4 x 4 lattice against the literature.
+
+### Amendments
+
+- **2026-09-21 evening (v1.1), after the first batch.** The final evaluation carries the
+  training chains on instead of starting fresh ones: from random configurations the
+  symmetric RBM's chains on 10 x 10 had R-hat 1.41 after 64 discards (job 14765875,
+  -156 ± 4 for a state whose training trace read -196.1), and the R-hat gate and repeat
+  were added. The divergence rule was added after the GCNN on the triangular lattice went
+  to NaN at step 396 (job 14765878). The DMRG ladder had been re-running chi = 500 for
+  every rung (chi_reached in the results file; TeNPy's engine keeps the trunc_params it
+  was built with), so each rung now gets its own engine; the sweep cap went from 20 at
+  1e-8 to 15 at 1e-6 and the jobs to the 120 h partition, since a chi = 2000 sweep on the
+  10 x 10 torus is 64 times a chi = 500 one. The five rows from the first batch (RBM on
+  both instances, symmetric RBM and ViT on the triangular lattice, GCNN on J1-J2) were
+  evaluated on fresh chains with R-hat 1.004-1.005 and stand; their notes say so. Failed
+  runs' files are kept under `results/failed/`; nothing there is a row.
 
 ## What a run becomes
 

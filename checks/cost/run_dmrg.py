@@ -63,6 +63,16 @@ def git_commit(repo_dir):
         return None
 
 
+def cpu_model():
+    try:
+        for line in open("/proc/cpuinfo"):
+            if line.startswith("model name"):
+                return line.split(":", 1)[1].strip()
+    except OSError:
+        pass
+    return platform.processor() or platform.machine()
+
+
 def hms(seconds):
     s = int(round(seconds))
     return f"{s // 3600:02d}:{(s % 3600) // 60:02d}:{s % 60:02d}"
@@ -72,7 +82,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--instance", choices=sorted(INSTANCES), required=True)
     ap.add_argument("--chi", type=int, nargs="+", default=[500, 1000, 2000])
-    ap.add_argument("--max-sweeps", type=int, default=20)
+    ap.add_argument("--max-sweeps", type=int, default=15)
+    ap.add_argument("--max-e-err", type=float, default=1e-6)
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
 
@@ -88,18 +99,16 @@ def main():
     print(f"DMRG on {args.instance}: {n} sites, MPO bond dimension {max(M.H_MPO.chi)}, {cores} cores, chi ladder {args.chi}", flush=True)
 
     rungs = []
-    eng = None
     for chi in args.chi:
         # max_trunc_err is TeNPy's consistency check, not a convergence target: at chi = 500 on a
         # torus the truncation error is above its 1e-4 default and the rung is still a row.
+        # A new engine per rung: updating the options of a running engine left chi_max at its
+        # first value, so the 1000 and 2000 rungs of job 14765882 ran at 500 (chi_reached says so).
         params = dict(trunc_params=dict(chi_max=chi, svd_min=1e-10), mixer=True, max_sweeps=args.max_sweeps,
-                      max_E_err=1e-8, min_sweeps=4, combine=True, max_trunc_err=1.0)
-        if eng is None:
-            eng = dmrg.TwoSiteDMRGEngine(psi, M, params)
-        else:
-            eng.options.update(params)
-            eng.reset_stats()
+                      max_E_err=args.max_e_err, min_sweeps=4, combine=True, max_trunc_err=1.0)
+        eng = dmrg.TwoSiteDMRGEngine(psi, M, params)
         E, psi = eng.run()
+        assert int(max(psi.chi)) <= chi
         t = time.perf_counter() - T_START
         rung = dict(chi_max=chi, chi_reached=int(max(psi.chi)), energy_SS=float(E), energy=4 * float(E), energy_per_site_SS=float(E) / n,
                     sweeps=int(eng.sweeps), max_trunc_err=float(max(eng.trunc_err_list)) if eng.trunc_err_list else None,
@@ -109,9 +118,9 @@ def main():
               f"max trunc err {rung['max_trunc_err']}, wall {rung['wall_hms']} = {rung['cpu_core_hours']:.2f} core-h", flush=True)
         with open(args.out, "w") as f:
             json.dump(dict(schema="qmbl-cost-run-dmrg-1", instance_id=args.instance, label="DMRG", rungs=rungs, cores=cores,
-                           protocol=dict(algorithm="two-site DMRG, TeNPy, finite MPS on the torus with long-range couplings, Sz conserved, Neel product start, mixer on",
-                                         max_sweeps=args.max_sweeps, max_E_err=1e-8, svd_min=1e-10, mpo_bond_dimension=int(max(M.H_MPO.chi))),
-                           hardware=dict(host=socket.gethostname(), cpu=platform.processor() or platform.machine(), slurm_job_id=os.environ.get("SLURM_JOB_ID"),
+                           protocol=dict(algorithm="two-site DMRG, TeNPy, finite MPS on the torus with long-range couplings, Sz conserved, Neel product start, mixer on, a new engine per rung on the previous rung's state",
+                                         max_sweeps=args.max_sweeps, max_E_err=args.max_e_err, svd_min=1e-10, mpo_bond_dimension=int(max(M.H_MPO.chi))),
+                           hardware=dict(host=socket.gethostname(), cpu=cpu_model(), slurm_job_id=os.environ.get("SLURM_JOB_ID"),
                                          slurm_partition=os.environ.get("SLURM_JOB_PARTITION"), cores=cores),
                            software=dict(python=platform.python_version(), tenpy=tenpy.__version__, numpy=np.__version__, script="checks/cost/run_dmrg.py",
                                          commit=os.environ.get("QMBL_COMMIT") or git_commit(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")), argv=sys.argv[1:]),
