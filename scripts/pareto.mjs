@@ -175,7 +175,7 @@ const describeHours = panels => panels.map(({ inst, pts }) => `${instLabel(inst)
 const hoursPanels = costFigure({
   name: "energy-vs-compute",
   title: "The best energies at each cost, instance by instance",
-  subtitle: panels => `Every published energy whose paper states what it cost in hours, on the ${panels.length} instances with at least two such rows. ` +
+  subtitle: panels => `Every energy whose paper, or QMBL's own run, states what it cost in hours, on the ${panels.length} instances with at least two such rows. ` +
     "The line is the frontier: the results nothing beats for less. Colour is the kind of number; filled marks can hold a record, hollow ones cannot.",
   costOf: hoursOf, minRows: MIN_COSTED,
   xLabel: "hours, as reported",
@@ -195,7 +195,7 @@ for (const { inst, pts } of hoursPanels) {
   const name = costFigureName(inst);
   const title = `${instLabel(inst)}: the best energies at each cost`;
   own.write(name, t => {
-    const h = header(t, title, "Every energy on this instance whose paper states what it cost in hours. " +
+    const h = header(t, title, "Every energy on this instance whose paper, or QMBL's own run, states what it cost in hours. " +
       "The line is the frontier: the results nothing beats for less; the horizontal line is the record, costed or not.");
     const lg = legend(t, HOURS_LEGEND(t), h.bottom + 34);
     const top = lg.bottom + 36, bottom = top + 300, left = PAD + 66, right = W - PAD - 8;

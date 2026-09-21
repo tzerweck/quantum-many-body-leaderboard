@@ -147,7 +147,7 @@ A missing `compute` block excludes nothing, exactly like a missing variance.
 
 ### How a FLOP count is estimated
 
-Ten rows state hours on a named GPU; 58 more state how many parameters the ansatz had,
+Ten published rows state hours on a named GPU; 58 more state how many parameters the ansatz had,
 how many samples each optimisation step drew and how many steps were taken. Those three
 numbers, with the instance, fix the number of network evaluations an optimisation took, and
 [`scripts/flops.mjs`](scripts/flops.mjs) turns them into floating-point operations at
@@ -180,11 +180,20 @@ also state GPU-hours the model implies these achieved rates:
 | J1-J2 6×6, J2 = 0.5 | ViT, T5 / decoupled attention | 1.8e16 | 10 h, A100 | 0.5 TFLOP/s |
 | J1-J2 6×6, J2 = 0.5 | ViT, factored attention | 1.5e16 | 6 h, A100 | 0.7 TFLOP/s |
 | J1-J2 20×20, J2 = 0.5 | ViT, symmetry restoration | 6.6e19 | 25000 h, GH200 (whole paper) | ≥ 0.7 TFLOP/s |
+| J1-J2 10×10, J2 = 0.5 | RBM α = 1, QMBL run | 8.4e15 | 0.46 h, A100 80 GB (measured) | 5.1 TFLOP/s |
+| triangular 36 | RBM α = 1, QMBL run | 1.2e14 | 0.10 h, A100 80 GB (measured) | 0.32 TFLOP/s |
+| triangular 36 | ViT, QMBL implementation | 3.4e15 | 2.7 h, A100 80 GB (measured) | 0.35 TFLOP/s |
+| triangular 36 | symmetric RBM α = 4, QMBL run | 1.3e13 | 0.12 h, A100 80 GB (measured) | 0.03 TFLOP/s |
 
-Consistent within a paper, a factor of forty across papers: **an estimate is good to an order
-of magnitude and never better**, which is why it has its own axis and its own figures
-(`figures/flops/`, `figures/energy-vs-flops.svg`) and is never placed on the hours axis.
-Turning FLOPs into hours would need exactly the conversion factor the first rule forbids.
+Consistent within a paper, a factor of forty across papers, and a factor of 170 between
+QMBL's own runs on one card (the last four rows, [`checks/cost/`](checks/cost/README.md)):
+a 149-parameter network keeps an A100 busy at 0.03 TFLOP/s, because below ~10^4
+parameters the step is launch overhead and sampling, not arithmetic, and the estimate
+falls 30-100 times short of the clock. **An estimate is good to an order of magnitude for
+a network large enough to fill a GPU and never better**, which is why it has its own axis
+and its own figures (`figures/flops/`, `figures/energy-vs-flops.svg`) and is never placed
+on the hours axis. Turning FLOPs into hours would need exactly the conversion factor the
+first rule forbids.
 
 Three rules, the same shape as the block's own:
 

@@ -20,8 +20,10 @@
 // that sum the network over a point group, attention scores, and any pre-training on smaller
 // lattices. Against the ten rows whose paper also states hours on a named GPU, the model
 // implies 0.5 to 21 TFLOP/s achieved (consistent within one paper, a factor of forty across
-// papers), so an estimate is good to about an order of magnitude and never better
-// (calibration table in DATA.md). Three rules follow from that:
+// papers), and against QMBL's own measured runs 0.03 to 5 TFLOP/s on one A100 (a network
+// under ~1e4 parameters is overhead-bound and the estimate falls 30-100x short), so an
+// estimate is good to about an order of magnitude for a network that fills a GPU and never
+// better (calibration table in DATA.md). Three rules follow from that:
 //
 // - An input nobody stated is never guessed. Parameters, samples and iterations must all be
 //   on the row; the architecture must be in ARCH; the instance's lattice must be one whose
