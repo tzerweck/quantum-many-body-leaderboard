@@ -34,10 +34,12 @@ and the row says so in its method string. Nothing here is attached to anyone els
   more (S is then rank-deficient and its dense form does not fit); the row records which. The
   learning rate ramps linearly from 0 over the first 200 steps (from a near-uniform start
   the first full-rate natural-gradient step threw the symmetric RBM on 10 x 10 to NaN; at a
-  tenth of the rate it descended cleanly). **Divergence rule:** if the energy is not
-  finite at a step, the parameters are restored from the last state kept (every 50 steps),
-  the learning rate is halved for the rest of the run, and the run goes on; after three
-  such recoveries it stops and is not a row. Everything spent is on the clock and the row's
+  tenth of the rate it descended cleanly). **Divergence rule:** a step's energy is *sane*
+  when it is finite and not below ten times the best energy so far (a variational energy
+  cannot improve tenfold, so that is a blow-up); on an insane energy the parameters are
+  restored from the last sane state kept (every 50 steps), the learning rate is halved for
+  the rest of the run, and the run goes on; after five such recoveries it stops and is not
+  a row. Everything spent is on the clock and the row's
   note says what happened. One seed, 20260921. No annealing, no pre-training, no symmetry
   restoration after the fact, no Lanczos step. The per-step energy trace and the final
   parameters are kept beside the results file.
@@ -75,6 +77,15 @@ and the row says so in its method string. Nothing here is attached to anyone els
   both instances, symmetric RBM and ViT on the triangular lattice, GCNN on J1-J2) were
   evaluated on fresh chains with R-hat 1.004-1.005 and stand; their notes say so. Failed
   runs' files are kept under `results/failed/`; nothing there is a row.
+
+- **2026-09-21 night (v1.2), after the GCNN rerun.** The first divergence rule kept any
+  *finite* energy as its fallback, so the GCNN on the triangular lattice restored from a
+  step whose energy was -5e18 and died immediately after (job 14793325, three recoveries in
+  200 steps). A fallback state now has to be sane in the sense above, an energy ten times
+  below the best is itself treated as a divergence rather than waited out, the recovery
+  budget is five, and the results file records the energy at each divergence and at the
+  state restored from. No committed row went through a recovery, so nothing is re-run for
+  this.
 
 ## What a run becomes
 

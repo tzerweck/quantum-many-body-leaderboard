@@ -47,7 +47,7 @@ INSTANCES = {
 # natural-gradient step at the full rate threw the symmetric RBM on 10x10 to +147 and then
 # to NaN, while lr 0.001 descended cleanly (diagnostic job 14760484).
 PROTOCOL = dict(n_samples=4096, n_chains=1024, n_discard_per_chain=16, steps=2000, lr=0.01, warmup_steps=200,
-                diag_shift=1e-6, diag_scale=0.01, cg_maxiter=300,
+                diag_shift=1e-6, diag_scale=0.01, cg_maxiter=300, max_recoveries=5,
                 eval_samples=131072, eval_chains=1024, eval_discard_per_chain=64, seed=20260921)
 
 MODELS = {
@@ -201,8 +201,17 @@ def main():
     done = 0                       # optimisation steps completed, across recoveries
     lr_now = PROTOCOL["lr"]
     recoveries = []                # {step, restored_from, lr}: the divergence rule (README)
-    good = dict(step=0, variables=vs.variables)   # last finite state, kept every 50 steps
-    diverged = dict(at=None)
+    # The state to fall back to, kept every 50 steps, and only while the energy is SANE: the
+    # first version of this rule kept any finite energy, so the GCNN on the triangular lattice
+    # restored from a step whose energy was -5e18 and died again at once (job 14793325).
+    good = dict(step=0, variables=vs.variables, energy=None)
+    best = dict(energy=None)
+    diverged = dict(at=None, energy=None)
+
+    def sane(e):
+        # Finite, and not an order of magnitude below the best energy seen: a variational
+        # energy cannot improve by 10x, so that is a blow-up, not progress.
+        return np.isfinite(e) and (best["energy"] is None or e > 10 * abs(best["energy"]) * -1)
 
     def cb(step_local, log_data, driver):
         nonlocal done
@@ -210,9 +219,9 @@ def main():
         now = time.perf_counter()
         step = done
         mean = float(np.real(e.mean))
-        if not np.isfinite(mean):
-            diverged["at"] = step
-            trace.write(json.dumps(dict(step=step, t=now - T_START, mean=None, diverged=True)) + "\n")
+        if not sane(mean):
+            diverged.update(at=step, energy=None if not np.isfinite(mean) else mean)
+            trace.write(json.dumps(dict(step=step, t=now - T_START, mean=None if not np.isfinite(mean) else mean, diverged=True)) + "\n")
             trace.flush()
             return False
         step_times.append(now)
@@ -222,8 +231,10 @@ def main():
         if step % 20 == 0:
             trace.flush()
             print(f"step {step:5d}  t={rec['t']:8.1f}s  E={rec['mean']:.6f} ± {rec['sigma']:.6f}  var={rec['variance']:.4f}  tau={rec['tau']:.2f}  Rhat={rec['r_hat']:.3f}", flush=True)
+        if best["energy"] is None or mean < best["energy"]:
+            best["energy"] = mean
         if step % 50 == 0:
-            good.update(step=step, variables=vs.variables)
+            good.update(step=step, variables=vs.variables, energy=mean)
         if args.checkpoint_every and step and step % args.checkpoint_every == 0:
             with open(ckpt_path, "wb") as f:
                 f.write(flax.serialization.to_bytes(vs.variables))
@@ -237,12 +248,12 @@ def main():
             break
         # The divergence rule: restore the last finite state, halve the learning rate, go on;
         # give up after three. Everything spent is on the clock.
-        if len(recoveries) >= 3:
-            print(f"DIVERGED at step {diverged['at']} after three recoveries; no row", flush=True)
+        if len(recoveries) >= PROTOCOL["max_recoveries"]:
+            print(f"DIVERGED at step {diverged['at']} after {len(recoveries)} recoveries; no row", flush=True)
             break
         lr_now /= 2
-        recoveries.append(dict(step=diverged["at"], restored_from=good["step"], lr=lr_now))
-        print(f"RECOVER: energy not finite at step {diverged['at']}; parameters restored from step {good['step']}, learning rate {lr_now}", flush=True)
+        recoveries.append(dict(step=diverged["at"], energy=diverged["energy"], restored_from=good["step"], restored_energy=good["energy"], lr=lr_now))
+        print(f"RECOVER: energy {diverged['energy']} at step {diverged['at']}; parameters restored from step {good['step']} (E = {good['energy']}), learning rate {lr_now}", flush=True)
         vs.variables = good["variables"]
         vs.reset()
         done = good["step"]
