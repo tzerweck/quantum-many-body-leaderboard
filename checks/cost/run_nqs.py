@@ -201,17 +201,20 @@ def main():
     done = 0                       # optimisation steps completed, across recoveries
     lr_now = PROTOCOL["lr"]
     recoveries = []                # {step, restored_from, lr}: the divergence rule (README)
-    # The state to fall back to, kept every 50 steps, and only while the energy is SANE: the
-    # first version of this rule kept any finite energy, so the GCNN on the triangular lattice
-    # restored from a step whose energy was -5e18 and died again at once (job 14793325).
+    # The state to fall back to, kept every 50 steps, and only while the energy is SANE. Sane
+    # means finite and inside the Hamiltonian's own bound: every term of these spin models has
+    # Pauli norm 1, so |E| <= n_conn is exact and |E| > 2 n_conn is impossible, whatever the
+    # ansatz. A bound read off the run itself does not work - the first version kept any finite
+    # energy and the GCNN restored from a -5e18 step (job 14793325), the second scaled by the
+    # best energy so far and fired three times while the energy descended through zero, where
+    # that scale is meaningless (job 14844477).
+    bound = 2.0 * n_conn
     good = dict(step=0, variables=vs.variables, energy=None)
     best = dict(energy=None)
     diverged = dict(at=None, energy=None)
 
     def sane(e):
-        # Finite, and not an order of magnitude below the best energy seen: a variational
-        # energy cannot improve by 10x, so that is a blow-up, not progress.
-        return np.isfinite(e) and (best["energy"] is None or e > 10 * abs(best["energy"]) * -1)
+        return np.isfinite(e) and abs(e) <= bound
 
     def cb(step_local, log_data, driver):
         nonlocal done

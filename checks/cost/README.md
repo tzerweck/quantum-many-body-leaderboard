@@ -34,12 +34,12 @@ and the row says so in its method string. Nothing here is attached to anyone els
   more (S is then rank-deficient and its dense form does not fit); the row records which. The
   learning rate ramps linearly from 0 over the first 200 steps (from a near-uniform start
   the first full-rate natural-gradient step threw the symmetric RBM on 10 x 10 to NaN; at a
-  tenth of the rate it descended cleanly). **Divergence rule:** a step's energy is *sane*
-  when it is finite and not below ten times the best energy so far (a variational energy
-  cannot improve tenfold, so that is a blow-up); on an insane energy the parameters are
-  restored from the last sane state kept (every 50 steps), the learning rate is halved for
-  the rest of the run, and the run goes on; after five such recoveries it stops and is not
-  a row. Everything spent is on the clock and the row's
+  tenth of the rate it descended cleanly). **Divergence rule:** a step's energy is *sane* when it is
+  finite and inside the Hamiltonian's own bound, |E| <= 2 n_conn - every term of these spin
+  models has Pauli norm 1, so no state of any ansatz can be outside it; on an insane energy
+  the parameters are restored from the last sane state kept (every 50 steps), the learning
+  rate is halved for the rest of the run, and the run goes on; after five such recoveries it
+  stops and is not a row. Everything spent is on the clock and the row's
   note says what happened. One seed, 20260921. No annealing, no pre-training, no symmetry
   restoration after the fact, no Lanczos step. The per-step energy trace and the final
   parameters are kept beside the results file.
@@ -86,6 +86,14 @@ and the row says so in its method string. Nothing here is attached to anyone els
   budget is five, and the results file records the energy at each divergence and at the
   state restored from. No committed row went through a recovery, so nothing is re-run for
   this.
+
+- **2026-09-22 (v1.3), after the GCNN converged under a misfiring rule.** Scaling the
+  sanity bound by the best energy so far is meaningless while the energy descends *through*
+  zero: the GCNN's rerun (job 14844477) recovered three times at -2.2, -1.0 and -1.1, all
+  of them ordinary steps, and finished at a learning rate eight times below the protocol's.
+  It reached -0.557874/site, but under a different optimisation than every other row, so it
+  is not a row. The bound is now the Hamiltonian's own, |E| <= 2 n_conn, which no state can
+  leave and which needs nothing from the run.
 
 ## What a run becomes
 
