@@ -46,7 +46,7 @@ const cffField = k => CFF.match(new RegExp(`^${k}:\\s*"?([^"\\n]+)"?\\s*$`, "m")
 const VERSION = cffField("version");
 const RELEASED = cffField("date-released");
 if (!VERSION || !RELEASED) throw new Error("CITATION.cff: version or date-released not found");
-const CITE_HEAD = "T. Zerweck";
+const CITE_HEAD = "T. Zerweck and J. Carrasquilla";
 const CITE_TITLE = "QMBL - the Quantum Many-Body Leaderboard";
 const CITE_TAIL = `v${VERSION}, Zenodo (${RELEASED.slice(0, 4)}).`;
 const CITATION = `${CITE_HEAD}, ${CITE_TITLE}, ${CITE_TAIL} https://doi.org/${DOI}`;
