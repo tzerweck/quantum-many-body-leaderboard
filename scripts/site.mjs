@@ -319,7 +319,7 @@ const byFrontier = (a, b) => {
 };
 const COST_FIGS = instances.filter(inst => fs.existsSync(`figures/${costFigureName(inst)}.svg`)).sort(byFrontier);
 const costEntry = inst => [costFigureName(inst), `${modelName(inst.model)} ${instanceLabel(inst)}: the best energies at each cost`,
-  "Every energy on this instance whose paper, or QMBL's own run, states its compute cost in hours, against that cost; the line is the frontier of results nothing beats for less."];
+  "Every energy on this instance whose paper, or QMBL's own run, states its compute cost in hours, against that cost."];
 
 // The estimated-FLOPs figures (flops.mjs): the same construction on an estimate from the
 // parameter, sample and iteration counts a paper states, for the instances where two or
@@ -327,7 +327,7 @@ const costEntry = inst => [costFigureName(inst), `${modelName(inst.model)} ${ins
 // forbids. Ordered like the cost figures.
 const FLOPS_FIGS = instances.filter(inst => fs.existsSync(`figures/${flopsFigureName(inst)}.svg`)).sort(byFrontier);
 const flopsEntry = inst => [flopsFigureName(inst), `${modelName(inst.model)} ${instanceLabel(inst)}: the best energies at each estimated cost in FLOPs`,
-  "Every energy on this instance whose paper states its parameter, sample and iteration counts, against the floating-point operations those imply; the line is the frontier of results nothing beats for less."];
+  "Every energy on this instance whose paper states its parameter, sample and iteration counts, against the floating-point operations those imply."];
 
 // Front page: one section for both axes (Tristan, 2026-09-21, in place of a section per
 // axis), in three rows of badges (Tristan, 2026-09-23, in place of one badge per instance):

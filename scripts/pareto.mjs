@@ -202,7 +202,7 @@ const hoursPanels = costFigure({
   name: "energy-vs-compute",
   title: "The best energies at each cost, instance by instance",
   subtitle: panels => `Every energy whose paper, or QMBL's own run, states what it cost in hours, on the ${panels.length} instances with at least two such rows. ` +
-    "The line is the frontier: the results nothing beats for less. Colour is the kind of number; filled marks can hold a record, hollow ones cannot.",
+    "Colour is the kind of number; filled marks can hold a record, hollow ones cannot.",
   costOf: hoursOf, minRows: MIN_COSTED,
   xLabel: "hours, as reported",
   legendItems: HOURS_LEGEND,
@@ -221,8 +221,7 @@ for (const { inst, pts } of hoursPanels) {
   const name = costFigureName(inst);
   const title = `${instLabel(inst)}: the best energies at each cost`;
   own.write(name, t => {
-    const h = header(t, title, "Every energy on this instance whose paper, or QMBL's own run, states what it cost in hours. " +
-      "The line is the frontier: the results nothing beats for less.");
+    const h = header(t, title, "Every energy on this instance whose paper, or QMBL's own run, states what it cost in hours.");
     const lg = legend(t, HOURS_LEGEND(t), h.bottom + 34);
     const top = lg.bottom + 36, bottom = top + 300, left = PAD + 66, right = W - PAD - 8;
     const parts = [h.svg, lg.svg];
@@ -256,7 +255,7 @@ const flopsPanels = costFigure({
   name: "energy-vs-flops",
   title: "The best energies at each estimated cost in FLOPs, instance by instance",
   subtitle: panels => `Every published energy whose paper states enough to estimate its optimisation in floating-point operations, on the ${panels.length} instances with at least two such rows. ` +
-    "The line is the frontier: the results nothing beats for less. Colour is the kind of number; filled marks can hold a record, hollow ones cannot.",
+    "Colour is the kind of number; filled marks can hold a record, hollow ones cannot.",
   costOf: estimatedFlopsOf, minRows: MIN_COSTED,
   xLabel: "FLOPs, estimated",
   legendItems: FLOPS_LEGEND,
@@ -271,8 +270,7 @@ for (const { inst, pts } of flopsPanels) {
   const name = flopsFigureName(inst);
   const title = `${instLabel(inst)}: the best energies at each estimated cost in FLOPs`;
   own.write(name, t => {
-    const h = header(t, title, "Every energy on this instance whose paper states enough to estimate its optimisation in floating-point operations. " +
-      "The line is the frontier: the results nothing beats for less.");
+    const h = header(t, title, "Every energy on this instance whose paper states enough to estimate its optimisation in floating-point operations.");
     const lg = legend(t, FLOPS_LEGEND(t), h.bottom + 34);
     const top = lg.bottom + 36, bottom = top + 300, left = PAD + 66, right = W - PAD - 8;
     const parts = [h.svg, lg.svg];
