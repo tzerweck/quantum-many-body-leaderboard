@@ -26,7 +26,7 @@ import { citeRef, paperYear } from "./cite.mjs";
 import { sources } from "./enrich_sources.mjs";
 import { quote, shorten, MODELS, BOUNDARY, instanceLabel, byGeometry, noRecordReason, gapAbove } from "./readme_table.mjs";
 import { logoSvg, faviconSvg, LOGO_CSS } from "./logo.mjs";
-import { hoursOf, costFigureName, flopsFigureName } from "./cost.mjs";
+import { hoursOf, costFigureName, flopsFigureName, paramsFigureName } from "./cost.mjs";
 import { flopsOf } from "./flops.mjs";
 import { FRONTIER } from "./views.mjs";
 import { energyFigures } from "./ladders.mjs";
@@ -326,17 +326,20 @@ const costEntry = inst => [costFigureName(inst), `${modelName(inst.model)} ${ins
 // more rows state all three. Never on the hours axis: that would be the conversion DATA.md
 // forbids. Ordered like the cost figures.
 const FLOPS_FIGS = instances.filter(inst => fs.existsSync(`figures/${flopsFigureName(inst)}.svg`)).sort(byFrontier);
+const PARAMS_FIGS = instances.filter(inst => fs.existsSync(`figures/${paramsFigureName(inst)}.svg`)).sort(byFrontier);
+const paramsEntry = inst => [paramsFigureName(inst), `${modelName(inst.model)} ${instanceLabel(inst)}: the best energies at each parameter count`,
+  "Every energy on this instance whose paper states the ansatz's parameter count, against that count."];
 const flopsEntry = inst => [flopsFigureName(inst), `${modelName(inst.model)} ${instanceLabel(inst)}: the best energies at each estimated cost in FLOPs`,
   "Every energy on this instance whose paper states its parameter, sample and iteration counts, against the floating-point operations those imply."];
 
 // Front page: one section for both axes (Tristan, 2026-09-21, in place of a section per
 // axis), in three rows of badges (Tristan, 2026-09-23, in place of one badge per instance):
-// the axis, "stated hours" or "estimated FLOPs", then the model, then the instance, each
+// the axis, "stated hours", "estimated FLOPs" or "parameters", then the model, then the instance, each
 // row holding only what has a figure on the axis above it. The axes stay separate figures:
 // the merge is of the sections, never of the axes. An instance badge says only what tells
 // it from its neighbours; what they all share (lattice, coupling, filling) stands once in
 // front of the row, as the slider's axis name does.
-const COMPUTE_AXES = [["stated hours", COST_FIGS, costEntry], ["estimated FLOPs", FLOPS_FIGS, flopsEntry]].filter(([, figs]) => figs.length);
+const COMPUTE_AXES = [["stated hours", COST_FIGS, costEntry], ["estimated FLOPs", FLOPS_FIGS, flopsEntry], ["parameters", PARAMS_FIGS, paramsEntry]].filter(([, figs]) => figs.length);
 const computeModels = figs => MODELS.map(([m]) => figs.filter(inst => inst.model === m).sort(byGeometry)).filter(g => g.length);
 // An instance's label as parts, the lattice split off its size: "square 8x8, J2 = 0.5"
 // is ["square", "8x8", "J2 = 0.5"].

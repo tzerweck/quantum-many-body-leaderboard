@@ -25,7 +25,7 @@
 import fs from "node:fs";
 import { recordEligible, exactEligible, boundLabel, perSiteDivisor, perSiteLabel } from "./units.mjs";
 import { collect, recordOf } from "./summary.mjs";
-import { hoursOf, parametersOf, MIN_COSTED, costFigureName, flopsFigureName } from "./cost.mjs";
+import { hoursOf, parametersOf, MIN_COSTED, costFigureName, flopsFigureName, paramsFigureName } from "./cost.mjs";
 import { estimatedFlopsOf } from "./flops.mjs";
 import { W, PAD, n, text, hline, dot, legend, header, footnote, doc, textWidth, niceStep, writer, log, logScale, pow10, shortLabel, rowHref, linked } from "./chart.mjs";
 
@@ -281,6 +281,19 @@ for (const { inst, pts } of flopsPanels) {
   });
 }
 
+// Parameter count: the same construction on the ansatz size the paper prints, for the
+// instances with at least three such rows, overview and one figure per instance.
+const PARAMS_LEGEND = t => [
+  { kind: "dot", color: t.series[0], label: "Variational bound" },
+  { kind: "dot", color: t.series[1], label: "Projected" },
+  { kind: "dot", color: t.series[2], label: "Extrapolated" },
+  { kind: "ring", color: t.ink2, label: "Cannot hold a record" },
+  { kind: "line", color: t.series[0], label: "Frontier" },
+];
+const PARAMS_FOOTER = "Parameter counts as the papers print them; a count evaluated from a printed formula is marked medium confidence in the row. " +
+  "Tensor-network bond dimensions and Monte Carlo sample counts are other costs and are not on this axis.";
+const describeParams = panels => panels.map(({ inst, pts }) => `${instLabel(inst)}: ${pts.map(p => `${shortLabel(p.r)} ${p.cost.value} parameters ${p.e.toFixed(6)}`).join(", ")}`).join("; ");
+
 const paramPanels = costFigure({
   name: "energy-vs-parameters",
   title: "The best energies at each parameter count, instance by instance",
@@ -288,18 +301,29 @@ const paramPanels = costFigure({
     "The line is the frontier: the results no smaller ansatz beats. Colour is the kind of number; filled marks can hold a record, hollow ones cannot.",
   costOf: parametersOf, minRows: 3,
   xLabel: "variational parameters",
-  legendItems: t => [
-    { kind: "dot", color: t.series[0], label: "Variational bound" },
-    { kind: "dot", color: t.series[1], label: "Projected" },
-    { kind: "dot", color: t.series[2], label: "Extrapolated" },
-    { kind: "ring", color: t.ink2, label: "Cannot hold a record" },
-    { kind: "line", color: t.series[0], label: "Frontier" },
-  ],
-  footer: () => "Parameter counts as the papers print them; a count evaluated from a printed formula is marked medium confidence in the row. " +
-    "Tensor-network bond dimensions and Monte Carlo sample counts are other costs and are not on this axis.",
-  describe: panels => panels.map(({ inst, pts }) => `${instLabel(inst)}: ${pts.map(p => `${shortLabel(p.r)} ${p.cost.value} parameters ${p.e.toFixed(6)}`).join(", ")}`).join("; "),
+  legendItems: PARAMS_LEGEND,
+  footer: () => PARAMS_FOOTER,
+  describe: describeParams,
 });
 
-console.log(`${OUT}/: ${written.length + own.written.length} files (${hoursPanels.length} per-instance cost figures, ${flopsPanels.length} per-instance FLOPs figures; energy vs compute: ${hoursPanels.length} instances, ${hoursPanels.reduce((a, p) => a + p.pts.length, 0)} rows; ` +
+const PARAMS_DIR = "figures/params";
+fs.rmSync(PARAMS_DIR, { recursive: true, force: true });
+fs.mkdirSync(PARAMS_DIR, { recursive: true });
+for (const { inst, pts } of paramPanels) {
+  const name = paramsFigureName(inst);
+  const title = `${instLabel(inst)}: the best energies at each parameter count`;
+  own.write(name, t => {
+    const h = header(t, title, "Every energy on this instance whose paper states the ansatz's parameter count.");
+    const lg = legend(t, PARAMS_LEGEND(t), h.bottom + 34);
+    const top = lg.bottom + 36, bottom = top + 300, left = PAD + 66, right = W - PAD - 8;
+    const parts = [h.svg, lg.svg];
+    drawPanel(t, parts, inst, pts, { px: PAD, left, right, top, bottom, xLabel: "variational parameters", title: null, nameOwn: true });
+    const fn = footnote(t, PARAMS_FOOTER, bottom + 70);
+    parts.push(fn.svg);
+    return doc(t, fn.bottom + 24, title, describeParams([{ inst, pts }]), parts);
+  });
+}
+
+console.log(`${OUT}/: ${written.length + own.written.length} files (${hoursPanels.length} per-instance cost figures, ${flopsPanels.length} per-instance FLOPs figures, ${paramPanels.length} per-instance parameter figures; energy vs compute: ${hoursPanels.length} instances, ${hoursPanels.reduce((a, p) => a + p.pts.length, 0)} rows; ` +
   `energy vs estimated FLOPs: ${flopsPanels.length} instances, ${flopsPanels.reduce((a, p) => a + p.pts.length, 0)} rows; ` +
   `energy vs parameters: ${paramPanels.length} instances, ${paramPanels.reduce((a, p) => a + p.pts.length, 0)} rows)`);

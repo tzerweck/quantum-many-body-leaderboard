@@ -46,3 +46,4 @@ export const MIN_COSTED = 2;
 // estimated-FLOPs figure (flops.mjs) sits beside it under figures/flops/.
 export const costFigureName = inst => `cost/${inst.instance_id.replace("/", "--")}`;
 export const flopsFigureName = inst => `flops/${inst.instance_id.replace("/", "--")}`;
+export const paramsFigureName = inst => `params/${inst.instance_id.replace("/", "--")}`;
