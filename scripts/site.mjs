@@ -340,11 +340,9 @@ function computeSwitcher() {
   if (!COMPUTE_FIGS.length) return "";
   return `<section class="tabs" id="energy-vs-compute">
   <h2>The best published energies, by cost</h2>
-  <p class="muted">What the published results on one instance cost in compute, on two axes. Hours are what a paper states, GPU or CPU, and few state them
-  (${COST_FIGS.length} instances). Many more state how many parameters, samples per step and steps an optimisation took; those imply a count of floating-point
-  operations, estimated here (<a href="${DATA}#how-a-flop-count-is-estimated">how</a>) and good to an order of magnitude: the optimizer's solve, symmetry projections and pre-training
-  are not counted (${FLOPS_FIGS.length} instances). Nothing on the FLOPs axis is a reported number, and turning it into hours would take the conversion the data rules forbid,
-  so the two are never mixed: an instance with both shows them as two figures, a badge each.</p>
+  <p class="muted">On ${COST_FIGS.length} instances, papers state compute cost in hours on GPU or CPU. Many more papers state the number of
+  parameters, samples and optimisation steps. Those imply a count of floating-point operations, which we estimate here
+  (<a href="${DATA}#how-a-flop-count-is-estimated">how</a>).</p>
   ${tabs("cost-tab", COMPUTE_FIGS.map((inst, j) => [`${esc(modelName(inst.model))} ${esc(instanceLabel(inst))}`, `<div class="tabs">${tabs(`cost-${j}`, computeAxes(inst).map(([label, entry]) => [label, figure(entry(inst))]))}</div>`]))}
 </section>`;
 }

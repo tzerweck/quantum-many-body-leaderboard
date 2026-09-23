@@ -193,7 +193,9 @@ falls 30-100 times short of the clock. **An estimate is good to an order of magn
 a network large enough to fill a GPU and never better**, which is why it has its own axis
 and its own figures (`figures/flops/`, `figures/energy-vs-flops.svg`) and is never placed
 on the hours axis. Turning FLOPs into hours would need exactly the conversion factor the
-first rule forbids.
+first rule forbids. Nothing on the FLOPs axis is a reported number, so the two axes are
+never mixed: on the front page an instance with both shows them as two figures, a badge
+each.
 
 Three rules, the same shape as the block's own:
 
