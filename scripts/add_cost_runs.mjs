@@ -29,7 +29,7 @@ for (const f of files) {
     const { hardware: h, timing: t, train: tr, software: sw } = res;
     if (!Number.isFinite(res.energy) || !Number.isFinite(res.sigma) || res.diverged) { console.log(`SKIP ${f}: energy ${res.energy} sigma ${res.sigma} (a run that diverged is not a row)`); continue; }
     if (!(res.r_hat < 1.05)) { console.log(`SKIP ${f}: R_hat ${res.r_hat} (the final evaluation's chains had not equilibrated; not a row)`); continue; }
-    const recovered = (res.recoveries || []).map(r => `energy not finite at step ${r.step}, parameters restored from step ${r.restored_from}, learning rate ${r.lr} from there`).join("; ");
+    const recovered = (res.recoveries || []).map(r => `energy ${r.energy == null ? "not finite" : r.energy.toPrecision(3)} at step ${r.step}${r.energy == null ? "" : ", outside the Hamiltonian's bound"}, parameters restored from step ${r.restored_from}${r.restored_energy == null ? "" : ` (E = ${r.restored_energy.toFixed(2)})`}, learning rate ${r.lr} from there`).join("; ");
     const chains = res.eval.chains_from === "training" ? "the training chains carried on" : "fresh chains";
     const device = h.device_kind.replace(/^NVIDIA /, "NVIDIA ");
     const gpuHours = t.wall_seconds / 3600 * h.n_devices;
