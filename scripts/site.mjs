@@ -359,9 +359,10 @@ function computeSwitcher() {
   if (!COMPUTE_AXES.length) return "";
   return `<section class="tabs" id="energy-vs-compute">
   <h2>The best published energies, by cost</h2>
-  <p class="muted">On ${COST_FIGS.length} instances, papers state compute cost in hours on GPU or CPU. Many more papers state the number of
-  parameters, samples and optimisation steps. Those imply a count of floating-point operations, which we estimate here
-  (<a href="${DATA}#how-a-flop-count-is-estimated">how</a>).</p>
+  <p class="muted">Skim through three kinds of cost: compute hours, estimated FLOPs and number of parameters. Papers state compute cost
+  in hours on GPU/CPU on ${COST_FIGS.length} instances. Many more papers state the number of parameters, samples and optimisation steps,
+  which imply a count of floating-point operations that we estimate (<a href="${DATA}#how-a-flop-count-is-estimated">how</a>). On top,
+  we plot the parameter count alone.</p>
   ${tabs("cost-axis", COMPUTE_AXES.map(([label, figs, entry], a) => [label, `<div class="tabs">${tabs(`cost-${a}`, computeModels(figs).map((g, m) =>
     [esc(modelName(g[0].model)), `<div class="tabs">${computeInstances(`cost-${a}-${m}`, g, entry)}</div>`]))}</div>`]))}
 </section>`;
