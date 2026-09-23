@@ -282,7 +282,7 @@ for (const { inst, pts } of flopsPanels) {
 }
 
 // Parameter count: the same construction on the ansatz size the paper prints, for the
-// instances with at least three such rows, overview and one figure per instance.
+// instances with at least two such rows, overview and one figure per instance.
 const PARAMS_LEGEND = t => [
   { kind: "dot", color: t.series[0], label: "Variational bound" },
   { kind: "dot", color: t.series[1], label: "Projected" },
@@ -297,9 +297,9 @@ const describeParams = panels => panels.map(({ inst, pts }) => `${instLabel(inst
 const paramPanels = costFigure({
   name: "energy-vs-parameters",
   title: "The best energies at each parameter count, instance by instance",
-  subtitle: panels => `Every published energy whose paper states the ansatz's parameter count, on the ${panels.length} instances with at least three such rows. ` +
-    "The line is the frontier: the results no smaller ansatz beats. Colour is the kind of number; filled marks can hold a record, hollow ones cannot.",
-  costOf: parametersOf, minRows: 3,
+  subtitle: panels => `Every published energy whose paper states the ansatz's parameter count, on the ${panels.length} instances with at least two such rows. ` +
+    "Colour is the kind of number; filled marks can hold a record, hollow ones cannot.",
+  costOf: parametersOf, minRows: MIN_COSTED,
   xLabel: "variational parameters",
   legendItems: PARAMS_LEGEND,
   footer: () => PARAMS_FOOTER,
