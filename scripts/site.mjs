@@ -299,9 +299,9 @@ const FIGURES = [
 // keyboard order. The first badge is checked. The stylesheet is written before any page, so
 // the rules for each switch come from tabRules() at module level, into TAB_CSS. (An "All"
 // badge showing every panel at once went with the stacked energy figures, 2026-09-18.)
-function tabs(id, items) {
+function tabs(id, items, lead = "") {
   return `${items.map((_, k) => `<input type="radio" name="${id}" id="${id}-${k}"${k ? "" : " checked"}>`).join("")}
-  <div class="tab-labels">${items.map(([label], k) => `<label for="${id}-${k}">${label}</label>`).join("")}</div>
+  <div class="tab-labels">${lead}${items.map(([label], k) => `<label for="${id}-${k}">${label}</label>`).join("")}</div>
   <div class="tab-panels">${items.map(([, html]) => html).join("\n")}</div>`;
 }
 const tabRules = (id, count) => [...Array(count).keys()].map(k =>
@@ -330,20 +330,37 @@ const flopsEntry = inst => [flopsFigureName(inst), `${modelName(inst.model)} ${i
   "Every energy on this instance whose paper states its parameter, sample and iteration counts, against the floating-point operations those imply; the line is the frontier of results nothing beats for less."];
 
 // Front page: one section for both axes (Tristan, 2026-09-21, in place of a section per
-// axis). A badge per instance with a figure on either axis, and under it a badge per axis
-// the instance has, "stated hours" or "estimated FLOPs", so the reader always sees which
-// one is up; an instance with both gets two. The axes stay separate figures: the merge is
-// of the sections, never of the axes.
-const COMPUTE_FIGS = instances.filter(inst => COST_FIGS.includes(inst) || FLOPS_FIGS.includes(inst)).sort(byFrontier);
-const computeAxes = inst => [COST_FIGS.includes(inst) && ["stated hours", costEntry], FLOPS_FIGS.includes(inst) && ["estimated FLOPs", flopsEntry]].filter(Boolean);
+// axis), in three rows of badges (Tristan, 2026-09-23, in place of one badge per instance):
+// the axis, "stated hours" or "estimated FLOPs", then the model, then the instance, each
+// row holding only what has a figure on the axis above it. The axes stay separate figures:
+// the merge is of the sections, never of the axes. An instance badge says only what tells
+// it from its neighbours; what they all share (lattice, coupling, filling) stands once in
+// front of the row, as the slider's axis name does.
+const COMPUTE_AXES = [["stated hours", COST_FIGS, costEntry], ["estimated FLOPs", FLOPS_FIGS, flopsEntry]].filter(([, figs]) => figs.length);
+const computeModels = figs => MODELS.map(([m]) => figs.filter(inst => inst.model === m).sort(byGeometry)).filter(g => g.length);
+// An instance's label as parts, the lattice split off its size: "square 8x8, J2 = 0.5"
+// is ["square", "8x8", "J2 = 0.5"].
+const labelParts = inst => instanceLabel(inst).split(", ").flatMap((p, k) => (k ? [p] : p.match(/^([a-z-]+) (\d.*)$/)?.slice(1) ?? [p]));
+function computeInstances(id, group, entry) {
+  const parts = group.map(labelParts);
+  const shared = group.length > 1 ? parts[0].filter(p => parts.every(q => q.includes(p))) : [];
+  const lead = shared.length ? `<span class="shared">${esc(shared.join(", "))}</span>` : "";
+  // The lattice and the size read as one part again when both are left: "square 6x6".
+  const label = ps => ps.map((p, k) => (k === 1 && !shared.includes(ps[0]) && !shared.includes(p) && /^\d+x\d/.test(p) ? " " : k ? ", " : "") + p)
+    .filter((p, k) => !shared.includes(ps[k])).join("").replace(/^, /, "");
+  return tabs(id, group.map((inst, k) => [esc(label(parts[k])), figure(entry(inst))]), lead);
+}
+const COMPUTE_TABS = COMPUTE_AXES.flatMap(([, figs], a) => [[`cost-${a}`, computeModels(figs).length],
+  ...computeModels(figs).map((g, m) => [`cost-${a}-${m}`, g.length])]);
 function computeSwitcher() {
-  if (!COMPUTE_FIGS.length) return "";
+  if (!COMPUTE_AXES.length) return "";
   return `<section class="tabs" id="energy-vs-compute">
   <h2>The best published energies, by cost</h2>
   <p class="muted">On ${COST_FIGS.length} instances, papers state compute cost in hours on GPU or CPU. Many more papers state the number of
   parameters, samples and optimisation steps. Those imply a count of floating-point operations, which we estimate here
   (<a href="${DATA}#how-a-flop-count-is-estimated">how</a>).</p>
-  ${tabs("cost-tab", COMPUTE_FIGS.map((inst, j) => [`${esc(modelName(inst.model))} ${esc(instanceLabel(inst))}`, `<div class="tabs">${tabs(`cost-${j}`, computeAxes(inst).map(([label, entry]) => [label, figure(entry(inst))]))}</div>`]))}
+  ${tabs("cost-axis", COMPUTE_AXES.map(([label, figs, entry], a) => [label, `<div class="tabs">${tabs(`cost-${a}`, computeModels(figs).map((g, m) =>
+    [esc(modelName(g[0].model)), `<div class="tabs">${computeInstances(`cost-${a}-${m}`, g, entry)}</div>`]))}</div>`]))}
 </section>`;
 }
 // The published energies of every Hamiltonian, drawn by size_energy.mjs into figures/energy/
@@ -401,7 +418,7 @@ function energySwitcher() {
 </section>`;
 }
 
-const TAB_CSS = [tabRules("cost-tab", COMPUTE_FIGS.length), ...COMPUTE_FIGS.map((inst, j) => tabRules(`cost-${j}`, computeAxes(inst).length)),
+const TAB_CSS = [tabRules("cost-axis", COMPUTE_AXES.length), ...COMPUTE_TABS.map(([id, n]) => tabRules(id, n)),
   tabRules("energy-group", ENERGY_FIGS.length),
   ...ENERGY_FIGS.map(([, figs], j) => tabRules(`energy-${j}`, figs.length)), ...SLIDERS.map(sliderRules)].join("\n");
 
@@ -1381,6 +1398,7 @@ pre.ticks { font-family: var(--mono); font-size: clamp(7px, 1.6vw, 13px); line-h
 .tab-labels label:hover { border-color: var(--accent); color: var(--accent); }
 .tab-panels > * { display: none; }
 .tab-panels > .tabs > .tab-labels { margin-top: 0; }
+.tab-labels .shared { align-self: center; color: var(--muted); margin-right: 0.2rem; }
 .stack > figure { margin-top: 0.6rem; }
 p.facet { margin: 1.4rem 0 0.2rem; font-size: 0.85rem; font-weight: 600; color: var(--ink2); }
 .slider { position: relative; max-width: 920px; }
