@@ -194,7 +194,7 @@ function HOURS_FOOTER(all, overview = false) {
   const rows = k => `${k} row${k === 1 ? "" : "s"}`;
   return (cpu ? `Circles are GPU-hours, squares CPU core-hours (${rows(cpu)}).` : "Every mark is GPU-hours.") +
     (der ? ` For ${rows(der)} the hours are devices × wall-clock, multiplied here.` : "") +
-    (own ? ` Labels marked QMBL are QMBL's own reference runs, measured on one A100 80 GB or 8 CPU cores (${rows(own)})${overview ? "; each instance's own figure names all of them" : ""}.` : "");
+    (own ? ` Labels marked QMBL are QMBL's own reference runs${overview ? "; each instance's own figure names all of them" : ""}.` : "");
 }
 const describeHours = panels => panels.map(({ inst, pts }) => `${instLabel(inst)}: ${pts.map(p => `${shortLabel(p.r)} ${Math.round(p.cost.value)} ${p.cost.unit === "cpu" ? "CPU-h" : "GPU-h"}${p.cost.derived ? " (derived)" : ""} ${p.e.toFixed(6)}`).join(", ")}`).join("; ");
 
