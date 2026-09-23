@@ -110,3 +110,9 @@ reading RULES.md 8.2 gives a VarBench baseline.
 - `run_nqs.py`, `vit.py` — the neural-state runs. `run_dmrg.py` — DMRG.
 - `euler/` — the sbatch scripts as submitted, and `submit.sh`.
 - `results/` — one JSON per run, with its `.trace.jsonl` and `.params.msgpack`.
+- `calibration/` — runs made to calibrate an estimate, never rows (`add_cost_runs.mjs` reads
+  `results/` only). `dmrg-cal-tri-36` repeats the chi = 500 rung on the triangular 36 torus
+  to record how many effective-Hamiltonian applications TeNPy's Lanczos took per two-site
+  update, the one input of the DMRG FLOP model (DATA.md) that TeNPy decides adaptively.
+  From 2026-09-23 every DMRG rung also records its final bond-dimension profile and these
+  Lanczos counts; the protocol is unchanged.

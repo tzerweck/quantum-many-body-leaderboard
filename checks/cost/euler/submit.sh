@@ -26,9 +26,11 @@ NQS_JOBS=(
   "vit-j1j2-100      J1J2/square_100_P_0.5       vit      gpupr.24h  24:00:00"
   "vit-tri-36        Heisenberg/triangular_36_P  vit      gpupr.24h  24:00:00"
 )
+# name  instance  time  chi ladder (comma-separated)  destination (results = a row; calibration = never a row)
 DMRG_JOBS=(
-  "dmrg-j1j2-100     J1J2/square_100_P_0.5       100:00:00"
-  "dmrg-tri-36       Heisenberg/triangular_36_P  60:00:00"
+  "dmrg-j1j2-100     J1J2/square_100_P_0.5       100:00:00  500,1000,2000  results"
+  "dmrg-tri-36       Heisenberg/triangular_36_P  60:00:00   500,1000,2000  results"
+  "dmrg-cal-tri-36   Heisenberg/triangular_36_P  04:00:00   500            calibration"
 )
 
 submit() {  # file
@@ -70,7 +72,8 @@ fi
 
 if [ "$what" = dmrg ] || [ "$what" = all ]; then
 for spec in "${DMRG_JOBS[@]}"; do
-  read -r name inst tlim <<<"$spec"
+  read -r name inst tlim chis dest <<<"$spec"
+  mkdir -p "$HERE/$dest"
   wanted "$name" || continue
   f="$HERE/euler/$name.sbatch"
   cat > "$f" <<SB
@@ -88,8 +91,8 @@ source "\$HOME/agent-runs/env-jax.sh"
 export QMBL_COMMIT="$COMMIT" OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 OPENBLAS_NUM_THREADS=8
 OUT="$SCR/$name"; mkdir -p "\$OUT"
 cd "$HERE"
-python run_dmrg.py --instance "$inst" --chi 500 1000 2000 --out "\$OUT/$name.json" 2>&1 | grep -v "^INFO\|^DEBUG\|^=====\|^$"
-cp "\$OUT/$name.json" "$HERE/results/"
+python run_dmrg.py --instance "$inst" --chi ${chis//,/ } --out "\$OUT/$name.json" 2>&1 | grep -v "^INFO\|^DEBUG\|^=====\|^$"
+cp "\$OUT/$name.json" "$HERE/$dest/"
 echo "DONE $name \$(date -u +%FT%TZ)"
 SB
   submit "$f"

@@ -73,6 +73,13 @@ def cpu_model():
     return platform.processor() or platform.machine()
 
 
+def lanczos_stats(eng):
+    # What the DMRG FLOP model (scripts/flops.mjs, dmrg-v1) needs from a run and TeNPy decides
+    # adaptively: how many effective-Hamiltonian applications the two-site updates took.
+    n = [int(x) for x in eng.update_stats.get("N_lanczos", [])]
+    return dict(updates=len(n), applications=sum(n), mean=sum(n) / len(n) if n else None, min=min(n, default=None), max=max(n, default=None))
+
+
 def hms(seconds):
     s = int(round(seconds))
     return f"{s // 3600:02d}:{(s % 3600) // 60:02d}:{s % 60:02d}"
@@ -112,7 +119,8 @@ def main():
         t = time.perf_counter() - T_START
         rung = dict(chi_max=chi, chi_reached=int(max(psi.chi)), energy_SS=float(E), energy=4 * float(E), energy_per_site_SS=float(E) / n,
                     sweeps=int(eng.sweeps), max_trunc_err=float(max(eng.trunc_err_list)) if eng.trunc_err_list else None,
-                    entanglement_entropy_max=float(max(psi.entanglement_entropy())), wall_seconds=t, wall_hms=hms(t), cpu_core_hours=t / 3600 * cores)
+                    entanglement_entropy_max=float(max(psi.entanglement_entropy())), wall_seconds=t, wall_hms=hms(t), cpu_core_hours=t / 3600 * cores,
+                    chi_profile=[int(c) for c in psi.chi], lanczos=lanczos_stats(eng))
         rungs.append(rung)
         print(f"RUNG chi={chi}: E = {rung['energy']:.6f} (Pauli, total), E/N = {rung['energy_per_site_SS']:.7f} S.S, sweeps {rung['sweeps']}, "
               f"max trunc err {rung['max_trunc_err']}, wall {rung['wall_hms']} = {rung['cpu_core_hours']:.2f} core-h", flush=True)
