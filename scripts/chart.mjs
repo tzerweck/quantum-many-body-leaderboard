@@ -191,10 +191,24 @@ export const pow10 = k => "10" + String(k).split("").map(c => SUP[c]).join("");
 const ABBREVIATED = { "Hierarchical backflow": "HB", "Residual hierarchical backflow": "RHB",
   "Transformer backflow": "Transformer BF", "Tensor backflow": "Tensor BF", "Slater-backflow-Jastrow": "SBJ" };
 const LABEL_MAX = 26;
+// A row QMBL computed itself (DATA.md, computed_by) is marked "QMBL" in its label, in every
+// figure, so it is never read as a published result (Tristan, 2026-09-23).
 export function shortLabel(r) {
   let s = ABBREVIATED[r.method] ?? r.method;
-  const withDetail = `${s} (${r.method_detail})`;
-  if (r.method_detail && withDetail.length <= LABEL_MAX) s = withDetail;
+  const qmbl = r.computed_by === "qmbl";
+  if (qmbl) {
+    // As much of the detail as fits, dropping trailing clauses, then "QMBL"; a bond
+    // dimension goes first, since it is what tells one DMRG rung from the next.
+    const parts = (r.method_detail || "").replace(/,?\s*QMBL (run|implementation)$/, "").split(", ").filter(Boolean)
+      .map(x => x === "translation-symmetric" ? "symmetric" : x);   // labels only; the table keeps the full detail
+    if (r.compute?.bond_dimension) parts.unshift(`χ = ${r.compute.bond_dimension}`);
+    let k = parts.length;
+    while (k > 0 && `${s} (${parts.slice(0, k).join(", ")}, QMBL)`.length > LABEL_MAX) k--;
+    s = k ? `${s} (${parts.slice(0, k).join(", ")}, QMBL)` : `${s} (QMBL)`;
+  } else {
+    const withDetail = `${s} (${r.method_detail})`;
+    if (r.method_detail && withDetail.length <= LABEL_MAX) s = withDetail;
+  }
   if (r.bound_type === "projected") {
     const trial = (r.method_detail || "").match(/^trial state: ([^,]+)/)?.[1];
     s = /fixed.?node/i.test(r.method) ? `${trial ?? "trial state"} + fixed-node` : `${s}, projected`;
