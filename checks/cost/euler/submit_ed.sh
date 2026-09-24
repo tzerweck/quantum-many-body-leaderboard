@@ -3,6 +3,7 @@
 # per instance of ed/worklist.json with run = true. Run ON EULER from ~/agent-runs/qmbl-cost after
 # `sync.sh`:
 #     bash euler/submit_ed.sh [--dry] [instance-id ...]      (ids restrict the batch)
+#     MEM_GB=200 bash euler/submit_ed.sh <ids>                 (override the memory estimate)
 # One core per job: SciPy's sparse matrix-vector product is single-threaded, so more cores would
 # be allocated and idle (the resources block would show it). Memory is the worklist's estimate
 # for the stored matrix, its construction and the Lanczos vectors, times 1.3.
@@ -15,12 +16,12 @@ mkdir -p "$SCR" "$HERE/ed/results" "$HERE/euler/logs"
 COMMIT="$(cat "$HERE/COMMIT" 2>/dev/null || echo unknown)"
 source "$HOME/agent-runs/env-jax.sh"
 python - "$@" <<'PY' > "$SCR/jobs.tsv"
-import json, math, sys
+import json, math, os, sys
 only = set(sys.argv[1:])
 for w in json.load(open("ed/worklist.json")):
     if not w["run"] or (only and w["instance_id"] not in only):
         continue
-    gb = max(4, math.ceil(1.3 * (w["memory_gb_estimate"] or 1)))
+    gb = int(os.environ.get("MEM_GB") or max(4, math.ceil(1.3 * (w["memory_gb_estimate"] or 1))))
     part, tlim = ("normal.4h", "04:00:00") if gb <= 16 else ("normal.24h", "24:00:00")
     slug = w["instance_id"].replace("/", "--")
     print(f"{slug}\t{w['instance_id']}\t{gb}\t{part}\t{tlim}")
