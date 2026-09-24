@@ -85,6 +85,9 @@ function mark(t, x, y, color, filled, unit, href) {
 // a variational one - and only a result with a cost can be placed; a record that states no
 // cost is named in a line of text under the axis, never drawn as a line across it
 // (Tristan, 2026-09-23). QMBL's own runs are all named, so none is read as published.
+// Labels the placement could not keep off the frontier line; the build prints them.
+const labelClashes = [];
+
 function drawPanel(t, parts, inst, pts, { px, left, right, top, bottom, xLabel, title, nameOwn = false }) {
   const plotH = bottom - top;
     const rec = recordOf(inst), recE = rec ? rec.energy / perSiteDivisor(inst) : null;
@@ -122,34 +125,73 @@ function drawPanel(t, parts, inst, pts, { px, left, right, top, bottom, xLabel, 
     // Every QMBL run is named in an instance's own figure; the small overview panels name
     // the frontier only, where naming them all piles the labels on each other.
     const named = new Set([...front, ...(nameOwn ? pts.filter(p => p.r.computed_by === "qmbl") : [])]);
-    // A label may not run across another mark: of the two sides the one it fits on and that
-    // covers fewer marks wins (a "ViT (QMBL)" label over a published ViT's dot reads as ours).
+    // A label may not run across another mark or the frontier: of the spots it fits, the one
+    // covering fewest wins (a "ViT (QMBL)" label over a published ViT's dot reads as ours, and
+    // the staircase leaves every frontier point to the right, through a label placed there).
     const centres = pts.map(p => [X(p.cost.value), Y(p.e)]);
-    const covers = (x0, x1, y, self) => centres.filter(([cx, cy]) => !(cx === self?.[0] && cy === self?.[1]) && cx + 6 > x0 && cx - 6 < x1 && Math.abs(cy - y) < 9).length;
-    const labels = [...named].map(p => {
+    const segs = front.slice(1).flatMap((p, i) => {
+      const x0 = X(front[i].cost.value), y0 = Y(front[i].e), x1 = X(p.cost.value), y1 = Y(p.e);
+      return [{ x0, x1, y0, y1: y0 }, { x0: x1, x1, y0, y1 }];
+    });
+    // The label's glyph box: baseline at ty + 4, cap height about 8 at 10.5 px.
+    const crosses = (x0, x1, ty) => segs.filter(g => Math.max(g.x0, x0 - 1) <= Math.min(g.x1, x1 + 1) &&
+      Math.max(Math.min(g.y0, g.y1), ty - 5) <= Math.min(Math.max(g.y0, g.y1), ty + 7)).length;
+    const covers = (x0, x1, y, self) => centres.filter(([cx, cy]) => !(cx === self?.[0] && cy === self?.[1]) && cx + 6 > x0 && cx - 6 < x1 && Math.abs(cy - y) < 9).length + crosses(x0, x1, y);
+    // Placed top to bottom, each label also avoiding the labels placed before it.
+    const placed = [];
+    const onLabel = c => placed.filter(l => c.x0 < l.x1 && l.x0 < c.x1 && Math.abs(c.ty - l.ty) < 12).length;
+    const labels = [...named].sort((a, b) => Y(a.e) - Y(b.e)).map(p => {
       const s = shortLabel(p.r), w = textWidth(s, 10.5), x = X(p.cost.value), y = Y(p.e);
-      // Beside the mark on the right, then the left, then above or below it; the first that
-      // fits the plot and covers no other mark, else the one covering fewest.
+      // Beside the mark on the right, then the left, then above or below it, then diagonally;
+      // the first that fits the plot and covers nothing, else the one covering fewest.
       const spots = [
         { x0: x + 10, x1: x + 10 + w, ty: y, anchor: "start", lx: x + 10 },
         { x0: x - 10 - w, x1: x - 10, ty: y, anchor: "end", lx: x - 10 },
         { x0: x - 4, x1: x - 4 + w, ty: y - 20, anchor: "start", lx: x - 4 },
         { x0: x - 4, x1: x - 4 + w, ty: y + 16, anchor: "start", lx: x - 4 },
-      ].filter(c => c.x0 >= left && c.x1 <= right);
-      const hits = c => covers(c.x0, c.x1, c.ty, [x, y]);
-      const pick = spots.find(c => hits(c) === 0) ?? spots.sort((c1, c2) => hits(c1) - hits(c2))[0] ?? { lx: x + 10, anchor: "start", ty: y };
-      return { s, w, x: pick.lx, anchor: pick.anchor, y: pick.ty + 4 };
+        { x0: x + 8, x1: x + 8 + w, ty: y + 14, anchor: "start", lx: x + 8 },
+        { x0: x + 8, x1: x + 8 + w, ty: y - 13, anchor: "start", lx: x + 8 },
+        { x0: x - 8 - w, x1: x - 8, ty: y + 14, anchor: "end", lx: x - 8 },
+        { x0: x - 8 - w, x1: x - 8, ty: y - 13, anchor: "end", lx: x - 8 },
+        { x0: x - 4, x1: x - 4 + w, ty: y - 32, anchor: "start", lx: x - 4 },
+        { x0: x - 4, x1: x - 4 + w, ty: y + 28, anchor: "start", lx: x - 4 },
+        { x0: x - w + 4, x1: x + 4, ty: y - 32, anchor: "end", lx: x + 4 },
+        { x0: x - w + 4, x1: x + 4, ty: y + 28, anchor: "end", lx: x + 4 },
+      ].filter(c => c.x0 >= left && c.x1 <= right && c.ty - 8 > top && c.ty + 4 < bottom);
+      // In a narrow panel nothing beside the mark may fit: centred above or below it, kept inside.
+      const cx = Math.min(Math.max(x - w / 2, left), right - w);
+      // Then farther up or down, clear of the staircase's vertical through the mark itself.
+      for (const ty of [y - 13, y + 16, y - 26, y + 29, y - 39, y + 42]) {
+        if (ty - 8 <= top || ty + 4 >= bottom) continue;
+        spots.push({ x0: cx, x1: cx + w, ty, anchor: "start", lx: cx });
+        if (x + 8 + w <= right) spots.push({ x0: x + 8, x1: x + 8 + w, ty, anchor: "start", lx: x + 8 });
+        if (x - 8 - w >= left) spots.push({ x0: x - 8 - w, x1: x - 8, ty, anchor: "end", lx: x - 8 });
+      }
+      const hits = c => covers(c.x0, c.x1, c.ty, [x, y]) + onLabel(c);
+      const pick = spots.find(c => hits(c) === 0) ?? spots.sort((c1, c2) => hits(c1) - hits(c2))[0] ?? { x0: x + 10, x1: x + 10 + w, lx: x + 10, anchor: "start", ty: y };
+      placed.push(pick);
+      return { s, w, x: pick.lx, anchor: pick.anchor, y: pick.ty + 4, forced: hits(pick) > 0 };
     }).sort((a, b) => a.y - b.y);
     // Nudged down only past labels they actually overlap, horizontally as well as vertically.
     const extent = l => l.anchor === "start" ? [l.x, l.x + l.w] : [l.x - l.w, l.x];
+    labels.sort((a, b) => a.y - b.y);
     for (let a = 1; a < labels.length; a++) {
+      if (!labels[a].forced) continue;
       const [a0, a1] = extent(labels[a]);
       for (let b = 0; b < a; b++) {
         const [b0, b1] = extent(labels[b]);
-        if (a0 < b1 && b0 < a1 && Math.abs(labels[a].y - labels[b].y) < 12) labels[a].y = labels[b].y + 12;
+        if (a0 < b1 && b0 < a1 && Math.abs(labels[a].y - labels[b].y) < 12) {
+          labels[a].y = labels[b].y + 12;
+          // pushed onto the frontier line: step on past it
+          for (let k = 0; k < 3 && crosses(a0, a1, labels[a].y - 4); k++) labels[a].y += 12;
+        }
       }
     }
-    for (const l of labels) parts.push(text(l.x, l.y, l.s, { size: 10.5, fill: t.ink2, anchor: l.anchor }));
+    for (const l of labels) {
+      const [l0, l1] = extent(l);
+      if (crosses(l0, l1, l.y - 4)) labelClashes.push(`${instLabel(inst)}: "${l.s}"`);
+      parts.push(text(l.x, l.y, l.s, { size: 10.5, fill: t.ink2, anchor: l.anchor }));
+    }
     parts.push(text((left + right) / 2, bottom + 32, xLabel, { size: 10.5, fill: t.ink2, anchor: "middle" }));
     if (rec && !pts.some(p => p.r === rec))
       parts.push(text(left, bottom + 48, `${rec.bound_type === "exact" ? boundLabel(rec) : "record"}: ${recE.toFixed(6).replace("-", "−")} (${shortLabel(rec)}), no cost stated, not drawn`, { size: 9.5, fill: t.muted }));
@@ -334,3 +376,4 @@ for (const { inst, pts } of paramPanels) {
 console.log(`${OUT}/: ${written.length + own.written.length} files (${hoursPanels.length} per-instance cost figures, ${flopsPanels.length} per-instance FLOPs figures, ${paramPanels.length} per-instance parameter figures; energy vs compute: ${hoursPanels.length} instances, ${hoursPanels.reduce((a, p) => a + p.pts.length, 0)} rows; ` +
   `energy vs estimated FLOPs: ${flopsPanels.length} instances, ${flopsPanels.reduce((a, p) => a + p.pts.length, 0)} rows; ` +
   `energy vs parameters: ${paramPanels.length} instances, ${paramPanels.reduce((a, p) => a + p.pts.length, 0)} rows)`);
+if (labelClashes.length) console.log(`LABEL CLASHES with the frontier line (${labelClashes.length}): ${labelClashes.join("; ")}`);
