@@ -11,8 +11,9 @@
 // The rules the readers worked to, restated because they decide what a block may say:
 // a field is filled only when the paper states that number (GPU-days become hours, and
 // the note says so; "20 A100 for 4 days" fills n_devices, device and wall_clock and leaves
-// gpu_hours null); a parameter count is never inferred from layer sizes; nothing is
-// normalised across hardware. A row whose paper states nothing gets no block at all -
+// gpu_hours null); a parameter count is evaluated from layer sizes only where the source
+// states the architecture in full, with the formula in the note (medium confidence; pass
+// 2026-09-24); nothing is normalised across hardware. A row whose paper states nothing gets no block at all -
 // the readers' record of what they searched stays in the pass directory, not here.
 import fs from "node:fs";
 import path from "node:path";

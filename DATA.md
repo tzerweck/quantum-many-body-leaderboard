@@ -119,7 +119,8 @@ networks: CPU core-hours and bond dimension for tensor networks and exact diagon
 sample and iteration counts for Monte Carlo. They are recorded in their own units and never
 translated into GPU-hours. `scope` says what the statement covers - this row, this ansatz
 across sizes, or the paper as a whole - and `confidence` drops to `medium` where a count
-was evaluated from a formula the paper prints, `low` where the only statement is second-hand
+was evaluated from a formula the paper prints or from an architecture the paper, its code or
+its run script states in full (the formula and its inputs are in `note`), `low` where the only statement is second-hand
 or an acknowledgement naming a supercomputer.
 
 A DMRG row whose run script is public also carries `sweep_schedule`, what the script states
@@ -152,7 +153,13 @@ per reading pass, applied in date order; the first (2026-09-16) read all 130 pap
 the non-baseline rows in full, appendices and supplements included, and found a statement
 in 81 of them. The second (2026-09-23) read the run script behind each of the 99 VarBench
 DMRG rows in [github.com/varbench/methods](https://github.com/varbench/methods) at
-`ed31bb0` for its sweep schedule; no script records a time.
+`ed31bb0` for its sweep schedule; no script records a time. The third (2026-09-24, Tristan)
+read the run scripts of the 187 other VarBench variational rows at the same commit and reread
+the sources of the 95 published rows that stated two of parameters, samples and iterations for
+the third, including the authors' code and run data; 153 of its 278 blocks carry all three.
+Where it found a stored number to be a different quantity (a final evaluation's sample count
+stored as the per-step count), the later block holds the per-step number and its note the old
+one. A VQE shot count per estimated quantity is not a per-step sample count and stays in the note.
 
 Three rules, and they are the whole design:
 
@@ -163,6 +170,10 @@ Three rules, and they are the whole design:
 - **Self-reported and unfalsifiable.** Nothing here is checked against a run. `reported_as`
   carries the authors' own words so a reader can see what was claimed, and is required.
 - **Never estimated.** A field nobody stated is `null`, not a guess from the ansatz size.
+  Counting the parameters of an architecture stated in full is not a guess; a count that
+  needs any choice the source leaves open (a bias, a width, which symmetry) stays `null`, and
+  one the source fixes only indirectly (a spin-parity doubling its own sample-count rule
+  implies) is `low`.
   "20 A100 GPUs for four days" fills `n_devices`, `device` and `wall_clock` and leaves
   `gpu_hours` null; a figure gives its own "GPU-days" as hours and the note says so. A view
   that multiplies devices by wall-clock does that at draw time and marks the point as
@@ -221,8 +232,9 @@ Scope ([`checks/cost/ed/worklist.json`](checks/cost/ed/worklist.json)):
 
 ### How a FLOP count is estimated
 
-Ten published rows state hours on a named GPU; 58 more state how many parameters the ansatz had,
-how many samples each optimisation step drew and how many steps were taken. Those three
+Seventeen published rows with an estimate also state hours on a named GPU; 211 published and
+VarBench rows state how many parameters the ansatz had, how many samples each optimisation step
+drew and how many steps were taken (the VarBench rows in their run scripts, compute pass 2026-09-24). Those three
 numbers, with the instance, fix the number of network evaluations an optimisation took, and
 [`scripts/flops.mjs`](scripts/flops.mjs) turns them into floating-point operations at
 build time (Tristan, 2026-09-21). That model, `nqs-v1`, is for neural and other variational
@@ -237,14 +249,17 @@ instance, bonds plus next-nearest bonds for J1-J2, the sites for the transverse-
 model, four per bond for Hubbard. `k_sample` is one sweep of N single-site proposals for
 Markov-chain sampling and one pass for an autoregressive draw. The 3 is the forward and
 backward pass of the gradient. `reuse` is how many times a weight is applied in one
-forward pass: once in a dense network, once per site in a convolution or a recurrent cell,
-once per patch in a vision transformer; it is declared per architecture in `ARCH`, one
-line each, with the sampling scheme and whether a determinant is evaluated.
+forward pass: once in a dense network (VarBench's and QMBL's `α = 1` RBMs are NetKet's dense
+RBM), twice for a Jastrow factor's N × N matrix, once per site in a convolution or a recurrent
+cell, once per patch in a vision transformer, once per element of the space group (sites ×
+point group, or sites alone over translations) in a group convolution; it is declared per
+architecture in `ARCH`, one line each, with the sampling scheme and whether a determinant is
+evaluated.
 
 What is not counted, and is said under every figure that shows an estimate: the
 stochastic-reconfiguration solve, symmetry projections that sum the network over a point
-group, attention scores, and pre-training on smaller lattices. Against the ten rows that
-also state GPU-hours the model implies these achieved rates:
+group, attention scores, and pre-training on smaller lattices. Against the rows that also
+state GPU-hours the model implies these achieved rates (`node scripts/flops.mjs` prints them all):
 
 | instance | method | estimated FLOPs | stated | achieved |
 |---|---|---|---|---|
@@ -255,16 +270,27 @@ also state GPU-hours the model implies these achieved rates:
 | J1-J2 6×6, J2 = 0.5 | ViT, T5 / decoupled attention | 1.8e16 | 10 h, A100 | 0.5 TFLOP/s |
 | J1-J2 6×6, J2 = 0.5 | ViT, factored attention | 1.5e16 | 6 h, A100 | 0.7 TFLOP/s |
 | J1-J2 20×20, J2 = 0.5 | ViT, symmetry restoration | 6.6e19 | 25000 h, GH200 (whole paper) | ≥ 0.7 TFLOP/s |
-| J1-J2 10×10, J2 = 0.5 | RBM α = 1, QMBL run | 8.4e15 | 0.46 h, A100 80 GB (measured) | 5.1 TFLOP/s |
-| triangular 36 | RBM α = 1, QMBL run | 1.2e14 | 0.10 h, A100 80 GB (measured) | 0.32 TFLOP/s |
+| triangular 108 | GCNN | 1.1e18 | 96 h, A100 | 3.1 TFLOP/s |
+| triangular 36 | GCNN, symmetry-projected | 3.9e16 | 12 h, A100 | 0.9 TFLOP/s |
+| J1-J2 16×16, J2 = 0.5 | GCNN | 9.1e17 | 300 h, A100 | 0.8 TFLOP/s |
+| Hubbard 4×16 | NNBF, 32 determinants | 1.1e19 | 800 h, H100 (GH200) | 4.0 TFLOP/s |
+| Hubbard 4×16 | NNBF, 4 determinants | 1.8e19 | 200 h, H100 (GH200) | 25 TFLOP/s |
+| Hubbard 4×16 | NNBF, n_h = 8192 | 5.3e20 | 400 h, H100 (GH200) | 366 TFLOP/s |
+| J1-J2 10×10, J2 = 0.5 | ViT, QMBL implementation | 3.2e16 | 6.4 h, A100 80 GB (measured) | 1.4 TFLOP/s |
+| J1-J2 10×10, J2 = 0.5 | GCNN, translations, QMBL run | 1.7e16 | 2.6 h, A100 80 GB (measured) | 1.8 TFLOP/s |
+| J1-J2 10×10, J2 = 0.5 | RBM α = 1, QMBL run | 8.4e13 | 0.46 h, A100 80 GB (measured) | 0.05 TFLOP/s |
+| triangular 36 | RBM α = 1, QMBL run | 3.3e12 | 0.10 h, A100 80 GB (measured) | 0.01 TFLOP/s |
 | triangular 36 | ViT, QMBL implementation | 3.4e15 | 2.7 h, A100 80 GB (measured) | 0.35 TFLOP/s |
 | triangular 36 | symmetric RBM α = 4, QMBL run | 1.3e13 | 0.12 h, A100 80 GB (measured) | 0.03 TFLOP/s |
 
-Consistent within a paper, a factor of forty across papers, and a factor of 170 between
-QMBL's own runs on one card (the last four rows, [`checks/cost/`](checks/cost/README.md)):
-a 149-parameter network keeps an A100 busy at 0.03 TFLOP/s, because below ~10^4
-parameters the step is launch overhead and sampling, not arithmetic, and the estimate
-falls 30-100 times short of the clock. **An estimate is good to an order of magnitude for
+Consistent within a paper and a factor of fifty across papers (0.5 to 25 TFLOP/s), with one
+outlier: the n_h = 8192 NNBF comes out at 366 TFLOP/s on one H100, above its FP32 peak, so
+either that run used reduced-precision tensor cores or the model overcounts that network (its
+7168 × n_h output layer is most of the count). QMBL's own runs on one card span a factor of
+180 (the last six rows, [`checks/cost/`](checks/cost/README.md)): the dense RBMs (1332 and
+10100 parameters, each applied once) keep an A100 at 0.01-0.05 TFLOP/s and a 149-parameter
+symmetric RBM at 0.03, because a forward pass of 10^3-10^5 FLOPs is launch overhead and
+sampling, not arithmetic, and the estimate falls 30-100 times short of the clock. **An estimate is good to an order of magnitude for
 a network large enough to fill a GPU and never better**, which is why it has its own axis
 and its own figures (`figures/flops/`, `figures/energy-vs-flops.svg`) and is never placed
 on the hours axis. Turning FLOPs into hours would need exactly the conversion factor the

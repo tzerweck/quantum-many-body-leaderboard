@@ -18,10 +18,11 @@
 // transverse-field Ising model, four per bond for Hubbard). Excluded, and stated on every
 // surface that shows the estimate: the stochastic-reconfiguration solve, symmetry projections
 // that sum the network over a point group, attention scores, and any pre-training on smaller
-// lattices. Against the ten rows whose paper also states hours on a named GPU, the model
-// implies 0.5 to 21 TFLOP/s achieved (consistent within one paper, a factor of forty across
-// papers), and against QMBL's own measured runs 0.03 to 5 TFLOP/s on one A100 (a network
-// under ~1e4 parameters is overhead-bound and the estimate falls 30-100x short), so an
+// lattices. Against the published rows that also state hours on a named GPU, the model
+// implies 0.5 to 25 TFLOP/s achieved (consistent within one paper, a factor of fifty across
+// papers; one NNBF row at 366), and against QMBL's own measured runs 0.01 to 1.8 TFLOP/s on
+// one A100 (a forward pass of 1e3-1e5 FLOPs is overhead-bound and the estimate falls 30-100x
+// short), so an
 // estimate is good to about an order of magnitude for a network that fills a GPU and never
 // better (calibration table in DATA.md). Three rules follow from that:
 //
@@ -43,11 +44,16 @@
 
 import fs from "node:fs";
 
-// Architecture, by short method name (scripts/method_names.mjs). `reuse` is "sites",
-// "patches" (sites / b^2, b read from the method detail), or 1; `sampling` is "mcmc" or
-// "ar" (autoregressive); `det` adds the determinant or Pfaffian of a fermionic state.
+// Architecture, by short method name (scripts/method_names.mjs; `archOf` below routes the
+// dense RBMs). `reuse` is "sites", "patches" (sites / b^2, b read from the method detail, else
+// the entry's `patch`), "group" (sites x the lattice's point group, a group convolution's
+// kernel applied at every element of the space group; sites alone where the method detail
+// says translations), or a number; `sampling` is "mcmc" or "ar" (autoregressive); `det` adds
+// the determinant or Pfaffian of a fermionic state. Entries after Tensor backflow: compute
+// pass 2026-09-24 (Tristan).
 export const ARCH = {
   "RBM": { reuse: "sites", sampling: "mcmc", note: "translation-symmetric RBM: each hidden unit is evaluated at every translation" },
+  "RBM (dense)": { reuse: 1, sampling: "mcmc", note: "dense RBM (NetKet's nk.models.RBM): every weight is applied once" },
   "CNN": { reuse: "sites", sampling: "mcmc" },
   "CNN-MPS": { reuse: "sites", sampling: "mcmc", note: "the CNN part; the MPS contraction is not counted" },
   "ViT": { reuse: "patches", sampling: "mcmc" },
@@ -59,7 +65,26 @@ export const ARCH = {
   "LRU": { reuse: "sites", sampling: "ar" },
   "HFPS": { reuse: "sites", sampling: "mcmc", det: true, note: "the hidden-fermion network; the Pfaffian is counted as (2/3) N_e^3 and is negligible at these sizes" },
   "Tensor backflow": { reuse: 1, sampling: "mcmc", det: true, note: "the backflow tensor is read once per configuration; the determinant is counted as (2/3) N_e^3" },
+  "Jastrow": { reuse: 2, sampling: "mcmc", note: "the N(N-1)/2 pair couplings are contracted as the full N x N matrix, each applied twice" },
+  "GCNN": { reuse: "group", sampling: "mcmc", note: "group convolution over the space group; a spin-parity doubling is not counted" },
+  "LCN": { reuse: "sites", sampling: "mcmc" },
+  "ConvNeXt": { reuse: "patches", patch: 2, sampling: "mcmc", note: "2 x 2 patch stem" },
+  "MLP": { reuse: 1, sampling: "mcmc" },
+  "GVMC": { reuse: "sites", sampling: "mcmc", note: "one backflow network evaluation per configuration; the Grassmannian states' extra evaluations are not counted" },
+  "pRNN": { reuse: "sites", sampling: "ar" },
+  "Adaptive RNN": { reuse: "sites", sampling: "ar", note: "the final hidden dimension's parameters over all stages; earlier, narrower stages cost less" },
+  "ACE": { reuse: "sites", sampling: "mcmc", det: true },
+  "SCALE": { reuse: "sites", sampling: "mcmc", det: true },
+  "Transformer backflow": { reuse: "sites", sampling: "mcmc", det: true },
+  "NNBF": { reuse: 1, sampling: "mcmc", det: true, note: "the MLP backflow, one pass per configuration; several determinants and symmetry projections are not counted" },
 };
+
+// The ARCH entry of a row. A VarBench RBM baseline (`α = 1`, programs/vmc_netket/vmc.py) and
+// QMBL's own `α = 1` run are NetKet's dense RBM; the plain "RBM" entry is the translation-symmetric one.
+export const archOf = r => ARCH[r.method === "RBM" && /^α = \d+(, QMBL run)?$/.test(r.method_detail || "") ? "RBM (dense)" : r.method];
+
+// Point-group order of a lattice, for a group convolution over its full space group.
+const POINT_GROUP = { square: 8, triangular: 12 };
 
 // Nearest-neighbour bonds of an instance, or null where the lattice is not written here.
 // Rectangular W x L cylinders (boundary PO) are periodic along W, the first number.
@@ -120,7 +145,7 @@ export function flopsOf(r, inst) {
 function nqsFlopsOf(r, inst) {
   const c = r.compute;
   if (!c || !(c.parameters > 0) || !(c.samples > 0) || !(c.iterations > 0)) return null;
-  const arch = ARCH[r.method];
+  const arch = archOf(r);
   if (!arch) return null;
   const n_conn = connectedOf(inst);
   if (n_conn == null) return null;
@@ -128,9 +153,16 @@ function nqsFlopsOf(r, inst) {
   let reuse, assumption = null;
   if (arch.reuse === "sites") reuse = N;
   else if (arch.reuse === "patches") {
-    const m = (r.method_detail || "").match(/\bb = (\d+)\b/);
-    if (m) reuse = N / (+m[1]) ** 2;
+    const b = +((r.method_detail || "").match(/\bb = (\d+)\b/)?.[1] ?? arch.patch ?? 0);
+    if (b) reuse = N / b ** 2;
     else { reuse = N; assumption = "patch size not stated, one token per site assumed (2 x 2 patches would divide the count by four)"; }
+  } else if (arch.reuse === "group") {
+    if (/translation/i.test(r.method_detail || "")) reuse = N;
+    else {
+      const g = POINT_GROUP[inst.lattice];
+      if (!g) return null;
+      reuse = N * g;
+    }
   } else reuse = arch.reuse;
   let det = 0;
   if (arch.det) {
