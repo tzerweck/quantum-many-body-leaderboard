@@ -76,8 +76,12 @@ def cpu_model():
 def lanczos_stats(eng):
     # What the DMRG FLOP model (scripts/flops.mjs, dmrg-v1) needs from a run and TeNPy decides
     # adaptively: how many effective-Hamiltonian applications the two-site updates took.
+    # TeNPy logs -1 for an update it solved by full diagonalisation (the small blocks near the
+    # ends of the chain), so those are counted apart from the Lanczos updates.
     n = [int(x) for x in eng.update_stats.get("N_lanczos", [])]
-    return dict(updates=len(n), applications=sum(n), mean=sum(n) / len(n) if n else None, min=min(n, default=None), max=max(n, default=None))
+    lz = [x for x in n if x > 0]
+    return dict(updates=len(n), lanczos_updates=len(lz), full_diagonalisations=len(n) - len(lz), applications=sum(lz),
+                mean=sum(lz) / len(lz) if lz else None, min=min(lz, default=None), max=max(lz, default=None))
 
 
 def hms(seconds):
