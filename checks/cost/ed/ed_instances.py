@@ -75,7 +75,7 @@ def build(inst):
         g = nk.graph.Graph(edges=edges)
         hi = nk.hilbert.Spin(0.5, N, total_sz=0)
         # NetKet's Heisenberg is J sigma.sigma per bond (Pauli); no sign rule, so H is exactly VarBench's.
-        H = nk.operator.Heisenberg(hi, g, J=[1.0, J2] if J2 else 1.0, sign_rule=False)
+        H = nk.operator.Heisenberg(hi, g, J=[1.0, J2], sign_rule=[False, False]) if J2 else nk.operator.Heisenberg(hi, g, J=1.0, sign_rule=False)
         return hi, H, "total Sz = 0"
     if model == "TFIsing":
         nn, _ = lattice_edges(inst)
@@ -111,20 +111,24 @@ def build(inst):
         name = inst["instance_id"].split("/")[1]
         spec = IMPURITY[name]
         with h5py.File(os.path.join(HERE, "impurity", spec["h5"]), "r") as f:
+            # The files name the two spins "up" and "dn" or similar (VarBench's README says "down");
+            # take the two keys present, the up spin first.
+            keys = sorted(f["e0"]["hloc"].keys(), key=lambda k: (not k.startswith("u"), k))
+            assert len(keys) == 2, keys
             spins = {}
-            for key in ("up", "down"):
+            for key in keys:
                 e0 = float(f["e0"]["hloc"][key][()][0, 0, 0])
                 baths = f["bath"]["bath"][key]["0"]
                 ls = sorted(baths.keys(), key=int)
                 eps = [float(baths[l]["eps"][()]) for l in ls]
                 V = [complex(*baths[l]["V"][()][0]) for l in ls]
                 spins[key] = (e0, eps, V)
-        L = 1 + len(spins["up"][1])  # impurity + bath sites per spin
+        L = 1 + len(spins[keys[0]][1])  # impurity + bath sites per spin
         dof = inst["exact"][0]["dof"]
         nup, ndn = (dof + 1) // 2, dof // 2
         hi = nk.hilbert.SpinOrbitalFermions(L, s=1 / 2, n_fermions_per_spin=(nup, ndn))
         terms, weights = [], []
-        for s, key in enumerate(("up", "down")):
+        for s, key in enumerate(keys):
             e0, eps, V = spins[key]
             o = lambda i, s=s: i + s * L
             terms.append(((o(0), 1), (o(0), 0))); weights.append(e0)
