@@ -95,6 +95,19 @@ and the row says so in its method string. Nothing here is attached to anyone els
   is not a row. The bound is now the Hamiltonian's own, |E| <= 2 n_conn, which no state can
   leave and which needs nothing from the run.
 
+- **2026-09-24 (v1.4), after the same run cost 2.5 times as much on another node.** The
+  DMRG calibration rung (triangular 36, χ = 500) took 3.4 core-h on one node and 8.7 on
+  another of the same partition, with the same sweeps and the same energy. Slurm pins a job to
+  its own cores, so the difference lies in what the cores share with other jobs: clock, memory
+  bandwidth and L3 cache. Euler's accounting records no per-job CPU time.
+  - **What every results file now carries** (`monitor.py`, block `resources`): the process's
+    own CPU time and CPU time / (wall-clock × cores); the clock of its cores, sampled every
+    30 s; the node's load average against its core count; and for a GPU run, the GPU's SM clock,
+    utilisation and power.
+  - **All 14 rows were rerun under v1.4 (Tristan, 2026-09-24)**, so every row carries these
+    numbers. The optimisation, sampling and evaluation are unchanged. The DMRG reruns also
+    record TeNPy's Lanczos count, which the FLOP model needs.
+
 ## What a run becomes
 
 `scripts/add_cost_runs.mjs` reads `results/*.json` and appends one row per result (per

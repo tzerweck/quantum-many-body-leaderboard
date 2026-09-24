@@ -12,6 +12,18 @@ const files = fs.existsSync(DIR) ? fs.readdirSync(DIR).filter(f => f.endsWith(".
 let added = 0;
 
 const two = x => (x == null ? null : +x.toPrecision(2));
+
+// Protocol v1.4 (checks/cost/README.md): what the hardware was doing, from the results file's
+// `resources` block, as one sentence for the compute note; empty for an older results file.
+const resourcesSaid = x => {
+  if (!x) return "";
+  const ghz = v => (v / 1000).toFixed(2);
+  const parts = [`process CPU time ${(x.process_cpu_seconds / 3600).toFixed(2)} h, ${Math.round(100 * x.cpu_utilisation)} % of wall-clock x ${x.cores} cores`];
+  if (x.core_mhz) parts.push(`cores at ${ghz(x.core_mhz.mean)} GHz on average (${ghz(x.core_mhz.min)}-${ghz(x.core_mhz.max)}${x.core_max_mhz ? `, max ${ghz(x.core_max_mhz)}` : ""})`);
+  if (x.node_load) parts.push(`node load ${x.node_load.mean} on average of ${x.node_cpus} CPUs`);
+  if (x.gpu?.sm_mhz) parts.push(`GPU SM clock ${Math.round(x.gpu.sm_mhz.mean)} MHz on average (max ${x.gpu.sm_max_mhz}), utilisation ${x.gpu.utilisation_percent?.mean} %, ${x.gpu.power_watts?.mean} W`);
+  return ` Hardware during the run (sampled every ${x.sample_period_seconds} s): ${parts.join("; ")}.`;
+};
 const label = r => `${r.label}, QMBL cost-to-reproduce run`;
 
 for (const f of files) {
@@ -57,7 +69,7 @@ for (const f of files) {
         source: `${rel}, Slurm job ${h.slurm_job_id} on ${h.host}, commit ${sw.commit} (QMBL run, ${day})`,
         scope: "row", confidence: "high",
         note: `Measured, not reported: wall-clock from process start to the end of the final evaluation, JIT compilation and sampling included ` +
-          `(setup ${t.setup_seconds.toFixed(0)} s, training ${t.train_seconds.toFixed(0)} s, evaluation ${t.eval_seconds.toFixed(0)} s); gpu_hours = wall-clock x ${h.n_devices} GPU.`,
+          `(setup ${t.setup_seconds.toFixed(0)} s, training ${t.train_seconds.toFixed(0)} s, evaluation ${t.eval_seconds.toFixed(0)} s); gpu_hours = wall-clock x ${h.n_devices} GPU.` + resourcesSaid(res.resources),
       },
     });
   } else if (res.schema === "qmbl-cost-run-dmrg-1") {
@@ -93,7 +105,7 @@ for (const f of files) {
           source: `${rel}, Slurm job ${h.slurm_job_id} on ${h.host}, commit ${sw.commit} (QMBL run, ${day})`,
           scope: "row", confidence: "high",
           note: `Measured, not reported: wall-clock from process start to the end of this rung, the rungs below it included; cpu_core_hours = wall-clock x ${res.cores} allocated cores. ` +
-            `iterations is the sweep count of this rung alone; sweep_schedule lists every sweep of the process up to the end of this rung, which is what the hours cover.`,
+            `iterations is the sweep count of this rung alone; sweep_schedule lists every sweep of the process up to the end of this rung, which is what the hours cover.` + resourcesSaid(rung.resources),
         },
       });
     }

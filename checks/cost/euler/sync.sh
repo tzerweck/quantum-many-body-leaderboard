@@ -5,7 +5,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 SSH="ssh -o ConnectTimeout=25 -o ControlMaster=no -o ControlPath=none euler"
 if [ "${1:-}" = "--fetch" ]; then
-  $SSH 'cd ~/agent-runs/qmbl-cost && tar czf - results euler/logs $(ls -d calibration 2>/dev/null)' | tar xzf - -C .
+  $SSH 'cd ~/agent-runs/qmbl-cost && tar czf - --exclude=results/failed results euler/logs $(ls -d calibration 2>/dev/null)' | tar xzf - -C .
   ls -la results; exit 0
 fi
 git rev-parse --short HEAD > COMMIT

@@ -25,6 +25,9 @@ import time
 T_START = time.perf_counter()
 WALL_START = time.time()
 
+from monitor import Monitor  # noqa: E402  (protocol v1.4: CPU time, clocks and node load beside the wall-clock)
+MON = Monitor()
+
 import numpy as np  # noqa: E402
 
 INSTANCES = {
@@ -305,6 +308,7 @@ def main():
         software=dict(python=platform.python_version(), netket=nk.__version__, jax=jax.__version__, flax=flax.__version__,
                       script="checks/cost/run_nqs.py", commit=os.environ.get("QMBL_COMMIT") or git_commit(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")), argv=sys.argv[1:]),
         files=dict(trace=os.path.basename(trace_path), params=os.path.basename(ckpt_path)),
+        resources=MON.summary(),
     )
     def finite(x):  # NaN is not JSON; a diverged run writes null and add_cost_runs skips it
         if isinstance(x, float) and not np.isfinite(x): return None

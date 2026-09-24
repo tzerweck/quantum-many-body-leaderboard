@@ -21,6 +21,9 @@ import time
 T_START = time.perf_counter()
 WALL_START = time.time()
 
+from monitor import Monitor  # noqa: E402  (protocol v1.4: CPU time, clocks and node load beside the wall-clock)
+MON = Monitor()
+
 import numpy as np  # noqa: E402
 
 INSTANCES = {
@@ -124,7 +127,7 @@ def main():
         rung = dict(chi_max=chi, chi_reached=int(max(psi.chi)), energy_SS=float(E), energy=4 * float(E), energy_per_site_SS=float(E) / n,
                     sweeps=int(eng.sweeps), max_trunc_err=float(max(eng.trunc_err_list)) if eng.trunc_err_list else None,
                     entanglement_entropy_max=float(max(psi.entanglement_entropy())), wall_seconds=t, wall_hms=hms(t), cpu_core_hours=t / 3600 * cores,
-                    chi_profile=[int(c) for c in psi.chi], lanczos=lanczos_stats(eng))
+                    chi_profile=[int(c) for c in psi.chi], lanczos=lanczos_stats(eng), resources=MON.summary())
         rungs.append(rung)
         print(f"RUNG chi={chi}: E = {rung['energy']:.6f} (Pauli, total), E/N = {rung['energy_per_site_SS']:.7f} S.S, sweeps {rung['sweeps']}, "
               f"max trunc err {rung['max_trunc_err']}, wall {rung['wall_hms']} = {rung['cpu_core_hours']:.2f} core-h", flush=True)
