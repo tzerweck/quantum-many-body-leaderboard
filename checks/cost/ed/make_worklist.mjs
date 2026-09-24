@@ -49,7 +49,8 @@ for (const inst of collect()) {
   // Off-diagonal elements per row: a spin-flip pair on about half the bonds, every hop for fermions.
   const conn = connectedOf(inst) ?? 4 * (inst.n_sites + 1);
   const perRow = inst.model === "Heisenberg" || inst.model === "J1J2" ? conn / 2 + 1 : conn + 1;
-  const gb = dim ? +((dim * perRow * 12 + dim * 8 * 25) / 1e9).toFixed(2) : null; // CSR + ~25 Lanczos vectors
+  // CSR twice over while the blocks are stacked, ~25 Lanczos vectors, a block of connections and the imports.
+  const gb = dim ? +((dim * perRow * 12 * 2.2 + dim * 8 * 25) / 1e9 + 3).toFixed(2) : null;
   const why = supported(inst) ?? (gb != null && gb > MAX_GB ? `stored matrix needs about ${Math.round(gb)} GB, more than a ${MAX_GB} GB job` : null);
   out.push({
     instance_id: inst.instance_id, model: inst.model, lattice: inst.lattice, boundary: inst.boundary, n_sites: inst.n_sites, params: inst.params,

@@ -2,7 +2,7 @@
 """QMBL-measured ED cost: exact diagonalization of one instance, timed (checks/cost/README.md).
 
 Build the Hamiltonian in the conserved sector (ed_instances.py), store it as a sparse matrix
-(NetKet's to_sparse), and find the lowest eigenvalue with SciPy's eigsh (ARPACK, implicitly
+(built from NetKet's connected elements a block of basis states at a time), and find the lowest eigenvalue with SciPy's eigsh (ARPACK, implicitly
 restarted Lanczos) through an operator that counts the matrix-vector products: that count is
 the Lanczos steps. The energy must reproduce the stored exact energy (relative 1e-8) or the run
 says so and its cost is not attached. Wall-clock from process start to the eigenvalue, imports
@@ -29,6 +29,32 @@ from monitor import Monitor  # noqa: E402
 MON = Monitor()
 
 TOL_REL = 1e-8
+CHUNK = 1 << 17  # basis states per block of the sparse build
+
+
+def sparse_chunked(H, hi):
+    """H as a SciPy CSR matrix, built a block of basis states at a time.
+
+    NetKet's to_sparse() expands every connected configuration of every basis state at once,
+    tens of times the final matrix (a 3.3e6-state Hubbard sector was killed at 12 GB); here each
+    block's connections become a CSR block and the blocks are stacked, so the peak is about twice
+    the matrix. Same matrix elements, same NetKet operator.
+    """
+    import numpy as np
+    import scipy.sparse as sp
+    n = hi.n_states
+    blocks = []
+    for start in range(0, n, CHUNK):
+        idx = np.arange(start, min(n, start + CHUNK))
+        xp, mels = H.get_conn_padded(hi.numbers_to_states(idx))
+        xp, mels = np.asarray(xp), np.asarray(mels)
+        keep = mels != 0
+        cols = hi.states_to_numbers(xp[keep]).astype(np.int64)
+        rows = np.broadcast_to((idx - start)[:, None], mels.shape)[keep]
+        blocks.append(sp.csr_matrix((mels[keep], (rows, cols)), shape=(len(idx), n)))
+    A = sp.vstack(blocks, format="csr")
+    A.sum_duplicates()
+    return A
 
 
 def hms(seconds):
@@ -63,7 +89,7 @@ def main():
     t0 = time.perf_counter()
     hi, H, sector = build(inst)
     t1 = time.perf_counter()
-    A = H.to_sparse().tocsr()
+    A = sparse_chunked(H, hi)
     t2 = time.perf_counter()
     count = [0]
 
@@ -94,6 +120,7 @@ def main():
         hardware=dict(cpu=cpu_model(), host=socket.gethostname(), slurm_job_id=os.environ.get("SLURM_JOB_ID"),
                       slurm_partition=os.environ.get("SLURM_JOB_PARTITION"), cores=cores),
         software=dict(python=platform.python_version(), netket=nk.__version__, scipy=scipy.__version__, numpy=np.__version__,
+                      sparse_build=f"NetKet get_conn_padded in blocks of {CHUNK} basis states, stacked as SciPy CSR",
                       eigensolver="scipy.sparse.linalg.eigsh (ARPACK), k = 1, which = SA, default tolerance",
                       script="checks/cost/ed/run_ed.py", commit=os.environ.get("QMBL_COMMIT"), argv=sys.argv[1:]),
         resources=MON.summary(),

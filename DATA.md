@@ -215,7 +215,7 @@ Scope ([`checks/cost/ed/worklist.json`](checks/cost/ed/worklist.json)):
 - **Not run: six.**
   - Kagome 12, 24 and 30 and shuriken 24: their clusters are defined only in their source
     papers.
-  - The 4×4 Hubbard model at half filling: the stored matrix needs about 290 GB.
+  - The 4×4 Hubbard model at half filling: building and storing the matrix needs about 600 GB.
 - The 44 exactly solved instances above 30 sites need a symmetry-adapted code, which is not
   used here.
 

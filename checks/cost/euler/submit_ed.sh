@@ -5,7 +5,7 @@
 #     bash euler/submit_ed.sh [--dry] [instance-id ...]      (ids restrict the batch)
 # One core per job: SciPy's sparse matrix-vector product is single-threaded, so more cores would
 # be allocated and idle (the resources block would show it). Memory is the worklist's estimate
-# for the stored matrix and Lanczos vectors, times 1.6, plus 3 GB.
+# for the stored matrix, its construction and the Lanczos vectors, times 1.3.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 dry=""; [ "${1:-}" = "--dry" ] && { dry=1; shift; }
@@ -20,7 +20,7 @@ only = set(sys.argv[1:])
 for w in json.load(open("ed/worklist.json")):
     if not w["run"] or (only and w["instance_id"] not in only):
         continue
-    gb = max(4, math.ceil(1.6 * (w["memory_gb_estimate"] or 1) + 3))
+    gb = max(4, math.ceil(1.3 * (w["memory_gb_estimate"] or 1)))
     part, tlim = ("normal.4h", "04:00:00") if gb <= 16 else ("normal.24h", "24:00:00")
     slug = w["instance_id"].replace("/", "--")
     print(f"{slug}\t{w['instance_id']}\t{gb}\t{part}\t{tlim}")
