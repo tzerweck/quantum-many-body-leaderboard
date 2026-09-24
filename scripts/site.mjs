@@ -429,8 +429,20 @@ const TAB_CSS = [tabRules("cost-axis", COMPUTE_AXES.length), ...COMPUTE_TABS.map
 // Leaderboard: the instance's cost figure above its rows, or how many of its energies state
 // a cost when that is too few to draw; nothing when none does. The estimated-FLOPs figure
 // follows it where one exists.
+// What diagonalizing the instance cost QMBL (DATA.md, `qmbl_ed_cost`), in one sentence; the CPU
+// is named, never the cluster.
+function edCostLine(inst) {
+  const x = inst.qmbl_ed_cost;
+  if (!x) return "";
+  const h = x.core_hours, t = h < 0.1 ? `${Math.round(h * 3600)} core-seconds` : `${h.toPrecision(2)} core-hours`;
+  return `<p class="muted cost-none">Exact diagonalization, cost measured by QMBL: ${t} on ${x.cores === 1 ? "one core" : `${x.cores} cores`} of an ${esc(x.cpu)} ` +
+    `(${x.sector.dimension.toLocaleString("en")} states with ${esc(x.sector.conserved)}, no lattice symmetry; ${x.lanczos_steps} Lanczos steps; ${esc(x.code)}; ` +
+    `<a href="${REPO}/blob/main/${x.results_file}">results file</a>).</p>`;
+}
+
 function costSlot(inst) {
-  const hours = COST_FIGS.includes(inst) ? figure(costEntry(inst)) : (k => k ? `<p class="muted cost-none">${k} of ${inst.rows.length} energies here state a compute cost; a cost figure is drawn from two.</p>` : "")(inst.rows.filter(r => hoursOrEdOf(r.compute, r, inst)).length);
+  const stated = inst.rows.filter(r => hoursOf(r.compute)).length;
+  const hours = COST_FIGS.includes(inst) ? figure(costEntry(inst)) : (stated ? `<p class="muted cost-none">${stated} of ${inst.rows.length} energies here state a compute cost; a cost figure is drawn from two.</p>` : "") + edCostLine(inst);
   const flops = FLOPS_FIGS.includes(inst) ? figure(flopsEntry(inst)) : (k => k ? `<p class="muted cost-none">${k} of ${inst.rows.length} energies here state enough to estimate their cost in FLOPs; a figure is drawn from two.</p>` : "")(inst.rows.filter(r => flopsOf(r, inst)).length);
   return hours + flops;
 }
