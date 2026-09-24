@@ -67,14 +67,22 @@ def _max_mhz(core):
 
 def _gpu():
     """SM clock (MHz), max SM clock, utilisation (%) and power (W) of this job's GPU, or None."""
-    # Inside an Euler job nvidia-smi lists every GPU on the node, other users' too, and
-    # CUDA_VISIBLE_DEVICES is renumbered from 0; SLURM_JOB_GPUS holds the physical index.
-    dev = (os.environ.get("SLURM_JOB_GPUS") or os.environ.get("SLURM_STEP_GPUS") or os.environ.get("CUDA_VISIBLE_DEVICES") or "").split(",")[0]
+    # Where the job's cgroup hides the other GPUs, nvidia-smi sees one card, numbered 0, and
+    # SLURM_JOB_GPUS's physical index does not exist for it (the GCNN rerun of 2026-09-24 lost its
+    # GPU record that way). Only where it lists several is the physical index needed.
+    q = ["--query-gpu=clocks.sm,clocks.max.sm,utilization.gpu,power.draw", "--format=csv,noheader,nounits"]
+    try:
+        visible = subprocess.run(["nvidia-smi", "-L"], capture_output=True, text=True, timeout=10).stdout.strip().splitlines()
+    except Exception:
+        return None
+    if len(visible) == 1:
+        dev = "0"
+    else:
+        dev = (os.environ.get("SLURM_JOB_GPUS") or os.environ.get("SLURM_STEP_GPUS") or os.environ.get("CUDA_VISIBLE_DEVICES") or "").split(",")[0]
     if not dev:
         return None
     try:
-        line = subprocess.run(["nvidia-smi", "-i", dev, "--query-gpu=clocks.sm,clocks.max.sm,utilization.gpu,power.draw",
-                               "--format=csv,noheader,nounits"], capture_output=True, text=True, timeout=10).stdout.strip()
+        line = subprocess.run(["nvidia-smi", "-i", dev] + q, capture_output=True, text=True, timeout=10).stdout.strip()
         sm, sm_max, util, power = (float(x) for x in line.split(","))
         return dict(sm=sm, sm_max=sm_max, util=util, power=power)
     except Exception:
