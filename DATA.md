@@ -172,6 +172,53 @@ Three rules, and they are the whole design:
 
 A missing `compute` block excludes nothing, exactly like a missing variance.
 
+### What an exact diagonalization costs: `qmbl_ed_cost`
+
+An exact energy is the same whoever computes it, so what it costs belongs to the instance, not
+to a row. QMBL diagonalizes the instance itself and stores the cost **once per instance**, as the
+field `qmbl_ed_cost` (Tristan, 2026-09-23/24). Duplicate rows would make one Hamiltonian look
+like several results.
+- **What is run:** [`checks/cost/ed/run_ed.py`](checks/cost/ed/run_ed.py) builds the
+  Hamiltonian in NetKet in VarBench's conventions. It conserves only particle number or total
+  Sz, with no lattice symmetry, so the cost is that of plain sparse Lanczos in a standard tool,
+  not the least an expert code could spend.
+- **How it is solved:** it stores the matrix and finds the lowest eigenvalue with SciPy's
+  `eigsh`, counting the matrix-vector products (the Lanczos steps).
+- **The clock:** from process start to the eigenvalue, on one core. The product is
+  single-threaded, so more cores would only sit idle.
+- **What is recorded:** the protocol-v1.4 hardware record sits beside the wall-clock
+  ([`checks/cost/README.md`](checks/cost/README.md)).
+
+```json
+"qmbl_ed_cost": {
+  "core_hours": 0.00411, "wall_clock": "00:00:15", "cores": 1, "cpu": "AMD EPYC 7H12 64-Core Processor",
+  "energy": -44.9139328337154, "reproduces": { "energy": -44.9139328, "method": "Exact diagonalization", "relative_difference": 7.51e-10 },
+  "sector": { "conserved": "total Sz = 0", "dimension": 12870, "nonzeros": 228162, "lattice_symmetries": "none" },
+  "lanczos_steps": 61, "peak_memory_gb": 0.89, "code": "NetKet 3.22.4 (sparse matrix) and SciPy 1.18.1 eigsh (ARPACK Lanczos)",
+  "note": "Measured by QMBL, not reported: wall-clock from process start to the eigenvalue on 1 core (imports 9 s, ...)",
+  "script": "checks/cost/ed/run_ed.py", "results_file": "checks/cost/ed/results/Heisenberg--square_16_P.json", "commit": "fd80732", "measured_on": "2026-09-24"
+}
+```
+
+Rules:
+- **The energy must reproduce.** A run's energy has to agree with the stored exact energy to
+  1e-8, relative. If it does not, nothing is attached and the build prints the mismatch; a
+  number in the table is never changed from here.
+- **The CPU is named, never the cluster.** The validator rejects the cluster's name anywhere in
+  the field.
+- **Placement in figures:** the exact row it reproduced is drawn on the hours axis at
+  `core_hours`, as a CPU core-hours square named "(cost measured by QMBL)". It is on the
+  frontier like any exact energy. It is never on the FLOPs axis, which holds estimates only.
+
+Scope ([`checks/cost/ed/worklist.json`](checks/cost/ed/worklist.json)):
+- 67 instances with an exact diagonalization and at most 30 sites.
+- **Not run: six.**
+  - Kagome 12, 24 and 30 and shuriken 24: their clusters are defined only in their source
+    papers.
+  - The 4×4 Hubbard model at half filling: the stored matrix needs about 290 GB.
+- The 44 exactly solved instances above 30 sites need a symmetry-adapted code, which is not
+  used here.
+
 ### How a FLOP count is estimated
 
 Ten published rows state hours on a named GPU; 58 more state how many parameters the ansatz had,

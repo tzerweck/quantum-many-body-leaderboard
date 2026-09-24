@@ -25,7 +25,7 @@
 import fs from "node:fs";
 import { recordEligible, exactEligible, boundLabel, perSiteDivisor, perSiteLabel } from "./units.mjs";
 import { collect, recordOf } from "./summary.mjs";
-import { hoursOf, parametersOf, MIN_COSTED, costFigureName, flopsFigureName, paramsFigureName } from "./cost.mjs";
+import { hoursOf, hoursOrEdOf, parametersOf, MIN_COSTED, costFigureName, flopsFigureName, paramsFigureName } from "./cost.mjs";
 import { estimatedFlopsOf } from "./flops.mjs";
 import { W, PAD, n, text, hline, dot, legend, header, footnote, doc, textWidth, niceStep, writer, log, logScale, pow10, shortLabel, rowHref, linked } from "./chart.mjs";
 
@@ -120,7 +120,7 @@ function drawPanel(t, parts, inst, pts, { px, left, right, top, bottom, xLabel, 
     const rec = recordOf(inst), recE = rec ? rec.energy / perSiteDivisor(inst) : null;
     const front = frontIn ?? frontierOf(pts);
     // An enlarged panel names each mark in full: its neighbours there are the ones it is confused with.
-    const nameOf = r => (tight ? fullLabel(r) : shortLabel(r));
+    const nameOf = p => (tight ? fullLabel(p.r) : shortLabel(p.r)) + (p.cost.measuredByQmbl ? " (cost measured by QMBL)" : "");
     if (title) parts.push(text(px, top - 14, title, { size: 12.5, fill: t.ink, weight: 600 }));
     parts.push(text(right, top - 14, perSiteLabel(inst), { size: 9.5, fill: t.muted, anchor: "end" }));
     // Cost axis: a decade either side of the data. Energy axis: linear, as in the
@@ -182,7 +182,7 @@ function drawPanel(t, parts, inst, pts, { px, left, right, top, bottom, xLabel, 
     const placed = [];
     const onLabel = c => placed.filter(l => c.x0 < l.x1 && l.x0 < c.x1 && Math.abs(c.ty - l.ty) < 12).length;
     const allLabels = [...named].sort((a, b) => front.includes(b) - front.includes(a) || Y(a.e) - Y(b.e)).map(p => {
-      const s = nameOf(p.r), w = textWidth(s, 10.5), x = X(p.cost.value), y = Y(p.e);
+      const s = nameOf(p), w = textWidth(s, 10.5), x = X(p.cost.value), y = Y(p.e);
       // Beside the mark on the right, then the left, then above or below it, then diagonally;
       // the first that fits the plot and covers nothing, else the one covering fewest.
       const spots = [
@@ -212,7 +212,7 @@ function drawPanel(t, parts, inst, pts, { px, left, right, top, bottom, xLabel, 
       const pick = spots.find(c => hits(c) === 0) ?? [...spots].sort((c1, c2) => hits(c1) - hits(c2))[0] ?? { x0: x + 10, x1: x + 10 + w, lx: x + 10, anchor: "start", ty: y };
       // In a crowd a name away from its mark's own row reads as its neighbour's: number it.
       const crowded = centres.some(([cx, cy]) => (cx !== x || cy !== y) && Math.hypot(cx - x, cy - y) < 24);
-      if (nameAll && (hits(pick) > 0 || (pick.ty !== y && crowded))) return { keyed: true, s: fullLabel(p.r), p, dx: x, dy: y };
+      if (nameAll && (hits(pick) > 0 || (pick.ty !== y && crowded))) return { keyed: true, s: fullLabel(p.r) + (p.cost.measuredByQmbl ? " (cost measured by QMBL)" : ""), p, dx: x, dy: y };
       placed.push(pick);
       return { s, w, x: pick.lx, anchor: pick.anchor, y: pick.ty + 4, forced: hits(pick) > 0 };
     });
@@ -310,10 +310,12 @@ const HOURS_LEGEND = t => [
 function HOURS_FOOTER(all, overview = false) {
   const cpu = all.filter(p => p.cost.unit === "cpu").length, der = all.filter(p => p.cost.derived).length;
   const own = all.filter(p => p.r.computed_by === "qmbl").length;
+  const ed = all.filter(p => p.cost.measuredByQmbl);
   const rows = k => `${k} row${k === 1 ? "" : "s"}`;
   return (cpu ? `Circles are GPU-hours, squares CPU core-hours (${rows(cpu)}).` : "Every mark is GPU-hours.") +
     (der ? ` For ${rows(der)} the hours are devices × wall-clock, multiplied here.` : "") +
-    (own ? ` Labels marked QMBL are QMBL's own reference runs${overview ? "; each instance's own figure names all of them" : ""}.` : "");
+    (own ? ` Labels marked QMBL are QMBL's own reference runs${overview ? "; each instance's own figure names all of them" : ""}.` : "") +
+    (ed.length ? ` An exact energy marked "cost measured by QMBL" is placed at what diagonalizing the instance cost QMBL, on ${[...new Set(ed.map(p => `${p.inst.qmbl_ed_cost.cores} core${p.inst.qmbl_ed_cost.cores === 1 ? "" : "s"} of an ${p.inst.qmbl_ed_cost.cpu}`))].join(" or ")}, with only particle number or Sz conserved.` : "");
 }
 const describeHours = panels => panels.map(({ inst, pts }) => `${instLabel(inst)}: ${pts.map(p => `${shortLabel(p.r)} ${Math.round(p.cost.value)} ${p.cost.unit === "cpu" ? "CPU-h" : "GPU-h"}${p.cost.derived ? " (derived)" : ""} ${p.e.toFixed(6)}`).join(", ")}`).join("; ");
 
@@ -322,7 +324,7 @@ const hoursPanels = costFigure({
   title: "The best energies at each cost, instance by instance",
   subtitle: panels => `Every energy whose paper, or QMBL's own run, states what it cost in hours, on the ${panels.length} instances with at least two such rows. ` +
     "Colour is the kind of number; filled marks can hold a record, hollow ones cannot.",
-  costOf: hoursOf, minRows: MIN_COSTED,
+  costOf: hoursOrEdOf, minRows: MIN_COSTED,
   xLabel: "hours, as reported",
   legendItems: HOURS_LEGEND,
   footer: panels => HOURS_FOOTER(panels.flatMap(p => p.pts), true),

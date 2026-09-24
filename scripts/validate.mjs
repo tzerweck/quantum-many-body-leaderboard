@@ -102,6 +102,17 @@ for (const m of fs.readdirSync("data")) {
           issues.push(`ERRMET ${at}: reported_as not verbatim in ${m.source_file}`);
       }
     }
+    // `qmbl_ed_cost` is instance level (DATA.md): measured, reproducing a stored exact energy,
+    // checkable against its committed results file, and naming the CPU, never the cluster.
+    if (inst.qmbl_ed_cost != null) {
+      const x = inst.qmbl_ed_cost, at = `EDCOST ${inst.instance_id}`;
+      for (const k of ["core_hours", "wall_clock", "cores", "cpu", "energy", "reproduces", "sector", "lanczos_steps", "code", "results_file", "commit"])
+        if (x[k] == null) issues.push(`${at}: no ${k}`);
+      if (!(x.core_hours > 0)) issues.push(`${at}: core_hours ${x.core_hours}`);
+      if (!inst.rows.some(r => r.bound_type === "exact" && r.energy === x.reproduces?.energy)) issues.push(`${at}: reproduces no exact row`);
+      if (x.results_file && !fs.existsSync(x.results_file)) issues.push(`${at}: results file ${x.results_file} missing`);
+      if (/euler/i.test(JSON.stringify(x))) issues.push(`${at}: names the cluster; public text names the CPU only`);
+    }
     // `coverage` is instance level: when its literature was last checked and by what.
     // A check that found nothing is as real as one that added a row, so `found: 0` is
     // valid and is what an instance page needs in order not to read as authoritative.

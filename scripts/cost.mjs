@@ -36,6 +36,17 @@ export function hoursOf(c) {
   return null;
 }
 
+// An exact energy's cost as QMBL measured it, once per instance (DATA.md, `qmbl_ed_cost`): the
+// exact-diagonalization row the run reproduced carries it, as CPU core-hours, never derived.
+export function edCostOf(r, inst) {
+  const x = inst?.qmbl_ed_cost;
+  if (!x || r.bound_type !== "exact" || r.energy !== x.reproduces.energy || (r.method_as_published ?? r.method) !== x.reproduces.method) return null;
+  return { value: x.core_hours, unit: "cpu", derived: false, measuredByQmbl: true };
+}
+
+// The hours axis: what the row states, else the instance's measured ED cost for its exact row.
+export const hoursOrEdOf = (c, r, inst) => hoursOf(c) ?? (r ? edCostOf(r, inst) : null);
+
 export const parametersOf = c => (c?.parameters > 0 ? { value: c.parameters, unit: "params", derived: false } : null);
 
 // A cost figure needs at least this many costed energies on its instance; below it the

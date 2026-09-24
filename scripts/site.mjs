@@ -26,7 +26,7 @@ import { citeRef, paperYear } from "./cite.mjs";
 import { sources } from "./enrich_sources.mjs";
 import { quote, shorten, MODELS, BOUNDARY, instanceLabel, byGeometry, noRecordReason, gapAbove } from "./readme_table.mjs";
 import { logoSvg, faviconSvg, LOGO_CSS } from "./logo.mjs";
-import { hoursOf, costFigureName, flopsFigureName, paramsFigureName } from "./cost.mjs";
+import { hoursOf, hoursOrEdOf, costFigureName, flopsFigureName, paramsFigureName } from "./cost.mjs";
 import { flopsOf } from "./flops.mjs";
 import { FRONTIER } from "./views.mjs";
 import { energyFigures } from "./ladders.mjs";
@@ -430,7 +430,7 @@ const TAB_CSS = [tabRules("cost-axis", COMPUTE_AXES.length), ...COMPUTE_TABS.map
 // a cost when that is too few to draw; nothing when none does. The estimated-FLOPs figure
 // follows it where one exists.
 function costSlot(inst) {
-  const hours = COST_FIGS.includes(inst) ? figure(costEntry(inst)) : (k => k ? `<p class="muted cost-none">${k} of ${inst.rows.length} energies here state a compute cost; a cost figure is drawn from two.</p>` : "")(inst.rows.filter(r => hoursOf(r.compute)).length);
+  const hours = COST_FIGS.includes(inst) ? figure(costEntry(inst)) : (k => k ? `<p class="muted cost-none">${k} of ${inst.rows.length} energies here state a compute cost; a cost figure is drawn from two.</p>` : "")(inst.rows.filter(r => hoursOrEdOf(r.compute, r, inst)).length);
   const flops = FLOPS_FIGS.includes(inst) ? figure(flopsEntry(inst)) : (k => k ? `<p class="muted cost-none">${k} of ${inst.rows.length} energies here state enough to estimate their cost in FLOPs; a figure is drawn from two.</p>` : "")(inst.rows.filter(r => flopsOf(r, inst)).length);
   return hours + flops;
 }
