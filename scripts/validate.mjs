@@ -60,6 +60,20 @@ for (const m of fs.readdirSync("data")) {
             if (c[k] != null && !(typeof c[k] === "number" && (c[k] > 0 || (k === "parameters" && c[k] === 0))))
               issues.push(`COMPUTE ${at}: ${k} is ${c[k]}`);
           if (c.gpu_hours != null && !c.device) issues.push(`COMPUTE ${at}: gpu_hours without a device model`);
+          // A DMRG run's schedule (DATA.md, `sweep_schedule`): one maximum bond dimension per
+          // sweep, at least the sweeps the row counts, variance evaluations inside the run.
+          if (c.sweep_schedule != null) {
+            const s = c.sweep_schedule;
+            if (!Array.isArray(s.maxdim) || !s.maxdim.length || s.maxdim.some(m => !(Number.isInteger(m) && m > 0)))
+              issues.push(`COMPUTE ${at}: sweep_schedule.maxdim is not a list of bond dimensions`);
+            else {
+              if (c.iterations == null || s.maxdim.length < c.iterations) issues.push(`COMPUTE ${at}: sweep_schedule has ${s.maxdim.length} sweeps, iterations ${c.iterations}`);
+              if ((s.variance_after || []).some(k => !(Number.isInteger(k) && k >= 1 && k <= s.maxdim.length))) issues.push(`COMPUTE ${at}: sweep_schedule.variance_after outside the run`);
+            }
+            if (!(s.eigensolver_applications == null || s.eigensolver_applications > 0) || !s.eigensolver_source) issues.push(`COMPUTE ${at}: sweep_schedule eigensolver setting without its source`);
+            if (!s.code || !s.lattice || !["chain", "snake", "edges", "itensor-triangular", "tenpy"].includes(s.lattice.order) || !(s.lattice.site_dimension > 1))
+              issues.push(`COMPUTE ${at}: sweep_schedule without code or a lattice order the FLOP model knows`);
+          }
           for (const k of Object.keys(c))
             if (/normali[sz]ed|equivalent|h100_eq/i.test(k)) issues.push(`COMPUTE ${at}: normalised field ${k}; DATA.md forbids normalisation`);
         }

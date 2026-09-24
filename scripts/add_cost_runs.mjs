@@ -62,7 +62,15 @@ for (const f of files) {
     });
   } else if (res.schema === "qmbl-cost-run-dmrg-1") {
     const { hardware: h, software: sw } = res;
+    const maxdim = [];
     for (const rung of res.rungs) {
+      // The schedule that reached this rung: every sweep of the rungs below it, then its own
+      // (dmrg-v1 in flops.mjs); TeNPy logs its MPO, so the model needs no lattice.
+      maxdim.push(...Array(rung.sweeps).fill(rung.chi_max));
+      const schedule = { code: `TeNPy ${sw.tenpy}`, eigensolver_applications: rung.lanczos?.lanczos_updates ? +(rung.lanczos.applications / rung.lanczos.lanczos_updates).toFixed(2) : null,
+        eigensolver_source: rung.lanczos?.lanczos_updates ? `measured: ${rung.lanczos.applications} Lanczos applications over ${rung.lanczos.lanczos_updates} Lanczos updates in this rung (${rung.lanczos.full_diagonalisations} more by full diagonalisation)` : "not recorded by this run (TeNPy's Lanczos stops adaptively)",
+        maxdim: [...maxdim], start: "Neel product state", cutoff: res.protocol.svd_min, variance_after: [],
+        lattice: { order: "tenpy", n_sites: inst.n_sites, mpo_bond_dimension: res.protocol.mpo_bond_dimension, site_dimension: 2, operators_per_bond: 3 } };
       const said = `chi_max ${rung.chi_max} chi_reached ${rung.chi_reached} energy ${rung.energy} (energy_SS ${rung.energy_SS}) sweeps ${rung.sweeps} max_trunc_err ${rung.max_trunc_err} | ` +
         `wall_hms ${rung.wall_hms} (wall_seconds ${rung.wall_seconds}) on ${res.cores} cores, ${h.host}, Slurm job ${h.slurm_job_id} | cpu_core_hours ${rung.cpu_core_hours}`;
       rows.push({
@@ -80,11 +88,12 @@ for (const f of files) {
         compute: {
           parameters: null, gpu_hours: null, device: `${h.cpu} (Euler ${h.slurm_partition})`, n_devices: null, samples: null,
           wall_clock: rung.wall_hms, cpu_core_hours: +rung.cpu_core_hours.toFixed(3), bond_dimension: rung.chi_max, iterations: rung.sweeps,
+          sweep_schedule: schedule,
           reported_as: said,
           source: `${rel}, Slurm job ${h.slurm_job_id} on ${h.host}, commit ${sw.commit} (QMBL run, ${day})`,
           scope: "row", confidence: "high",
           note: `Measured, not reported: wall-clock from process start to the end of this rung, the rungs below it included; cpu_core_hours = wall-clock x ${res.cores} allocated cores. ` +
-            `iterations is the sweep count of this rung alone.`,
+            `iterations is the sweep count of this rung alone; sweep_schedule lists every sweep of the process up to the end of this rung, which is what the hours cover.`,
         },
       });
     }

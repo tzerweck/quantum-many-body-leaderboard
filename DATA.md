@@ -122,10 +122,37 @@ across sizes, or the paper as a whole - and `confidence` drops to `medium` where
 was evaluated from a formula the paper prints, `low` where the only statement is second-hand
 or an acknowledgement naming a supercomputer.
 
+A DMRG row whose run script is public also carries `sweep_schedule`, what the script states
+about the run rather than what it cost:
+
+```json
+"sweep_schedule": {
+  "code": "ITensors.jl 0.6.16",
+  "maxdim": [1024, 1024, "... one maximum bond dimension per sweep"],
+  "eigensolver_applications": 3,
+  "eigensolver_source": "ITensors.jl 0.6.16 dmrg(): eigsolve_krylovdim = 3, eigsolve_maxiter = 1 (defaults, not overridden)",
+  "variance_after": [50],
+  "start": "random MPS at bond dimension 1024",
+  "cutoff": 1e-12,
+  "lattice": { "order": "snake", "rows": 10, "cols": 10, "wrap_row": true, "wrap_col": true,
+               "diagonals": ["\\", "/"], "site_dimension": 2, "operators_per_bond": 3 }
+}
+```
+
+`maxdim` has one entry per sweep (`iterations` is its length, or for a QMBL rung the sweeps
+of that rung alone). `variance_after` lists the sweeps after which the script evaluates
+⟨ψ|H H|ψ⟩. `eigensolver_applications` is the most effective-Hamiltonian applications per
+two-site update the code's eigensolver makes, with the source it was read from. `lattice` is
+the site order and couplings the script builds its MPO from, so the MPO's size can be
+recomputed. None of this is a cost. It is the input to the one estimate QMBL makes for
+DMRG (next section).
+
 Blocks are attached by `scripts/add_compute.mjs` from `compute-rows-<date>.json`, one file
 per reading pass, applied in date order; the first (2026-09-16) read all 130 papers behind
 the non-baseline rows in full, appendices and supplements included, and found a statement
-in 81 of them.
+in 81 of them. The second (2026-09-23) read the run script behind each of the 99 VarBench
+DMRG rows in [github.com/varbench/methods](https://github.com/varbench/methods) at
+`ed31bb0` for its sweep schedule; no script records a time.
 
 Three rules, and they are the whole design:
 
@@ -140,8 +167,8 @@ Three rules, and they are the whole design:
   `gpu_hours` null; a figure gives its own "GPU-days" as hours and the note says so. A view
   that multiplies devices by wall-clock does that at draw time and marks the point as
   derived; the stored fields stay as reported. The one estimate QMBL makes, a FLOP count
-  from stated parameter, sample and iteration counts, is evaluated at build time and never
-  stored (next section).
+  from stated counts (parameters, samples and iterations for a network; the sweep schedule
+  for DMRG), is evaluated at build time and never stored (next section).
 
 A missing `compute` block excludes nothing, exactly like a missing variance.
 
@@ -151,7 +178,8 @@ Ten published rows state hours on a named GPU; 58 more state how many parameters
 how many samples each optimisation step drew and how many steps were taken. Those three
 numbers, with the instance, fix the number of network evaluations an optimisation took, and
 [`scripts/flops.mjs`](scripts/flops.mjs) turns them into floating-point operations at
-build time (Tristan, 2026-09-21):
+build time (Tristan, 2026-09-21). That model, `nqs-v1`, is for neural and other variational
+Monte Carlo states; DMRG has its own, `dmrg-v1`, at the end of this section.
 
     FLOPs = iterations × samples × (n_conn + k_sample + 3) × FLOPs_forward
     FLOPs_forward = 2 × parameters × reuse (+ 2/3 N_e³ for a determinant or Pfaffian)
@@ -201,15 +229,80 @@ Three rules, the same shape as the block's own:
 
 - **An input nobody stated is never guessed.** Parameters, samples and iterations must all
   be on the row, the architecture must be in `ARCH`, and the instance must be on a lattice
-  whose bond count the script writes. Otherwise there is no estimate. The estimate is
+  whose bond count the script writes. For DMRG the sweep schedule, eigensolver setting and
+  site order must be in the run script. Otherwise there is no estimate. The estimate is
   `medium` confidence when those hold and `low` when an architectural assumption was needed
   (a transformer whose patch size the paper does not state) or the block itself is `low`.
 - **Nothing is stored.** The estimate is a function of the row and its instance, recomputed
   on every build; changing the model changes every figure at once and no data file.
-- **No tensor-network model yet.** A bond dimension alone does not fix a DMRG cost; the
-  sweep count is stated for none of the lattice rows, and a PEPS needs its contraction
-  dimension. The four exact diagonalizations that state seconds per matrix-vector product do
-  not state the Lanczos iteration count.
+- **DMRG only where the schedule is stated.** A bond dimension alone does not fix a DMRG
+  cost, so only rows with a `sweep_schedule` get one (below): the VarBench rows, from their
+  run scripts, and QMBL's own. No DMRG paper in the table states its sweep schedule, a PEPS
+  needs its contraction dimension, and the four exact diagonalizations that state seconds per
+  matrix-vector product do not state the Lanczos iteration count.
+
+#### DMRG: `dmrg-v1`
+
+For a row with a `sweep_schedule` (Tristan, 2026-09-23), `flops.mjs` counts the dense tensor
+contractions of two-site DMRG:
+
+    FLOPs = Σ over sweeps  2 × Σ over the N − 1 two-site updates
+              [ n_apply × apply + svd + environment ]
+          + one ⟨ψ|H H|ψ⟩ contraction after each sweep in variance_after
+    apply       = 2 d² D χ_l χ_r (χ_l + χ_r) + 4 d³ D² χ_l χ_r
+    svd         = 4 m n min(m, n),  m = d χ_l,  n = d χ_r
+    environment = 2 d D χ_l χ_r (χ_l + χ_r) + 2 d² D² χ_l χ_r
+    ⟨H²⟩        = Σ over sites  2 d D² χ_l χ_r (χ_l + χ_r) + 4 d² D³ χ_l χ_r
+
+`d` is the site dimension (2 for spins and spinless fermions, 4 for Hubbard). The bond
+dimension at a bond in a sweep is the least of three numbers: the sweep's maximum, the
+reached bond dimension the row states (a 16-site tV run capped at 4096 reached 74), and the
+exact limit d^min(b, N − b). `n_apply` is the code's own eigensolver setting: at most 3 for
+ITensors.jl 0.6.16's defaults (Krylov dimension 3, one pass) and for ITensor C++ at
+`niter = 2` (one application, then one per Davidson iteration). For TeNPy, whose Lanczos stops
+adaptively, it is the count measured on the calibration run (`checks/cost/calibration/`).
+`D`, the MPO bond dimension, is 2 + k × the largest number of sites on the smaller side of
+any cut in the script's site order with a coupling across that cut. `k` is the number of
+operators per bond: 3 for S⁺S⁻ + S⁻S⁺ + SᶻSᶻ and for tV, 1 for the Ising ZZ, 4 for the two spin
+species' hops. For QMBL's runs this bound reproduces the MPO bond dimension TeNPy logs,
+68 on the J1-J2 10×10 torus and 41 on triangular 36.
+
+Not counted, and said under every figure that shows a DMRG estimate:
+- **conserved quantum numbers.** The model is dense, and block-sparse tensors skip most of
+  the contraction, increasingly so as χ grows.
+- **the noise or mixer term, the eigensolver's orthogonalisation, and memory traffic.**
+
+**Calibration.** The check is QMBL's own DMRG rungs, whose wall-clock is measured on
+8 cores (TeNPy 1.1.1, Sz conserved,
+[`checks/cost/`](checks/cost/README.md)). TeNPy's Lanczos count comes from a repeat of the
+triangular-36 χ = 500 rung (`checks/cost/calibration/dmrg-cal-tri-36.json`, the same energy to
+all printed digits): 3964 applications over 1053 Lanczos updates, **3.76 per update**, from 2
+to 20. The 35 updates on the smallest blocks were solved by full diagonalisation. The six
+rungs ran before the count was recorded, so their estimates use this 3.76 and are `low`
+confidence. Each rung's schedule covers every sweep up to the end of that rung, because the
+wall-clock does too.
+
+| instance | rung | estimated FLOPs | measured | achieved per core |
+|---|---|---|---|---|
+| triangular 36 | χ = 500 | 2.4e14 | 3.7 core-h, EPYC 7H12 | 18 GFLOP/s |
+| triangular 36 | χ = 1000 | 1.8e15 | 9.0 core-h, EPYC 7H12 | 57 GFLOP/s |
+| triangular 36 | χ = 2000 | 1.3e16 | 24.9 core-h, EPYC 7H12 | 140 GFLOP/s |
+| J1-J2 10×10, J2 = 0.5 | χ = 500 | 1.9e15 | 37 core-h, EPYC 7763 | 15 GFLOP/s |
+| J1-J2 10×10, J2 = 0.5 | χ = 1000 | 1.6e16 | 88 core-h, EPYC 7763 | 49 GFLOP/s |
+| J1-J2 10×10, J2 = 0.5 | χ = 2000 | 1.2e17 | 221 core-h, EPYC 7763 | 144 GFLOP/s |
+
+**The implied rate grows with χ, tenfold from χ = 500 to 2000, almost identically on both lattices.**
+One of these cores peaks at about 40-55 GFLOP/s in double precision. From χ ≈ 1000 upward
+the model therefore counts more arithmetic than the run did: blocks with different Sz are
+never multiplied, and that saving grows with χ. Below it, the run spends time on things the
+model does not count.
+
+The clock is itself uncertain. The calibration repeat took 3.4 core-h on one node and
+8.7 core-h on another of the same partition, for the same sweeps and the same energy.
+
+**A DMRG estimate is therefore good to an order of magnitude, like a network's.** It
+overstates the work of a large-χ run by up to a factor of three against peak. It shares an
+axis with the network estimates and, like them, never the hours axis.
 
 ## When the literature was last checked: `coverage`
 

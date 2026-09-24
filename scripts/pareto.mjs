@@ -241,12 +241,19 @@ const FLOPS_LEGEND = t => [
   { kind: "ring", color: t.ink2, label: "Cannot hold a record" },
   { kind: "line", color: t.series[0], label: "Frontier" },
 ];
-const FLOPS_MODEL = "Every mark is an estimate: iterations × samples × (connected configurations + sampler passes + 3) × forward-pass FLOPs, " +
-  "from the counts the paper states; the optimizer's solve, symmetry projections and pre-training are not counted, and the model is good to an order of magnitude.";
+// One sentence per model drawn (flops.mjs): what it counts and what it leaves out.
+const FLOPS_MODEL = {
+  "nqs-v1": "Network estimates: iterations × samples × (connected configurations + sampler passes + 3) × forward-pass FLOPs, " +
+    "from the counts the paper states; the optimizer's solve, symmetry projections and pre-training are not counted.",
+  "dmrg-v1": "DMRG estimates: the dense tensor contractions of every sweep in the run script's schedule, plus its variance evaluations; " +
+    "the saving from conserved quantum numbers is not counted, so a symmetric code does less arithmetic than this.",
+};
 function FLOPS_FOOTER(all) {
+  const models = [...new Set(all.map(p => p.cost.estimate.model))].sort((a, b) => b.localeCompare(a));
   const low = all.filter(p => p.cost.derived).length;
   const own = all.filter(p => p.r.computed_by === "qmbl").length;
-  return FLOPS_MODEL + (low ? ` ${low} of these estimate${low === 1 ? "" : "s"} needed an assumption about the architecture.` : "") +
+  return "Every mark is an estimate, good to an order of magnitude. " + models.map(m => FLOPS_MODEL[m]).join(" ") +
+    (low ? ` ${low} of these estimate${low === 1 ? "" : "s"} needed an assumption (an architecture detail, or a Lanczos count taken from the calibration run).` : "") +
     (own ? ` Labels marked QMBL are QMBL's own reference runs (${own} row${own === 1 ? "" : "s"}).` : "");
 }
 const describeFlops = panels => panels.map(({ inst, pts }) => `${instLabel(inst)}: ${pts.map(p => `${shortLabel(p.r)} ${p.cost.value.toExponential(1)} FLOPs (estimated${p.cost.derived ? ", low confidence" : ""}) ${p.e.toFixed(6)}`).join(", ")}`).join("; ");
@@ -254,7 +261,7 @@ const describeFlops = panels => panels.map(({ inst, pts }) => `${instLabel(inst)
 const flopsPanels = costFigure({
   name: "energy-vs-flops",
   title: "The best energies at each estimated cost in FLOPs, instance by instance",
-  subtitle: panels => `Every published energy whose paper states enough to estimate its optimisation in floating-point operations, on the ${panels.length} instances with at least two such rows. ` +
+  subtitle: panels => `Every published energy whose paper or run script states enough to estimate its cost in floating-point operations, on the ${panels.length} instances with at least two such rows. ` +
     "Colour is the kind of number; filled marks can hold a record, hollow ones cannot.",
   costOf: estimatedFlopsOf, minRows: MIN_COSTED,
   xLabel: "FLOPs, estimated",
@@ -270,7 +277,7 @@ for (const { inst, pts } of flopsPanels) {
   const name = flopsFigureName(inst);
   const title = `${instLabel(inst)}: the best energies at each estimated cost in FLOPs`;
   own.write(name, t => {
-    const h = header(t, title, "Every energy on this instance whose paper states enough to estimate its optimisation in floating-point operations.");
+    const h = header(t, title, "Every energy on this instance whose paper or run script states enough to estimate its cost in floating-point operations.");
     const lg = legend(t, FLOPS_LEGEND(t), h.bottom + 34);
     const top = lg.bottom + 36, bottom = top + 300, left = PAD + 66, right = W - PAD - 8;
     const parts = [h.svg, lg.svg];

@@ -360,8 +360,8 @@ function computeSwitcher() {
   return `<section class="tabs" id="energy-vs-compute">
   <h2>The best published energies, by cost</h2>
   <p class="muted">Skim through three kinds of cost: compute hours, estimated FLOPs and number of parameters. Papers state compute cost
-  in hours on GPU/CPU on ${COST_FIGS.length} instances. Many more papers state the number of parameters, samples and optimisation steps,
-  which imply a count of floating-point operations that we estimate (<a href="${DATA}#how-a-flop-count-is-estimated">how</a>). On top,
+  in hours on GPU/CPU on ${COST_FIGS.length} instances. Many more papers state the number of parameters, samples and optimisation steps, and
+  public DMRG run scripts state their sweeps, which imply a count of floating-point operations that we estimate (<a href="${DATA}#how-a-flop-count-is-estimated">how</a>). On top,
   we plot the parameter count alone.</p>
   ${tabs("cost-axis", COMPUTE_AXES.map(([label, figs, entry], a) => [label, `<div class="tabs">${tabs(`cost-${a}`, computeModels(figs).map((g, m) =>
     [esc(modelName(g[0].model)), `<div class="tabs">${computeInstances(`cost-${a}-${m}`, g, entry)}</div>`]))}</div>`]))}
@@ -1096,8 +1096,8 @@ function contributePage() {
   rows state at least one of these, which is what the <a href="/#energy-vs-compute">energy-versus-cost
   figure</a> is drawn from; yours can join them
   (<a href="${DATA}#what-a-number-cost-the-compute-block">the format is specified</a>). Parameter,
-  sample and iteration counts together let the site <a href="/#energy-vs-compute">estimate a FLOP count</a>
-  where no hours were stated.</li>
+  sample and iteration counts together, or a DMRG run's sweep schedule, let the site
+  <a href="/#energy-vs-compute">estimate a FLOP count</a> where no hours were stated.</li>
 </ul>`;
   return page({ url: "/contribute/", title: "Contribute", body,
     description: "How to correct a row, add a published result, supply a missing error bar, or object to a record in QMBL." });

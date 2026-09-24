@@ -19,7 +19,7 @@ import path from "node:path";
 
 const PASSES = fs.readdirSync(".").filter(f => /^compute-rows-\d{4}-\d{2}-\d{2}\.json$/.test(f)).sort();
 const BLOCK = ["parameters", "gpu_hours", "device", "n_devices", "samples", "wall_clock",
-  "cpu_core_hours", "bond_dimension", "iterations", "reported_as", "source", "scope", "confidence", "note"];
+  "cpu_core_hours", "bond_dimension", "iterations", "sweep_schedule", "reported_as", "source", "scope", "confidence", "note"];
 
 // A row's reference is `[paper](url)`, `[code](url)` or a citation string; the passes key
 // on the url or the string, as the worklist that was read from did.
@@ -52,6 +52,8 @@ for (const file of PASSES) {
     if (row.compute) replaced++; else attached++;
     const block = {};
     for (const k of BLOCK) block[k] = c[k] ?? null;
+    // Only a DMRG run script states a sweep schedule; no other block carries the field.
+    if (block.sweep_schedule == null) delete block.sweep_schedule;
     if (c.arxiv) block.source = `${block.source ?? "text"}, arXiv:${c.arxiv}`;
     block.source += ` (compute pass ${date})`;
     row.compute = block;
