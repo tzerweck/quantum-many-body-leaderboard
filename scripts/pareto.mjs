@@ -85,19 +85,49 @@ function mark(t, x, y, color, filled, unit, href) {
 // a variational one - and only a result with a cost can be placed; a record that states no
 // cost is named in a line of text under the axis, never drawn as a line across it
 // (Tristan, 2026-09-23). QMBL's own runs are all named, so none is read as published.
+// The method with its whole detail, for a key or an enlarged panel, where there is room.
+const fullLabel = r => (r.computed_by === "qmbl" ? shortLabel(r) : `${r.method}${r.method_detail ? ` (${r.method_detail})` : ""}`);
+
+// An instance's own figure: every mark named. Where three or more marks are too close to name
+// in place, their region is boxed and drawn again below at its own scale. Returns the y the
+// footnote starts at.
+function drawInstance(t, parts, inst, pts, g) {
+  const trial = [], crowd = [];
+  const k0 = drawPanel(t, trial, inst, pts, { ...g, nameAll: true, keyOut: crowd });
+  if (crowd.length < 3) { parts.push(...trial); return g.bottom + 70 + k0; }
+  const cs = crowd.map(p => log(p.cost.value)), es = crowd.map(p => p.e);
+  const espan = Math.max(Math.max(...es) - Math.min(...es), 1e-9);
+  const box = { c0: 10 ** (Math.min(...cs) - 0.06), c1: 10 ** (Math.max(...cs) + 0.06), e0: Math.min(...es) - 0.2 * espan, e1: Math.max(...es) + 0.2 * espan };
+  const inBox = pts.filter(p => p.cost.value >= box.c0 && p.cost.value <= box.c1 && p.e >= box.e0 && p.e <= box.e1);
+  const k1 = drawPanel(t, parts, inst, pts, { ...g, nameAll: true, hide: new Set(inBox), box });
+  const top2 = g.bottom + 70 + k1 + 26, bottom2 = top2 + plotHeight(inBox);
+  parts.push(text(g.px, top2 - 14, "The boxed region, enlarged", { size: 11.5, fill: t.ink, weight: 600 }));
+  const k2 = drawPanel(t, parts, inst, inBox, { ...g, top: top2, bottom: bottom2, nameAll: true, tight: true,
+    frontIn: frontierOf(pts).filter(p => inBox.includes(p)), recNoteOn: false });
+  return bottom2 + 70 + k2;
+}
+
+// An instance's own figure names every mark, so it grows with the marks it holds: 300 px for
+// up to twelve, 16 px more for each beyond (the 26 rows on J1-J2 10x10's parameter axis).
+const plotHeight = pts => 300 + 16 * Math.max(0, pts.length - 12);
+
 // Labels the placement could not keep off the frontier line; the build prints them.
 const labelClashes = [];
 
-function drawPanel(t, parts, inst, pts, { px, left, right, top, bottom, xLabel, title, nameOwn = false }) {
+function drawPanel(t, parts, inst, pts, { px, left, right, top, bottom, xLabel, title, nameAll = false,
+  hide = null, box = null, tight = false, frontIn = null, recNoteOn = true, keyOut = null }) {
   const plotH = bottom - top;
     const rec = recordOf(inst), recE = rec ? rec.energy / perSiteDivisor(inst) : null;
-    const front = frontierOf(pts);
+    const front = frontIn ?? frontierOf(pts);
+    // An enlarged panel names each mark in full: its neighbours there are the ones it is confused with.
+    const nameOf = r => (tight ? fullLabel(r) : shortLabel(r));
     if (title) parts.push(text(px, top - 14, title, { size: 12.5, fill: t.ink, weight: 600 }));
     parts.push(text(right, top - 14, perSiteLabel(inst), { size: 9.5, fill: t.muted, anchor: "end" }));
     // Cost axis: a decade either side of the data. Energy axis: linear, as in the
     // record-over-time figure, so the record and an exact energy sit where they are.
     const cs = pts.map(p => p.cost.value);
-    const x0 = 10 ** Math.floor(log(Math.min(...cs)) - 0.5), x1 = 10 ** Math.ceil(log(Math.max(...cs)) + 0.5);
+    const lo = log(Math.min(...cs)), hi = log(Math.max(...cs)), wide = Math.max(0.3 - (hi - lo), 0) / 2;
+    const x0 = tight ? 10 ** (lo - 0.12 - wide) : 10 ** Math.floor(lo - 0.5), x1 = tight ? 10 ** (hi + 0.12 + wide) : 10 ** Math.ceil(hi + 0.5);
     const X = logScale(x0, x1, left, right);
     const es = pts.map(p => p.e);
     const span = Math.max(Math.max(...es) - Math.min(...es), 1e-6);
@@ -111,8 +141,15 @@ function drawPanel(t, parts, inst, pts, { px, left, right, top, bottom, xLabel, 
       parts.push(hline(left, right, Y(v), t.grid));
       parts.push(text(left - 6, Y(v) + 4, v.toFixed(decimals).replace("-", "−"), { size: 10, fill: t.muted, anchor: "end", nums: true }));
     }
-    for (let k2 = Math.ceil(log(x0)); k2 <= Math.floor(log(x1)); k2++)
-      parts.push(text(X(10 ** k2), bottom + 16, pow10(k2), { size: 10, fill: t.muted, anchor: "middle", nums: true }));
+    if (!tight)
+      for (let k2 = Math.ceil(log(x0)); k2 <= Math.floor(log(x1)); k2++)
+        parts.push(text(X(10 ** k2), bottom + 16, pow10(k2), { size: 10, fill: t.muted, anchor: "middle", nums: true }));
+    else  // an enlarged range may hold no power of ten: 1, 2 and 5 of each decade
+      for (let k2 = Math.floor(log(x0)); k2 <= Math.ceil(log(x1)); k2++)
+        for (const m of [1, 2, 5]) {
+          const v = m * 10 ** k2;
+          if (v >= x0 && v <= x1) parts.push(text(X(v), bottom + 16, m === 1 ? pow10(k2) : `${m}×${pow10(k2)}`, { size: 10, fill: t.muted, anchor: "middle", nums: true }));
+        }
     if (front.length > 1) {
       let d = `M${n(X(front[0].cost.value))} ${n(Y(front[0].e))}`;
       for (const p of front.slice(1)) d += `H${n(X(p.cost.value))}V${n(Y(p.e))}`;
@@ -120,11 +157,15 @@ function drawPanel(t, parts, inst, pts, { px, left, right, top, bottom, xLabel, 
     }
     for (const p of [...pts].sort((a, b) => a.eligible - b.eligible))
       parts.push(mark(t, X(p.cost.value), Y(p.e), t.series[BOUNDS[p.r.bound_type]], p.eligible, p.cost.unit, rowHref(p.inst, p.r)));
-    // Frontier points and QMBL's own runs are named; the label goes right of the mark, or
-    // left at the edge, and is nudged down where it would sit on the previous one.
-    // Every QMBL run is named in an instance's own figure; the small overview panels name
-    // the frontier only, where naming them all piles the labels on each other.
-    const named = new Set([...front, ...(nameOwn ? pts.filter(p => p.r.computed_by === "qmbl") : [])]);
+    // An instance's own figure names every mark (Tristan, 2026-09-24: a dot without a name
+    // cannot be read); the small overview panels name the frontier only, where naming them
+    // all piles the labels on each other. Frontier points are placed first.
+    const named = new Set([...front, ...(nameAll ? pts : [])].filter(p => !hide?.has(p)));
+    if (box) {
+      // at least clear of the marks it frames; the panel below says what the box is
+      const bx0 = X(box.c0) - 8, bx1 = X(box.c1) + 8, by0 = Y(box.e1) - 8, by1 = Y(box.e0) + 8;
+      parts.push(`<rect x="${n(bx0)}" y="${n(by0)}" width="${n(bx1 - bx0)}" height="${n(by1 - by0)}" fill="none" stroke="${t.muted}" stroke-width="1" stroke-dasharray="3 3" rx="3"/>`);
+    }
     // A label may not run across another mark or the frontier: of the spots it fits, the one
     // covering fewest wins (a "ViT (QMBL)" label over a published ViT's dot reads as ours, and
     // the staircase leaves every frontier point to the right, through a label placed there).
@@ -140,8 +181,8 @@ function drawPanel(t, parts, inst, pts, { px, left, right, top, bottom, xLabel, 
     // Placed top to bottom, each label also avoiding the labels placed before it.
     const placed = [];
     const onLabel = c => placed.filter(l => c.x0 < l.x1 && l.x0 < c.x1 && Math.abs(c.ty - l.ty) < 12).length;
-    const labels = [...named].sort((a, b) => Y(a.e) - Y(b.e)).map(p => {
-      const s = shortLabel(p.r), w = textWidth(s, 10.5), x = X(p.cost.value), y = Y(p.e);
+    const allLabels = [...named].sort((a, b) => front.includes(b) - front.includes(a) || Y(a.e) - Y(b.e)).map(p => {
+      const s = nameOf(p.r), w = textWidth(s, 10.5), x = X(p.cost.value), y = Y(p.e);
       // Beside the mark on the right, then the left, then above or below it, then diagonally;
       // the first that fits the plot and covers nothing, else the one covering fewest.
       const spots = [
@@ -168,10 +209,32 @@ function drawPanel(t, parts, inst, pts, { px, left, right, top, bottom, xLabel, 
         if (x - 8 - w >= left) spots.push({ x0: x - 8 - w, x1: x - 8, ty, anchor: "end", lx: x - 8 });
       }
       const hits = c => covers(c.x0, c.x1, c.ty, [x, y]) + onLabel(c);
-      const pick = spots.find(c => hits(c) === 0) ?? spots.sort((c1, c2) => hits(c1) - hits(c2))[0] ?? { x0: x + 10, x1: x + 10 + w, lx: x + 10, anchor: "start", ty: y };
+      const pick = spots.find(c => hits(c) === 0) ?? [...spots].sort((c1, c2) => hits(c1) - hits(c2))[0] ?? { x0: x + 10, x1: x + 10 + w, lx: x + 10, anchor: "start", ty: y };
+      // In a crowd a name away from its mark's own row reads as its neighbour's: number it.
+      const crowded = centres.some(([cx, cy]) => (cx !== x || cy !== y) && Math.hypot(cx - x, cy - y) < 24);
+      if (nameAll && (hits(pick) > 0 || (pick.ty !== y && crowded))) return { keyed: true, s: fullLabel(p.r), p, dx: x, dy: y };
       placed.push(pick);
       return { s, w, x: pick.lx, anchor: pick.anchor, y: pick.ty + 4, forced: hits(pick) > 0 };
-    }).sort((a, b) => a.y - b.y);
+    });
+    // Numbered marks, left to right, the number in the first free spot touching the mark.
+    const keyed = allLabels.filter(l => l.keyed).sort((a, b) => a.dx - b.dx || a.dy - b.dy);
+    keyed.forEach((k, i) => {
+      const num = String(i + 1), w = textWidth(num, 9), { dx: x, dy: y } = k;
+      const spots = [
+        { x0: x + 7, x1: x + 7 + w, ty: y, anchor: "start", lx: x + 7 },
+        { x0: x - 7 - w, x1: x - 7, ty: y, anchor: "end", lx: x - 7 },
+        { x0: x - w / 2, x1: x + w / 2, ty: y - 10, anchor: "middle", lx: x },
+        { x0: x - w / 2, x1: x + w / 2, ty: y + 11, anchor: "middle", lx: x },
+      ];
+      const hits = c => covers(c.x0, c.x1, c.ty, [x, y]) + onLabel(c);
+      const pick = spots.find(c => hits(c) === 0) ?? [...spots].sort((c1, c2) => hits(c1) - hits(c2))[0];
+      placed.push(pick);
+      Object.assign(k, { num, x: pick.lx, y: pick.ty + 3, anchor: pick.anchor });
+    });
+    const labels = allLabels.filter(l => !l.keyed).sort((a, b) => a.y - b.y);
+    keyOut?.push(...keyed.map(k => k.p));
+    // Two keyed marks with one name are told apart by their source.
+    for (const k of keyed) if (keyed.filter(o => o.s === k.s).length > 1 && k.p.r.arxiv) k.s += ` [arXiv:${k.p.r.arxiv}]`;
     // Nudged down only past labels they actually overlap, horizontally as well as vertically.
     const extent = l => l.anchor === "start" ? [l.x, l.x + l.w] : [l.x - l.w, l.x];
     labels.sort((a, b) => a.y - b.y);
@@ -192,9 +255,23 @@ function drawPanel(t, parts, inst, pts, { px, left, right, top, bottom, xLabel, 
       if (crosses(l0, l1, l.y - 4)) labelClashes.push(`${instLabel(inst)}: "${l.s}"`);
       parts.push(text(l.x, l.y, l.s, { size: 10.5, fill: t.ink2, anchor: l.anchor }));
     }
+    for (const k of keyed) parts.push(text(k.x, k.y, k.num, { size: 9, fill: t.ink2, anchor: k.anchor, weight: 600 }));
     parts.push(text((left + right) / 2, bottom + 32, xLabel, { size: 10.5, fill: t.ink2, anchor: "middle" }));
-    if (rec && !pts.some(p => p.r === rec))
+    const recNote = recNoteOn && rec && !pts.some(p => p.r === rec);
+    if (recNote)
       parts.push(text(left, bottom + 48, `${rec.bound_type === "exact" ? boundLabel(rec) : "record"}: ${recE.toFixed(6).replace("-", "−")} (${shortLabel(rec)}), no cost stated, not drawn`, { size: 9.5, fill: t.muted }));
+    if (!keyed.length) return 0;
+    // The key: "1 ViT   2 fViT ...", wrapped to the plot's width.
+    const lines = [[]];
+    let used = 0;
+    for (const k of keyed) {
+      const item = `${k.num} ${k.s}`, w = textWidth(item, 10) + textWidth("  ·  ", 10);
+      if (used + w > right - left && lines.at(-1).length) { lines.push([]); used = 0; }
+      lines.at(-1).push(item); used += w;
+    }
+    const y0 = bottom + (recNote ? 64 : 50);
+    lines.forEach((l, i) => parts.push(text(left, y0 + 14 * i, l.join("  ·  "), { size: 10, fill: t.ink2 })));
+    return y0 + 14 * (lines.length - 1) - (bottom + 48) + 8;
 }
 
 function costFigure({ name, title, subtitle, costOf, minRows, xLabel, legendItems, footer, describe }) {
@@ -265,10 +342,9 @@ for (const { inst, pts } of hoursPanels) {
   own.write(name, t => {
     const h = header(t, title, "Every energy on this instance whose paper, or QMBL's own run, states what it cost in hours.");
     const lg = legend(t, HOURS_LEGEND(t), h.bottom + 34);
-    const top = lg.bottom + 36, bottom = top + 300, left = PAD + 66, right = W - PAD - 8;
+    const top = lg.bottom + 36, bottom = top + plotHeight(pts), left = PAD + 66, right = W - PAD - 8;
     const parts = [h.svg, lg.svg];
-    drawPanel(t, parts, inst, pts, { px: PAD, left, right, top, bottom, xLabel: "hours, as reported", title: null, nameOwn: true });
-    const fn = footnote(t, HOURS_FOOTER(pts), bottom + 70);
+    const fn = footnote(t, HOURS_FOOTER(pts), drawInstance(t, parts, inst, pts, { px: PAD, left, right, top, bottom, xLabel: "hours, as reported", title: null }));
     parts.push(fn.svg);
     return doc(t, fn.bottom + 24, title, describeHours([{ inst, pts }]), parts);
   });
@@ -321,10 +397,9 @@ for (const { inst, pts } of flopsPanels) {
   own.write(name, t => {
     const h = header(t, title, "Every energy on this instance whose paper or run script states enough to estimate its cost in floating-point operations.");
     const lg = legend(t, FLOPS_LEGEND(t), h.bottom + 34);
-    const top = lg.bottom + 36, bottom = top + 300, left = PAD + 66, right = W - PAD - 8;
+    const top = lg.bottom + 36, bottom = top + plotHeight(pts), left = PAD + 66, right = W - PAD - 8;
     const parts = [h.svg, lg.svg];
-    drawPanel(t, parts, inst, pts, { px: PAD, left, right, top, bottom, xLabel: "FLOPs, estimated", title: null, nameOwn: true });
-    const fn = footnote(t, FLOPS_FOOTER(pts), bottom + 70);
+    const fn = footnote(t, FLOPS_FOOTER(pts), drawInstance(t, parts, inst, pts, { px: PAD, left, right, top, bottom, xLabel: "FLOPs, estimated", title: null }));
     parts.push(fn.svg);
     return doc(t, fn.bottom + 24, title, describeFlops([{ inst, pts }]), parts);
   });
@@ -364,10 +439,9 @@ for (const { inst, pts } of paramPanels) {
   own.write(name, t => {
     const h = header(t, title, "Every energy on this instance whose paper states the ansatz's parameter count.");
     const lg = legend(t, PARAMS_LEGEND(t), h.bottom + 34);
-    const top = lg.bottom + 36, bottom = top + 300, left = PAD + 66, right = W - PAD - 8;
+    const top = lg.bottom + 36, bottom = top + plotHeight(pts), left = PAD + 66, right = W - PAD - 8;
     const parts = [h.svg, lg.svg];
-    drawPanel(t, parts, inst, pts, { px: PAD, left, right, top, bottom, xLabel: "variational parameters", title: null, nameOwn: true });
-    const fn = footnote(t, PARAMS_FOOTER, bottom + 70);
+    const fn = footnote(t, PARAMS_FOOTER, drawInstance(t, parts, inst, pts, { px: PAD, left, right, top, bottom, xLabel: "variational parameters", title: null }));
     parts.push(fn.svg);
     return doc(t, fn.bottom + 24, title, describeParams([{ inst, pts }]), parts);
   });
