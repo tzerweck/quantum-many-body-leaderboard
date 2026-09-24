@@ -34,7 +34,7 @@ while IFS=$'\t' read -r slug inst gb part tlim; do
 #SBATCH --time=$tlim
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1
-#SBATCH --mem=${gb}G
+#SBATCH --mem-per-cpu=${gb}G
 #SBATCH --output=$HERE/euler/logs/%x-%j.out
 #SBATCH --error=$HERE/euler/logs/%x-%j.err
 set -euo pipefail
