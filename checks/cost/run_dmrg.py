@@ -29,6 +29,8 @@ import numpy as np  # noqa: E402
 INSTANCES = {
     "J1J2/square_100_P_0.5": dict(model="J1J2", Lx=10, Ly=10, J2=0.5, n_sites=100),
     "Heisenberg/triangular_36_P": dict(model="Heisenberg", Lx=6, Ly=6, n_sites=36),
+    # The size ladder (README, amendment v1.5).
+    **{f"J1J2/square_{L * L}_P_0.5": dict(model="J1J2", Lx=L, Ly=L, J2=0.5, n_sites=L * L) for L in (6, 8, 12)},
 }
 
 

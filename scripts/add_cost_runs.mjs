@@ -24,7 +24,10 @@ const resourcesSaid = x => {
   if (x.gpu?.sm_mhz) parts.push(`GPU SM clock ${Math.round(x.gpu.sm_mhz.mean)} MHz on average (max ${x.gpu.sm_max_mhz}), utilisation ${x.gpu.utilisation_percent?.mean} %, ${x.gpu.power_watts?.mean} W`);
   return ` Hardware during the run (sampled every ${x.sample_period_seconds} s): ${parts.join("; ")}.`;
 };
-const label = r => `${r.label}, QMBL cost-to-reproduce run`;
+// A size-ladder run on the H100 host (README, amendment v1.5) is a second protocol for hours: its
+// method string says so, and it names no Slurm job because the host has no scheduler.
+const label = (r, f) => `${r.label}, QMBL cost-to-reproduce run${/^h100-/.test(f || "") ? ", H100 size ladder" : ""}`;
+const jobOf = h => (h.slurm_job_id ? `Slurm job ${h.slurm_job_id}` : "no scheduler");
 
 for (const f of files) {
   let res;
@@ -46,12 +49,12 @@ for (const f of files) {
     const device = h.device_kind.replace(/^NVIDIA /, "NVIDIA ");
     const gpuHours = t.wall_seconds / 3600 * h.n_devices;
     const said = `energy ${res.energy} sigma ${res.sigma} energy_variance ${res.energy_variance} tau_corr ${res.tau_corr} r_hat ${res.r_hat} | ` +
-      `wall_hms ${t.wall_hms} (wall_seconds ${t.wall_seconds}) on ${h.n_devices} x ${h.device_kind}, ${h.host}, Slurm job ${h.slurm_job_id} | ` +
+      `wall_hms ${t.wall_hms} (wall_seconds ${t.wall_seconds}) on ${h.n_devices} x ${h.device_kind}, ${h.host}, ${jobOf(h)} | ` +
       `parameters ${res.parameters}, steps ${tr.steps} x n_samples ${tr.n_samples}, eval samples ${res.eval.samples}`;
     rows.push({
       energy: res.energy, sigma: two(res.sigma), energy_variance: res.energy_variance, dof, einf,
       v_score: vScore(res.energy_variance, dof, res.energy, einf),
-      method: label(res),
+      method: label(res, f),
       bound_type: "variational",
       bound_type_reason: "variational Monte Carlo energy of a normalised ansatz, evaluated by QMBL on the trained state with its error bar; a strict upper bound within that bar",
       reference: `QMBL, checks/cost/ (cost-to-reproduce run ${f.replace(/\.json$/, "")}, Euler job ${h.slurm_job_id}, commit ${sw.commit})`,
@@ -66,7 +69,7 @@ for (const f of files) {
         parameters: res.parameters, gpu_hours: +gpuHours.toFixed(3), device, n_devices: h.n_devices, samples: tr.n_samples,
         wall_clock: t.wall_hms, cpu_core_hours: null, bond_dimension: null, iterations: tr.steps,
         reported_as: said,
-        source: `${rel}, Slurm job ${h.slurm_job_id} on ${h.host}, commit ${sw.commit} (QMBL run, ${day})`,
+        source: `${rel}, ${jobOf(h)} on ${h.host}, commit ${sw.commit} (QMBL run, ${day})`,
         scope: "row", confidence: "high",
         note: `Measured, not reported: wall-clock from process start to the end of the final evaluation, JIT compilation and sampling included ` +
           `(setup ${t.setup_seconds.toFixed(0)} s, training ${t.train_seconds.toFixed(0)} s, evaluation ${t.eval_seconds.toFixed(0)} s); gpu_hours = wall-clock x ${h.n_devices} GPU.` + resourcesSaid(res.resources) +
@@ -85,7 +88,7 @@ for (const f of files) {
         maxdim: [...maxdim], start: "Neel product state", cutoff: res.protocol.svd_min, variance_after: [],
         lattice: { order: "tenpy", n_sites: inst.n_sites, mpo_bond_dimension: res.protocol.mpo_bond_dimension, site_dimension: 2, operators_per_bond: 3 } };
       const said = `chi_max ${rung.chi_max} chi_reached ${rung.chi_reached} energy ${rung.energy} (energy_SS ${rung.energy_SS}) sweeps ${rung.sweeps} max_trunc_err ${rung.max_trunc_err} | ` +
-        `wall_hms ${rung.wall_hms} (wall_seconds ${rung.wall_seconds}) on ${res.cores} cores, ${h.host}, Slurm job ${h.slurm_job_id} | cpu_core_hours ${rung.cpu_core_hours}`;
+        `wall_hms ${rung.wall_hms} (wall_seconds ${rung.wall_seconds}) on ${res.cores} cores, ${h.host}, ${jobOf(h)} | cpu_core_hours ${rung.cpu_core_hours}`;
       rows.push({
         energy: rung.energy, sigma: null, energy_variance: null, dof, einf, v_score: null,
         method: `DMRG (chi = ${rung.chi_max}), QMBL cost-to-reproduce run`,
@@ -103,7 +106,7 @@ for (const f of files) {
           wall_clock: rung.wall_hms, cpu_core_hours: +rung.cpu_core_hours.toFixed(3), bond_dimension: rung.chi_max, iterations: rung.sweeps,
           sweep_schedule: schedule,
           reported_as: said,
-          source: `${rel}, Slurm job ${h.slurm_job_id} on ${h.host}, commit ${sw.commit} (QMBL run, ${day})`,
+          source: `${rel}, ${jobOf(h)} on ${h.host}, commit ${sw.commit} (QMBL run, ${day})`,
           scope: "row", confidence: "high",
           note: `Measured, not reported: wall-clock from process start to the end of this rung, the rungs below it included; cpu_core_hours = wall-clock x ${res.cores} allocated cores. ` +
             `iterations is the sweep count of this rung alone; sweep_schedule lists every sweep of the process up to the end of this rung, which is what the hours cover.` + resourcesSaid(rung.resources),

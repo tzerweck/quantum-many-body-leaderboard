@@ -119,6 +119,22 @@ and the row says so in its method string. Nothing here is attached to anyone els
   - **What the row says:** its note gives the number of runs, not their spread. v1.3 runs are
     not candidates, because they lack the hardware record.
 
+- **2026-09-25 (v1.5), the size ladder (Tristan, 2026-09-24).** To read cost against system
+  size, every ansatz above runs on J1-J2 at J2 = 0.5 on the periodic L x L squares, L = 4, 6,
+  8, 10, 12, 14, 16, under the protocol unchanged (the same sampler, samples, 2000 steps,
+  optimizer and evaluation at every size), and DMRG on 6 x 6, 8 x 8 and 12 x 12 on Euler as
+  above.
+  - **The neural states run on one NVIDIA H100 NVL 96 GB of a group host**, not on Euler's
+    A100s: Euler's A100 queue is the bottleneck, and Tristan allowed one such card by day for
+    this ladder beyond the host's day cap. One card, one run after another
+    (`h100/ladder.sh`, deployed by `h100/deploy.sh` with NetKet 3.22.4, jax 0.8.3 and flax
+    0.12.6, the Euler versions); the card is one the host's GPU policy lists as idle.
+  - **A second device is a second protocol for hours.** A ladder row's hours compare with the
+    other ladder rows, never with the A100 rows; its method string and results file name
+    (`h100-*`) say which, and 10 x 10 is run again on the H100 so the ladder is complete on one
+    device. The host is shared and has no scheduler, so the resources block (node load, clocks)
+    matters more here than on Euler.
+
 ## What a run becomes
 
 `scripts/add_cost_runs.mjs` reads `results/*.json` and appends one row per result (per

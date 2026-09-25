@@ -34,6 +34,8 @@ INSTANCES = {
     # instance_id: how to build it. Both are spin-1/2, total S_z = 0, periodic, Pauli units.
     "J1J2/square_100_P_0.5": dict(model="J1J2", L=10, J2=0.5, n_sites=100),
     "Heisenberg/triangular_36_P": dict(model="Heisenberg", L=6, n_sites=36),
+    # The size ladder (README, amendment v1.5): J1-J2 at J2 = 0.5 on the periodic L x L squares.
+    **{f"J1J2/square_{L * L}_P_0.5": dict(model="J1J2", L=L, J2=0.5, n_sites=L * L) for L in (4, 6, 8, 12, 14, 16)},
 }
 
 # One protocol for every ansatz (README.md): the same sampler, sample count, step count,
