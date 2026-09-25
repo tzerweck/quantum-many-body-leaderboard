@@ -31,6 +31,10 @@ DMRG_JOBS=(
   "dmrg-j1j2-100     J1J2/square_100_P_0.5       100:00:00  500,1000,2000  results"
   "dmrg-tri-36       Heisenberg/triangular_36_P  60:00:00   500,1000,2000  results"
   "dmrg-cal-tri-36   Heisenberg/triangular_36_P  04:00:00   500            calibration"
+  # The size ladder (README, amendment v1.5).
+  "dmrg-j1j2-36      J1J2/square_36_P_0.5        24:00:00   500,1000,2000  results"
+  "dmrg-j1j2-64      J1J2/square_64_P_0.5        72:00:00   500,1000,2000  results"
+  "dmrg-j1j2-144     J1J2/square_144_P_0.5       120:00:00  500,1000,2000  results"
 )
 
 submit() {  # file
