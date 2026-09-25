@@ -82,7 +82,14 @@ export const paperYear = (row, cache = sources()) =>
 // author-year where that reads off cleanly, else as its opening words. A quoted row with no
 // paper of its own says where it was read. The README renders this as markdown and the site
 // as HTML; splitting it here is what keeps the citation under a number identical in both.
+// A row QMBL computed cites the code that produced it, at the commit that ran, so it can be rerun.
+const REPO = "https://github.com/tzerweck/quantum-many-body-leaderboard";
+
 export function citeRef(row, cache = sources()) {
+  if (row.computed_by === "qmbl") {
+    const commit = (row.reference || "").match(/commit ([0-9a-f]{7,40})/)?.[1];
+    return { text: "QMBL run", url: commit ? `${REPO}/tree/${commit}/checks/cost` : `${REPO}/tree/main/checks/cost`, note: "code, protocol and results" };
+  }
   const s = sourceOf(row, cache);
   if (s) return { text: citeText(s), url: citeUrl(s) };
   const ref = row.reference || "";

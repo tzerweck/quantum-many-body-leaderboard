@@ -144,6 +144,8 @@ function redirectPage(url, target, title) {
 const instUrl = inst => `/i/${inst.instance_id}/`;
 const jsonUrl = inst => `/api/i/${inst.instance_id}.json`;
 const yearOf = r => paperYear(r, cache);
+// The year column: a paper's year, or for QMBL's own runs the year the run finished.
+const yearCell = r => (r.computed_by === "qmbl" ? +(r.verified?.checked_on || "").slice(0, 4) || null : yearOf(r));
 
 const BOUND_ORDER = ["variational", "projected", "extrapolated", "exact", null];
 const BOUND_LABEL = {
@@ -804,7 +806,7 @@ function allRows(inst) {
       <td><span class="badge">${boundLabel(r)}</span>${r.defect ? ` ${flagBadge(r)}` : ""}</td>
       <td>${esc(shorten(methodLabel(r), 60))}</td>
       <td>${citeHtml(r)}</td>
-      <td class="num">${yearOf(r) ?? '<span class="muted">n/a</span>'}</td>
+      <td class="num">${yearCell(r) ?? '<span class="muted">n/a</span>'}</td>
     </tr>`;
   }).join("");
   return `${costSlot(inst)}
@@ -962,7 +964,7 @@ function rowTable(rows, inst) {
       <td class="num">${r.v_score == null ? '<span class="muted">n/a</span>' : r.v_score.toExponential(1)}</td>
       <td>${esc(methodLabel(r))}${badges ? `<div class="badges">${badges}</div>` : ""}</td>
       <td>${citeHtml(r)}</td>
-      <td class="num">${yearOf(r) ?? '<span class="muted">n/a</span>'}</td>
+      <td class="num">${yearCell(r) ?? '<span class="muted">n/a</span>'}</td>
     </tr>`;
   }).join("");
   return `<div class="scroll"><table class="rows">${head}<tbody>${body}</tbody></table></div>`;
