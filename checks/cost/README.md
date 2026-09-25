@@ -108,6 +108,17 @@ and the row says so in its method string. Nothing here is attached to anyone els
     numbers. The optimisation, sampling and evaluation are unchanged. The DMRG reruns also
     record TeNPy's Lanczos count, which the FLOP model needs.
 
+- **2026-09-25: a configuration run more than once is stored as its best run** (Tristan). Runs
+  of one configuration with the same seed differ, because XLA's GPU arithmetic is not
+  deterministic.
+  - **Where it matters:** on triangular 36 the difference decides whether the GCNN blows up
+    and whether the ViT stalls. On J1-J2 10 × 10 repeated runs agree to about 1e-4 per site.
+  - **The rule:** the row is the lowest final energy among the configuration's v1.4 runs that
+    stand. [`best_run.mjs`](best_run.mjs) keeps every run in `results/runs/` and writes the
+    chosen one to `results/<name>.json`. `euler/sync.sh --fetch` calls it.
+  - **What the row says:** its note gives the number of runs, not their spread. v1.3 runs are
+    not candidates, because they lack the hardware record.
+
 ## What a run becomes
 
 `scripts/add_cost_runs.mjs` reads `results/*.json` and appends one row per result (per
@@ -122,7 +133,7 @@ reading RULES.md 8.2 gives a VarBench baseline.
 
 - `run_nqs.py`, `vit.py` — the neural-state runs. `run_dmrg.py` — DMRG.
 - `euler/` — the sbatch scripts as submitted, and `submit.sh`.
-- `results/` — one JSON per run, with its `.trace.jsonl` and `.params.msgpack`.
+- `results/` — one JSON per configuration (the best of its runs), with its `.trace.jsonl` and `.params.msgpack`; `results/runs/` holds every v1.4 run as `<name>--<Slurm job>.json` with its trace, never rows.
 - `calibration/` — runs made to calibrate an estimate, never rows (`add_cost_runs.mjs` reads
   `results/` only). `dmrg-cal-tri-36` repeats the chi = 500 rung on the triangular 36 torus
   to record how many effective-Hamiltonian applications TeNPy's Lanczos took per two-site

@@ -69,7 +69,8 @@ for (const f of files) {
         source: `${rel}, Slurm job ${h.slurm_job_id} on ${h.host}, commit ${sw.commit} (QMBL run, ${day})`,
         scope: "row", confidence: "high",
         note: `Measured, not reported: wall-clock from process start to the end of the final evaluation, JIT compilation and sampling included ` +
-          `(setup ${t.setup_seconds.toFixed(0)} s, training ${t.train_seconds.toFixed(0)} s, evaluation ${t.eval_seconds.toFixed(0)} s); gpu_hours = wall-clock x ${h.n_devices} GPU.` + resourcesSaid(res.resources),
+          `(setup ${t.setup_seconds.toFixed(0)} s, training ${t.train_seconds.toFixed(0)} s, evaluation ${t.eval_seconds.toFixed(0)} s); gpu_hours = wall-clock x ${h.n_devices} GPU.` + resourcesSaid(res.resources) +
+          (res.best_of?.runs > 1 ? ` The best of ${res.best_of.runs} runs of this configuration under the protocol (lowest final energy; checks/cost/best_run.mjs).` : ""),
       },
     });
   } else if (res.schema === "qmbl-cost-run-dmrg-1") {

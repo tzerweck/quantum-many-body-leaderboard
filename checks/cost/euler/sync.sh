@@ -6,7 +6,9 @@ cd "$(dirname "$0")/.."
 SSH="ssh -o ConnectTimeout=25 -o ControlMaster=no -o ControlPath=none euler"
 if [ "${1:-}" = "--fetch" ]; then
   $SSH 'cd ~/agent-runs/qmbl-cost && tar czf - --exclude=results/failed results euler/logs $(ls -d calibration ed/results 2>/dev/null)' | tar xzf - -C .
-  ls -la results; exit 0
+  # A configuration run more than once keeps every run under results/runs/ and its best as the row.
+  (cd ../.. && node checks/cost/best_run.mjs)
+  exit 0
 fi
 git rev-parse --short HEAD > COMMIT
 tar czf - --exclude=results --exclude=calibration --exclude=ed/results --exclude=euler/logs --exclude=__pycache__ . | $SSH 'mkdir -p ~/agent-runs/qmbl-cost && cd ~/agent-runs/qmbl-cost && tar xzf - && echo synced && ls'
