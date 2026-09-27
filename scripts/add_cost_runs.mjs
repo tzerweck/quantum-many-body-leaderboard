@@ -68,6 +68,16 @@ for (const f of files) {
       compute: {
         parameters: res.parameters, gpu_hours: +gpuHours.toFixed(3), device, n_devices: h.n_devices, samples: tr.n_samples,
         wall_clock: t.wall_hms, cpu_core_hours: null, bond_dimension: null, iterations: tr.steps,
+        // How the network was evaluated (DATA.md, `evaluation`; nqs-v2 in flops.mjs): NetKet pads the local
+        // energy to every bond; each kept sample follows (kept + discarded per chain) / kept sweeps of N
+        // proposals; run_nqs.py builds the RBMs with complex parameters; the SR solve is
+        // Cholesky on the dense S, or conjugate gradients whose iteration count the run does not log.
+        evaluation: {
+          proposals_per_sample: inst.n_sites * (tr.n_samples / tr.n_chains + tr.n_discard_per_chain) / (tr.n_samples / tr.n_chains),
+          local_energy: "all", complex: ["rbm", "rbmsymm"].includes(res.model), // the GCNN is complex too, but in NetKet's irreps mode its FLOPs already equal the model's 2 P |G| (verification 2026-09-25)
+          sr: /Cholesky/.test(tr.optimizer) ? { kind: "dense" } : { kind: "cg", cg_iterations: null },
+          code: `NetKet ${sw.netket} (checks/cost/run_nqs.py)`,
+        },
         reported_as: said,
         source: `${rel}, ${jobOf(h)} on ${h.host}, commit ${sw.commit} (QMBL run, ${day})`,
         scope: "row", confidence: "high",

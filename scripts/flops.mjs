@@ -3,7 +3,8 @@
 // evaluated at build time from the row's `compute` block and its instance, and every figure
 // that draws one says so. The stored fields stay as reported (DATA.md, "Never estimated").
 //
-// The model, `nqs-v1`, counts network evaluations. One optimisation step draws `samples`
+// The first model, `nqs-v1`, counts network evaluations (`nqs-v2`, below, adds what the run states
+// about how it evaluated the network; without such statements it is nqs-v1). One optimisation step draws `samples`
 // configurations and, for each, evaluates the network for the local energy (once per
 // off-diagonal Hamiltonian term that connects to the configuration), for the sampler (one
 // sweep of N single-site proposals for Markov-chain sampling, one pass for an autoregressive
@@ -18,13 +19,10 @@
 // transverse-field Ising model, four per bond for Hubbard). Excluded, and stated on every
 // surface that shows the estimate: the stochastic-reconfiguration solve, symmetry projections
 // that sum the network over a point group, attention scores, and any pre-training on smaller
-// lattices. Against the published rows that also state hours on a named GPU, the model
-// implies 0.5 to 25 TFLOP/s achieved (consistent within one paper, a factor of fifty across
-// papers; one NNBF row at 366), and against QMBL's own measured runs 0.01 to 1.8 TFLOP/s on
-// one A100 (a forward pass of 1e3-1e5 FLOPs is overhead-bound and the estimate falls 30-100x
-// short), so an
-// estimate is good to about an order of magnitude for a network that fills a GPU and never
-// better (calibration table in DATA.md). Three rules follow from that:
+// lattices. Under nqs-v2 the published rows that also state hours on a named GPU run at 10-45 %
+// of their device's peak in the precision they used, and QMBL's own runs at 0.1-3 TFLOP/s on one
+// A100, so an estimate is good to about an order of magnitude and never better (calibration
+// table in DATA.md). Three rules follow from that:
 //
 // - An input nobody stated is never guessed. Parameters, samples and iterations must all be
 //   on the row; the architecture must be in ARCH; the instance's lattice must be one whose
@@ -57,11 +55,11 @@ export const ARCH = {
   "CNN": { reuse: "sites", sampling: "mcmc" },
   "CNN-MPS": { reuse: "sites", sampling: "mcmc", note: "the CNN part; the MPS contraction is not counted" },
   "ViT": { reuse: "patches", sampling: "mcmc" },
-  "TQS": { reuse: "sites", sampling: "ar" },
-  "PITQS": { reuse: "sites", sampling: "ar" },
+  "TQS": { reuse: "sites", sampling: "mcmc", det: true, note: "the decoder is a multi-Slater backflow sampled by Markov chains, not autoregressively" },
+  "PITQS": { reuse: "sites", sampling: "mcmc", det: true, note: "as TQS" },
   "RNN": { reuse: "sites", sampling: "ar" },
   "2D RNN": { reuse: "sites", sampling: "ar" },
-  "minGRU": { reuse: "sites", sampling: "ar" },
+  "minGRU": { reuse: "patches", patch: 2, sampling: "ar", note: "2 x 2 patches (PSR-NQS model.py)" },
   "LRU": { reuse: "sites", sampling: "ar" },
   "HFPS": { reuse: "sites", sampling: "mcmc", det: true, note: "the hidden-fermion network; the Pfaffian is counted as (2/3) N_e^3 and is negligible at these sizes" },
   "Tensor backflow": { reuse: 1, sampling: "mcmc", det: true, note: "the backflow tensor is read once per configuration; the determinant is counted as (2/3) N_e^3" },
@@ -74,14 +72,17 @@ export const ARCH = {
   "pRNN": { reuse: "sites", sampling: "ar" },
   "Adaptive RNN": { reuse: "sites", sampling: "ar", note: "the final hidden dimension's parameters over all stages; earlier, narrower stages cost less" },
   "ACE": { reuse: "sites", sampling: "mcmc", det: true },
-  "SCALE": { reuse: "sites", sampling: "mcmc", det: true },
-  "Transformer backflow": { reuse: "sites", sampling: "mcmc", det: true },
+  // SCALE (local updates of at most 18 sites per move) and the transformer backflow (attention and several
+  // determinants) are not in the model: against the per-step times their paper measures (arXiv:2604.25775)
+  // nqs counting is 10x off in each direction (verification of 2026-09-25), so they get no estimate.
   "NNBF": { reuse: 1, sampling: "mcmc", det: true, note: "the MLP backflow, one pass per configuration; several determinants and symmetry projections are not counted" },
 };
 
 // The ARCH entry of a row. A VarBench RBM baseline (`α = 1`, programs/vmc_netket/vmc.py) and
 // QMBL's own `α = 1` run are NetKet's dense RBM; the plain "RBM" entry is the translation-symmetric one.
-export const archOf = r => ARCH[r.method === "RBM" && /^α = \d+(, QMBL run)?$/.test(r.method_detail || "") ? "RBM (dense)" : r.method];
+// An RBM whose detail names projections (Nomura's K = 0, A1, parity projected RBM) is dense too; its
+// projection sum is the row's evaluation.evaluations_per_amplitude.
+export const archOf = r => ARCH[r.method === "RBM" && (/^α = \d+(, QMBL run)?$/.test(r.method_detail || "") || /projection/i.test(r.method_detail || "")) ? "RBM (dense)" : r.method];
 
 // Point-group order of a lattice, for a group convolution over its full space group.
 const POINT_GROUP = { square: 8, triangular: 12 };
@@ -118,11 +119,26 @@ function nnnBondsOf(inst) {
 }
 
 // Off-diagonal Hamiltonian terms connected to one configuration: the network evaluations
-// one local energy takes. An upper bound where matrix elements can vanish (parallel spins
-// on a Heisenberg bond, a Pauli-blocked hop), by at most a factor of two.
-export function connectedOf(inst) {
+// one local energy takes. With `rule` "all" (the default, and what NetKet does: it pads the
+// local energy to every bond) every term counts. With "nonzero" (a code that evaluates only
+// non-vanishing matrix elements, the row's `evaluation.local_energy`) a spin bond counts when
+// its spins are antiparallel, two thirds of them in the antiferromagnetically correlated
+// configurations these codes sample (0.63-0.73 measured, verification 2026-09-25), and a hop when its target is empty:
+// N_e x z x (1 - n_sigma), which at doping 1/8 is a quarter of the four-per-bond count.
+export function connectedOf(inst, rule = "all") {
   const b = bondsOf(inst);
   if (b == null) return null;
+  if (rule === "nonzero") {
+    const ne = electronsOf(inst), z = (2 * b) / inst.n_sites;
+    switch (inst.model) {
+      case "Heisenberg": return (2 / 3) * b;
+      case "J1J2": { const nnn = nnnBondsOf(inst); return nnn == null ? null : (2 / 3) * (b + (inst.params.J2 ? nnn : 0)); }
+      case "TFIsing": return inst.n_sites;
+      case "Hubbard": return ne == null ? null : ne * z * (1 - inst.params.Nf / inst.n_sites);
+      case "tV": return ne == null ? null : ne * z * (1 - ne / inst.n_sites);
+      default: return null;
+    }
+  }
   switch (inst.model) {
     case "Heisenberg": return b;
     case "J1J2": { const nnn = nnnBondsOf(inst); return nnn == null ? null : b + (inst.params.J2 ? nnn : 0); }
@@ -139,7 +155,27 @@ const electronsOf = inst => (inst.model === "Hubbard" && inst.params.Nf ? 2 * in
 // The estimate for one row on its instance: { value, model, inputs, confidence, note }, or
 // null when an input is missing. `value` is total floating-point operations.
 export function flopsOf(r, inst) {
-  return r.compute?.sweep_schedule ? dmrgFlopsOf(r, inst) : nqsFlopsOf(r, inst);
+  const c = r.compute;
+  if (c?.sweep_schedule) return dmrgFlopsOf(r, inst);
+  if (c?.vmc_schedule?.kind === "mvmc") return mvmcFlopsOf(r, inst);
+  if (c?.circuit_schedule?.runs) return vqeFlopsOf(r, inst);
+  return nqsFlopsOf(r, inst);
+}
+
+// `nqs-v2` (Tristan, 2026-09-27, after the verification of 2026-09-25): nqs-v1 plus what the run
+// states about how it evaluated the network (the block's `evaluation`, DATA.md). Per stage
+//   FLOPs = iterations x samples x [(n_conn + 3) x m + proposals x (m, or 1 for an autoregressive draw)] x forward
+//         + iterations x SR
+//   forward = c_x x 2 x ((P - head) x reuse + head) (+ c_x x (2/3) N_e^3 for a determinant)
+// c_x = 2 for complex parameters. Without an `evaluation` block every factor takes its nqs-v1 value.
+function srFlops(sr, P, S, cx, forward, m) {
+  switch (sr?.kind) {
+    case "dense": return cx * (2 * S * P * P + (P * P * P) / 3);
+    case "onthefly_dense": return 2 * P * S * forward * m + (cx * P * P * P) / 3; // P matrix-vector products, each a forward and backward pass over the samples
+    case "cg": return sr.cg_iterations > 0 ? sr.cg_iterations * 2 * 2 * S * P * cx : 0;
+    case "minsr": return cx * (2 * S * S * P + (S * S * S) / 3);
+    default: return 0;
+  }
 }
 
 function nqsFlopsOf(r, inst) {
@@ -147,11 +183,13 @@ function nqsFlopsOf(r, inst) {
   if (!c || !(c.parameters > 0) || !(c.samples > 0) || !(c.iterations > 0)) return null;
   const arch = archOf(r);
   if (!arch) return null;
-  const n_conn = connectedOf(inst);
+  const ev = c.evaluation || {};
+  const n_conn = connectedOf(inst, ev.local_energy || "all");
   if (n_conn == null) return null;
   const N = inst.n_sites;
   let reuse, assumption = null;
-  if (arch.reuse === "sites") reuse = N;
+  if (ev.reuse > 0) reuse = ev.reuse;
+  else if (arch.reuse === "sites") reuse = N;
   else if (arch.reuse === "patches") {
     const b = +((r.method_detail || "").match(/\bb = (\d+)\b/)?.[1] ?? arch.patch ?? 0);
     if (b) reuse = N / b ** 2;
@@ -164,20 +202,89 @@ function nqsFlopsOf(r, inst) {
       reuse = N * g;
     }
   } else reuse = arch.reuse;
+  const cx = ev.complex ? 2 : 1; // complex weights on real inputs: 4 real FLOPs per multiply-add, not 2 (complex-by-complex layers cost up to twice more)
   let det = 0;
   if (arch.det) {
     const ne = electronsOf(inst);
     if (ne == null) return null;
-    det = (2 / 3) * ne ** 3;
+    det = cx * (2 / 3) * ne ** 3;
   }
-  const k_sample = arch.sampling === "ar" ? 1 : N;
-  const forward = 2 * c.parameters * reuse + det;
-  const perSample = n_conn + k_sample + 3;
-  const value = c.iterations * c.samples * perSample * forward;
+  const k_sample = ev.proposals_per_sample > 0 ? ev.proposals_per_sample : arch.sampling === "ar" ? 1 : N;
+  // An autoregressive sample is drawn from the unsymmetrised network, so its one pass is not
+  // multiplied by the evaluations per amplitude; a Markov chain's proposals each need a full amplitude.
+  const stages = ev.stages?.length ? ev.stages : [{}];
+  let value = 0, sr = 0;
+  const used = [];
+  for (const st of stages) {
+    const P = st.parameters ?? c.parameters, S = st.samples ?? c.samples, I = st.iterations ?? (stages.length === 1 ? c.iterations : null);
+    const m = st.evaluations_per_amplitude ?? ev.evaluations_per_amplitude ?? 1;
+    if (!(P > 0 && S > 0 && I > 0 && m > 0)) return null;
+    const H = Math.min(ev.head_parameters || 0, P);
+    const forward = cx * 2 * ((P - H) * reuse + H) + det;
+    const srStep = srFlops(ev.sr, P, S, cx, forward, m);
+    const perSample = (n_conn + 3) * m + k_sample * (arch.sampling === "ar" ? 1 : m);
+    value += I * S * perSample * forward + I * srStep;
+    sr += I * srStep;
+    used.push({ iterations: I, samples: S, parameters: P, evaluations_per_amplitude: m });
+  }
   const confidence = assumption || c.confidence === "low" ? "low" : "medium";
-  const note = [arch.note, assumption, c.scope !== "row" ? `inputs stated for the ${c.scope}, not this row` : null].filter(Boolean).join("; ");
-  return { value, model: "nqs-v1", confidence, note,
-    inputs: { parameters: c.parameters, samples: c.samples, iterations: c.iterations, reuse, n_conn, k_sample, sampling: arch.sampling, determinant: det || null } };
+  const note = [arch.note, assumption, ev.sr?.kind === "cg" && !(ev.sr.cg_iterations > 0) ? "conjugate-gradient iterations not stated, the solve is not counted" : null,
+    !ev.sr ? "the optimizer's linear solve is not counted" : null, c.scope !== "row" ? `inputs stated for the ${c.scope}, not this row` : null].filter(Boolean).join("; ");
+  return { value, model: "nqs-v2", confidence, note,
+    inputs: { stages: used, reuse, n_conn, local_energy: ev.local_energy || "all", k_sample, sampling: arch.sampling, complex: !!ev.complex,
+      head_parameters: ev.head_parameters || 0, determinant: det || null, sr: ev.sr?.kind || null, sr_flops: sr || null } };
+}
+
+// `mvmc-v2`: projected-fermion VMC in mVMC (Misawa et al., CPC 235, 447 (2019)), for a row whose block
+// carries the run's def-file settings (`vmc_schedule`, kind "mvmc"). Calibrated on QMBL's own short runs of
+// VarBench's inputs (2026-09-25, 4.6-17 GFLOP/s per core on an EPYC 9654):
+//   FLOPs = c_x [ P_tot N_QP (r + a u) + N_it S_step N_QP (n_conn r + n^2)
+//               + (a P_tot / N + N_it S_step) N_QP (7/3) n^3 ] + SR
+//   P_tot = n_proc k [NVMCWarmUp + NVMCSample + (N_it - 1)(NVMCSample + 1)], k = N x NVMCInterval,
+//   S_step = NVMCSample n_proc / NSplitSize, N_QP = NMPTrans NSPGaussLeg NQPOptTrans, n = Nsize,
+//   r, u = 2n, 6n^2 for a hop and 2n^2, 34n^2 for an exchange; a = 1 (the acceptance, a bound: measured 0.4-0.5);
+//   SR = N_it (2 c_x N_p^2 S_step + n_proc N_p^3 / 3) with NSRCG = 0, 100 N_it x 8 N_p S_step with NSRCG = 1
+//   (100 CG iterations per step, the calibration's count, not the N_p worst case).
+// Not counted: the correlator ratios (Jastrow, Gutzwiller, RBM), the Lanczos step, MPI reductions.
+function mvmcFlopsOf(r, inst) {
+  const c = r.compute, s = c.vmc_schedule, N = inst.n_sites;
+  const need = ["n_proc", "NVMCSample", "NSROptItrStep", "NMPTrans", "NSPGaussLeg", "n_size", "parameters_real"];
+  if (need.some(k => !(s[k] > 0))) return null;
+  const n_conn = connectedOf(inst);
+  if (n_conn == null) return null;
+  const cx = s.complex ? 4 : 1, n = s.n_size, Nit = s.NSROptItrStep, a = 1;
+  const k = N * (s.NVMCInterval || 1), NQP = s.NMPTrans * s.NSPGaussLeg * (s.NQPOptTrans || 1);
+  const S = (s.NVMCSample * s.n_proc) / (s.NSplitSize || 1);
+  const Ptot = s.n_proc * k * ((s.NVMCWarmUp || 0) + s.NVMCSample + (Nit - 1) * (s.NVMCSample + 1));
+  const exchange = s.NExUpdatePath === 2;
+  const rr = exchange ? 2 * n * n : 2 * n, uu = exchange ? 34 * n * n : 6 * n * n;
+  const Np = s.parameters_real;
+  const sr = s.NSRCG ? 100 * Nit * 8 * Np * S : Nit * (2 * cx * Np * Np * S + (s.n_proc * Np ** 3) / 3);
+  const value = cx * (Ptot * NQP * (rr + a * uu) + Nit * S * NQP * (n_conn * rr + n * n) + ((a * Ptot) / N + Nit * S) * NQP * (7 / 3) * n ** 3) + sr;
+  return { value, model: "mvmc-v2", confidence: "low", note: "acceptance bounded by 1 (measured 0.4-0.5, so sampling is overstated about twice); SR-CG at the calibration's 100 iterations per step; correlator ratios and the Lanczos step not counted",
+    inputs: { n_size: n, projections: NQP, samples: S, iterations: Nit, proposals_total: Ptot, parameters_real: Np, complex: !!s.complex, exchange, n_conn, sr_flops: sr } };
+}
+
+// `vqe-v1`: the VarBench SU(2) VQE (programs/VQE: exact state vector in the S^z = 0 sector, natural
+// gradient from derivative states and Hadamard-test overlaps projected on |G| symmetry terms), for a row
+// whose block carries `circuit_schedule`. Per step of a run, with P gates, D amplitudes and n_H bond terms:
+//   32 P^2 D + 32 P D + 8 |G| P^2 D + n_H P D (32 + 8 |G|) + 8 |G| P D + n_H D (32 + 8 |G|) + 8 |G| D
+// (the metric tensor's 8 |G| P^2 D is a bound: the code pairs inverse elements, |G|/2 to |G| products, in
+// single precision). Calibrated at 3.7-37 GFLOP/s per core (2026-09-25). Shots are binomial draws on exact
+// probabilities and add no state-vector work.
+const binom = (n, k) => { let x = 1; for (let i = 1; i <= k; i++) x = (x * (n - k + i)) / i; return x; };
+function vqeFlopsOf(r, inst) {
+  const s = r.compute.circuit_schedule, N = inst.n_sites;
+  const P = s.gates, D = s.dimension ?? binom(N, N / 2), nH = connectedOf(inst);
+  if (!(P > 0) || nH == null || !s.runs.length) return null;
+  let value = 0;
+  for (const run of s.runs) {
+    const G = run.projector_terms;
+    if (!(G > 0 && run.iterations > 0)) return null;
+    value += run.iterations * (32 * P * P * D + 32 * P * D + 8 * G * P * P * D + nH * P * D * (32 + 8 * G) + 8 * G * P * D + nH * D * (32 + 8 * G) + 8 * G * D);
+  }
+  return { value, model: "vqe-v1", confidence: "low", note: "the schedule is the published script's; the script postdates the energy and crashes after its first run as published",
+    inputs: { gates: P, dimension: D, n_H: nH, runs: s.runs.map(x => ({ projector_terms: x.projector_terms, iterations: x.iterations })) } };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -339,7 +446,7 @@ export function calibration(instances, hoursOf) {
   const out = [];
   for (const inst of instances) for (const r of inst.rows) {
     const f = flopsOf(r, inst), h = hoursOf(r.compute);
-    if (!f || !h || (h.unit !== "gpu" && f.model !== "dmrg-v1")) continue;
+    if (!f || !h || (h.unit !== "gpu" && !["dmrg-v1", "mvmc-v2", "vqe-v1"].includes(f.model))) continue;
     out.push({ instance_id: inst.instance_id, method: r.method, detail: r.method_detail, arxiv: r.arxiv, device: r.compute.device,
       hours: h.value, unit: h.unit, model: f.model, derived: h.derived, flops: f.value, flops_per_s: f.value / (h.value * 3600), confidence: f.confidence, scope: r.compute.scope });
   }

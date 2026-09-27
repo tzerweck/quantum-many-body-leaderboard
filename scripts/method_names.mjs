@@ -100,8 +100,8 @@ export const NAMES = {
   "2D RNN wavefunction, zero-variance extrapolation": ["2D RNN", "variance → 0"],
   "2D tensorized-GRU RNN wavefunction, best variational": ["2D RNN", "tensorized GRU"],
   "2D tensorized-GRU RNN, zero-variance extrapolation": ["2D RNN", "tensorized GRU, variance → 0"],
-  "2D minGRU (3 layers, c4v symmetry, parallel scan)": ["minGRU", "3 layers, C4v"],
-  "2D minGRU, 3 layers, c4v symmetry, iterative retraining (PSR-NQS)": ["minGRU", "3 layers, C4v, iterative retraining"],
+  "2D minGRU (3 layers, c4v symmetry, parallel scan)": ["minGRU", "6 layers, d_h = 512, b = 2, C4v"], // arXiv:2605.13807 Table 4: the cold-start network (compute pass 2026-09-27)
+  "2D minGRU, 3 layers, c4v symmetry, iterative retraining (PSR-NQS)": ["minGRU", "3 layers, d_h = 256, b = 2, C4v, iterative retraining"], // Table 5
   "2D pRNN wave function (Marshall-sign-rotated, GRU cell, d_h=200) + Adam optimizer": ["pRNN", "GRU, hidden dimension 200, Marshall sign, Adam"],
   "2D pRNN wave function (Marshall-sign-rotated, GRU cell, d_h=200) + minSR optimizer (regularized)": ["pRNN", "GRU, hidden dimension 200, Marshall sign, MinSR"],
   "Adaptive RNN (hidden dim 32->256, doubling)": ["Adaptive RNN", "hidden dimension 32 → 256"],
@@ -114,8 +114,8 @@ export const NAMES = {
 
   // ---------------------------------------------------------------- transformer / ViT
   "ViT": ["ViT", ""],
-  "ViT with Spatial Attention, zero-variance extrapolation": ["ViT", "spatial attention, variance → 0"],
-  "ViT with symmetry restoration": ["ViT", "symmetry restoration"],
+  "ViT with Spatial Attention, zero-variance extrapolation": ["ViT", "spatial attention, b = 4, variance → 0"], // arXiv:2602.02665 Sec. V.2: "b = 4 for the square lattice"
+  "ViT with symmetry restoration": ["ViT", "symmetry restoration, b = 4"],
   "fViT (vision transformer, 2.7e5 params)": ["fViT", ""],
   "Factored attention (ViT, h=10,d=60,b=2,nl=4)": ["ViT", "factored attention, h = 10, d = 60, b = 2, 4 layers"],
   "Decoupled attention (ViT, h=10,d=60,b=2,nl=4)": ["ViT", "decoupled attention, h = 10, d = 60, b = 2, 4 layers"],

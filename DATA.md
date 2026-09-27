@@ -159,7 +159,7 @@ the sources of the 95 published rows that stated two of parameters, samples and 
 the third, including the authors' code and run data; 153 of its 278 blocks carry all three.
 Where it found a stored number to be a different quantity (a final evaluation's sample count
 stored as the per-step count), the later block holds the per-step number and its note the old
-one. A VQE shot count per estimated quantity is not a per-step sample count and stays in the note.
+one. A VQE shot count per estimated quantity is not a per-step sample count and stays in the note. The fourth (2026-09-27, Tristan) followed a verification of every family against its papers and code (`qmbl-runs/cost-routes-2026-09-24/verify/`): 235 blocks gained what the run states about how it evaluated its state, in three objects that, like `sweep_schedule`, are statements and never costs. `evaluation` holds the training stages, the network evaluations per amplitude (a symmetry sum, several determinants), the sampler proposals per kept sample, whether the local energy skips vanishing terms, complex parameters, a dense read-out head and the optimiser's solve; `vmc_schedule` (kind `mvmc`) the def-file settings of an mVMC run; `circuit_schedule` a VQE script's gates and runs. The next section says how each enters the estimate.
 
 Three rules, and they are the whole design:
 
@@ -232,80 +232,105 @@ Scope ([`checks/cost/ed/worklist.json`](checks/cost/ed/worklist.json)):
 
 ### How a FLOP count is estimated
 
-Seventeen published rows with an estimate also state hours on a named GPU; 211 published and
-VarBench rows state how many parameters the ansatz had, how many samples each optimisation step
-drew and how many steps were taken (the VarBench rows in their run scripts, compute pass 2026-09-24). Those three
-numbers, with the instance, fix the number of network evaluations an optimisation took, and
-[`scripts/flops.mjs`](scripts/flops.mjs) turns them into floating-point operations at
-build time (Tristan, 2026-09-21). That model, `nqs-v1`, is for neural and other variational
-Monte Carlo states; DMRG has its own, `dmrg-v1`, at the end of this section.
+211 published and VarBench rows state how many parameters the ansatz had, how many samples
+each optimisation step drew and how many steps were taken (the VarBench rows in their run
+scripts). Those three numbers, with the instance and what the paper or code says about how
+the network was evaluated, fix the arithmetic an optimisation took, and
+[`scripts/flops.mjs`](scripts/flops.mjs) turns them into floating-point operations at build
+time (Tristan, 2026-09-21). The model for neural and other variational Monte Carlo states is
+`nqs-v2` (Tristan, 2026-09-27, after a verification of every family against its papers and
+code on 2026-09-25 found `nqs-v1` off by 3-40x wherever a run symmetrised, trained in stages
+or skipped vanishing terms). DMRG, mVMC and the VarBench VQE have their own models at the end
+of this section.
 
-    FLOPs = iterations × samples × (n_conn + k_sample + 3) × FLOPs_forward
-    FLOPs_forward = 2 × parameters × reuse (+ 2/3 N_e³ for a determinant or Pfaffian)
+Per training stage:
 
-`n_conn` is the number of off-diagonal Hamiltonian terms connected to one configuration,
-which is what one local energy costs in network evaluations: the bonds of a Heisenberg
-instance, bonds plus next-nearest bonds for J1-J2, the sites for the transverse-field Ising
-model, four per bond for Hubbard. `k_sample` is one sweep of N single-site proposals for
-Markov-chain sampling and one pass for an autoregressive draw. The 3 is the forward and
-backward pass of the gradient. `reuse` is how many times a weight is applied in one
-forward pass: once in a dense network (VarBench's and QMBL's `α = 1` RBMs are NetKet's dense
-RBM), twice for a Jastrow factor's N × N matrix, once per site in a convolution or a recurrent
-cell, once per patch in a vision transformer, once per element of the space group (sites ×
-point group, or sites alone over translations) in a group convolution; it is declared per
-architecture in `ARCH`, one line each, with the sampling scheme and whether a determinant is
-evaluated.
+    FLOPs = iterations × samples × [ (n_conn + 3) × m + proposals × m_s ] × FLOPs_forward
+          + iterations × SR
+    FLOPs_forward = c_x × 2 × ((parameters − head) × reuse + head)  (+ c_x × 2/3 N_e³ for a determinant or Pfaffian)
 
-What is not counted, and is said under every figure that shows an estimate: the
-stochastic-reconfiguration solve, symmetry projections that sum the network over a point
-group, attention scores, and pre-training on smaller lattices. Against the rows that also
-state GPU-hours the model implies these achieved rates (`node scripts/flops.mjs` prints them all):
+- `n_conn`: the off-diagonal Hamiltonian terms one local energy evaluates. By default every
+  term (NetKet pads the local energy to all of them): the bonds of a Heisenberg instance, bonds
+  plus next-nearest bonds for J1-J2, the sites for the transverse-field Ising model, four per
+  bond for Hubbard. A code that evaluates only non-vanishing terms (`local_energy: "nonzero"`)
+  counts two thirds of the spin bonds (antiparallel, 0.63-0.73 measured) and, for fermions,
+  N_e × z × (1 − n_σ) hops, a quarter of the four-per-bond count at doping 1/8.
+- `m`: network evaluations per amplitude (`evaluations_per_amplitude`), 1 unless the run sums
+  over a symmetry group, several determinants each with its own network pass, or several
+  states per sample. `proposals` is what the sampler spends per kept sample: one sweep of N
+  single-site proposals by default, or what the code states (NetKet's discarded samples count;
+  QMBL's own runs spend 5N). An autoregressive draw is one pass of the unsymmetrised network
+  (m_s = 1); a Markov chain's proposal needs a whole amplitude (m_s = m). The 3 is the forward
+  and backward pass of the gradient.
+- `reuse`: how many times a weight is applied in one forward pass, declared per architecture
+  in `ARCH`: once in a dense network (VarBench's and QMBL's `α = 1` RBMs and Nomura's projected
+  RBM are dense), twice for a Jastrow factor's N × N matrix, once per site in a convolution or
+  a recurrent cell, once per patch in a vision transformer or a patch-embedded RNN, once per
+  element of the space group in a group convolution. A row whose network differs from its
+  family (an HFPS with a group-convolutional hidden network, a backflow tensor of which a
+  configuration reads a fraction) states its own. `head` parameters (a dense read-out) run once.
+- `c_x` = 2 for complex parameters on real inputs (4 real FLOPs per multiply-add, not 2).
+- `SR`: the optimiser's linear solve where the code is known: the dense S (2 × samples ×
+  P² + P³/3), NetKet's on-the-fly S made dense (P matrix-vector products), conjugate gradients
+  at their stated iteration count, or MinSR (2 × samples² × P + samples³/3). Not counted where
+  the code is unknown.
+
+These are statements about the run, stored in the compute block's `evaluation` object (with
+the stages as a list, each with its own iterations, samples, parameters and m), never costs;
+each is quoted in `reported_as` like the counts. A row without one gets every default, which
+is `nqs-v1`. Still not counted, and said under every figure: attention scores (up to ~20 %),
+pre-training on smaller lattices, and an extra energy estimate some codes make per step. SCALE
+(local updates of at most 18 sites per move) and the transformer backflow (attention over
+several determinants) are not in the model, because against their paper's measured time per
+step it is ten times off in each direction; they have no estimate.
+
+Against the rows that also state GPU-hours the model implies these achieved rates
+(`node scripts/flops.mjs` prints them all):
 
 | instance | method | estimated FLOPs | stated | achieved |
 |---|---|---|---|---|
-| Heisenberg 10×10 open | minGRU, 3 layers, C4v | 7.8e18 | 108 h, L40S | 20 TFLOP/s |
-| Heisenberg 16×16 open | minGRU, 3 layers, C4v | 5.3e19 | 696 h, L40S | 21 TFLOP/s |
-| J1-J2 10×10, J2 = 0.5 | ViT, T5 / decoupled attention | 1.4e17 | 28 h, A100 | 1.4 TFLOP/s |
-| J1-J2 10×10, J2 = 0.5 | ViT, factored attention | 1.2e17 | 12.5 h, A100 | 2.6 TFLOP/s |
-| J1-J2 6×6, J2 = 0.5 | ViT, T5 / decoupled attention | 1.8e16 | 10 h, A100 | 0.5 TFLOP/s |
-| J1-J2 6×6, J2 = 0.5 | ViT, factored attention | 1.5e16 | 6 h, A100 | 0.7 TFLOP/s |
-| J1-J2 20×20, J2 = 0.5 | ViT, symmetry restoration | 6.6e19 | 25000 h, GH200 (whole paper) | ≥ 0.7 TFLOP/s |
+| Heisenberg 10×10 open | minGRU, 6 layers, 2×2 patches, C4v | 1.6e19 | 108 h, L40S | 40 TFLOP/s |
+| Heisenberg 16×16 open | minGRU, 6 layers, 2×2 patches, C4v | 1.1e20 | 696 h, L40S | 42 TFLOP/s |
+| Hubbard 4×16 | NNBF, n_h = 8192 | 1.2e20 | 400 h, H100 (GH200) | 82 TFLOP/s |
+| Hubbard 4×16 | NNBF, 4 determinants, symmetry stage | 3.4e19 | 200 h, H100 (GH200) | 48 TFLOP/s |
+| Hubbard 4×16 | NNBF, 32 determinants, symmetry stage | 1.0e20 | 800 h, H100 (GH200) | 35 TFLOP/s |
+| J1-J2 10×10, J2 = 0.5 | ViT, factored attention | 1.7e17 | 12.5 h, A100 | 3.7 TFLOP/s |
+| J1-J2 10×10, J2 = 0.5 | ViT, T5 / decoupled attention | 2.0e17 | 28 h, A100 | 2.0 TFLOP/s |
+| J1-J2 6×6, J2 = 0.5 | ViT, factored attention | 7.1e16 | 6 h, A100 | 3.3 TFLOP/s |
+| J1-J2 6×6, J2 = 0.5 | ViT, T5 / decoupled attention | 8.4e16 | 10 h, A100 | 2.3 TFLOP/s |
 | triangular 108 | GCNN | 1.1e18 | 96 h, A100 | 3.1 TFLOP/s |
+| J1-J2 16×16, J2 = 0.5 | GCNN | 1.8e18 | 300 h, A100 | 1.7 TFLOP/s |
 | triangular 36 | GCNN, symmetry-projected | 3.9e16 | 12 h, A100 | 0.9 TFLOP/s |
-| J1-J2 16×16, J2 = 0.5 | GCNN | 9.1e17 | 300 h, A100 | 0.8 TFLOP/s |
-| Hubbard 4×16 | NNBF, 32 determinants | 1.1e19 | 800 h, H100 (GH200) | 4.0 TFLOP/s |
-| Hubbard 4×16 | NNBF, 4 determinants | 1.8e19 | 200 h, H100 (GH200) | 25 TFLOP/s |
-| Hubbard 4×16 | NNBF, n_h = 8192 | 5.3e20 | 400 h, H100 (GH200) | 366 TFLOP/s |
-| J1-J2 10×10, J2 = 0.5 | ViT, QMBL implementation | 3.2e16 | 6.4 h, A100 80 GB (measured) | 1.4 TFLOP/s |
-| J1-J2 10×10, J2 = 0.5 | GCNN, translations, QMBL run | 1.7e16 | 2.6 h, A100 80 GB (measured) | 1.8 TFLOP/s |
-| J1-J2 10×10, J2 = 0.5 | RBM α = 1, QMBL run | 8.4e13 | 0.46 h, A100 80 GB (measured) | 0.05 TFLOP/s |
-| triangular 36 | RBM α = 1, QMBL run | 3.3e12 | 0.10 h, A100 80 GB (measured) | 0.01 TFLOP/s |
-| triangular 36 | ViT, QMBL implementation | 3.4e15 | 2.7 h, A100 80 GB (measured) | 0.35 TFLOP/s |
-| triangular 36 | symmetric RBM α = 4, QMBL run | 1.3e13 | 0.12 h, A100 80 GB (measured) | 0.03 TFLOP/s |
+| J1-J2 20×20, J2 = 0.5 | ViT, b = 4, symmetry stages | 2.0e19 | 25000 h, GH200 (whole paper) | ≥ 0.2 TFLOP/s |
+| J1-J2 10×10, J2 = 0.5 | GCNN, translations, QMBL run | 3.0e16 | 2.7 h, A100 80 GB (measured) | 3.1 TFLOP/s |
+| J1-J2 10×10, J2 = 0.5 | ViT, QMBL implementation | 5.8e16 | 6.4 h, A100 80 GB (measured) | 2.5 TFLOP/s |
+| triangular 36 | ViT, QMBL implementation | 6.6e15 | 2.7 h, A100 80 GB (measured) | 0.7 TFLOP/s |
+| J1-J2 10×10, J2 = 0.5 | symmetric RBM α = 4, QMBL run | 1.2e15 | 0.51 h, A100 80 GB (measured) | 0.7 TFLOP/s |
+| J1-J2 10×10, J2 = 0.5 | RBM α = 1, QMBL run | 3.0e14 | 0.45 h, A100 80 GB (measured) | 0.2 TFLOP/s |
+| triangular 36 | RBM α = 1, QMBL run | 7.8e13 | 0.10 h, A100 80 GB (measured) | 0.2 TFLOP/s |
 
-Consistent within a paper and a factor of fifty across papers (0.5 to 25 TFLOP/s), with one
-outlier: the n_h = 8192 NNBF comes out at 366 TFLOP/s on one H100, above its FP32 peak, so
-either that run used reduced-precision tensor cores or the model overcounts that network (its
-7168 × n_h output layer is most of the count). QMBL's own runs on one card span a factor of
-180 (the last six rows, [`checks/cost/`](checks/cost/README.md)): the dense RBMs (1332 and
-10100 parameters, each applied once) keep an A100 at 0.01-0.05 TFLOP/s and a 149-parameter
-symmetric RBM at 0.03, because a forward pass of 10^3-10^5 FLOPs is launch overhead and
-sampling, not arithmetic, and the estimate falls 30-100 times short of the clock. **An estimate is good to an order of magnitude for
-a network large enough to fill a GPU and never better**, which is why it has its own axis
-and its own figures (`figures/flops/`, `figures/energy-vs-flops.svg`) and is never placed
-on the hours axis. Turning FLOPs into hours would need exactly the conversion factor the
-first rule forbids. Nothing on the FLOPs axis is a reported number, so the two axes are
-never mixed: on the front page an instance with both shows them as two figures, a badge
+**The rates now sit where the hardware says they should.** The A100 rows, in double
+precision, run at 0.9-3.7 TFLOP/s, 10-40 % of its FP64 peak; the minGRU in single precision on
+an L40S and the NNBF in TF32 on an H100 at 7-45 % of their peaks. Under `nqs-v1` the same rows
+spread from 0.01 to 366 TFLOP/s, because the symmetrisation, the training stages, the discarded
+samples and the complex arithmetic were missing. QMBL's own small RBMs (1368 and 10200 parameters)
+stay lowest, at 0.1-0.7 TFLOP/s: their steps are too small to fill a card. **An estimate is good
+to an order of magnitude** where the run's evaluation is stated, and no better; that is why it
+has its own axis and its own figures (`figures/flops/`, `figures/energy-vs-flops.svg`) and is
+never placed on the hours axis. Turning FLOPs into hours would need exactly the conversion
+factor the first rule forbids. Nothing on the FLOPs axis is a reported number, so the two axes
+are never mixed: on the front page an instance with both shows them as two figures, a badge
 each.
 
 Three rules, the same shape as the block's own:
 
 - **An input nobody stated is never guessed.** Parameters, samples and iterations must all
   be on the row, the architecture must be in `ARCH`, and the instance must be on a lattice
-  whose bond count the script writes. For DMRG the sweep schedule, eigensolver setting and
-  site order must be in the run script. Otherwise there is no estimate. The estimate is
-  `medium` confidence when those hold and `low` when an architectural assumption was needed
-  (a transformer whose patch size the paper does not state) or the block itself is `low`.
+  whose bond count the script writes; the `evaluation` statements are quoted or take their
+  defaults. For DMRG the sweep schedule, eigensolver setting and site order must be in the run
+  script. Otherwise there is no estimate. The estimate is `medium` confidence when those hold
+  and `low` when an architectural assumption was needed (a transformer whose patch size the
+  paper does not state) or the block itself is `low`.
 - **Nothing is stored.** The estimate is a function of the row and its instance, recomputed
   on every build; changing the model changes every figure at once and no data file.
 - **DMRG only where the schedule is stated.** A bond dimension alone does not fix a DMRG
@@ -357,14 +382,14 @@ wall-clock does too.
 
 | instance | rung | estimated FLOPs | measured | achieved per core |
 |---|---|---|---|---|
-| triangular 36 | χ = 500 | 2.4e14 | 3.7 core-h, EPYC 7H12 | 18 GFLOP/s |
-| triangular 36 | χ = 1000 | 1.8e15 | 9.0 core-h, EPYC 7H12 | 57 GFLOP/s |
-| triangular 36 | χ = 2000 | 1.3e16 | 24.9 core-h, EPYC 7H12 | 140 GFLOP/s |
+| triangular 36 | χ = 500 | 2.4e14 | 3.7 core-h, EPYC 7742 | 18 GFLOP/s |
+| triangular 36 | χ = 1000 | 1.4e15 | 9.4 core-h, EPYC 7742 | 41 GFLOP/s |
+| triangular 36 | χ = 2000 | 9.3e15 | 24.4 core-h, EPYC 7742 | 105 GFLOP/s |
 | J1-J2 10×10, J2 = 0.5 | χ = 500 | 1.9e15 | 37 core-h, EPYC 7763 | 15 GFLOP/s |
 | J1-J2 10×10, J2 = 0.5 | χ = 1000 | 1.6e16 | 88 core-h, EPYC 7763 | 49 GFLOP/s |
 | J1-J2 10×10, J2 = 0.5 | χ = 2000 | 1.2e17 | 221 core-h, EPYC 7763 | 144 GFLOP/s |
 
-**The implied rate grows with χ, tenfold from χ = 500 to 2000, almost identically on both lattices.**
+**The implied rate grows with χ, six- to tenfold from χ = 500 to 2000.**
 One of these cores peaks at about 40-55 GFLOP/s in double precision. From χ ≈ 1000 upward
 the model therefore counts more arithmetic than the run did: blocks with different Sz are
 never multiplied, and that saving grows with χ. Below it, the run spends time on things the
@@ -376,6 +401,38 @@ The clock is itself uncertain. The calibration repeat took 3.4 core-h on one nod
 **A DMRG estimate is therefore good to an order of magnitude, like a network's.** It
 overstates the work of a large-χ run by up to a factor of three against peak. It shares an
 axis with the network estimates and, like them, never the hours axis.
+
+#### mVMC: `mvmc-v2`
+
+For a row whose compute block carries its mVMC def-file settings (`vmc_schedule`, kind
+`mvmc`: the VarBench mVMC + RBM rows, read from their inputs and `mVMC.sh`; Tristan, 2026-09-27),
+`flops.mjs` counts the Pfaffian arithmetic over every projection term:
+
+    FLOPs = c_x [ P_tot N_QP (r + a u) + N_it S N_QP (n_conn r + n²) + (a P_tot / N + N_it S) N_QP (7/3) n³ ] + SR
+
+with P_tot the proposals of all processes over the run, N_QP the projection terms (NMPTrans ×
+NSPGaussLeg), S the samples per step (NVMCSample × processes), n = Nsize, r and u the ratio and
+update of a hop (2n, 6n²) or an exchange (2n², 34n²), c_x = 4 for complex inputs, and SR the
+complex O O† product and Cholesky on every process (NSRCG 0) or 100 conjugate-gradient
+iterations per step (NSRCG 1). The acceptance a is bounded by 1, which overstates sampling about
+twice. Calibrated on QMBL's own short runs of VarBench's inputs on an EPYC 9654 (2026-09-25,
+`qmbl-runs/cost-routes-2026-09-24/calib/`): 4.6-17 GFLOP/s per core over Hubbard 8×8 and
+pyrochlore 128 and 432, against 7-18x too high or 6.6x too low before the complex arithmetic,
+the per-sample Pfaffian recomputation and the realistic CG count were in. Every estimate is
+`low`: the scripts are simplified templates of the published runs.
+
+#### VQE: `vqe-v1`
+
+For the VarBench SU(2) VQE rows (`circuit_schedule`: gates, runs with their symmetry-projector
+terms |G| and iterations, the state-vector dimension C(N, N/2)), per step
+
+    32 P² D + 32 P D + 8 |G| P² D + n_H P D (32 + 8 |G|) + 8 |G| P D + n_H D (32 + 8 |G|) + 8 |G| D
+
+for the derivative states, the metric tensor (a bound: the code pairs inverse group elements),
+the energy derivatives, and energy and norm. Shots are binomial draws on exact probabilities
+and add no state-vector work. Calibrated at 3.7-37 GFLOP/s per core on the same CPU, with the
+same rate at D = 12870 and 2.7 million. Every estimate is `low`: the script postdates the
+energies and, as published, stops after its first run.
 
 ## When the literature was last checked: `coverage`
 

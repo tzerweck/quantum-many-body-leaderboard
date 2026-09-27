@@ -363,8 +363,11 @@ const FLOPS_LEGEND = t => [
 ];
 // One sentence per model drawn (flops.mjs): what it counts and what it leaves out.
 const FLOPS_MODEL = {
-  "nqs-v1": "Network estimates: iterations × samples × (connected configurations + sampler passes + 3) × forward-pass FLOPs, " +
-    "from the counts the paper states; the optimizer's solve, symmetry projections and pre-training are not counted.",
+  "nqs-v2": "Network estimates: iterations × samples × (connected configurations + sampler proposals + 3) × forward-pass FLOPs × evaluations per amplitude, " +
+    "stage by stage, from the counts the paper or run script states, with the optimizer's solve where the code is known; pre-training is not counted.",
+  "mvmc-v2": "mVMC estimates: Pfaffian updates, ratios and recomputations over every projection term plus the SR solve, from the run's def files, " +
+    "with the acceptance bounded by 1 (about twice the measured sampling).",
+  "vqe-v1": "VQE estimates: state-vector gate, metric-tensor and energy-derivative work of the run script's natural-gradient schedule.",
   "dmrg-v1": "DMRG estimates: the dense tensor contractions of every sweep in the run script's schedule, plus its variance evaluations; " +
     "the saving from conserved quantum numbers is not counted, so a symmetric code does less arithmetic than this.",
 };

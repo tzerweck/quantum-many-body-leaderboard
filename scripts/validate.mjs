@@ -74,6 +74,29 @@ for (const m of fs.readdirSync("data")) {
             if (!s.code || !s.lattice || !["chain", "snake", "edges", "itensor-triangular", "tenpy"].includes(s.lattice.order) || !(s.lattice.site_dimension > 1))
               issues.push(`COMPUTE ${at}: sweep_schedule without code or a lattice order the FLOP model knows`);
           }
+          // How the run evaluated its state (DATA.md, `evaluation`; nqs-v2): positive counts, known rules,
+          // stages whose iterations add up to the row's.
+          if (c.evaluation != null) {
+            const ev = c.evaluation, pos = x => x == null || (typeof x === "number" && x > 0);
+            for (const k of ["evaluations_per_amplitude", "proposals_per_sample", "reuse"]) if (!pos(ev[k])) issues.push(`COMPUTE ${at}: evaluation.${k} is ${ev[k]}`);
+            if (!(ev.head_parameters == null || (ev.head_parameters >= 0 && (c.parameters == null || ev.head_parameters <= c.parameters)))) issues.push(`COMPUTE ${at}: evaluation.head_parameters ${ev.head_parameters}`);
+            if (ev.local_energy != null && !["all", "nonzero"].includes(ev.local_energy)) issues.push(`COMPUTE ${at}: evaluation.local_energy ${ev.local_energy}`);
+            if (ev.sr != null && !["dense", "onthefly_dense", "cg", "minsr", "none"].includes(ev.sr.kind)) issues.push(`COMPUTE ${at}: evaluation.sr.kind ${ev.sr.kind}`);
+            if (ev.stages != null) {
+              if (!Array.isArray(ev.stages) || !ev.stages.length || ev.stages.some(st => !(st.iterations > 0) || !pos(st.samples) || !pos(st.parameters) || !pos(st.evaluations_per_amplitude)))
+                issues.push(`COMPUTE ${at}: evaluation.stages malformed`);
+              else if (c.iterations != null && ev.stages.reduce((x, st) => x + st.iterations, 0) !== c.iterations)
+                issues.push(`COMPUTE ${at}: evaluation.stages add up to ${ev.stages.reduce((x, st) => x + st.iterations, 0)} iterations, the row states ${c.iterations}`);
+            }
+          }
+          if (c.vmc_schedule?.kind === "mvmc") {
+            const v = c.vmc_schedule;
+            for (const k of ["n_proc", "NVMCSample", "NSROptItrStep", "NMPTrans", "NSPGaussLeg", "n_size", "parameters_real"]) if (!(v[k] > 0) && !(k === "parameters_real" && v[k] == null)) issues.push(`COMPUTE ${at}: vmc_schedule.${k} is ${v[k]}`);
+          }
+          if (c.circuit_schedule != null) {
+            const cs = c.circuit_schedule;
+            if (!(cs.gates > 0) || !Array.isArray(cs.runs) || cs.runs.some(x => !(x.projector_terms > 0 && x.iterations > 0))) issues.push(`COMPUTE ${at}: circuit_schedule without gates or runs`);
+          }
           for (const k of Object.keys(c))
             if (/normali[sz]ed|equivalent|h100_eq/i.test(k)) issues.push(`COMPUTE ${at}: normalised field ${k}; DATA.md forbids normalisation`);
         }
