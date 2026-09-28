@@ -116,6 +116,8 @@ export const NAMES = {
   "ViT": ["ViT", ""],
   "ViT with Spatial Attention, zero-variance extrapolation": ["ViT", "spatial attention, b = 4, variance → 0"], // arXiv:2602.02665 Sec. V.2: "b = 4 for the square lattice"
   "ViT with symmetry restoration": ["ViT", "symmetry restoration, b = 4"],
+  "ViT with Spatial Attention, translations + C6v projection": ["ViT", "spatial attention, b = 3, translations + C6v projection"], // arXiv:2602.02665 Table 1 (triangular)
+  "ViT with Spatial Attention, zero-variance extrapolation (triangular)": ["ViT", "spatial attention, b = 3, variance → 0"],
   "fViT (vision transformer, 2.7e5 params)": ["fViT", ""],
   "Factored attention (ViT, h=10,d=60,b=2,nl=4)": ["ViT", "factored attention, h = 10, d = 60, b = 2, 4 layers"],
   "Decoupled attention (ViT, h=10,d=60,b=2,nl=4)": ["ViT", "decoupled attention, h = 10, d = 60, b = 2, 4 layers"],
@@ -235,6 +237,12 @@ export const NAMES = {
   "VMC with Dirac+field+Jastrow": ["VMC", "Dirac spin liquid + field + Jastrow"],
   "VMC with fermions (flux+neel+Jastrow)": ["VMC", "fermions, flux + Néel + Jastrow"],
   "VMC with projected BCS (Z2 spin liquid)": ["VMC", "projected BCS, Z2 spin liquid"],
+  "Gutzwiller-projected 120° magnetic state (π-flux hopping)": ["VMC", "120° order, π-flux hopping"], // arXiv:1512.03356 Table I
+  "Gutzwiller-projected U(1) Dirac spin liquid": ["VMC", "U(1) Dirac spin liquid"],
+  "Jastrow-Gutzwiller": ["VMC", "Jastrow-Gutzwiller"], // as arXiv:2602.02665 Table 1 prints it
+  "p-BCS (projected BCS + spin Jastrow)": ["VMC", "projected BCS + spin Jastrow"],
+  "RVB wave function": ["VMC", "RVB"],
+  "Entangled-plaquette state (EPS), 16-site plaquettes": ["EPS", "16-site plaquettes", { family: "classic VMC" }],
   "VMC with projected fermions + Jastrow": ["VMC", "projected fermions + Jastrow"],
   "VMC, Gutzwiller-projected U(1) Dirac spin liquid (NN hopping, [0,pi] flux, no Jastrow), periodic-antiperiodic spinon boundary conditions": ["VMC", "U(1) Dirac spin liquid, [0,π] flux, periodic-antiperiodic spinon boundaries"],
   "VMC, Gutzwiller-projected U(1) Dirac spin liquid (NN hopping, [0,pi] flux, no Jastrow), periodic-periodic spinon boundary conditions": ["VMC", "U(1) Dirac spin liquid, [0,π] flux, periodic spinon boundaries"],

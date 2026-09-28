@@ -13,6 +13,8 @@
 // One file per pass, sweep-rows-YYYY-MM-DD.json, applied in date order; the date names the
 // pass in each row's source (sweep-allresults-<date>) and verified.checked_on. Later passes
 // see the rows of earlier ones, so a value read twice is skipped by the duplicate check below.
+// A second pass on the same day, run by another session, takes a suffix
+// (sweep-rows-YYYY-MM-DD-<label>.json) so neither regenerates over the other's rows.
 //
 // What the reading caught, so the next pass does not repeat it:
 // - site count is not geometry: an 8x32 cylinder and the 16x16 torus both have 256 sites;
@@ -25,7 +27,7 @@
 import fs from "node:fs";
 import { perSiteDivisor, expectedDof, expectedEinf, vScore } from "./units.mjs";
 
-const PASSES = fs.readdirSync(".").filter(f => /^sweep-rows-\d{4}-\d{2}-\d{2}\.json$/.test(f)).sort()
+const PASSES = fs.readdirSync(".").filter(f => /^sweep-rows-\d{4}-\d{2}-\d{2}(-[a-z0-9]+)?\.json$/.test(f)).sort()
   .map(f => ({ file: f, date: f.slice(11, 21), rows: JSON.parse(fs.readFileSync(f, "utf8")) }));
 const REASON = {
   variational: "variational ansatz at a stated size; energy is an upper bound (assigned during source reading)",
