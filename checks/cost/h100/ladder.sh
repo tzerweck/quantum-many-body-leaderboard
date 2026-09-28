@@ -8,8 +8,8 @@
 # the ladder after the current job.
 #
 # The card: the one the previous job used if it is still free, else one the host's GPU
-# policy lists as eligible (idle for 20 minutes); if there is none, wait. Tristan allowed one
-# card by day for this ladder beyond the day cap (2026-09-24); it never takes a second.
+# policy lists as eligible (idle for 20 minutes); if there is none, wait. The host has no card
+# cap for our jobs since 2026-09-28 (Tristan); the ladder still takes one card, never a second.
 set -uo pipefail
 ROOT=/scratch/tzerweck/qmbl-cost
 CODE="$ROOT/code"

@@ -125,8 +125,9 @@ and the row says so in its method string. Nothing here is attached to anyone els
   optimizer and evaluation at every size), and DMRG on 6 x 6, 8 x 8 and 12 x 12 on Euler as
   above.
   - **The neural states run on one NVIDIA H100 NVL 96 GB of a group host**, not on Euler's
-    A100s: Euler's A100 queue is the bottleneck, and Tristan allowed one such card by day for
-    this ladder beyond the host's day cap. One card, one run after another
+    A100s: Euler's A100 queue is the bottleneck. Tristan allowed one such card by day for this
+    ladder beyond the host's day cap (2026-09-24); since 2026-09-28 the host has no cap for
+    our jobs at all (a card only after 20 min idle). One card, one run after another
     (`h100/ladder.sh`, deployed by `h100/deploy.sh` with NetKet 3.22.4, jax 0.8.3 and flax
     0.12.6, the Euler versions); the card is one the host's GPU policy lists as idle.
   - **A second device is a second protocol for hours.** A ladder row's hours compare with the
