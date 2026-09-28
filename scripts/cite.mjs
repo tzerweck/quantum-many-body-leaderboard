@@ -71,10 +71,18 @@ function authorYear(ref) {
   return { text: `${who} (${year})`, year: +year };
 }
 
-// The year a row's number was published: its resolved paper's, else the year read off the
-// reference text. The site's year column, the currency counts and the year figures use this.
+// A VarBench run script is cited with the paper VarBench was published with, and dated by it
+// (Tristan, 2026-09-28): the paper behind a row whose reference is a script in github.com/varbench.
+const VARBENCH_PAPER = "doi:10.1126/science.adg9774";
+const varbenchPaper = (row, cache) =>
+  /\[code\]\(https:\/\/github\.com\/varbench\//.test(row.reference || "") ? cache[VARBENCH_PAPER] ?? null : null;
+
+// The year a row's number was published: its resolved paper's, VarBench's for its run scripts,
+// else the year read off the reference text. The site's year column, the currency counts and
+// the year figures use this.
 export const paperYear = (row, cache = sources()) =>
-  sourceOf(row, cache)?.year ?? (row.reference && !/\]\(https?:/.test(row.reference) ? authorYear(row.reference)?.year ?? null : null);
+  sourceOf(row, cache)?.year ?? varbenchPaper(row, cache)?.year ??
+    (row.reference && !/\]\(https?:/.test(row.reference) ? authorYear(row.reference)?.year ?? null : null);
 
 // The source of a row as text + url, before any markup. Falls back to the reference itself
 // when the row names no paper we have resolved, so nothing is ever silently dropped: an
@@ -84,8 +92,6 @@ export const paperYear = (row, cache = sources()) =>
 // as HTML; splitting it here is what keeps the citation under a number identical in both.
 // A row QMBL computed cites the code that produced it, at the commit that ran, so it can be rerun.
 const REPO = "https://github.com/tzerweck/quantum-many-body-leaderboard";
-// A VarBench run script cites the paper VarBench was published with alongside it (Tristan, 2026-09-28).
-const VARBENCH_PAPER = "doi:10.1126/science.adg9774";
 
 export function citeRef(row, cache = sources()) {
   if (row.computed_by === "qmbl") {
@@ -97,7 +103,7 @@ export function citeRef(row, cache = sources()) {
   const ref = row.reference || "";
   const code = ref.match(/\[code\]\((https?:\/\/[^\s)]+)\)/);
   if (code) {
-    const vb = /^https:\/\/github\.com\/varbench\//.test(code[1]) && cache[VARBENCH_PAPER];
+    const vb = varbenchPaper(row, cache);
     return vb ? { text: "run script", url: code[1], also: { text: citeText(vb), url: citeUrl(vb) } }
       : { text: "run script", url: code[1], note: "no paper cited" };
   }

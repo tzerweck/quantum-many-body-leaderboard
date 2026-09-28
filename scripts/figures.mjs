@@ -48,7 +48,8 @@ function frontierPanel([id, title]) {
   }
   const bestProjected = pts.filter(p => p.r.bound_type === "projected").sort((a, b) => a.gap - b.gap)[0];
   for (const p of pts) p.labelled = p.r === rec || p.gap < 0 || p === bestProjected;
-  return { title, pts, steps, rec, recE: rec.energy / f, unit: perSiteLabel(inst), undated: rows.length - pts.length };
+  return { title, pts, steps, rec, recE: rec.energy / f, unit: perSiteLabel(inst), undated: rows.length - pts.length,
+    undatedQmbl: rows.filter(r => !yearOf(r) && r.computed_by === "qmbl").length };
 }
 
 write("record-over-time", t => {
@@ -127,8 +128,9 @@ write("record-over-time", t => {
   });
 
   const undated = panels.map(p => `${p.undated} on ${p.title.split(",")[0]}`).join(" and ");
+  const ownRuns = panels.every(p => p.undated === p.undatedQmbl) ? " (QMBL's own runs)" : "";
   const units = panels.map(p => `${p.title.split(" ")[0]} as ${p.unit}`).join(", ");
-  const fn = footnote(t, `Energies per site: ${units}. Not shown: rows with no paper to date them, ${undated} (VarBench's own reference runs). ` +
+  const fn = footnote(t, `Energies per site: ${units}. Not shown: rows with no publication year, ${undated}${ownRuns}. ` +
     "Year is the source's publication year. The line steps down only when an eligible row beats the standing record.", bottom + 52);
   parts.push(fn.svg);
   return doc(t, fn.bottom + 24, "The record over time on two frontier instances",
@@ -311,12 +313,13 @@ write("error-metrics", t => {
 write("records-by-year", t => {
   const recs = instances.map(recordOf).filter(r => r?.bound_type === "variational");
   const dated = recs.map(yearOf).filter(Boolean);
-  const noPaper = recs.filter(r => citeRef(r, cache).text === "run script").length;
+  const noPaper = recs.filter(r => !yearOf(r) && citeRef(r, cache).text === "run script").length;
   const y0 = Math.min(...dated), y1 = Math.max(...dated);
   const years = Array.from({ length: y1 - y0 + 1 }, (_, k) => y0 + k);
   const count = years.map(y => dated.filter(d => d === y).length);
   const rest = recs.length - dated.length;
   const h = header(t, "Standing records by the year their source was published",
+    !rest ? `All ${recs.length} variational-held records resolve to a publication year (a VarBench run script to its paper's).` :
     `${dated.length} of the ${recs.length} variational-held records resolve to a publication year. ` +
     (rest === noPaper
       ? `The other ${rest} cite a run script, so they have no year to plot.`
