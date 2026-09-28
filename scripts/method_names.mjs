@@ -194,6 +194,7 @@ export const NAMES = {
   "RBM with momentum (K=0), spin-parity (even S), and point-group (A1) projections, 72 hidden units": ["RBM", "K = 0, even spin parity and A1 projections, 72 hidden units"],
   "RBM with momentum (K=0), spin-parity (even S), and point-group (A1) projections, 96 hidden units": ["RBM", "K = 0, even spin parity and A1 projections, 96 hidden units"],
   "RBM+PP with momentum (K=0), spin-parity (even S), and point-group (A1) projections, 16 hidden units": ["RBM + PP", "K = 0, even spin parity and A1 projections, 16 hidden units"],
+  "RBM+PP (momentum, spin-parity and simplified point-group projections, 16 hidden units, no sublattice structure)": ["RBM + PP", "K = 0, even spin parity and simplified point-group projections, 16 hidden units, no sublattice structure"],
   "RBM-fermionic": ["RBM", "fermionic"],
   "mVMC + RBM (as quoted)": ["mVMC + RBM", ""],
   "previous work [23] (Nomura & Imada neural-network solver)": ["mVMC + RBM", "", { family: "RBM" }],
