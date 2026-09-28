@@ -766,7 +766,8 @@ function searchIndex(inst, name) {
 }
 
 
-// Every row of the instance, the record marked, challengers with their gap above it. sigma
+// Every row of the instance, the record marked, challengers with their gap above it in a
+// column of its own, per site (Tristan, 2026-09-28). sigma
 // is shown because 62% of rows carry one (2026-09-16); Var(E) and the V-score, on 36%, stay
 // on the instance page.
 function allRows(inst) {
@@ -779,7 +780,8 @@ function allRows(inst) {
     const gap = rec && !isRec && r.bound_type === "variational" && !r.defect ? gapAbove(rec, r, f, decimals) : null;
     const { sigma } = perSite(r, inst);
     return `<tr id="${rowId(inst, r)}" class="${isRec ? "is-record" : ""}${r.defect ? " is-flagged" : ""}">
-      <td class="record">${energyCell(r, inst, isRec ? null : decimals)}${isRec ? '<span class="tag">record</span>' : gap ? ` <span class="muted num">(${esc(gap)})</span>` : ""}</td>
+      <td class="record">${energyCell(r, inst, isRec ? null : decimals)}${isRec ? '<span class="tag">record</span>' : ""}</td>
+      <td class="num">${isRec ? "0" : gap ? esc(gap.replace(/^\+/, "")) : '<span class="muted">n/a</span>'}</td>
       <td class="num">${sigma == null ? '<span class="muted">n/a</span>' : sigma.toExponential(1)}</td>
       <td><span class="badge">${boundLabel(r)}</span>${r.defect ? ` ${flagBadge(r)}` : ""}</td>
       <td>${esc(shorten(methodLabel(r), 60))}</td>
@@ -788,7 +790,7 @@ function allRows(inst) {
     </tr>`;
   }).join("");
   return `
-    <table class="next"><thead><tr><th>${perSiteLabel(inst)}</th><th>&sigma;</th><th>kind</th><th>method</th><th>source</th><th>year</th></tr></thead><tbody>${rows}</tbody></table>
+    <table class="next"><thead><tr><th>${perSiteLabel(inst)}</th><th>distance to record</th><th>&sigma;</th><th>kind</th><th>method</th><th>source</th><th>year</th></tr></thead><tbody>${rows}</tbody></table>
     <p class="links"><a href="${jsonUrl(inst)}">JSON</a></p>`;
 }
 

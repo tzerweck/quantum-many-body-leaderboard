@@ -34,11 +34,13 @@ function frontierPanel([id, title]) {
     r, year: yearOf(r), eligible: recordEligible(r), e: r.energy / f,
     gap: (r.energy - rec.energy) / Math.abs(rec.energy),
   }));
-  // Within a year, spread the marks sideways in energy order so none hides another.
+  // Within a year, spread the marks sideways in energy order so none hides another, the
+  // year's marks together no wider than 0.8 of a year.
   const byYear = Map.groupBy(pts, p => p.year);
   for (const group of byYear.values()) {
     group.sort((a, b) => a.gap - b.gap);
-    group.forEach((p, k) => { p.dx = (k - (group.length - 1) / 2) * 0.1; });
+    const gapX = Math.min(0.3, 0.8 / group.length);
+    group.forEach((p, k) => { p.dx = (k - (group.length - 1) / 2) * gapX; });
   }
   // The standing record: lowest eligible energy published up to each year.
   const steps = [];
@@ -72,6 +74,7 @@ write("record-over-time", t => {
   const top = lg.bottom + 52, plotH = 280, bottom = top + plotH;
   const panelW = (W - 2 * PAD - 44) / 2;
   const parts = [h.svg, lg.svg];
+  let keyH = 0;
 
   panels.forEach((panel, k) => {
     const px = PAD + k * (panelW + 44), left = px + 64, right = px + panelW - 6;
@@ -93,15 +96,21 @@ write("record-over-time", t => {
       parts.push(text(left - 8, Y(v) + 4, v.toFixed(decimals).replace("-", "−"), { size: 11, fill: t.muted, anchor: "end", nums: true }));
     }
     parts.push(hline(left, right, Y(panel.recE), t.ink2));
-    // The record is named on its own line, at the left where no mark sits, rather than
-    // beside its marker, which is always crowded by the rivals closest to it.
-    parts.push(text(left + 4, Y(panel.recE) - 6, `record: ${shortLabel(panel.rec)}`, { size: 12, fill: t.ink, weight: 600 }));
-    for (let y = Math.ceil(x0); y <= x1; y++) parts.push(text(X(y), bottom + 22, String(y), { size: 11, fill: t.muted, anchor: "middle", nums: true }));
+    // A year every 1, 2 or 5, whichever leaves room between two labels.
+    const yearStep = [1, 2, 5, 10].find(st => X(x0 + st) - X(x0) >= textWidth("2026", 11) + 8);
+    for (let y = Math.ceil(x0 / yearStep) * yearStep; y <= x1; y += yearStep)
+      parts.push(text(X(y), bottom + 22, String(y), { size: 11, fill: t.muted, anchor: "middle", nums: true }));
 
+    const segs = [{ x0: left, x1: right, y0: Y(panel.recE), y1: Y(panel.recE) }];
     if (panel.steps.length) {
       let d = `M${n(X(panel.steps[0].year))} ${n(Y(panel.steps[0].e))}`;
       for (const s of panel.steps.slice(1)) d += `H${n(X(s.year))}V${n(Y(s.e))}`;
       parts.push(`<path d="${d}H${n(right)}" fill="none" stroke="${t.ink2}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`);
+      panel.steps.forEach((st, i) => {
+        const next = panel.steps[i + 1], xa = X(st.year), xb = next ? X(next.year) : right;
+        segs.push({ x0: xa, x1: xb, y0: Y(st.e), y1: Y(st.e) });
+        if (next) segs.push({ x0: xb, x1: xb, y0: Y(st.e), y1: Y(next.e) });
+      });
     }
     // Hollow first, so a filled (eligible) mark is never covered by a listed-only one; the
     // flagged outlines last, over whatever they coincide with.
@@ -109,29 +118,69 @@ write("record-over-time", t => {
     for (const p of order) parts.push(p.r.defect ? slashed(t, X(p.year + p.dx), Y(p.e), t.series[BOUNDS[p.r.bound_type]])
       : dot(t, X(p.year + p.dx), Y(p.e), t.series[BOUNDS[p.r.bound_type]], p.eligible));
 
-    // Labels only on the marks the story is about: the record, anything below it, and the
-    // best projected energy. Nudged apart vertically where two would overlap.
-    const labels = panel.pts.filter(p => p.labelled && p.r !== panel.rec).map(p => {
-      const s = shortLabel(p.r), w = textWidth(s, 12), x = X(p.year + p.dx), y = Y(p.e);
-      const rightSide = x + 10 + w <= right;
-      // A mark just above the record line takes its label above it, off the line.
-      const hugsRecord = y < Y(panel.recE) && Y(panel.recE) - y < 20;
-      return { s, w, x: rightSide ? x + 10 : x - 10, anchor: rightSide ? "start" : "end", y: hugsRecord ? y - 10 : y + 4 };
-    }).sort((a, b) => a.y - b.y);
-    for (let a = 1; a < labels.length; a++) {
-      const prev = labels[a - 1], cur = labels[a];
-      const span = l => (l.anchor === "start" ? [l.x, l.x + l.w] : [l.x - l.w, l.x]);
-      const [p0, p1] = span(prev), [c0, c1] = span(cur);
-      if (c0 < p1 && p0 < c1 && cur.y - prev.y < 14) cur.y = prev.y + 14;
+    // What a name may not cover: a mark other than its own, the record line, the staircase,
+    // a name placed before it. A box is a name's glyphs at 12 px, baseline `base`.
+    const centres = panel.pts.map(p => [X(p.year + p.dx), Y(p.e)]);
+    const placed = [];
+    const box = (lx, base, w, anchor) => {
+      const bx = anchor === "start" ? lx : anchor === "end" ? lx - w : lx - w / 2;
+      return { x0: bx, x1: bx + w, y0: base - 10, y1: base + 3, lx, base, anchor };
+    };
+    const hits = (b, own) => centres.filter(([cx, cy]) => !(cx === own?.[0] && cy === own?.[1]) && cx + 6 > b.x0 && cx - 6 < b.x1 && cy + 6 > b.y0 && cy - 6 < b.y1).length +
+      segs.filter(g => Math.max(g.x0, b.x0) <= Math.min(g.x1, b.x1) && Math.max(Math.min(g.y0, g.y1), b.y0) <= Math.min(Math.max(g.y0, g.y1), b.y1)).length +
+      placed.filter(l => b.x0 < l.x1 && l.x0 < b.x1 && b.y0 < l.y1 && l.y0 < b.y1).length;
+    const inside = b => b.x0 >= left && b.x1 <= right && b.y0 >= top && b.y1 <= bottom;
+
+    // The record is named on its line, left or right, above or below, wherever that covers
+    // nothing; else in the panel's heading, after the title where it fits, else under it.
+    const recName = `record: ${shortLabel(panel.rec)}`, rw = textWidth(recName, 12) + 4, ry = Y(panel.recE);
+    const recBox = [box(left + 4, ry - 6, rw, "start"), box(right - 4, ry - 6, rw, "end"), box(left + 4, ry + 15, rw, "start"), box(right - 4, ry + 15, rw, "end")]
+      .find(b => inside(b) && !hits(b)) ??
+      (px + textWidth(panel.title, 13) + 16 + rw <= right ? box(right, top - 20, rw, "end") : box(left, top - 5, rw, "start"));
+    placed.push(recBox);
+    parts.push(text(recBox.lx, recBox.base, recName, { size: 12, fill: t.ink, weight: 600, anchor: recBox.anchor }));
+
+    // Names only on the marks the story is about: anything below the record and the best
+    // projected energy. Beside the mark, above or below it, then diagonally or farther; a
+    // mark with no free spot is numbered and named in a key under the panel, as in the cost
+    // figures.
+    const keyed = [];
+    for (const p of panel.pts.filter(q => q.labelled && q.r !== panel.rec).sort((a, b) => Y(a.e) - Y(b.e))) {
+      const s = shortLabel(p.r), w = textWidth(s, 12) + 2, x = X(p.year + p.dx), y = Y(p.e);
+      const spot = [box(x + 10, y + 4, w, "start"), box(x - 10, y + 4, w, "end"), box(x, y - 10, w, "middle"), box(x, y + 18, w, "middle"),
+        box(x + 7, y - 8, w, "start"), box(x - 7, y - 8, w, "end"), box(x + 7, y + 16, w, "start"), box(x - 7, y + 16, w, "end"),
+        box(x, y - 22, w, "middle"), box(x, y + 30, w, "middle")].find(b => inside(b) && !hits(b, [x, y]));
+      // In a crowd a name off its mark's own row reads as a neighbour's: number it instead.
+      const crowded = centres.some(([cx, cy]) => (cx !== x || cy !== y) && Math.hypot(cx - x, cy - y) < 24);
+      if (!spot || (spot.base !== y + 4 && crowded)) { keyed.push({ p, x, y }); continue; }
+      placed.push(spot);
+      parts.push(text(spot.lx, spot.base, s, { size: 12, fill: t.ink2, anchor: spot.anchor }));
     }
-    for (const l of labels) parts.push(text(l.x, l.y, l.s, { size: 12, fill: t.ink2, anchor: l.anchor }));
+    keyed.sort((a, b) => a.x - b.x || a.y - b.y).forEach((k, i) => {
+      const num = String(i + 1), w = textWidth(num, 10) + 2, { x, y } = k;
+      const spots = [box(x + 7, y + 4, w, "start"), box(x - 7, y + 4, w, "end"), box(x, y - 8, w, "middle"), box(x, y + 15, w, "middle")];
+      const spot = spots.find(b => !hits(b, [x, y])) ?? [...spots].sort((a, b) => hits(a, [x, y]) - hits(b, [x, y]))[0];
+      placed.push(spot);
+      Object.assign(k, { num });
+      parts.push(text(spot.lx, spot.base, num, { size: 10, fill: t.ink, weight: 600, anchor: spot.anchor }));
+    });
+    // The key: "1 DMRG, extrapolated (2019)  ·  2 ...", wrapped to the plot's width.
+    const lines = [[]];
+    let used = 0;
+    for (const k of keyed) {
+      const item = `${k.num} ${shortLabel(k.p.r)} (${k.p.year})`, iw = textWidth(item + "  ·  ", 11);
+      if (used + iw > right - left && lines.at(-1).length) { lines.push([]); used = 0; }
+      lines.at(-1).push(item); used += iw;
+    }
+    if (keyed.length) lines.forEach((l, i) => parts.push(text(left, bottom + 44 + 15 * i, l.join("  ·  "), { size: 11, fill: t.ink2 })));
+    keyH = Math.max(keyH, keyed.length ? 15 * lines.length + 8 : 0);
   });
 
   const undated = panels.map(p => `${p.undated} on ${p.title.split(",")[0]}`).join(" and ");
   const ownRuns = panels.every(p => p.undated === p.undatedQmbl) ? " (QMBL's own runs)" : "";
   const units = panels.map(p => `${p.title.split(" ")[0]} as ${p.unit}`).join(", ");
   const fn = footnote(t, `Energies per site: ${units}. Not shown: rows with no publication year, ${undated}${ownRuns}. ` +
-    "Year is the source's publication year. The line steps down only when an eligible row beats the standing record.", bottom + 52);
+    "Year is the source's publication year. The line steps down only when an eligible row beats the standing record.", bottom + 52 + keyH);
   parts.push(fn.svg);
   return doc(t, fn.bottom + 24, "The record over time on two frontier instances",
     `Energy per site versus publication year for ${FRONTIER.map(f => f[1]).join(" and ")}.`, parts);
