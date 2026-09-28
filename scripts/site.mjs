@@ -207,7 +207,7 @@ const flagBadge = r => {
 
 function citeHtml(row) {
   const r = citeRef(row, cache);
-  const link = r.url ? `<a href="${esc(r.url)}">${esc(r.text)}</a>` : esc(r.text);
+  const link = (r.url ? `<a href="${esc(r.url)}">${esc(r.text)}</a>` : esc(r.text)) + (r.also ? `, <a href="${esc(r.also.url)}">${esc(r.also.text)}</a>` : "");
   return r.note ? `${link}<span class="muted">, ${esc(r.note)}</span>` : link;
 }
 
@@ -475,7 +475,7 @@ function rowCard(r, inst) {
 <span class="e">${energyCell(r, inst)} <span class="muted">${perSiteLabel(inst)} &middot; ${boundLabel(r)}</span>${r.defect ? ` ${flagBadge(r)}` : ""}${recordOf(inst) === r ? '<span class="tag">record</span>' : ""}</span>
 <span class="muted">${cardSource(r)}</span>`;
 }
-const cardSource = r => { const c = citeRef(r, cache); return esc(c.note ? `${c.text}, ${c.note}` : c.text); };
+const cardSource = r => { const c = citeRef(r, cache); return esc([c.text, c.also?.text, c.note].filter(Boolean).join(", ")); };
 
 // One card per row a figure links to, in a <template> so it is neither rendered nor read
 // out; the script below moves a card into the floating box while its mark is hovered.

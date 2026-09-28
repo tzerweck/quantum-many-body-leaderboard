@@ -84,6 +84,8 @@ export const paperYear = (row, cache = sources()) =>
 // as HTML; splitting it here is what keeps the citation under a number identical in both.
 // A row QMBL computed cites the code that produced it, at the commit that ran, so it can be rerun.
 const REPO = "https://github.com/tzerweck/quantum-many-body-leaderboard";
+// A VarBench run script cites the paper VarBench was published with alongside it (Tristan, 2026-09-28).
+const VARBENCH_PAPER = "doi:10.1126/science.adg9774";
 
 export function citeRef(row, cache = sources()) {
   if (row.computed_by === "qmbl") {
@@ -94,7 +96,11 @@ export function citeRef(row, cache = sources()) {
   if (s) return { text: citeText(s), url: citeUrl(s) };
   const ref = row.reference || "";
   const code = ref.match(/\[code\]\((https?:\/\/[^\s)]+)\)/);
-  if (code) return { text: "run script", url: code[1], note: "no paper cited" };
+  if (code) {
+    const vb = /^https:\/\/github\.com\/varbench\//.test(code[1]) && cache[VARBENCH_PAPER];
+    return vb ? { text: "run script", url: code[1], also: { text: citeText(vb), url: citeUrl(vb) } }
+      : { text: "run script", url: code[1], note: "no paper cited" };
+  }
   const link = ref.match(/\((https?:\/\/[^\s)]+)\)/);
   if (link) return { text: "source", url: link[1] };
   const via = row.verified?.secondary_of && identify(row.verified.secondary_of);
@@ -113,6 +119,6 @@ export function citeRef(row, cache = sources()) {
 // Markdown for the source cell.
 export function citeCell(row, cache = sources()) {
   const r = citeRef(row, cache);
-  const link = r.url ? `[${r.text}](${r.url})` : r.text;
+  const link = (r.url ? `[${r.text}](${r.url})` : r.text) + (r.also ? `, [${r.also.text}](${r.also.url})` : "");
   return r.note ? `${link}, ${r.note}` : link;
 }

@@ -311,7 +311,7 @@ write("error-metrics", t => {
 write("records-by-year", t => {
   const recs = instances.map(recordOf).filter(r => r?.bound_type === "variational");
   const dated = recs.map(yearOf).filter(Boolean);
-  const noPaper = recs.filter(r => citeRef(r, cache).note === "no paper cited").length;
+  const noPaper = recs.filter(r => citeRef(r, cache).text === "run script").length;
   const y0 = Math.min(...dated), y1 = Math.max(...dated);
   const years = Array.from({ length: y1 - y0 + 1 }, (_, k) => y0 + k);
   const count = years.map(y => dated.filter(d => d === y).length);
@@ -319,8 +319,8 @@ write("records-by-year", t => {
   const h = header(t, "Standing records by the year their source was published",
     `${dated.length} of the ${recs.length} variational-held records resolve to a publication year. ` +
     (rest === noPaper
-      ? `The other ${rest} cite a run script and no paper, so they have no year to plot.`
-      : `The other ${rest} have no year to plot: ${noPaper} cite no paper, ${rest - noPaper} cite one with no year on record.`));
+      ? `The other ${rest} cite a run script, so they have no year to plot.`
+      : `The other ${rest} have no year to plot: ${noPaper} cite a run script, ${rest - noPaper} cite one with no year on record.`));
   const top = h.bottom + 44, plotH = 180, base = top + plotH;
   const left = PAD + 8, right = W - PAD - 8, band = (right - left) / years.length, bw = Math.min(24, band * 0.6);
   const ymax = Math.max(...count);
