@@ -180,6 +180,10 @@ function energyCell(row, inst, decimals) {
   return `<span class="num">${q.text}</span>`;
 }
 
+// A table with a sigma column prints the energy without the bracketed digit, at the
+// precision its own sigma sets, so the error bar is written once (Tristan, 2026-09-28).
+const bareEnergyCell = (row, inst) => energyCell(row, inst, quoteRow(row, inst).decimals);
+
 // The site prints none of the README's markers for a missing error bar (the circle, the
 // dagger): the sigma column says n/a. Methods print as methodLabel (units.mjs); the published
 // string, searched but not shown, loses the source's own "(this work)" or "(Ours)", since the
@@ -780,7 +784,7 @@ function allRows(inst) {
     const gap = rec && !isRec && r.bound_type === "variational" && !r.defect ? gapAbove(rec, r, f, decimals) : null;
     const { sigma } = perSite(r, inst);
     return `<tr id="${rowId(inst, r)}" class="${isRec ? "is-record" : ""}${r.defect ? " is-flagged" : ""}">
-      <td class="record">${energyCell(r, inst, isRec ? null : decimals)}${isRec ? '<span class="tag">record</span>' : ""}</td>
+      <td class="record">${isRec || decimals == null ? bareEnergyCell(r, inst) : energyCell(r, inst, decimals)}${isRec ? '<span class="tag">record</span>' : ""}</td>
       <td class="num">${isRec ? "0" : gap ? esc(gap.replace(/^\+/, "")) : '<span class="muted">n/a</span>'}</td>
       <td class="num">${sigma == null ? '<span class="muted">n/a</span>' : sigma.toExponential(1)}</td>
       <td><span class="badge">${boundLabel(r)}</span>${r.defect ? ` ${flagBadge(r)}` : ""}</td>
@@ -938,7 +942,7 @@ function rowTable(rows, inst) {
     ].filter(Boolean).join(" ");
     const { sigma } = perSite(r, inst);
     return `<tr id="${rowId(inst, r)}" class="${rec ? "is-record" : ""}${r.defect ? " is-flagged" : ""}">
-      <td class="record">${energyCell(r, inst)}${rec ? '<span class="tag">record</span>' : ""}</td>
+      <td class="record">${bareEnergyCell(r, inst)}${rec ? '<span class="tag">record</span>' : ""}</td>
       <td class="num">${sigma == null ? '<span class="muted">n/a</span>' : sigma.toExponential(1)}</td>
       <td class="num">${r.energy_variance == null ? '<span class="muted">n/a</span>' : r.energy_variance.toExponential(2)}</td>
       <td class="num">${r.v_score == null ? '<span class="muted">n/a</span>' : r.v_score.toExponential(1)}</td>
