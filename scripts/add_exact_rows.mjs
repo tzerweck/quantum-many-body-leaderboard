@@ -35,8 +35,10 @@ function put(id, create, row) {
     energy: row.energy, sigma: row.sigma, energy_variance: null, dof, einf, v_score: null,
     method: row.method, bound_type: "exact", bound_type_reason: row.why,
     reference: row.src.ref, peer_reviewed: row.src.pr,
-    source: "exact-2026-09-15", provenance: "primary",
-    verified: { checked_on: CHECKED, method: row.read, reported_as: row.reported, note: row.note, secondary_of: null },
+    source: row.source ?? "exact-2026-09-15", provenance: "primary",
+    verified: { checked_on: row.checked ?? CHECKED, method: row.read, reported_as: row.reported, note: row.note, secondary_of: null },
+    // a value this script published before and has since corrected stays on the row (RULES.md 11)
+    ...(row.corrections ? { corrections: row.corrections } : {}),
   });
   added++;
   fs.mkdirSync(`data/${id.split("/")[0]}`, { recursive: true });
@@ -98,8 +100,9 @@ console.log(`batch A: ${added} exact rows (${created} new instances)`);
 // statistical errors below 1e-7. Read from the arXiv HTML, one value per table cell.
 //
 // Units: Table 1 gives e0 = E/N per spin in the S.S convention. Tables 2 and 3 give the
-// energy per interaction BOND, N_b = 2(L^2 - L) for open L x L and 2 L^2 - L for the
-// L x 2L cylinder, printed without its sign; E/N = -(E0/N_b) N_b / N. Checked: the L = 6
+// energy per interaction BOND, N_b = 2(L^2 - L) for open L x L and 4 L^2 - L for the
+// L x 2L cylinder (Table 3's caption prints 2 L^2 - L, a misprint: see the cylinder loop),
+// printed without its sign; E/N = -(E0/N_b) N_b / N. Checked: the L = 6
 // PBC and OBC values reproduce the exact-diagonalization rows on square_36_P and
 // square_36_O to 1.6e-8 and 3.3e-7, and L = 10 and 16 OBC reproduce the two rows QMBL
 // already quoted from this paper via arXiv:2605.13807 to the printed digits. Those two
@@ -129,7 +132,8 @@ const SANDVIK_TABLES = {
     [32, "0.3387504(2)"], [48, "0.3373629(2)"], [64, "0.3366865(2)"], [96, "0.33602096(8)"],
     [128, "0.33569204(9)"],
   ],
-  // Table 3: L x 2L, periodic along L, open along 2L. E0/N_b with N_b = 2 L^2 - L, magnitude.
+  // Table 3: L x 2L, periodic along L, open along 2L. E0/N_b per interaction bond, magnitude;
+  // the caption's N_b = 2 L^2 - L is a misprint for 4 L^2 - L (see the cylinder loop).
   cyl: [
     [4, "0.3532363(2)"], [6, "0.3427879(2)"], [8, "0.3397983(2)"], [10, "0.3384370(2)"],
     [12, "0.3376621(2)"], [14, "0.3371612(2)"], [16, "0.3368096(2)"], [18, "0.3365491(2)"],
@@ -156,15 +160,58 @@ for (const [L, printed] of SANDVIK_TABLES.obc) {
       reported: `E0/N_b = ${printed} (magnitude, per bond, N_b = ${Nb}), L = ${L}, open`,
       note: `Table 2, "SSE data for L x L systems with open boundary conditions. The ground state energy is normalized by the number of interaction bonds N_b = 2(L^2 - L)", row L = ${L}. Printed as a magnitude; E/N = -(E0/N_b) N_b / N = ${(-v * Nb / N).toFixed(8)} in S.S units, Pauli total = 4 N E/N. The L = 6 value agrees with the exact-diagonalization row on square_36_O to 3.3e-7 (2 sigma), and L = 10 and 16 reproduce the rows QMBL already quotes from this paper via arXiv:2605.13807.` });
 }
+// The caption's N_b = 2 L^2 - L counts only the bonds along the open direction (2L - 1 per
+// row, L rows). The cylinder also has 2 L^2 around the periodic one (L per ring, 2L rings), so
+// N_b = 4 L^2 - L. The printed E0/N_b are per true bond: Sec. IV fits Tables 1-3 (Fig. 8) to
+// one infinite-size E0/N_b, e0/2 = 0.33472 for periodic L x L, which only the true count
+// reproduces; with the caption's count E/N would be about -0.32, above the Neel product state.
+// Until 2026-09-29 these rows were built with the caption's count and published at about half
+// their energy (qmbl-verify 2026-09-16, P4); the old values stay on the rows in `corrections`.
 for (const [L, printed] of SANDVIK_TABLES.cyl) {
-  const N = 2 * L * L, Nb = 2 * L * L - L, [v, s] = parse(printed);
+  const N = 2 * L * L, Nb = 4 * L * L - L, NbCaption = 2 * L * L - L, [v, s] = parse(printed);
+  const energy = +(-4 * Nb * v).toPrecision(12), sigma = +(4 * Nb * s).toPrecision(3);
+  const fix = (field, from, to, conversion) => ({
+    field, to, reported_as: `E0/N_b = ${printed}`, location: `Table 3, row L = ${L}`,
+    version_read: "arXiv:2601.20189v2, HTML (caption alttext, Sec. IV) and PDF; J. Stat. Mech. (2026) 043101",
+    conversion, checked_on: "2026-09-29",
+    reason: `Built with the bond count Table 3's caption prints, N_b = 2L^2 - L = ${NbCaption}, which counts only the bonds along the open direction; the ${L} x ${2 * L} cylinder has 4L^2 - L = ${Nb}. The published value was about half the energy (E/N ${(-v * NbCaption / N).toFixed(5)} in S.S units, above the Neel product state); the printed E0/N_b is per true bond, since Fig. 8 fits all three boundary conditions to one infinite-size E0/N_b.`,
+    source_entry: "qmbl-verify 2026-09-16 P4-ours-exact-0915; second reading of the caption, Sec. IV and Fig. 8 on 2026-09-29; fixed on Tristan's go-ahead, 2026-09-29",
+    from,
+  });
   put(`Heisenberg/rectangular-${L}x${2 * L}_${N}_PO`,
     { model: "Heisenberg", lattice: `rectangular-${L}x${2 * L}`, n_sites: N, boundary: "PO", params: {}, dof: N, einf: 0 },
-    { energy: +(-4 * Nb * v).toPrecision(12), sigma: +(4 * Nb * s).toPrecision(3), src: SANDVIK, method: SSE, why: SSE_WHY, read: SSE_READ,
-      reported: `E0/N_b = ${printed} (magnitude, per bond, N_b = ${Nb}), L x 2L = ${L} x ${2 * L}, cylinder`,
-      note: `Table 3, "SSE data for L x 2L lattices with cylindrical boundary conditions (periodic in the shorter direction and open in the longer direction). The ground state energy is normalized by the number of interaction bonds N_b = 2 L^2 - L", row L = ${L}. Boundary PO (VarBench lattice.md): periodic along the ${L}-site direction, open along the ${2 * L}-site one. Printed as a magnitude; E/N = -(E0/N_b) N_b / N = ${(-v * Nb / N).toFixed(8)} in S.S units, Pauli total = 4 N E/N.` });
+    { energy, sigma, src: SANDVIK, method: SSE, why: SSE_WHY, read: SSE_READ,
+      reported: `E0/N_b = ${printed} (magnitude, per bond, N_b = 4L^2 - L = ${Nb}; the caption prints 2L^2 - L), L x 2L = ${L} x ${2 * L}, cylinder`,
+      note: `Table 3, "SSE data for L x 2L lattices with cylindrical boundary conditions (periodic in the shorter direction and open in the longer direction). The ground state energy is normalized by the number of interaction bonds N_b = 2 L^2 - L", row L = ${L}. The caption's N_b is a misprint: the cylinder has 4L^2 - L = ${Nb} bonds, and only that count sends E0/N_b to the infinite-size value the Fig. 8 fits share with Tables 1 and 2. Boundary PO (VarBench lattice.md): periodic along the ${L}-site direction, open along the ${2 * L}-site one. Printed as a magnitude; E/N = -(E0/N_b) N_b / N = ${(-v * Nb / N).toFixed(8)} in S.S units, Pauli total = 4 N E/N.`,
+      corrections: [
+        fix("energy", +(-4 * NbCaption * v).toPrecision(12), energy, `-4 x ${Nb} x ${v} = ${energy} (Pauli total)`),
+        fix("sigma", +(4 * NbCaption * s).toPrecision(3), sigma, `4 x ${Nb} x ${s} = ${sigma}`),
+      ] });
 }
 console.log(`batch B: ${added - before[0]} exact rows (${created - before[1]} new instances)`);
+
+// ---------------------------------------------------------------------------------------
+// Batch B2: exact diagonalizations QMBL ran itself, where the table's exact row was not the
+// ground state (RULES.md 11: that row is removed in removals.mjs and this one stands).
+//
+// Heisenberg/pyrochlore-2x2x2_32_P: VarBench's -66.1514 is -0.5168078 per site; the ground state
+// of the same 32-site cluster is -66.15792523719963. Two diagonalizations on 99problems, 2026-09-16
+// (checks/pyrochlore-32-ed/): Lanczos over the whole S^z = 0 space (601,080,390 states, no
+// symmetry) and over the fully symmetric sector of the cluster's 384-element space group times
+// spin inversion (789,438 states); they agree to 1.2e-11. Geometry from VarBench's own
+// generator (StdFace Pyrochlore.c, 96 bonds, every site 6-fold); the S^z = 1 level gives the
+// triplet gap 0.68720 that arXiv:2010.03563 (Table I) and arXiv:2101.08787 (Table II) print for
+// this cluster, next to E/N = -0.5168 (the ground state truncated to four decimals).
+put("Heisenberg/pyrochlore-2x2x2_32_P",
+  { model: "Heisenberg", lattice: "pyrochlore-2x2x2", n_sites: 32, boundary: "P", params: {}, dof: 32, einf: 0 },
+  { energy: -66.15792523719963, sigma: null,
+    src: { ref: "QMBL, checks/pyrochlore-32-ed/ (exact diagonalization of VarBench's 32-site cluster, two codes)", pr: false },
+    method: "Exact diagonalization", why: "Lanczos exact diagonalization of the full S^z = 0 space, computed by QMBL; deterministic",
+    read: "ed_full.py (numba matrix-free Lanczos, S^z = 0, no spatial symmetry, 601,080,390 states, residual 6.9e-10) and ed_perm.py (fully symmetric sector of the 384-element space group x spin inversion, 789,438 states, residual 6.3e-10), 99problems, 2026-09-16",
+    reported: "-66.15792523719963 (ed_full.py) | -66.15792523721132 (ed_perm.py)",
+    note: "Pauli total; E/N = -0.51685879 in S.S units. The ground state is the unique fully symmetric singlet; the lowest S^z = 1 level -63.40912320391 gives the triplet gap (E1 - E0)/4 = 0.68720, the 0.6872 printed for this cluster in arXiv:2010.03563 Table I and arXiv:2101.08787 Table II, whose E/N = -0.5168 is this energy truncated. Replaces VarBench's exact row -66.1514 (-0.5168078 per site), 6.5e-3 above it (RULES.md 11, removals.mjs).",
+    source: "qmbl-verify-2026-09-16", checked: "2026-09-16" });
+console.log("batch B2: 1 exact row computed by QMBL (pyrochlore-2x2x2_32_P)");
 
 // ---------------------------------------------------------------------------------------
 // Batch C: exact diagonalization of frustrated clusters. Deterministic, so no sigma; the

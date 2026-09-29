@@ -50,6 +50,11 @@ export const REMOVALS = [
     ruled: "2026-09-18 (Tristan): not the exact energy, removed; the exact result stays",
     reason: "Table I of arXiv:2606.04558 prints -0.714356 per site, which is 4.433e-6 per site (8.9x the half-width of its 6 printed decimals) above the ground state -102.867902314985 carried on this instance. Transcribed correctly; the calculation, not the reading, is off. The ground state is reproduced independently by our symmetric-basis Lanczos on 99problems to 1e-13 (qmbl-runs/qmbl-verify-2026-09-17-j1j2-36) and printed as -0.714360 by Schulz, Ziman & Poilblanc, J. Phys. I 6, 675 (1996), Table II, 36(B1) - the paper's own reference for its ED. A scan of every spin-inversion-even sector of the 6x6 torus finds nothing lower.",
   },
+  {
+    match: { instance: "Heisenberg/pyrochlore-2x2x2_32_P", method: "Exact diagonalization", energy: -66.1514 },
+    ruled: "2026-09-29 (Tristan): not the exact energy, removed; the exact result stays",
+    reason: "VarBench's exact row, -0.5168078 per site. Two diagonalizations of the same 32-site cluster (VarBench's StdFace geometry) on 99problems give the ground state -66.15792523719963, over the whole S^z = 0 space and in the fully symmetric sector of the space group, agreeing to 1.2e-11 (checks/pyrochlore-32-ed/). The stored value sits 6.5e-3 above it, 65x the 1e-4 it is printed to, so it is not the ground-state energy at its own precision. The recomputed energy is carried on this instance (add_exact_rows.mjs, batch B2).",
+  },
   // Not an energy of the instance.
   ...["J1J2/triangular_108_P_0.125", "J1J2/triangular_144_P_0.125"].map(instance => ({
     match: { instance, method: "Thermodynamic-limit estimate interpolated to this size (1/L^3)" },

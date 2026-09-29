@@ -41,26 +41,26 @@ Organised literature for fellow researchers and AI, so that we can see the works
 | kagome 4x4 (48 sites) | **-0.438703897156(2)** | ED [Wietek & Läuchli (2018)](https://doi.org/10.1103/physreve.98.033309) | -0.437500000000 (+1.2e-3) GCNN (6 layers, 6 feature maps;... [Đurić et al. (2024)](https://doi.org/10.48550/arxiv.2401.02866) |
 | kagome 6x6 (108 sites) | no record | every variational row is flagged | |
 | kagome 8x8 (192 sites) | **-0.42987(1)** | VMC (Dirac spin liquid + Jastrow) [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/kagome-8x8_192_P/vmc_gutzwiller.sh), [Wu et al. (2024)](https://doi.org/10.1126/science.adg9774) | -0.42868 (+1.2e-3) VMC (U(1) Dirac spin liquid, [0... [He et al. (2024)](https://doi.org/10.48550/arxiv.2407.20629) |
-| pyrochlore 2x2x2 (32 sites) | **-0.5168078** | ED [Astrakhantsev et al. (2021)](https://doi.org/10.1103/physrevx.11.041021) | -0.5162656 (+5.4e-4) mVMC (projected: SU(2)... [Astrakhantsev et al. (2021)](https://doi.org/10.1103/physrevx.11.041021) |
+| pyrochlore 2x2x2 (32 sites) | **-0.5168588** | ED QMBL, checks/pyrochlore-32-ed/ (exact… | -0.5162656 (+5.9e-4) mVMC (projected: SU(2)... [Astrakhantsev et al. (2021)](https://doi.org/10.1103/physrevx.11.041021) |
 | pyrochlore 2x2x2 (128 sites) | **-0.49229(7)** | mVMC + RBM (1 Lanczos step, random initial... [Pohle et al. (2023)](https://doi.org/10.48550/arxiv.2311.11561) | -0.49220 (+8.9e-5) mVMC + RBM (1 Lanczos step, 128... [Pohle et al. (2023)](https://doi.org/10.48550/arxiv.2311.11561) |
 | pyrochlore 3x3x3 (108 sites) | **-0.48711(9)** | mVMC (projected: SU(2), unspecified) [Astrakhantsev et al. (2021)](https://doi.org/10.1103/physrevx.11.041021) | -0.48510 (+2.0e-3) DMRG (bond dimension 16000) [Hagymási et al. (2021)](https://doi.org/10.1103/physrevlett.126.117204) |
 | pyrochlore 3x3x3 (432 sites) | **-0.48851(3)** | mVMC (1 Lanczos step, random initial state;... [Pohle et al. (2023)](https://doi.org/10.48550/arxiv.2311.11561) | -0.48847 (+3.5e-5) mVMC (1 Lanczos step; projected:... [Pohle et al. (2023)](https://doi.org/10.48550/arxiv.2311.11561) |
 | pyrochlore 4x4x4 (256 sites) | **-0.485584(3)** | VMC (generalized RVB) [Cheng & Li (2025)](https://doi.org/10.48550/arxiv.2509.13746) | -0.483096 (+2.5e-3) mVMC (projected: SU(2)... [Astrakhantsev et al. (2021)](https://doi.org/10.1103/physrevx.11.041021) |
 | pyrochlore 4x4x4 (1024 sites) | **-0.48800(1)** | mVMC (1 Lanczos step; projected: spin parity... [Pohle et al. (2023)](https://doi.org/10.48550/arxiv.2311.11561) | -0.48537 (+2.6e-3) mVMC (random initial state;... [Pohle et al. (2023)](https://doi.org/10.48550/arxiv.2311.11561) |
-| rectangular 10x20, periodic/open | **-0.3215152(2)** | SSE QMC [Sandvik (2026)](https://doi.org/10.48550/arxiv.2601.20189) | none |
-| rectangular 12x24, periodic/open | **-0.3235928(2)** | SSE QMC [Sandvik (2026)](https://doi.org/10.48550/arxiv.2601.20189) | none |
-| rectangular 14x28, periodic/open | **-0.3251197(2)** | SSE QMC [Sandvik (2026)](https://doi.org/10.48550/arxiv.2601.20189) | none |
-| rectangular 16x32, periodic/open | **-0.3262843(2)** | SSE QMC [Sandvik (2026)](https://doi.org/10.48550/arxiv.2601.20189) | none |
-| rectangular 18x36, periodic/open | **-0.3272005(2)** | SSE QMC [Sandvik (2026)](https://doi.org/10.48550/arxiv.2601.20189) | none |
-| rectangular 20x40, periodic/open | **-0.3279389(2)** | SSE QMC [Sandvik (2026)](https://doi.org/10.48550/arxiv.2601.20189) | none |
-| rectangular 24x48, periodic/open | **-0.3290543(3)** | SSE QMC [Sandvik (2026)](https://doi.org/10.48550/arxiv.2601.20189) | none |
-| rectangular 32x64, periodic/open | **-0.3304607(3)** | SSE QMC [Sandvik (2026)](https://doi.org/10.48550/arxiv.2601.20189) | none |
-| rectangular 48x96, periodic/open | **-0.3318764(3)** | SSE QMC [Sandvik (2026)](https://doi.org/10.48550/arxiv.2601.20189) | none |
-| rectangular 4x8, periodic/open | **-0.3090818(2)** | SSE QMC [Sandvik (2026)](https://doi.org/10.48550/arxiv.2601.20189) | none |
-| rectangular 64x128, periodic/open | **-0.3325865(2)** | SSE QMC [Sandvik (2026)](https://doi.org/10.48550/arxiv.2601.20189) | none |
-| rectangular 6x12, periodic/open | **-0.3142222(2)** | SSE QMC [Sandvik (2026)](https://doi.org/10.48550/arxiv.2601.20189) | none |
+| rectangular 10x20, periodic/open | **-0.6599522(4)** | SSE QMC [Sandvik (2026)](https://doi.org/10.48550/arxiv.2601.20189) | none |
+| rectangular 12x24, periodic/open | **-0.6612549(4)** | SSE QMC [Sandvik (2026)](https://doi.org/10.48550/arxiv.2601.20189) | none |
+| rectangular 14x28, periodic/open | **-0.6622809(4)** | SSE QMC [Sandvik (2026)](https://doi.org/10.48550/arxiv.2601.20189) | none |
+| rectangular 16x32, periodic/open | **-0.6630939(4)** | SSE QMC [Sandvik (2026)](https://doi.org/10.48550/arxiv.2601.20189) | none |
+| rectangular 18x36, periodic/open | **-0.6637496(4)** | SSE QMC [Sandvik (2026)](https://doi.org/10.48550/arxiv.2601.20189) | none |
+| rectangular 20x40, periodic/open | **-0.6642865(4)** | SSE QMC [Sandvik (2026)](https://doi.org/10.48550/arxiv.2601.20189) | none |
+| rectangular 24x48, periodic/open | **-0.6651098(6)** | SSE QMC [Sandvik (2026)](https://doi.org/10.48550/arxiv.2601.20189) | none |
+| rectangular 32x64, periodic/open | **-0.6661668(6)** | SSE QMC [Sandvik (2026)](https://doi.org/10.48550/arxiv.2601.20189) | none |
+| rectangular 48x96, periodic/open | **-0.6672462(6)** | SSE QMC [Sandvik (2026)](https://doi.org/10.48550/arxiv.2601.20189) | none |
+| rectangular 4x8, periodic/open | **-0.6623181(4)** | SSE QMC [Sandvik (2026)](https://doi.org/10.48550/arxiv.2601.20189) | none |
+| rectangular 64x128, periodic/open | **-0.6677918(4)** | SSE QMC [Sandvik (2026)](https://doi.org/10.48550/arxiv.2601.20189) | none |
+| rectangular 6x12, periodic/open | **-0.6570101(4)** | SSE QMC [Sandvik (2026)](https://doi.org/10.48550/arxiv.2601.20189) | none |
 | rectangular 6x8 | **-0.675986664017(2)** | ED [Wietek & Läuchli (2018)](https://doi.org/10.1103/physreve.98.033309) | none |
-| rectangular 8x16, periodic/open | **-0.3185609(2)** | SSE QMC [Sandvik (2026)](https://doi.org/10.48550/arxiv.2601.20189) | none |
+| rectangular 8x16, periodic/open | **-0.6583592(4)** | SSE QMC [Sandvik (2026)](https://doi.org/10.48550/arxiv.2601.20189) | none |
 | shuriken, 24 sites | **-0.4483290** | ED [Astrakhantsev et al. (2021)](https://doi.org/10.1103/physrevb.104.l220408) | none |
 | shuriken, 96 sites | **-0.43826(1)** | mVMC (projected: SU(2), point group) [Astrakhantsev et al. (2021)](https://doi.org/10.1103/physrevb.104.l220408) | none |
 | shuriken, 216 sites | **-0.4376(1)** | mVMC (projected: SU(2), point group) [Astrakhantsev et al. (2021)](https://doi.org/10.1103/physrevb.104.l220408) | none |

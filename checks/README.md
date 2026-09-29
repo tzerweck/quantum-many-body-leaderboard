@@ -162,3 +162,36 @@ resolve.
 node run_fermions.mjs Hubbard/square_16_P_5_2.1544 Hubbard/square_16_P_5_2.1544@2.15443469   # ~4 min each, ~1 GB
 python ed_check.py '[{"lattice":"square","L":4,"n":5,"U":2.15443469}]' out.jsonl
 ```
+
+## `pyrochlore-32-ed/`: is VarBench's exact energy on the 32-site pyrochlore the ground state?
+
+**Question.** VarBench carries `Exact diagonalization` -66.1514 on `Heisenberg/pyrochlore-2x2x2_32_P`
+(-0.5168078 per site in S.S units). The papers that diagonalized this cluster print E/N = -0.5168
+and a triplet gap of 0.6872 (arXiv:2010.03563 Table I; arXiv:2101.08787 Table II), four digits that
+do not decide between that number and a lower one. Is the stored energy the ground state?
+
+**Design.** Lanczos ground state of `H = sum_b sigma_i . sigma_j` (Pauli) on the cluster VarBench's
+own generator builds: `programs/mVMC_RBM/src/StdFace/Pyrochlore.c` of varbench/methods, 2 x 2 x 2
+fcc cells of four sites, 96 bonds, every site six-fold, cross-checked against a real-space
+nearest-neighbour list. Two codes on 99problems, 2026-09-16: `ed_full.py`, matrix-free over the
+whole S^z = 0 space (601,080,390 states, no spatial symmetry, true residual measured on a rebuilt
+Ritz vector), and `ed_perm.py` (with `ed_sym.py`), in the fully symmetric sector of the cluster's
+384-element space group times spin inversion (789,438 states). An S^z = 1 run gives the triplet gap.
+
+**Result.** -66.15792523719963 (`ed_full.py`, residual 6.9e-10) and -66.15792523721132
+(`ed_perm.py`, residual 6.3e-10), 1.2e-11 apart; E/N = -0.51685879. The lowest S^z = 1 level,
+-63.4091232, gives the gap (E1 - E0)/4 = 0.68720, the papers' 0.6872, so this is their cluster; their
+-0.5168 is this energy truncated. The stored -66.1514 sits 6.5e-3 above the ground state, 65 times
+the 1e-4 it is printed to.
+
+**Conclusion.** Not the ground-state energy at its own precision: the row is removed and the
+recomputed energy stands (RULES.md §11; `scripts/removals.mjs`, `scripts/add_exact_rows.mjs`
+batch B2; ruled 2026-09-29).
+
+**Reproduce.** About 55 min and 19 GB on 64 threads for the full space, 1.5 min and 5 GB on 16
+threads for the symmetric sector (numba):
+
+```bash
+python ed_full.py --model heis_pyrochlore --L 2 --instance Heisenberg/pyrochlore-2x2x2_32_P --out full.json
+python ed_perm.py --W 2 --subgroup full --outdir sectors
+```
