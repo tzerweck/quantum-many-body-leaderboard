@@ -34,7 +34,8 @@ DMRG_JOBS=(
   # The size ladder (README, amendment v1.5).
   "dmrg-j1j2-36      J1J2/square_36_P_0.5        24:00:00   500,1000,2000  results"
   "dmrg-j1j2-64      J1J2/square_64_P_0.5        72:00:00   500,1000,2000  results"
-  "dmrg-j1j2-144     J1J2/square_144_P_0.5       120:00:00  500,1000,2000  results"
+  # 12 x 12 at chi = 2000 ran out of memory at 8 x 8 GB after its chi = 1000 rung (job 15119534); 8 x 24 GB.
+  "dmrg-j1j2-144     J1J2/square_144_P_0.5       120:00:00  500,1000,2000  results  24G"
 )
 
 submit() {  # file
@@ -76,7 +77,7 @@ fi
 
 if [ "$what" = dmrg ] || [ "$what" = all ]; then
 for spec in "${DMRG_JOBS[@]}"; do
-  read -r name inst tlim chis dest <<<"$spec"
+  read -r name inst tlim chis dest mem <<<"$spec"
   mkdir -p "$HERE/$dest"
   wanted "$name" || continue
   f="$HERE/euler/$name.sbatch"
@@ -87,7 +88,7 @@ for spec in "${DMRG_JOBS[@]}"; do
 #SBATCH --time=$tlim
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
-#SBATCH --mem-per-cpu=8G
+#SBATCH --mem-per-cpu=${mem:-8G}
 #SBATCH --output=$HERE/euler/logs/%x-%j.out
 #SBATCH --error=$HERE/euler/logs/%x-%j.err
 set -euo pipefail
