@@ -775,18 +775,26 @@ function searchIndex(inst, name) {
 // is shown because 62% of rows carry one (2026-09-16); Var(E) and the V-score, on 36%, stay
 // on the instance page. The Table names a method alone; its detail, bond dimension and
 // sector are on the instance page (Tristan, 2026-09-29).
+// Distance to the record, per site: 0 on the record, the gap above it for an unflagged
+// variational row, n/a elsewhere (Tristan, 2026-09-28). The Table's opened row and the
+// instance page both show it.
+function distanceCell(r, inst) {
+  const rec = recordOf(inst);
+  if (r === rec) return "0";
+  if (!rec || r.bound_type !== "variational" || r.defect) return '<span class="muted">n/a</span>';
+  return esc(gapAbove(rec, r, perSiteDivisor(inst) ?? 1, quoteRow(rec, inst).decimals).replace(/^\+/, ""));
+}
+
 function allRows(inst) {
   const rec = recordOf(inst);
   const sorted = [...inst.rows].sort((a, b) => a.energy - b.energy);
-  const f = perSiteDivisor(inst) ?? 1;
   const decimals = rec ? quoteRow(rec, inst).decimals : null;
   const rows = sorted.map(r => {
     const isRec = r === rec;
-    const gap = rec && !isRec && r.bound_type === "variational" && !r.defect ? gapAbove(rec, r, f, decimals) : null;
     const { sigma } = perSite(r, inst);
     return `<tr id="${rowId(inst, r)}" class="${isRec ? "is-record" : ""}${r.defect ? " is-flagged" : ""}">
       <td class="record">${isRec || decimals == null ? bareEnergyCell(r, inst) : energyCell(r, inst, decimals)}${isRec ? '<span class="tag">record</span>' : ""}</td>
-      <td class="num">${isRec ? "0" : gap ? esc(gap.replace(/^\+/, "")) : '<span class="muted">n/a</span>'}</td>
+      <td class="num">${distanceCell(r, inst)}</td>
       <td class="num">${sigma == null ? '<span class="muted">n/a</span>' : sigma.toExponential(1)}</td>
       <td><span class="badge">${boundLabel(r)}</span>${r.defect ? ` ${flagBadge(r)}` : ""}</td>
       <td>${esc(r.method)}</td>
@@ -936,7 +944,7 @@ reveal();
 
 // ---------------------------------------------------------------------- instance page
 function rowTable(rows, inst) {
-  const head = `<thead><tr><th>${perSiteLabel(inst)}</th><th>&sigma;</th><th>Var(E)</th><th>V-score</th>
+  const head = `<thead><tr><th>${perSiteLabel(inst)}</th><th>distance to record</th><th>&sigma;</th><th>Var(E)</th><th>V-score</th>
     <th>method</th><th>source</th><th>year</th></tr></thead>`;
   const body = rows.map(r => {
     const rec = recordOf(inst) === r;
@@ -953,6 +961,7 @@ function rowTable(rows, inst) {
     const { sigma } = perSite(r, inst);
     return `<tr id="${rowId(inst, r)}" class="${rec ? "is-record" : ""}${r.defect ? " is-flagged" : ""}">
       <td class="record">${bareEnergyCell(r, inst)}${rec ? '<span class="tag">record</span>' : ""}</td>
+      <td class="num">${distanceCell(r, inst)}</td>
       <td class="num">${sigma == null ? '<span class="muted">n/a</span>' : sigma.toExponential(1)}</td>
       <td class="num">${r.energy_variance == null ? '<span class="muted">n/a</span>' : r.energy_variance.toExponential(2)}</td>
       <td class="num">${r.v_score == null ? '<span class="muted">n/a</span>' : r.v_score.toExponential(1)}</td>
