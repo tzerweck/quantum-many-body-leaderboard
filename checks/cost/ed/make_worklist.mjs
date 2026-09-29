@@ -10,7 +10,7 @@ import { collect } from "../../../scripts/summary.mjs";
 import { connectedOf } from "../../../scripts/flops.mjs";
 
 const MAX_SITES = 30;
-// A node of Euler's normal partitions has 250 GB; a job asks for its estimate plus a margin.
+// A node of the cluster's CPU partitions has 250 GB; a job asks for its estimate plus a margin.
 const MAX_GB = 180;
 const isED = r => r.bound_type === "exact" && /diagonal|\bED\b|Lanczos/i.test(`${r.method || ""} ${r.method_as_published || ""}`);
 const C = (n, k) => { let r = 1; for (let i = 1; i <= k; i++) r = (r * (n - k + i)) / i; return Math.round(r); };

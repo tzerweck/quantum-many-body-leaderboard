@@ -11,9 +11,10 @@ and the row says so in its method string. Nothing here is attached to anyone els
 
 ## Protocol (Tristan, 2026-09-21)
 
-- **Hardware.** One NVIDIA A100 80 GB PCIe on Euler (`gpupr` partitions, pinned with
-  `--gres=gpumem:80g` and checked by the job script; the type request alone once landed on a 40 GB card) for the neural states; 8 CPU cores of the same cluster for DMRG. The device model,
-  node, Slurm job id and software versions are in every results file.
+- **Hardware.** One NVIDIA A100 80 GB PCIe for the neural states (the job asks for the card
+  by its 80 GB of memory and checks it; a request by type alone once landed on a 40 GB card);
+  8 cores of one AMD EPYC node for DMRG. The device and CPU model, node, Slurm job id and
+  software versions are in every results file.
 - **Clock.** Wall-clock from process start to the end of the final evaluation, measured in
   the process (`time.perf_counter`), JIT compilation and sampling included. `gpu_hours` is
   that wall-clock in hours times one GPU; `cpu_core_hours` is wall-clock times the cores
@@ -54,8 +55,8 @@ and the row says so in its method string. Nothing here is attached to anyone els
   500, 1000, 2000 in one process, a new engine per rung on the previous rung's state, at
   most 15 sweeps per rung or converged at 1e-6 in the energy. Each rung is a row; its cost
   is the wall-clock since process start, so reaching chi = 2000 is costed with the rungs
-  before it. On the 120 h CPU partition: a sweep scales as chi^3, and the 10 x 10 torus took
-  6 min per sweep at chi = 500.
+  before it. Jobs get 120 h: a sweep scales as chi^3, and the 10 x 10 torus took 6 min per
+  sweep at chi = 500.
 - **Instances.** `J1J2/square_100_P_0.5` and `Heisenberg/triangular_36_P` (exact energy
   known, -80.6937689612426 Pauli total) in the first batch.
 - **Units.** NetKet's `Heisenberg` and TeNPy's spin couplings differ by the factor 4 between
@@ -99,7 +100,7 @@ and the row says so in its method string. Nothing here is attached to anyone els
   DMRG calibration rung (triangular 36, χ = 500) took 3.4 core-h on one node and 8.7 on
   another of the same partition, with the same sweeps and the same energy. Slurm pins a job to
   its own cores, so the difference lies in what the cores share with other jobs: clock, memory
-  bandwidth and L3 cache. Euler's accounting records no per-job CPU time.
+  bandwidth and L3 cache. The cluster's accounting records no per-job CPU time.
   - **What every results file now carries** (`monitor.py`, block `resources`): the process's
     own CPU time and CPU time / (wall-clock × cores); the clock of its cores, sampled every
     30 s; the node's load average against its core count; and for a GPU run, the GPU's SM clock,
@@ -122,19 +123,19 @@ and the row says so in its method string. Nothing here is attached to anyone els
 - **2026-09-25 (v1.5), the size ladder (Tristan, 2026-09-24).** To read cost against system
   size, every ansatz above runs on J1-J2 at J2 = 0.5 on the periodic L x L squares, L = 4, 6,
   8, 10, 12, 14, 16, under the protocol unchanged (the same sampler, samples, 2000 steps,
-  optimizer and evaluation at every size), and DMRG on 6 x 6, 8 x 8 and 12 x 12 on Euler as
-  above.
-  - **The neural states run on one NVIDIA H100 NVL 96 GB of a group host**, not on Euler's
-    A100s: Euler's A100 queue is the bottleneck. Tristan allowed one such card by day for this
+  optimizer and evaluation at every size), and DMRG on 6 x 6, 8 x 8 and 12 x 12 on 8 CPU
+  cores as above.
+  - **The neural states run on one NVIDIA H100 NVL 96 GB of a group host**, not on the A100s
+    of the first batch: their queue is the bottleneck. Tristan allowed one such card by day for this
     ladder beyond the host's day cap (2026-09-24); since 2026-09-28 the host has no cap for
     our jobs at all (a card only after 20 min idle). One card, one run after another
     (`h100/ladder.sh`, deployed by `h100/deploy.sh` with NetKet 3.22.4, jax 0.8.3 and flax
-    0.12.6, the Euler versions); the card is one the host's GPU policy lists as idle.
+    0.12.6, the versions of the A100 runs); the card is one the host's GPU policy lists as idle.
   - **A second device is a second protocol for hours.** A ladder row's hours compare with the
     other ladder rows, never with the A100 rows; its method string and results file name
     (`h100-*`) say which, and 10 x 10 is run again on the H100 so the ladder is complete on one
     device. The host is shared and has no scheduler, so the resources block (node load, clocks)
-    matters more here than on Euler.
+    matters more here than on the scheduled A100 and CPU nodes.
 
 ## What a run becomes
 
@@ -159,7 +160,7 @@ The FLOP estimate (DATA.md, `nqs-v2`) models one forward pass of a network as
   transcendental functions counted apart. Per configuration is the difference between batches
   of 16 and 1024, so work on the parameters alone is not charged to each configuration.
   XLA's own cost analysis of the same program sits beside it: lowered, compiled for the CPU,
-  and compiled for the runs' own A100 80 GB on Euler (`euler/submit_flops.sh`, job 15565887).
+  and compiled for the runs' own A100 80 GB (`euler/submit_flops.sh`, job 15565887).
 - **Where.** Nothing runs, so the count needs no card: it is made on the H100 host's CPU with
   the runs' NetKet and JAX versions (`h100/forward-flops.sh start`, then `fetch`), for every
   instance and ansatz `run_nqs.py` knows, and written to `forward-flops.json`.

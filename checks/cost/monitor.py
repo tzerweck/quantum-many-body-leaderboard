@@ -1,6 +1,6 @@
 """What a cost run's hardware was doing while it ran (protocol v1.4, Tristan 2026-09-24).
 
-The same DMRG rung took 3.4 core-h on one Euler node and 8.7 on another. Slurm pins a job to
+The same DMRG rung took 3.4 core-h on one cluster node and 8.7 on another. Slurm pins a job to
 its own cores, so the difference is in what the cores share: clock (boost falls as the socket
 fills), memory bandwidth and L3. Every results file therefore records, next to the wall-clock:
 

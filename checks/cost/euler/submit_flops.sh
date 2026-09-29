@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# XLA's count of every cost-run network compiled for the runs' own GPU, an A100 80 GB on Euler:
-# the GPU cross-check of forward-flops.json (README, "The forward pass, counted"). Runs ON EULER
+# XLA's count of every cost-run network compiled for the runs' own GPU, an A100 80 GB:
+# the GPU cross-check of forward-flops.json (README, "The forward pass, counted"). Runs on the cluster
 # from ~/agent-runs/qmbl-cost, where forward_flops.py, run_nqs.py, vit.py, monitor.py and the CPU
 # pass's forward-flops.json have been copied (one ssh from the laptop):
 #     tar czf - forward_flops.py run_nqs.py vit.py monitor.py forward-flops.json euler/submit_flops.sh |

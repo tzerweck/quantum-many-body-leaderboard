@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Submit the first batch of QMBL cost-to-reproduce runs on Euler (README.md, protocol of
-# 2026-09-21). Run ON EULER from ~/agent-runs/qmbl-cost after `sync.sh` copied this directory:
+# Submit the first batch of QMBL cost-to-reproduce runs on the cluster (README.md, protocol of
+# 2026-09-21). Run on the cluster from ~/agent-runs/qmbl-cost after `sync.sh` copied this directory:
 #     bash euler/submit.sh [nqs|dmrg|all] [--dry] [job-name ...]     (names restrict the batch)
 # Every job writes to $SCRATCH/agent-runs/qmbl-cost/<job-name>/ and copies its results JSON,
 # trace and parameters into ~/agent-runs/qmbl-cost/results/ when done.

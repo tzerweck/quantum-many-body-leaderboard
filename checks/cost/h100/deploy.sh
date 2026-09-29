@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Copy the run scripts to the H100 host and, the first time, build the environment the Euler
+# Copy the run scripts to the H100 host and, the first time, build the environment the A100
 # runs use (NetKet 3.22.4, jax 0.8.3, flax 0.12.6, Python 3.13), then a smoke test: the
 # convention check on 4 x 4 and 20 RBM steps on one free card. One ssh connection.
 #     bash checks/cost/h100/deploy.sh [host]        (from the repository root; default 99problems)

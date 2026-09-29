@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# From the laptop: copy checks/cost/ to Euler (~/agent-runs/qmbl-cost) in one ssh session,
+# From the laptop: copy checks/cost/ to the cluster (~/agent-runs/qmbl-cost) in one ssh session,
 # recording the commit the scripts came from; or fetch results back with `--fetch`.
 set -euo pipefail
 cd "$(dirname "$0")/.."

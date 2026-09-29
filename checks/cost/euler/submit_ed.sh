@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Submit the QMBL-measured ED cost runs (checks/cost/README.md, "QMBL-measured ED cost"), one job
-# per instance of ed/worklist.json with run = true. Run ON EULER from ~/agent-runs/qmbl-cost after
+# per instance of ed/worklist.json with run = true. Run on the cluster from ~/agent-runs/qmbl-cost after
 # `sync.sh`:
 #     bash euler/submit_ed.sh [--dry] [instance-id ...]      (ids restrict the batch)
 #     MEM_GB=200 bash euler/submit_ed.sh <ids>                 (override the memory estimate)
