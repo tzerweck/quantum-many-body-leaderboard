@@ -178,9 +178,35 @@ The FLOP estimate (DATA.md, `nqs-v2`) models one forward pass of a network as
   mostly matrix products, and is kept as a record only; its lowered analysis gives no count on
   the GPU backend.
 
+## The SR step, counted (2026-09-29)
+
+`sr_flops.py` traces one stochastic-reconfiguration step of each of the eight runs exactly as
+`run_nqs.py` builds it (NetKet's SR with `QGTJacobianDense` on the run's 4096 samples, Cholesky
+or conjugate gradients, the relative diagonal shift) and counts it as `forward_flops.py` counts
+a forward pass, in two parts: constructing the QGT, which is the per-sample Jacobian, and the
+rest, which is forming S and solving, or one conjugate-gradient iteration. A Cholesky
+factorisation of order n counts n³/3 and a triangular solve n² per right-hand side, four times
+that for complex matrices. Results in `sr-flops.json`, counted on the H100 host's CPU like the
+forward pass. `pvary`, which the file lists as unknown, is JAX's sharding annotation and does no
+arithmetic.
+
+- **The shape NetKet solves.** Every one of these networks has a complex output, so NetKet
+  differentiates it in its "complex" mode: complex parameters are split into real pairs and
+  the real and imaginary parts of the output are stacked, so the Jacobian is a real matrix
+  with 2 x samples rows and one column per real parameter. The counted solve equals that
+  shape's cost on all eight runs (ratio 1.00). Against `nqs-v2`'s SR term (DATA.md) that is 4
+  times for a dense S with complex parameters (the two symmetric RBMs, the RBM on the triangular
+  lattice) and 2 times per conjugate-gradient iteration, complex or real parameters alike.
+  Setting up conjugate gradients costs one more iteration.
+- **The Jacobian** costs 3.5-10 forward passes per sample, which `nqs-v2` does not count.
+  Against the 290-900 forward passes per sample that local energies and proposals take on
+  these instances, that is 0.4-3 %.
+- **Not applied.** No estimate uses these counts yet: the model stays until it is decided.
+
 ## Files
 
 - `run_nqs.py`, `vit.py` — the neural-state runs. `run_dmrg.py` — DMRG.
+- `sr_flops.py`, `sr-flops.json` — the counted SR step of the eight runs (above).
 - `forward_flops.py`, `forward-flops.json` — the counted forward pass of every network (above);
   `h100/forward-flops.sh` and `h100/forward-flops-run.sh` run it on the H100 host.
 - `euler/` — the sbatch scripts as submitted, and `submit.sh`.

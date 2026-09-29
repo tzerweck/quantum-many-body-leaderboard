@@ -283,8 +283,11 @@ Per training stage:
   every multiply-add is complex by complex, 8 FLOPs, as counted on QMBL's own networks (below;
   Tristan, 2026-09-29). No published row states complex parameters yet. The SR term keeps
   `c_x` = 2: NetKet differentiates a complex-valued network in its "complex" mode, which splits
-  complex parameters into real pairs and stacks the real and imaginary parts of the Jacobian, and
-  what that costs against this model is not settled.
+  complex parameters into real pairs and stacks the real and imaginary parts of the Jacobian.
+  Counted on QMBL's eight runs ([checks/cost/README.md](checks/cost/README.md#the-sr-step-counted-2026-09-29)),
+  that costs 4 times this term for a dense S with complex parameters and 2 times per
+  conjugate-gradient iteration, and the Jacobian adds 3.5-10 forward passes per sample. The
+  model is unchanged until that is decided.
 - `SR`: the optimiser's linear solve where the code is known: the dense S (2 × samples ×
   P² + P³/3), NetKet's on-the-fly S made dense (P matrix-vector products), conjugate gradients
   at their stated iteration count, or MinSR (2 × samples² × P + samples³/3). Not counted where
