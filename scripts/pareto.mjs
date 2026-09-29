@@ -24,7 +24,7 @@
 // extrapolations are drawn but never on the frontier, as they are not bounds.
 import fs from "node:fs";
 import { recordEligible, exactEligible, boundLabel, perSiteDivisor, perSiteLabel } from "./units.mjs";
-import { collect, recordOf } from "./summary.mjs";
+import { collect, recordOf, rowId } from "./summary.mjs";
 import { hoursOf, hoursOrEdOf, parametersOf, MIN_COSTED, costFigureName, flopsFigureName, paramsFigureName } from "./cost.mjs";
 import { estimatedFlopsOf } from "./flops.mjs";
 import { W, PAD, n, text, hline, dot, legend, header, footnote, doc, textWidth, niceStep, writer, log, logScale, pow10, shortLabel, rowHref, linked } from "./chart.mjs";
@@ -85,17 +85,19 @@ function mark(t, x, y, color, filled, unit, href) {
 // a variational one - and only a result with a cost can be placed; a record that states no
 // cost is named in a line of text under the axis, never drawn as a line across it
 // (Tristan, 2026-09-23). QMBL's own runs are all named, so none is read as published.
-// The method with its whole detail, for marks drawn as one whose short names coincide.
-const fullLabel = r => (r.computed_by === "qmbl" ? shortLabel(r) : `${r.method}${r.method_detail ? ` (${r.method_detail})` : ""}`);
+// A mark is named by its method alone, its detail in the row's card on hover (Tristan,
+// 2026-09-29); QMBL's own runs keep "QMBL" in the name, so none is read as published
+// (2026-09-23). The colour says the kind of number.
+const markName = r => shortLabel({ ...r, method_detail: undefined, compute: undefined, bound_type: "variational", defect: undefined });
 
-// An instance's own figure: every mark named in place where it can be. Where three or more
+// An instance's own figure: every mark named in place where it can be. Where two or more
 // marks still find no room, their region is boxed and drawn again, enlarged, in an inset in
 // the plot's top right corner, a second crowd's in the top left (Tristan, 2026-09-29: no
 // second panel under the plot). Returns the y the footnote starts at.
 function drawInstance(t, parts, inst, pts, g) {
   const trial = [], crowd = [];
   drawPanel(t, trial, inst, pts, { ...g, nameAll: true, keyOut: crowd });
-  if (crowd.length >= 3) {
+  if (crowd.length >= 2) {
     const zoomed = [];
     if (drawPanel(t, zoomed, inst, pts, { ...g, nameAll: true, zoom: crowd })) { parts.push(...zoomed); return g.bottom + 70; }
   }
@@ -121,10 +123,10 @@ const stairs = (front, X, Y) => front.slice(1).flatMap((p, i) => {
 // `avoid`. In an instance's own figure (`nameAll`) a name with no such spot, or one that would
 // sit off its mark's row in a crowd, where it reads as a neighbour's, goes in a lane above or
 // below the mark with a vertical line to it (Tristan, 2026-09-29, in place of numbers and an
-// enlarged panel); what is still left is numbered. Marks drawn as one, within 4 px, are named
-// together, a line each in the order they lie from top to bottom, in full where their short
-// names coincide.
-function layoutLabels({ pts, named, X, Y, front, left, right, top, bottom, nameOf, nameAll, avoid = [], distinguish = false }) {
+// enlarged panel); what is still left is numbered. Marks drawn as one, within 6 px, are named
+// together, a line per method in the order they lie from top to bottom ("ViT ×2" where two
+// share one). Every name links to its rows, so on the site hovering it shows their cards.
+function layoutLabels({ pts, named, X, Y, front, left, right, top, bottom, nameOf, nameAll, avoid = [] }) {
   const centres = pts.map(p => [X(p.cost.value), Y(p.e)]);
   const segs = stairs(front, X, Y);
   // The label's glyph box: baseline at ty + 4, cap height about 8 at 10.5 px.
@@ -147,45 +149,14 @@ function layoutLabels({ pts, named, X, Y, front, left, right, top, bottom, nameO
   for (const it of items) {
     it.ps.sort((a, b) => Y(a.e) - Y(b.e));
     it.own = it.ps.map(p => [X(p.cost.value), Y(p.e)]);
-    // Short names that coincide take as few of the clauses of their detail that tell them
-    // apart as it takes: "ViT (T5 attention)" and "ViT (decoupled attention)".
-    const short = it.ps.map(nameOf);
-    let names = short;
-    const shared = () => new Set(names).size < names.length;
-    if (shared()) {
-      const clauses = it.ps.map(p => (p.r.method_detail || "").split(", ").filter(Boolean));
-      const differ = it.ps.map((p, i) => {
-        const peers = short.flatMap((s, j) => (s === short[i] ? [j] : []));
-        return peers.length < 2 ? null : clauses[i].filter(cl => !peers.every(j => clauses[j].includes(cl)));
-      });
-      for (let c = 1; shared() && c <= Math.max(1, ...differ.map(d => d?.length ?? 0)); c++)
-        names = it.ps.map((p, i) => (!differ[i] ? short[i] : (p.r.computed_by === "qmbl" ? fullLabel(p.r) : `${p.r.method}${differ[i].length ? ` (${differ[i].slice(0, c).join(", ")})` : ""}`) +
-          (p.cost.measuredByQmbl ? " (cost measured by QMBL)" : "")));
-    }
-    if (shared()) names = names.map((s, i) => (it.ps[i].r.arxiv ? `${s} [arXiv:${it.ps[i].r.arxiv}]` : s));
+    const byName = new Map();
+    for (const p of it.ps) byName.set(nameOf(p), [...(byName.get(nameOf(p)) ?? []), p]);
+    const names = [...byName].map(([s, ps]) => (ps.length > 1 ? `${s} ×${ps.length}` : s));
+    it.rows = [...byName.values()].map(ps => [...ps].sort((a, b) => a.e - b.e));   // best first, as the site lists them
     const x = it.own.reduce((a, o) => a + o[0], 0) / it.own.length, y = it.own.reduce((a, o) => a + o[1], 0) / it.own.length;
     Object.assign(it, { names, k: names.length, w: Math.max(...names.map(s => textWidth(s, 10.5))), x, y,
       top: it.own[0][1], bottom: it.own.at(-1)[1], front: it.ps.some(p => front.includes(p)),
       crowded: centres.some(([cx, cy]) => !mine(cx, cy, it.own) && Math.hypot(cx - x, cy - y) < 24) });
-  }
-  // In an inset, where the marks are one crowd, marks that share a short name are told apart
-  // the same way, by as few of the clauses that differ as it takes.
-  if (distinguish) {
-    const byName = new Map();
-    for (const it of items.filter(i => i.k === 1)) byName.set(it.names[0], [...(byName.get(it.names[0]) ?? []), it]);
-    for (const peers of byName.values()) {
-      const clauses = peers.map(it => (it.ps[0].r.method_detail || "").split(", ").filter(Boolean));
-      const differ = clauses.map(cl => cl.filter(c => !clauses.every(o => o.includes(c))));
-      if (peers.length < 2 || differ.every(d => !d.length)) continue;
-      let names = peers.map(it => it.names[0]);
-      for (let c = 1; new Set(names).size < names.length && c <= Math.max(...differ.map(d => d.length)); c++)
-        names = peers.map((it, i) => {
-          const p = it.ps[0];
-          if (!differ[i].length) return it.names[0];
-          return (p.r.computed_by === "qmbl" ? fullLabel(p.r) : `${p.r.method} (${differ[i].slice(0, c).join(", ")})`) + (p.cost.measuredByQmbl ? " (cost measured by QMBL)" : "");
-        });
-      peers.forEach((it, i) => Object.assign(it, { names: [names[i]], w: textWidth(names[i], 10.5) }));
-    }
   }
 
   const lines = (it, c) => it.names.map((s, i) => ({ ...c, ty: c.ty + 12 * i }));
@@ -329,18 +300,22 @@ function layoutLabels({ pts, named, X, Y, front, left, right, top, bottom, nameO
   }
   const out = [];
   for (const [it, { c, forced }] of best.at)
-    it.names.forEach((s, i) => out.push({ s, w: textWidth(s, 10.5), x: c.lx, anchor: c.anchor, y: c.ty + 12 * i + 4, forced }));
+    it.names.forEach((s, i) => out.push({ s, rows: it.rows[i], w: textWidth(s, 10.5), x: c.lx, anchor: c.anchor, y: c.ty + 12 * i + 4, forced }));
   return { lines: out, leaders: best.leaders, keyed: best.keyed, crosses };
 }
 
-// Lines to marks, names and numbers, as layoutLabels placed them.
+// Lines to marks, names and numbers, as layoutLabels placed them. A name for several rows
+// carries them all, best first, as a merged mark does (size_accuracy.mjs), for the site's list.
+const toRows = (rows, svg) => (rows.length > 1
+  ? `<a class="pt" href="${rowHref(rows[0].inst, rows[0].r)}" data-rows="${rows.map(p => rowId(p.inst, p.r)).join(" ")}">${svg}</a>`
+  : linked(rowHref(rows[0].inst, rows[0].r), svg));
 function drawLabels(t, parts, inst, L) {
   const extent = l => (l.anchor === "start" ? [l.x, l.x + l.w] : [l.x - l.w, l.x]);
   for (const l of L.leaders) parts.push(`<path d="M${n(l.x)} ${n(l.y0)}V${n(l.y1)}" stroke="${t.muted}" stroke-width="1"/>`);
   for (const l of L.lines) {
     const [l0, l1] = extent(l);
     if (L.crosses(l0, l1, l.y - 4)) labelClashes.push(`${instLabel(inst)}: "${l.s}"`);
-    parts.push(text(l.x, l.y, l.s, { size: 10.5, fill: t.ink2, anchor: l.anchor }));
+    parts.push(toRows(l.rows, text(l.x, l.y, l.s, { size: 10.5, fill: t.ink2, anchor: l.anchor })));
   }
   // A 9 px digit is a small target: an invisible box a little larger than it takes the pointer.
   // The digit comes second, so the site's hover scale (a.pt > :nth-child(2)) grows it as it grows a mark.
@@ -404,11 +379,7 @@ function drawInset(t, parts, inst, pts, front, r, box, nameOf, heading) {
   }
   for (const p of [...pts].sort((a, b) => a.eligible - b.eligible))
     parts.push(mark(t, X(p.cost.value), Y(p.e), t.series[BOUNDS[p.r.bound_type]], p.eligible, p.cost.unit, rowHref(p.inst, p.r)));
-  // Names told apart where that still names every mark, else the short ones if they name more.
-  const lay = distinguish => layoutLabels({ pts, named: pts, X, Y, front, left: r.x0 + 6, right: r.x1 - 6, top: r.y0 + 14, bottom: r.y1 - 4, nameOf, nameAll: true, avoid: tickBoxes, distinguish });
-  let L = lay(true);
-  if (L.keyed.length) { const S = lay(false); if (S.keyed.length < L.keyed.length) L = S; }
-  drawLabels(t, parts, inst, L);
+  drawLabels(t, parts, inst, layoutLabels({ pts, named: pts, X, Y, front, left: r.x0 + 6, right: r.x1 - 6, top: r.y0 + 14, bottom: r.y1 - 4, nameOf, nameAll: true, avoid: tickBoxes }));
 }
 
 // A panel: axes, frontier, marks and names. With `zoom`, the marks that found no room, their
@@ -418,7 +389,7 @@ function drawPanel(t, parts, inst, pts, { px, left, right, top, bottom, xLabel, 
   const plotH = bottom - top;
   const rec = recordOf(inst), recE = rec ? rec.energy / perSiteDivisor(inst) : null;
   const front = frontierOf(pts);
-  const nameOf = p => shortLabel(p.r) + (p.cost.measuredByQmbl ? " (cost measured by QMBL)" : "");
+  const nameOf = p => markName(p.r) + (p.cost.measuredByQmbl ? " (cost measured by QMBL)" : "");
   // Cost axis: a decade either side of the data. Energy axis: linear, as in the
   // record-over-time figure, so the record and an exact energy sit where they are.
   const cs = pts.map(p => p.cost.value);
@@ -461,7 +432,7 @@ function drawPanel(t, parts, inst, pts, { px, left, right, top, bottom, xLabel, 
     const midX = z => z.inBox.reduce((sum, p) => sum + pos(p)[0], 0) / z.inBox.length;
     for (const z of boxes.sort((a, b) => midX(b) - midX(a))) {
       // What the inset's marks need: their widest name beside a spread of marks, and a row each.
-      const nameW = Math.max(...z.inBox.map(p => Math.min(200, Math.max(textWidth(nameOf(p), 10.5), p.r.method_detail ? textWidth(`${p.r.method} (${p.r.method_detail.split(", ")[0]})`, 10.5) : 0))));
+      const nameW = Math.max(...z.inBox.map(p => textWidth(nameOf(p), 10.5)));
       z.frame = insetFrame(pts.map(pos), stairs(front, X, Y), [...boxes.map(b => b.rect), ...zooms.map(q => q.frame)], { left, right, top, bottom },
         Math.min(560, 110 + nameW + 14 * z.inBox.length), Math.min(440, 80 + 26 * z.inBox.length));
       if (z.frame) zooms.push(z);
@@ -518,7 +489,7 @@ function drawPanel(t, parts, inst, pts, { px, left, right, top, bottom, xLabel, 
   drawLabels(t, parts, inst, L);
   parts.push(text((left + right) / 2, bottom + 32, xLabel, { size: 10.5, fill: t.ink2, anchor: "middle" }));
   if (rec && !pts.some(p => p.r === rec))
-    parts.push(text(left, bottom + 48, `${rec.bound_type === "exact" ? boundLabel(rec) : "record"}: ${recE.toFixed(6).replace("-", "−")} (${shortLabel(rec)}), no cost stated, not drawn`, { size: 9.5, fill: t.muted }));
+    parts.push(text(left, bottom + 48, `${rec.bound_type === "exact" ? boundLabel(rec) : "record"}: ${recE.toFixed(6).replace("-", "−")} (${markName(rec)}), no cost stated, not drawn`, { size: 9.5, fill: t.muted }));
   return true;
 }
 
