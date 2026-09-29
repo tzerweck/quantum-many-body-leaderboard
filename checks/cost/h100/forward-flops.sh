@@ -8,16 +8,17 @@
 # (forward-flops-run.sh). Logs land in qmbl-runs/forward-flops/ beside the repository.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-HOST="${2:-99problems}"
-R=/scratch/tzerweck/qmbl-cost/flops
+source h100/site.env   # SSH_HOST, REMOTE_ROOT, GPU_POLICY (gitignored; h100/site.env.example)
+HOST="${2:-$SSH_HOST}"
+R=$REMOTE_ROOT/flops
 LOCAL="$(git rev-parse --show-toplevel)/../qmbl-runs/forward-flops"
 case "${1:-}" in
   start)
-    tar -c run_nqs.py vit.py monitor.py forward_flops.py -C h100 forward-flops-run.sh |
+    tar -c run_nqs.py vit.py monitor.py forward_flops.py -C h100 forward-flops-run.sh site.env |
       timeout 120 ssh -o ConnectTimeout=25 "$HOST" "set -euo pipefail
 mkdir -p $R; rm -f $R/status $R/cpu.json $R/forward-flops.json $R/cpu.log $R/gpu.log; tar -x -C $R
 systemd-run --user --unit=qmbl-forward-flops-\$(date +%s) --collect -p MemoryMax=48G -p CPUQuota=1600% bash $R/forward-flops-run.sh
-echo started on \$(hostname)"
+echo started"
     ;;
   fetch)
     mkdir -p "$LOCAL"

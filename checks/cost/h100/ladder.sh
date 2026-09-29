@@ -12,9 +12,10 @@
 # policy lists as eligible (idle for 20 minutes); if there is none, wait. The host has no card
 # cap for our jobs since 2026-09-28 (Tristan); the ladder still takes one card, never a second.
 set -uo pipefail
-ROOT=/scratch/tzerweck/qmbl-cost
+source "$(dirname "$0")/site.env"   # REMOTE_ROOT, GPU_POLICY (copied here with h100/ by deploy.sh)
+ROOT=$REMOTE_ROOT
 CODE="$ROOT/code"
-POLICY=/scratch/tzerweck/gpuhist/bin/gpu-policy.sh
+POLICY=$GPU_POLICY
 source "$ROOT/.venv/bin/activate"
 export JAX_ENABLE_X64=1 QMBL_COMMIT="$(cat "$CODE/COMMIT" 2>/dev/null || echo unknown)"
 
