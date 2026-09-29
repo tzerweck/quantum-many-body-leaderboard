@@ -136,6 +136,14 @@ and the row says so in its method string. Nothing here is attached to anyone els
     (`h100-*`) say which, and 10 x 10 is run again on the H100 so the ladder is complete on one
     device. The host is shared and has no scheduler, so the resources block (node load, clocks)
     matters more here than on the scheduled A100 and CPU nodes.
+  - **The final evaluation in batches (2026-09-29).** 26 of the 28 runs stand (qmbl `3d41283`).
+    GCNN and ViT on 16 x 16 trained their 2000 steps and then failed in the final evaluation:
+    NetKet builds the connected configurations of every sample of one call at once, 131072 x 1025
+    x 256 bytes (34 GB), and the card ran out of memory. `run_nqs.py` now computes the local
+    energies in batches of at most 16384 samples, each continuing the same chains (only the first
+    discards), joined along each chain; NetKet's statistics of the joined array are those of one
+    call on the same samples (checked by `h100/eval_check.py`). Nothing else changes, so the
+    rows made before stand; the two 16 x 16 runs are rerun from the start.
 
 ## What a run becomes
 

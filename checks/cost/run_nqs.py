@@ -51,6 +51,7 @@ INSTANCES = {
 # its value over the first 200 steps: from a near-uniform start S is tiny and the first
 # natural-gradient step at the full rate threw the symmetric RBM on 10x10 to +147 and then
 # to NaN, while lr 0.001 descended cleanly (diagnostic job 14760484).
+EVAL_BATCH = 16384  # samples per batch of the final evaluation's local energies (README, amendment v1.5)
 PROTOCOL = dict(n_samples=4096, n_chains=1024, n_discard_per_chain=16, steps=2000, lr=0.01, warmup_steps=200,
                 diag_shift=1e-6, diag_scale=0.01, cg_maxiter=300, max_recoveries=5,
                 eval_samples=131072, eval_chains=1024, eval_discard_per_chain=64, seed=20260921)
@@ -276,15 +277,29 @@ def main():
     # discards, R-hat 1.41, job 14765875), many more samples, NetKet's own error of the mean
     # (blocked, autocorrelation-corrected), tau and R-hat reported with it. If R-hat is still
     # above 1.05 the chains are run 1024 more sweeps and the evaluation repeated, once.
+    #
+    # The local energies are computed batch by batch (README, amendment v1.5): NetKet builds the
+    # connected configurations of every sample of a call at once, 131072 x 1025 x 256 bytes (34 GB)
+    # on 16 x 16, which ended both 16 x 16 ladder runs after their 2000 steps. Each batch continues
+    # the same chains (only the first discards), the batches are joined along each chain, and
+    # NetKet's statistics of the joined array are those of one call on the same samples.
+    def expect_batched(discard):
+        batches = -(-args.eval_samples // EVAL_BATCH)
+        vs.n_samples = args.eval_samples // batches
+        parts = []
+        for b in range(batches):
+            vs.n_discard_per_chain = discard if b == 0 else 0
+            vs.sample()
+            parts.append(np.asarray(vs.local_estimators(H)))
+        axis = 1 if parts[0].shape[0] == PROTOCOL["n_chains"] else 0  # the chain axis stays whole
+        return nk.stats.statistics(np.concatenate(parts, axis=axis)), batches
+
     eval_attempts = []
-    vs.n_samples = args.eval_samples
-    vs.n_discard_per_chain = PROTOCOL["eval_discard_per_chain"]
-    E = vs.expect(H)
-    eval_attempts.append(dict(discard_per_chain=PROTOCOL["eval_discard_per_chain"], r_hat=float(E.R_hat), tau_corr=float(E.tau_corr)))
+    E, n_batches = expect_batched(PROTOCOL["eval_discard_per_chain"])
+    eval_attempts.append(dict(discard_per_chain=PROTOCOL["eval_discard_per_chain"], r_hat=float(E.R_hat), tau_corr=float(E.tau_corr), batches=n_batches))
     if not (float(E.R_hat) < 1.05):
-        vs.n_discard_per_chain = 1024
-        E = vs.expect(H)
-        eval_attempts.append(dict(discard_per_chain=1024, r_hat=float(E.R_hat), tau_corr=float(E.tau_corr)))
+        E, n_batches = expect_batched(1024)
+        eval_attempts.append(dict(discard_per_chain=1024, r_hat=float(E.R_hat), tau_corr=float(E.tau_corr), batches=n_batches))
     t_end = time.perf_counter()
 
     wall = t_end - T_START
