@@ -20,7 +20,8 @@ const stands = r => r.schema === "qmbl-cost-run-1" && r.resources && Number.isFi
 for (const f of fs.readdirSync(DIR).filter(f => f.endsWith(".json"))) {
   const r = read(path.join(DIR, f));
   if (r.schema !== "qmbl-cost-run-1" || !r.resources) continue;
-  const name = f.replace(/\.json$/, ""), job = r.hardware.slurm_job_id;
+  // A run on a host without a scheduler (the H100 size ladder, README v1.5) is keyed by when it ended.
+  const name = f.replace(/\.json$/, ""), job = r.hardware.slurm_job_id ?? `host${(r.timing?.ended_utc || "").replace(/\D/g, "").slice(0, 14)}`;
   const dst = path.join(RUNS, `${name}--${job}.json`);
   if (fs.existsSync(dst)) continue;
   fs.copyFileSync(path.join(DIR, f), dst);

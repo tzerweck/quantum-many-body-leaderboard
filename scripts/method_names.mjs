@@ -416,6 +416,14 @@ Object.assign(NAMES, {
   ["GCNN (translations, 4 layers, 8 features)" + QMBL_RUN]: ["GCNN", "4 layers, 8 features, QMBL run; symmetric: translations", { family: "CNN / ResNet" }],
   ["ViT (factored attention, 2x2 patches, d = 60, 4 layers, 10 heads)" + QMBL_RUN]: ["ViT", "factored attention, b = 2, d = 60, 4 layers, 10 heads, QMBL implementation"],
 });
+// The same runs on the size ladder's H100 (checks/cost/README.md, amendment v1.5): a second device, so
+// the detail says so; their hours compare only with each other.
+const LADDER = ", H100 size ladder";
+for (const k of Object.keys(NAMES).filter(k => k.endsWith(QMBL_RUN))) {
+  const [name, detail, extra] = NAMES[k];
+  const [head, ...slots] = detail.split("; ");
+  NAMES[k + LADDER] = [name, [head + LADDER, ...slots].join("; "), ...(extra ? [extra] : [])];
+}
 
 // Systematic families of strings, matched when no exact entry exists.
 export const PATTERNS = [
