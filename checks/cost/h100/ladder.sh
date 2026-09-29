@@ -5,7 +5,8 @@
 #     systemd-run --user --unit=qmbl-ladder --collect bash $ROOT/code/h100/ladder.sh
 # A job whose results file exists is skipped, so the unit can be restarted at any time; a job
 # that fails leaves FAILED in its directory and the ladder goes on. `touch $ROOT/STOP` ends
-# the ladder after the current job.
+# the ladder after the current job. `ONLY="name ..."` in the environment restricts the ladder to those
+# jobs, so reruns can go on cards of their own at the same time.
 #
 # The card: the one the previous job used if it is still free, else one the host's GPU
 # policy lists as eligible (idle for 20 minutes); if there is none, wait. The host has no card
@@ -30,9 +31,10 @@ free_card() {  # a card with no compute process on it
 pick_card() {
   local prev="${1:-}" c
   while true; do
-    if [ -n "$prev" ] && free_card | grep -qx "$prev"; then echo "$prev"; return; fi
-    c=$("$POLICY" query 2>/dev/null | sed -n 's/.* eligible=\([0-9,]*\) .*/\1/p' | cut -d, -f1)
-    if [ -n "$c" ] && free_card | grep -qx "$c"; then echo "$c"; return; fi
+    if [ -n "$prev" ] && free_card | grep -x "$prev" >/dev/null; then echo "$prev"; return; fi
+    for c in $("$POLICY" query 2>/dev/null | sed -n 's/.* eligible=\([0-9,]*\) .*/\1/p' | tr , ' '); do
+      free_card | grep -x "$c" >/dev/null && { echo "$c"; return; }
+    done
     echo "$(date -Is) no eligible card, waiting" >&2; sleep 600
   done
 }
@@ -41,16 +43,18 @@ GPU=""
 for spec in "${JOBS[@]}"; do
   [ -e "$ROOT/STOP" ] && { echo "$(date -Is) STOP"; exit 0; }
   read -r name inst model <<<"$spec"
+  [ -n "${ONLY:-}" ] && case " $ONLY " in *" $name "*) ;; *) continue ;; esac
   OUT="$ROOT/ladder/$name"; mkdir -p "$OUT"
   [ -s "$OUT/$name.json" ] && continue
   [ -e "$OUT/FAILED" ] && continue
   GPU=$(pick_card "$GPU")
   echo "$(date -Is) START $name on GPU $GPU"
-  if CUDA_VISIBLE_DEVICES=$GPU python "$CODE/run_nqs.py" --instance "$inst" --model "$model" --out "$OUT/$name.json" > "$OUT/$name.log" 2>&1 \
-     && [ -s "$OUT/$name.json" ]; then
+  CUDA_VISIBLE_DEVICES=$GPU python "$CODE/run_nqs.py" --instance "$inst" --model "$model" --out "$OUT/$name.json" > "$OUT/$name.log" 2>&1
+  rc=$?
+  if [ $rc -eq 0 ] && [ -s "$OUT/$name.json" ]; then
     echo "$(date -Is) DONE $name"
   else
-    echo "$(date -Is) FAILED $name (exit $?), see $OUT/$name.log"; date -Is > "$OUT/FAILED"
+    echo "$(date -Is) FAILED $name (exit $rc), see $OUT/$name.log"; date -Is > "$OUT/FAILED"
   fi
 done
 echo "$(date -Is) ladder complete"
