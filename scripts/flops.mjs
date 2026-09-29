@@ -167,7 +167,8 @@ export function flopsOf(r, inst) {
 //   FLOPs = iterations x samples x [(n_conn + 3) x m + proposals x (m, or 1 for an autoregressive draw)] x forward
 //         + iterations x SR
 //   forward = c_x x 2 x ((P - head) x reuse + head) (+ c_x x (2/3) N_e^3 for a determinant)
-// c_x = 2 for complex parameters. Without an `evaluation` block every factor takes its nqs-v1 value.
+// c_x = 2 for complex parameters, 4 for complex parameters in a JAX code (below); the SR term keeps
+// 2. Without an `evaluation` block every factor takes its nqs-v1 value.
 // Where the forward pass was counted from the program JAX traces for the network
 // (`evaluation.forward_flops`, QMBL's own runs: checks/cost/forward_flops.py, Tristan 2026-09-29),
 // that count replaces the modelled forward; everything else in the formula stays.
@@ -205,7 +206,12 @@ function nqsFlopsOf(r, inst) {
       reuse = N * g;
     }
   } else reuse = arch.reuse;
-  const cx = ev.complex ? 2 : 1; // complex weights on real inputs: 4 real FLOPs per multiply-add, not 2 (complex-by-complex layers cost up to twice more)
+  // Complex weights on real inputs: 4 real FLOPs per multiply-add, not 2. A JAX code (NetKet, jVMC, ...)
+  // promotes the real input to complex, so every multiply-add is complex by complex, 8 FLOPs: counted
+  // on QMBL's own networks (checks/cost/forward_flops.py), c_x = 4 there (Tristan, 2026-09-29). The SR
+  // term keeps c_x = 2: NetKet's Jacobian of a complex network is a question of its own (DATA.md).
+  const jaxCode = /netket|\bjax\b|jvmc|flax|quantax/i.test(ev.code || "");
+  const cx = ev.complex ? (jaxCode ? 4 : 2) : 1, cxSR = ev.complex ? 2 : 1;
   let det = 0;
   if (arch.det) {
     const ne = electronsOf(inst);
@@ -226,7 +232,7 @@ function nqsFlopsOf(r, inst) {
     if (!(P > 0 && S > 0 && I > 0 && m > 0)) return null;
     const H = Math.min(ev.head_parameters || 0, P);
     const forward = counted ?? cx * 2 * ((P - H) * reuse + H) + det;
-    const srStep = srFlops(ev.sr, P, S, cx, forward, m);
+    const srStep = srFlops(ev.sr, P, S, cxSR, forward, m);
     const perSample = (n_conn + 3) * m + k_sample * (arch.sampling === "ar" ? 1 : m);
     value += I * S * perSample * forward + I * srStep;
     sr += I * srStep;

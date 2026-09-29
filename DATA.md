@@ -278,7 +278,13 @@ Per training stage:
   element of the space group in a group convolution. A row whose network differs from its
   family (an HFPS with a group-convolutional hidden network, a backflow tensor of which a
   configuration reads a fraction) states its own. `head` parameters (a dense read-out) run once.
-- `c_x` = 2 for complex parameters on real inputs (4 real FLOPs per multiply-add, not 2).
+- `c_x` = 2 for complex parameters on real inputs (4 real FLOPs per multiply-add, not 2), and
+  4 where the code is JAX (NetKet, jVMC and the like): JAX promotes the real input to complex, so
+  every multiply-add is complex by complex, 8 FLOPs, as counted on QMBL's own networks (below;
+  Tristan, 2026-09-29). No published row states complex parameters yet. The SR term keeps
+  `c_x` = 2: NetKet differentiates a complex-valued network in its "complex" mode, which splits
+  complex parameters into real pairs and stacks the real and imaginary parts of the Jacobian, and
+  what that costs against this model is not settled.
 - `SR`: the optimiser's linear solve where the code is known: the dense S (2 × samples ×
   P² + P³/3), NetKet's on-the-fly S made dense (P matrix-vector products), conjugate gradients
   at their stated iteration count, or MinSR (2 × samples² × P + samples³/3). Not counted where
@@ -289,8 +295,8 @@ Per training stage:
   Tristan 2026-09-29). On the eight runs the count is 0.99-1.01 times the model for QMBL's ViT,
   1.2-1.3 times for its GCNN and 2.0-2.1 times for its complex RBMs. JAX promotes the real spin
   configuration to complex, so a complex network multiplies complex by complex: 8 FLOPs per
-  multiply-add, not the 4 `c_x` = 2 assumes. `c_x` stays 2 for published rows, whose code has
-  not been traced. XLA's own cost analysis, which arXiv:2606.02794 used, counts a complex
+  multiply-add, not the 4 `c_x` = 2 assumed; `c_x` is now 4 for such networks in JAX codes
+  (above). XLA's own cost analysis, which arXiv:2606.02794 used, counts a complex
   multiply-add as 2 FLOPs like a real one: it agrees with the count to 0.1 % on the real-valued
   ViT and reads the complex networks 2-4 times low.
 
