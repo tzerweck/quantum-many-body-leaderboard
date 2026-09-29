@@ -284,15 +284,16 @@ def main():
     # the same chains (only the first discards), the batches are joined along each chain, and
     # NetKet's statistics of the joined array are those of one call on the same samples.
     def expect_batched(discard):
+        import jax.numpy as jnp
         batches = -(-args.eval_samples // EVAL_BATCH)
         vs.n_samples = args.eval_samples // batches
         parts = []
         for b in range(batches):
             vs.n_discard_per_chain = discard if b == 0 else 0
             vs.sample()
-            parts.append(np.asarray(vs.local_estimators(H)))
+            parts.append(jnp.asarray(vs.local_estimators(H)))  # a LocalEstimators object in NetKet 3.22
         axis = 1 if parts[0].shape[0] == PROTOCOL["n_chains"] else 0  # the chain axis stays whole
-        return nk.stats.statistics(np.concatenate(parts, axis=axis)), batches
+        return nk.stats.statistics(jnp.concatenate(parts, axis=axis)), batches
 
     eval_attempts = []
     E, n_batches = expect_batched(PROTOCOL["eval_discard_per_chain"])
