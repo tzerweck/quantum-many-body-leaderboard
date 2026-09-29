@@ -773,7 +773,8 @@ function searchIndex(inst, name) {
 // Every row of the instance, the record marked, challengers with their gap above it in a
 // column of its own, per site (Tristan, 2026-09-28). sigma
 // is shown because 62% of rows carry one (2026-09-16); Var(E) and the V-score, on 36%, stay
-// on the instance page.
+// on the instance page. The Table names a method alone; its detail, bond dimension and
+// sector are on the instance page (Tristan, 2026-09-29).
 function allRows(inst) {
   const rec = recordOf(inst);
   const sorted = [...inst.rows].sort((a, b) => a.energy - b.energy);
@@ -788,7 +789,7 @@ function allRows(inst) {
       <td class="num">${isRec ? "0" : gap ? esc(gap.replace(/^\+/, "")) : '<span class="muted">n/a</span>'}</td>
       <td class="num">${sigma == null ? '<span class="muted">n/a</span>' : sigma.toExponential(1)}</td>
       <td><span class="badge">${boundLabel(r)}</span>${r.defect ? ` ${flagBadge(r)}` : ""}</td>
-      <td>${esc(shorten(methodLabel(r), 60))}</td>
+      <td>${esc(r.method)}</td>
       <td>${citeHtml(r)}</td>
       <td class="num">${yearCell(r) ?? '<span class="muted">n/a</span>'}</td>
     </tr>`;
@@ -807,7 +808,7 @@ function instancesPage() {
       const label = instanceLabel(inst);
       const search = searchIndex(inst, name);
       const cells = rec
-        ? `<td class="record">${energyCell(rec, inst)}</td><td>${esc(shorten(methodLabel(rec), 52))} ${citeHtml(rec)}</td>`
+        ? `<td class="record">${energyCell(rec, inst)}</td><td>${esc(rec.method)} ${citeHtml(rec)}</td>`
         : `<td class="none">no record</td><td>${esc(noRecordReason(inst))}</td>`;
       const id = `x-${inst.instance_id.replace(/[^\w-]/g, "_")}`;
       return `<tr class="inst" data-search="${esc(search.own)}" data-methods="${esc(search.methods)}" data-lattice="${esc(latticeOf(inst))}" data-size="${sizeBand(inst)}">
