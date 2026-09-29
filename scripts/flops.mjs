@@ -19,7 +19,7 @@
 // transverse-field Ising model, four per bond for Hubbard). Excluded, and stated on every
 // surface that shows the estimate: the stochastic-reconfiguration solve, symmetry projections
 // that sum the network over a point group, attention scores, and any pre-training on smaller
-// lattices. Under nqs-v2 the published rows that also state hours on a named GPU run at 10-45 %
+// lattices. Under nqs-v2 the published rows that also state hours on a named GPU run at 5-60 %
 // of their device's peak in the precision they used, and QMBL's own runs at 0.26-3.7 TFLOP/s on one
 // A100, so an estimate is good to about an order of magnitude and never better (calibration
 // table in DATA.md). Three rules follow from that:

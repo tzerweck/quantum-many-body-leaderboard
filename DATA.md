@@ -301,6 +301,13 @@ Per training stage:
   instead (`evaluation.sr_counted`): the Jacobian (3.5-10 forward passes per sample, which the
   model does not count) plus the dense solve, or the set-up of conjugate gradients, whose
   iterations the runs do not log.
+  The pass of 2026-09-29 (`compute-rows-2026-09-29.json`) read the statement from the code of
+  the published rows in JAX codes that have an SR term: 86 `real` (VarBench's NetKet RBMs and
+  Jastrows, the MinSR paper's CNN), 11 `complex` (the ViTs of arXiv:2405.18874, TQS and PITQS,
+  ConvNeXt; their SR term rose fourfold). The HFPS rows state nothing, since their run scripts are
+  not public, and nor do the GVMC rows, whose SR is the code's own. Quantax, which ran the HFPS and
+  the MinSR paper's CNN, solves MinSR by an eigendecomposition, which the S³/3 of the model does
+  not cover.
 - **A counted forward pass replaces the modelled one** where the row carries
   `evaluation.forward_flops`: QMBL's own runs, whose networks are counted from the program JAX
   traces for them ([checks/cost/README.md](checks/cost/README.md#the-forward-pass-counted-2026-09-29),
@@ -332,10 +339,10 @@ Against the rows that also state GPU-hours the model implies these achieved rate
 | Hubbard 4×16 | NNBF, n_h = 8192 | 1.2e20 | 400 h, H100 (GH200) | 82 TFLOP/s |
 | Hubbard 4×16 | NNBF, 4 determinants, symmetry stage | 3.4e19 | 200 h, H100 (GH200) | 48 TFLOP/s |
 | Hubbard 4×16 | NNBF, 32 determinants, symmetry stage | 1.0e20 | 800 h, H100 (GH200) | 35 TFLOP/s |
-| J1-J2 10×10, J2 = 0.5 | ViT, factored attention | 1.7e17 | 12.5 h, A100 | 3.7 TFLOP/s |
-| J1-J2 10×10, J2 = 0.5 | ViT, T5 / decoupled attention | 2.0e17 | 28 h, A100 | 2.0 TFLOP/s |
-| J1-J2 6×6, J2 = 0.5 | ViT, factored attention | 7.1e16 | 6 h, A100 | 3.3 TFLOP/s |
-| J1-J2 6×6, J2 = 0.5 | ViT, T5 / decoupled attention | 8.4e16 | 10 h, A100 | 2.3 TFLOP/s |
+| J1-J2 10×10, J2 = 0.5 | ViT, factored attention | 3.4e17 | 12.5 h, A100 | 7.5 TFLOP/s |
+| J1-J2 10×10, J2 = 0.5 | ViT, T5 / decoupled attention | 4.0e17 | 28 h, A100 | 4.0 TFLOP/s |
+| J1-J2 6×6, J2 = 0.5 | ViT, factored attention | 2.4e17 | 6 h, A100 | 11 TFLOP/s |
+| J1-J2 6×6, J2 = 0.5 | ViT, T5 / decoupled attention | 2.9e17 | 10 h, A100 | 7.9 TFLOP/s |
 | triangular 108 | GCNN | 1.1e18 | 96 h, A100 | 3.1 TFLOP/s |
 | J1-J2 16×16, J2 = 0.5 | GCNN | 1.8e18 | 300 h, A100 | 1.7 TFLOP/s |
 | triangular 36 | GCNN, symmetry-projected | 3.9e16 | 12 h, A100 | 0.9 TFLOP/s |
@@ -348,8 +355,12 @@ Against the rows that also state GPU-hours the model implies these achieved rate
 | triangular 36 | RBM α = 1, QMBL run | 2.9e14 | 0.10 h, A100 80 GB (measured) | 0.8 TFLOP/s |
 
 **The rates now sit where the hardware says they should.** The A100 rows, in double
-precision, run at 0.9-3.7 TFLOP/s, 10-40 % of its FP64 peak; the minGRU in single precision on
-an L40S and the NNBF in TF32 on an H100 at 7-45 % of their peaks. Under `nqs-v1` the same rows
+precision, run at 0.9-11 TFLOP/s, 5-57 % of its FP64 tensor-core peak (19.5 TFLOP/s, which
+cuBLAS reaches on large matrix products). The fastest are the ViTs, whose step is dominated by
+MinSR's sample-space matrix over 2 × 6000 stacked samples, one large matrix product; their rates
+doubled to tripled when the Jacobian pass of 2026-09-29 gave them NetKet's complex mode. The
+minGRU in single precision on an L40S and the NNBF in TF32 on an H100 run at 7-45 % of their
+peaks. Under `nqs-v1` the same rows
 spread from 0.01 to 366 TFLOP/s, because the symmetrisation, the training stages, the discarded
 samples and the complex arithmetic were missing. QMBL's own small RBMs (1368 and 10200 parameters)
 stay lowest, at 0.4-0.8 TFLOP/s: their steps are too small to fill a card. QMBL's rows use
