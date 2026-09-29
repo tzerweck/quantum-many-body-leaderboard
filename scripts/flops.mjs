@@ -20,7 +20,7 @@
 // surface that shows the estimate: the stochastic-reconfiguration solve, symmetry projections
 // that sum the network over a point group, attention scores, and any pre-training on smaller
 // lattices. Under nqs-v2 the published rows that also state hours on a named GPU run at 10-45 %
-// of their device's peak in the precision they used, and QMBL's own runs at 0.25-3.6 TFLOP/s on one
+// of their device's peak in the precision they used, and QMBL's own runs at 0.26-3.7 TFLOP/s on one
 // A100, so an estimate is good to about an order of magnitude and never better (calibration
 // table in DATA.md). Three rules follow from that:
 //
@@ -167,11 +167,19 @@ export function flopsOf(r, inst) {
 //   FLOPs = iterations x samples x [(n_conn + 3) x m + proposals x (m, or 1 for an autoregressive draw)] x forward
 //         + iterations x SR
 //   forward = c_x x 2 x ((P - head) x reuse + head) (+ c_x x (2/3) N_e^3 for a determinant)
-// c_x = 2 for complex parameters, 4 for complex parameters in a JAX code (below); the SR term keeps
-// 2. Without an `evaluation` block every factor takes its nqs-v1 value.
+// c_x = 2 for complex parameters, 4 for complex parameters in a JAX code (below); the SR term is
+// sized by the Jacobian the code builds (below). Without an `evaluation` block every factor takes its
+// nqs-v1 value.
 // Where the forward pass was counted from the program JAX traces for the network
 // (`evaluation.forward_flops`, QMBL's own runs: checks/cost/forward_flops.py, Tristan 2026-09-29),
 // that count replaces the modelled forward; everything else in the formula stays.
+// The SR term is sized by the matrix the code solves (`evaluation.jacobian`, read from the code;
+// Tristan 2026-09-29, after the counted SR steps of checks/cost/sr_flops.py matched NetKet's modes
+// exactly): "real", a real S x P Jacobian; "complex", NetKet's complex mode, which stacks the real
+// and imaginary parts of a complex output (2S rows) and splits complex parameters into real pairs
+// (P_r columns), all in real arithmetic; "holomorphic", a complex S x P Jacobian (4 real FLOPs per
+// complex one). Without the statement, S x P with c_x = 2 for complex parameters, as before.
+// QMBL's own runs carry their counted SR step (`evaluation.sr_counted`) and use it instead.
 function srFlops(sr, P, S, cx, forward, m) {
   switch (sr?.kind) {
     case "dense": return cx * (2 * S * P * P + (P * P * P) / 3);
@@ -209,7 +217,7 @@ function nqsFlopsOf(r, inst) {
   // Complex weights on real inputs: 4 real FLOPs per multiply-add, not 2. A JAX code (NetKet, jVMC, ...)
   // promotes the real input to complex, so every multiply-add is complex by complex, 8 FLOPs: counted
   // on QMBL's own networks (checks/cost/forward_flops.py), c_x = 4 there (Tristan, 2026-09-29). The SR
-  // term keeps c_x = 2: NetKet's Jacobian of a complex network is a question of its own (DATA.md).
+  // term has its own factor: c_x = 2 unless `evaluation.jacobian` says how the code builds its matrix.
   const jaxCode = /netket|\bjax\b|jvmc|flax|quantax/i.test(ev.code || "");
   const cx = ev.complex ? (jaxCode ? 4 : 2) : 1, cxSR = ev.complex ? 2 : 1;
   let det = 0;
@@ -224,6 +232,9 @@ function nqsFlopsOf(r, inst) {
   const stages = ev.stages?.length ? ev.stages : [{}];
   // A counted forward pass is the whole network as it ran, one stage only.
   const counted = stages.length === 1 && ev.forward_flops?.flops_per_configuration > 0 ? ev.forward_flops.flops_per_configuration : null;
+  // A counted SR step: the Jacobian, plus the solve of a dense S or the set-up of conjugate
+  // gradients, whose iterations the runs do not log (the loop is then not counted).
+  const srCounted = stages.length === 1 && ev.sr_counted?.jacobian_flops_per_step > 0 ? ev.sr_counted : null;
   let value = 0, sr = 0;
   const used = [];
   for (const st of stages) {
@@ -232,7 +243,12 @@ function nqsFlopsOf(r, inst) {
     if (!(P > 0 && S > 0 && I > 0 && m > 0)) return null;
     const H = Math.min(ev.head_parameters || 0, P);
     const forward = counted ?? cx * 2 * ((P - H) * reuse + H) + det;
-    const srStep = srFlops(ev.sr, P, S, cxSR, forward, m);
+    // The matrix the SR solves (see srFlops); an on-the-fly S does not stack the samples.
+    const complexMode = ev.jacobian === "complex";
+    const S_sr = complexMode && ev.sr?.kind !== "onthefly_dense" ? 2 * S : S, P_sr = complexMode && ev.complex ? 2 * P : P;
+    const c_sr = complexMode || ev.jacobian === "real" ? 1 : ev.jacobian === "holomorphic" ? 4 : cxSR;
+    const srStep = srCounted ? srCounted.jacobian_flops_per_step + (srCounted.solve_flops_per_step ?? srCounted.solve_setup_flops_per_step ?? 0)
+      : srFlops(ev.sr, P_sr, S_sr, c_sr, forward, m);
     const perSample = (n_conn + 3) * m + k_sample * (arch.sampling === "ar" ? 1 : m);
     value += I * S * perSample * forward + I * srStep;
     sr += I * srStep;
@@ -240,11 +256,13 @@ function nqsFlopsOf(r, inst) {
   }
   const confidence = assumption || c.confidence === "low" ? "low" : "medium";
   const note = [counted ? "forward pass counted from the network's traced program, not modelled" : arch.note, assumption,
-    ev.sr?.kind === "cg" && !(ev.sr.cg_iterations > 0) ? "conjugate-gradient iterations not stated, the solve is not counted" : null,
+    srCounted ? `SR step counted from the traced program (the Jacobian${srCounted.solve_flops_per_step != null ? " and the dense solve" : " and the set-up of conjugate gradients, whose iterations the run did not log"})` : null,
+    !srCounted && ev.sr?.kind === "cg" && !(ev.sr.cg_iterations > 0) ? "conjugate-gradient iterations not stated, the solve is not counted" : null,
     !ev.sr ? "the optimizer's linear solve is not counted" : null, c.scope !== "row" ? `inputs stated for the ${c.scope}, not this row` : null].filter(Boolean).join("; ");
   return { value, model: "nqs-v2", confidence, note,
     inputs: { stages: used, reuse, n_conn, local_energy: ev.local_energy || "all", k_sample, sampling: arch.sampling, complex: !!ev.complex,
-      head_parameters: ev.head_parameters || 0, determinant: det || null, ...(counted ? { forward_counted: counted } : {}), sr: ev.sr?.kind || null, sr_flops: sr || null } };
+      head_parameters: ev.head_parameters || 0, determinant: det || null, ...(counted ? { forward_counted: counted } : {}), sr: ev.sr?.kind || null,
+      ...(ev.jacobian ? { jacobian: ev.jacobian } : {}), ...(srCounted ? { sr_counted: true } : {}), sr_flops: sr || null } };
 }
 
 // `mvmc-v2`: projected-fermion VMC in mVMC (Misawa et al., CPC 235, 447 (2019)), for a row whose block

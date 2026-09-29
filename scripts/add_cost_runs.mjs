@@ -35,6 +35,20 @@ const jobOf = h => (h.slurm_job_id ? `Slurm job ${h.slurm_job_id}` : "no schedul
 // network has the run's parameter count.
 const FWD_FILE = "checks/cost/forward-flops.json";
 const FWD = fs.existsSync(FWD_FILE) ? JSON.parse(fs.readFileSync(FWD_FILE, "utf8")) : null;
+// The SR step, counted the same way (checks/cost/sr_flops.py, sr-flops.json; Tristan, 2026-09-29):
+// the Jacobian NetKet builds (its "complex" mode for these networks), and the solve of a dense S or
+// the set-up of conjugate gradients, whose iterations the runs do not log.
+const SR_FILE = "checks/cost/sr-flops.json";
+const SRC = fs.existsSync(SR_FILE) ? JSON.parse(fs.readFileSync(SR_FILE, "utf8")) : null;
+const srOf = res => {
+  const c = SRC?.runs.find(x => x.instance_id === res.instance_id && x.model === res.model && !x.error);
+  if (!c) return {};
+  if (c.parameters !== res.parameters) { console.log(`  SR count for ${res.instance_id} ${res.model}: ${c.parameters} parameters, the run has ${res.parameters}; not attached`); return {}; }
+  const cg = c.cg_iteration_flops != null;
+  return { jacobian: c.jacobian_mode, sr_counted: { jacobian_flops_per_step: c.jacobian.flops, solve_flops_per_step: cg ? null : c.solve_flops,
+    ...(cg ? { solve_setup_flops_per_step: c.solve_setup_flops, cg_iteration_flops: c.cg_iteration_flops } : {}),
+    source: `${SR_FILE}, counted ${SRC.environment.ran_utc.slice(0, 10)} by ${SRC.script} (sha256 ${SRC.script_sha256.slice(0, 12)}) with NetKet ${SRC.environment.netket}, jax ${SRC.environment.jax}` } };
+};
 const forwardOf = res => {
   const c = FWD?.configurations.find(x => x.instance_id === res.instance_id && x.model === res.model && x.flops_per_configuration > 0);
   if (!c) return undefined;
@@ -92,6 +106,7 @@ for (const f of files) {
           local_energy: "all", complex: ["rbm", "rbmsymm"].includes(res.model), // the GCNN is complex too, but in NetKet's irreps mode its FLOPs already equal the model's 2 P |G| (verification 2026-09-25)
           sr: /Cholesky/.test(tr.optimizer) ? { kind: "dense" } : { kind: "cg", cg_iterations: null },
           forward_flops: forwardOf(res),
+          ...srOf(res),
           code: `NetKet ${sw.netket} (checks/cost/run_nqs.py)`,
         },
         reported_as: said,

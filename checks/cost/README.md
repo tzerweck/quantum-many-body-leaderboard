@@ -201,7 +201,10 @@ arithmetic.
 - **The Jacobian** costs 3.5-10 forward passes per sample, which `nqs-v2` does not count.
   Against the 290-900 forward passes per sample that local energies and proposals take on
   these instances, that is 0.4-3 %.
-- **Not applied.** No estimate uses these counts yet: the model stays until it is decided.
+- **Applied (Tristan, 2026-09-29).** `add_cost_runs.mjs` attaches each run's counted SR step
+  (`evaluation.sr_counted`: the Jacobian, and the dense solve or the set-up of conjugate
+  gradients, whose iterations the runs do not log) and `flops.mjs` uses it. Published rows get
+  their SR matrix sized by the Jacobian mode read from their code (DATA.md, `evaluation.jacobian`).
 
 ## Files
 

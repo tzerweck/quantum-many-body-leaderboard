@@ -281,17 +281,26 @@ Per training stage:
 - `c_x` = 2 for complex parameters on real inputs (4 real FLOPs per multiply-add, not 2), and
   4 where the code is JAX (NetKet, jVMC and the like): JAX promotes the real input to complex, so
   every multiply-add is complex by complex, 8 FLOPs, as counted on QMBL's own networks (below;
-  Tristan, 2026-09-29). No published row states complex parameters yet. The SR term keeps
-  `c_x` = 2: NetKet differentiates a complex-valued network in its "complex" mode, which splits
-  complex parameters into real pairs and stacks the real and imaginary parts of the Jacobian.
-  Counted on QMBL's eight runs ([checks/cost/README.md](checks/cost/README.md#the-sr-step-counted-2026-09-29)),
-  that costs 4 times this term for a dense S with complex parameters and 2 times per
-  conjugate-gradient iteration, and the Jacobian adds 3.5-10 forward passes per sample. The
-  model is unchanged until that is decided.
+  Tristan, 2026-09-29). No published row states complex parameters yet. The SR term is sized
+  on its own (next bullet).
 - `SR`: the optimiser's linear solve where the code is known: the dense S (2 × samples ×
   P² + P³/3), NetKet's on-the-fly S made dense (P matrix-vector products), conjugate gradients
   at their stated iteration count, or MinSR (2 × samples² × P + samples³/3). Not counted where
-  the code is unknown.
+  the code is unknown. The matrix is the one the code builds (`evaluation.jacobian`, read from
+  the code; Tristan, 2026-09-29):
+  - `real`: real parameters and a real output, samples × P.
+  - `complex`: NetKet's complex mode, which every network with a complex output gets unless it
+    is declared holomorphic. The real and imaginary parts of the output are stacked into
+    2 × samples rows and complex parameters are split into real pairs, all in real arithmetic
+    (an on-the-fly S does not stack the samples).
+  - `holomorphic`: a complex samples × P matrix, 4 real FLOPs per complex one.
+  Counted on QMBL's eight runs ([checks/cost/README.md](checks/cost/README.md#the-sr-step-counted-2026-09-29)),
+  the complex mode's cost matched exactly: 4 times the unsized term for a dense S with complex
+  parameters, 2 times per conjugate-gradient iteration. Without the statement the term keeps
+  samples × P with `c_x` = 2 for complex parameters. QMBL's own rows use their counted SR step
+  instead (`evaluation.sr_counted`): the Jacobian (3.5-10 forward passes per sample, which the
+  model does not count) plus the dense solve, or the set-up of conjugate gradients, whose
+  iterations the runs do not log.
 - **A counted forward pass replaces the modelled one** where the row carries
   `evaluation.forward_flops`: QMBL's own runs, whose networks are counted from the program JAX
   traces for them ([checks/cost/README.md](checks/cost/README.md#the-forward-pass-counted-2026-09-29),
@@ -331,20 +340,21 @@ Against the rows that also state GPU-hours the model implies these achieved rate
 | J1-J2 16×16, J2 = 0.5 | GCNN | 1.8e18 | 300 h, A100 | 1.7 TFLOP/s |
 | triangular 36 | GCNN, symmetry-projected | 3.9e16 | 12 h, A100 | 0.9 TFLOP/s |
 | J1-J2 20×20, J2 = 0.5 | ViT, b = 4, symmetry stages | 2.0e19 | 25000 h, GH200 (whole paper) | ≥ 0.2 TFLOP/s |
-| J1-J2 10×10, J2 = 0.5 | GCNN, translations, QMBL run | 3.5e16 | 2.7 h, A100 80 GB (measured) | 3.6 TFLOP/s |
-| J1-J2 10×10, J2 = 0.5 | ViT, QMBL implementation | 5.8e16 | 6.4 h, A100 80 GB (measured) | 2.5 TFLOP/s |
-| triangular 36 | ViT, QMBL implementation | 6.6e15 | 2.7 h, A100 80 GB (measured) | 0.7 TFLOP/s |
+| J1-J2 10×10, J2 = 0.5 | GCNN, translations, QMBL run | 3.5e16 | 2.7 h, A100 80 GB (measured) | 3.7 TFLOP/s |
+| J1-J2 10×10, J2 = 0.5 | ViT, QMBL implementation | 5.9e16 | 6.4 h, A100 80 GB (measured) | 2.5 TFLOP/s |
+| triangular 36 | ViT, QMBL implementation | 6.7e15 | 2.7 h, A100 80 GB (measured) | 0.7 TFLOP/s |
 | J1-J2 10×10, J2 = 0.5 | symmetric RBM α = 4, QMBL run | 2.5e15 | 0.51 h, A100 80 GB (measured) | 1.3 TFLOP/s |
 | J1-J2 10×10, J2 = 0.5 | RBM α = 1, QMBL run | 6.2e14 | 0.45 h, A100 80 GB (measured) | 0.4 TFLOP/s |
-| triangular 36 | RBM α = 1, QMBL run | 9.2e13 | 0.10 h, A100 80 GB (measured) | 0.25 TFLOP/s |
+| triangular 36 | RBM α = 1, QMBL run | 2.9e14 | 0.10 h, A100 80 GB (measured) | 0.8 TFLOP/s |
 
 **The rates now sit where the hardware says they should.** The A100 rows, in double
 precision, run at 0.9-3.7 TFLOP/s, 10-40 % of its FP64 peak; the minGRU in single precision on
 an L40S and the NNBF in TF32 on an H100 at 7-45 % of their peaks. Under `nqs-v1` the same rows
 spread from 0.01 to 366 TFLOP/s, because the symmetrisation, the training stages, the discarded
 samples and the complex arithmetic were missing. QMBL's own small RBMs (1368 and 10200 parameters)
-stay lowest, at 0.25-0.4 TFLOP/s: their steps are too small to fill a card. QMBL's rows use
-their counted forward pass (above), which doubled the RBMs' estimates. **An estimate is good
+stay lowest, at 0.4-0.8 TFLOP/s: their steps are too small to fill a card. QMBL's rows use
+their counted forward pass and SR step (above): the J1-J2 RBMs' estimates doubled, and the
+triangular RBM's rose 3.7-fold, most of it from its dense S of 2736 real parameters. **An estimate is good
 to an order of magnitude** where the run's evaluation is stated, and no better; that is why it
 has its own axis and its own figures (`figures/flops/`, `figures/energy-vs-flops.svg`) and is
 never placed on the hours axis. Turning FLOPs into hours would need exactly the conversion
