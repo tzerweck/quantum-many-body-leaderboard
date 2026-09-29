@@ -20,7 +20,7 @@
 // surface that shows the estimate: the stochastic-reconfiguration solve, symmetry projections
 // that sum the network over a point group, attention scores, and any pre-training on smaller
 // lattices. Under nqs-v2 the published rows that also state hours on a named GPU run at 10-45 %
-// of their device's peak in the precision they used, and QMBL's own runs at 0.1-3 TFLOP/s on one
+// of their device's peak in the precision they used, and QMBL's own runs at 0.25-3.6 TFLOP/s on one
 // A100, so an estimate is good to about an order of magnitude and never better (calibration
 // table in DATA.md). Three rules follow from that:
 //
@@ -168,6 +168,9 @@ export function flopsOf(r, inst) {
 //         + iterations x SR
 //   forward = c_x x 2 x ((P - head) x reuse + head) (+ c_x x (2/3) N_e^3 for a determinant)
 // c_x = 2 for complex parameters. Without an `evaluation` block every factor takes its nqs-v1 value.
+// Where the forward pass was counted from the program JAX traces for the network
+// (`evaluation.forward_flops`, QMBL's own runs: checks/cost/forward_flops.py, Tristan 2026-09-29),
+// that count replaces the modelled forward; everything else in the formula stays.
 function srFlops(sr, P, S, cx, forward, m) {
   switch (sr?.kind) {
     case "dense": return cx * (2 * S * P * P + (P * P * P) / 3);
@@ -213,6 +216,8 @@ function nqsFlopsOf(r, inst) {
   // An autoregressive sample is drawn from the unsymmetrised network, so its one pass is not
   // multiplied by the evaluations per amplitude; a Markov chain's proposals each need a full amplitude.
   const stages = ev.stages?.length ? ev.stages : [{}];
+  // A counted forward pass is the whole network as it ran, one stage only.
+  const counted = stages.length === 1 && ev.forward_flops?.flops_per_configuration > 0 ? ev.forward_flops.flops_per_configuration : null;
   let value = 0, sr = 0;
   const used = [];
   for (const st of stages) {
@@ -220,7 +225,7 @@ function nqsFlopsOf(r, inst) {
     const m = st.evaluations_per_amplitude ?? ev.evaluations_per_amplitude ?? 1;
     if (!(P > 0 && S > 0 && I > 0 && m > 0)) return null;
     const H = Math.min(ev.head_parameters || 0, P);
-    const forward = cx * 2 * ((P - H) * reuse + H) + det;
+    const forward = counted ?? cx * 2 * ((P - H) * reuse + H) + det;
     const srStep = srFlops(ev.sr, P, S, cx, forward, m);
     const perSample = (n_conn + 3) * m + k_sample * (arch.sampling === "ar" ? 1 : m);
     value += I * S * perSample * forward + I * srStep;
@@ -228,11 +233,12 @@ function nqsFlopsOf(r, inst) {
     used.push({ iterations: I, samples: S, parameters: P, evaluations_per_amplitude: m });
   }
   const confidence = assumption || c.confidence === "low" ? "low" : "medium";
-  const note = [arch.note, assumption, ev.sr?.kind === "cg" && !(ev.sr.cg_iterations > 0) ? "conjugate-gradient iterations not stated, the solve is not counted" : null,
+  const note = [counted ? "forward pass counted from the network's traced program, not modelled" : arch.note, assumption,
+    ev.sr?.kind === "cg" && !(ev.sr.cg_iterations > 0) ? "conjugate-gradient iterations not stated, the solve is not counted" : null,
     !ev.sr ? "the optimizer's linear solve is not counted" : null, c.scope !== "row" ? `inputs stated for the ${c.scope}, not this row` : null].filter(Boolean).join("; ");
   return { value, model: "nqs-v2", confidence, note,
     inputs: { stages: used, reuse, n_conn, local_energy: ev.local_energy || "all", k_sample, sampling: arch.sampling, complex: !!ev.complex,
-      head_parameters: ev.head_parameters || 0, determinant: det || null, sr: ev.sr?.kind || null, sr_flops: sr || null } };
+      head_parameters: ev.head_parameters || 0, determinant: det || null, ...(counted ? { forward_counted: counted } : {}), sr: ev.sr?.kind || null, sr_flops: sr || null } };
 }
 
 // `mvmc-v2`: projected-fermion VMC in mVMC (Misawa et al., CPC 235, 447 (2019)), for a row whose block

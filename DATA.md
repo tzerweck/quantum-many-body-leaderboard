@@ -274,6 +274,16 @@ Per training stage:
   P² + P³/3), NetKet's on-the-fly S made dense (P matrix-vector products), conjugate gradients
   at their stated iteration count, or MinSR (2 × samples² × P + samples³/3). Not counted where
   the code is unknown.
+- **A counted forward pass replaces the modelled one** where the row carries
+  `evaluation.forward_flops`: QMBL's own runs, whose networks are counted from the program JAX
+  traces for them ([checks/cost/README.md](checks/cost/README.md#the-forward-pass-counted-2026-09-29),
+  Tristan 2026-09-29). On the eight runs the count is 0.99-1.01 times the model for QMBL's ViT,
+  1.2-1.3 times for its GCNN and 2.0-2.1 times for its complex RBMs. JAX promotes the real spin
+  configuration to complex, so a complex network multiplies complex by complex: 8 FLOPs per
+  multiply-add, not the 4 `c_x` = 2 assumes. `c_x` stays 2 for published rows, whose code has
+  not been traced. XLA's own cost analysis, which arXiv:2606.02794 used, counts a complex
+  multiply-add as 2 FLOPs like a real one: it agrees with the count to 0.1 % on the real-valued
+  ViT and reads the complex networks 2-4 times low.
 
 These are statements about the run, stored in the compute block's `evaluation` object (with
 the stages as a list, each with its own iterations, samples, parameters and m), never costs;
@@ -302,19 +312,20 @@ Against the rows that also state GPU-hours the model implies these achieved rate
 | J1-J2 16×16, J2 = 0.5 | GCNN | 1.8e18 | 300 h, A100 | 1.7 TFLOP/s |
 | triangular 36 | GCNN, symmetry-projected | 3.9e16 | 12 h, A100 | 0.9 TFLOP/s |
 | J1-J2 20×20, J2 = 0.5 | ViT, b = 4, symmetry stages | 2.0e19 | 25000 h, GH200 (whole paper) | ≥ 0.2 TFLOP/s |
-| J1-J2 10×10, J2 = 0.5 | GCNN, translations, QMBL run | 3.0e16 | 2.7 h, A100 80 GB (measured) | 3.1 TFLOP/s |
+| J1-J2 10×10, J2 = 0.5 | GCNN, translations, QMBL run | 3.5e16 | 2.7 h, A100 80 GB (measured) | 3.6 TFLOP/s |
 | J1-J2 10×10, J2 = 0.5 | ViT, QMBL implementation | 5.8e16 | 6.4 h, A100 80 GB (measured) | 2.5 TFLOP/s |
 | triangular 36 | ViT, QMBL implementation | 6.6e15 | 2.7 h, A100 80 GB (measured) | 0.7 TFLOP/s |
-| J1-J2 10×10, J2 = 0.5 | symmetric RBM α = 4, QMBL run | 1.2e15 | 0.51 h, A100 80 GB (measured) | 0.7 TFLOP/s |
-| J1-J2 10×10, J2 = 0.5 | RBM α = 1, QMBL run | 3.0e14 | 0.45 h, A100 80 GB (measured) | 0.2 TFLOP/s |
-| triangular 36 | RBM α = 1, QMBL run | 7.8e13 | 0.10 h, A100 80 GB (measured) | 0.2 TFLOP/s |
+| J1-J2 10×10, J2 = 0.5 | symmetric RBM α = 4, QMBL run | 2.5e15 | 0.51 h, A100 80 GB (measured) | 1.3 TFLOP/s |
+| J1-J2 10×10, J2 = 0.5 | RBM α = 1, QMBL run | 6.2e14 | 0.45 h, A100 80 GB (measured) | 0.4 TFLOP/s |
+| triangular 36 | RBM α = 1, QMBL run | 9.2e13 | 0.10 h, A100 80 GB (measured) | 0.25 TFLOP/s |
 
 **The rates now sit where the hardware says they should.** The A100 rows, in double
 precision, run at 0.9-3.7 TFLOP/s, 10-40 % of its FP64 peak; the minGRU in single precision on
 an L40S and the NNBF in TF32 on an H100 at 7-45 % of their peaks. Under `nqs-v1` the same rows
 spread from 0.01 to 366 TFLOP/s, because the symmetrisation, the training stages, the discarded
 samples and the complex arithmetic were missing. QMBL's own small RBMs (1368 and 10200 parameters)
-stay lowest, at 0.1-0.7 TFLOP/s: their steps are too small to fill a card. **An estimate is good
+stay lowest, at 0.25-0.4 TFLOP/s: their steps are too small to fill a card. QMBL's rows use
+their counted forward pass (above), which doubled the RBMs' estimates. **An estimate is good
 to an order of magnitude** where the run's evaluation is stated, and no better; that is why it
 has its own axis and its own figures (`figures/flops/`, `figures/energy-vs-flops.svg`) and is
 never placed on the hours axis. Turning FLOPs into hours would need exactly the conversion

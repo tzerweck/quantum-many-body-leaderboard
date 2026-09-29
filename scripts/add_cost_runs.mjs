@@ -29,6 +29,21 @@ const resourcesSaid = x => {
 const label = (r, f) => `${r.label}, QMBL cost-to-reproduce run${/^h100-/.test(f || "") ? ", H100 size ladder" : ""}`;
 const jobOf = h => (h.slurm_job_id ? `Slurm job ${h.slurm_job_id}` : "no scheduler");
 
+// The forward pass of the network, counted from the program JAX traces for it
+// (checks/cost/forward_flops.py, forward-flops.json; Tristan, 2026-09-29): nqs-v2 in flops.mjs
+// uses it instead of its modelled 2 x parameters x reuse. Attached only where the counted
+// network has the run's parameter count.
+const FWD_FILE = "checks/cost/forward-flops.json";
+const FWD = fs.existsSync(FWD_FILE) ? JSON.parse(fs.readFileSync(FWD_FILE, "utf8")) : null;
+const forwardOf = res => {
+  const c = FWD?.configurations.find(x => x.instance_id === res.instance_id && x.model === res.model && x.flops_per_configuration > 0);
+  if (!c) return undefined;
+  if (c.parameters !== res.parameters) { console.log(`  forward count for ${res.instance_id} ${res.model}: ${c.parameters} parameters, the run has ${res.parameters}; not attached`); return undefined; }
+  const env = FWD.environment.cpu;
+  return { flops_per_configuration: c.flops_per_configuration, transcendentals_per_configuration: c.transcendentals_per_configuration,
+    source: `${FWD_FILE}, counted ${env.ran_utc.slice(0, 10)} by ${FWD.script} (sha256 ${FWD.script_sha256.slice(0, 12)}) with NetKet ${env.netket}, jax ${env.jax}` };
+};
+
 for (const f of files) {
   let res;
   try { res = JSON.parse(fs.readFileSync(path.join(DIR, f), "utf8")); } catch (e) { console.log(`SKIP ${f}: ${e.message.slice(0, 60)}`); continue; }
@@ -76,6 +91,7 @@ for (const f of files) {
           proposals_per_sample: inst.n_sites * (tr.n_samples / tr.n_chains + tr.n_discard_per_chain) / (tr.n_samples / tr.n_chains),
           local_energy: "all", complex: ["rbm", "rbmsymm"].includes(res.model), // the GCNN is complex too, but in NetKet's irreps mode its FLOPs already equal the model's 2 P |G| (verification 2026-09-25)
           sr: /Cholesky/.test(tr.optimizer) ? { kind: "dense" } : { kind: "cg", cg_iterations: null },
+          forward_flops: forwardOf(res),
           code: `NetKet ${sw.netket} (checks/cost/run_nqs.py)`,
         },
         reported_as: said,

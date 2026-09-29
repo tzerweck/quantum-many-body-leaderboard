@@ -146,9 +146,40 @@ same values, `source` the results file, job and commit). The row ranks like any 
 published number would mean nobody has published a good number for that instance, the same
 reading RULES.md 8.2 gives a VarBench baseline.
 
+## The forward pass, counted (2026-09-29)
+
+The FLOP estimate (DATA.md, `nqs-v2`) models one forward pass of a network as
+2 × c_x × parameters × reuse. For QMBL's own networks that pass is counted instead (Tristan,
+2026-09-29, after arXiv:2606.02794 measured theirs with JAX's FLOP counter).
+
+- **How.** `forward_flops.py` builds each network exactly as `run_nqs.py` does, lets JAX trace
+  one forward pass on a batch of configurations of the sampler's dtype, and counts the traced
+  program's arithmetic in DATA.md's convention: a real multiply-add is 2 FLOPs, 8 when both
+  factors are complex; elementwise operations 1 per element (a complex multiply 6);
+  transcendental functions counted apart. Per configuration is the difference between batches
+  of 16 and 1024, so work on the parameters alone is not charged to each configuration.
+  XLA's own cost analysis of the same program sits beside it (lowered, and compiled for the
+  CPU; `forward-flops-run.sh` adds a GPU compilation when the host has an eligible card, and on
+  2026-09-29 it had none).
+- **Where.** Nothing runs, so the count needs no card: it is made on the H100 host's CPU with
+  the runs' NetKet and JAX versions (`h100/forward-flops.sh start`, then `fetch`), for every
+  instance and ansatz `run_nqs.py` knows, and written to `forward-flops.json`.
+- **What it changes.** `add_cost_runs.mjs` attaches the count to each run's row
+  (`evaluation.forward_flops`) where the counted network has the run's parameter count, and
+  `flops.mjs` uses it in place of the modelled forward pass. Everything else in the estimate
+  (local energies, proposals, gradient, SR) is still modelled.
+- **What it found.** On the eight runs the count is 0.99-1.01 times the model for the ViT,
+  1.2-1.3 times for the GCNN and 2.0-2.1 times for the RBMs. The RBMs have complex parameters,
+  and JAX promotes the real spin configuration to complex, so every multiply-add is complex by
+  complex (8 FLOPs where the model assumed 4). XLA counts a complex multiply-add as 2 FLOPs,
+  like a real one, so its analysis agrees with the count to 0.1 % on the ViT and reads the
+  complex networks 2-4 times low.
+
 ## Files
 
 - `run_nqs.py`, `vit.py` — the neural-state runs. `run_dmrg.py` — DMRG.
+- `forward_flops.py`, `forward-flops.json` — the counted forward pass of every network (above);
+  `h100/forward-flops.sh` and `h100/forward-flops-run.sh` run it on the H100 host.
 - `euler/` — the sbatch scripts as submitted, and `submit.sh`.
 - `results/` — one JSON per configuration (the best of its runs), with its `.trace.jsonl` and `.params.msgpack`; `results/runs/` holds every v1.4 run as `<name>--<Slurm job>.json` with its trace, never rows.
 - `calibration/` — runs made to calibrate an estimate, never rows (`add_cost_runs.mjs` reads
