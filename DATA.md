@@ -423,31 +423,34 @@ Not counted, and said under every figure that shows a DMRG estimate:
 
 **Calibration.** The check is QMBL's own DMRG rungs, whose wall-clock is measured on
 8 cores (TeNPy 1.1.1, Sz conserved,
-[`checks/cost/`](checks/cost/README.md)). TeNPy's Lanczos count comes from a repeat of the
-triangular-36 χ = 500 rung (`checks/cost/calibration/dmrg-cal-tri-36.json`, the same energy to
-all printed digits): 3964 applications over 1053 Lanczos updates, **3.76 per update**, from 2
-to 20. The 35 updates on the smallest blocks were solved by full diagonalisation. The six
-rungs ran before the count was recorded, so their estimates use this 3.76 and are `low`
-confidence. Each rung's schedule covers every sweep up to the end of that rung, because the
-wall-clock does too.
+[`checks/cost/`](checks/cost/README.md)). TeNPy's Lanczos stops adaptively, so its count is
+measured: every rung since protocol v1.4 records its own, **2.6-3.8 effective-Hamiltonian
+applications per update** over the six rungs (3.76, 2.72 and 2.64 on the triangular ladder,
+3.83, 3.06 and 3.00 on J1-J2). A repeat of the triangular-36 χ = 500 rung measured it first
+(`checks/cost/calibration/dmrg-cal-tri-36.json`, the same energy to all printed digits): 3964
+applications over 1053 Lanczos updates, 3.76 per update, from 2 to 20; the 35 updates on the
+smallest blocks were solved by full diagonalisation. Each rung's schedule covers every sweep
+up to the end of that rung, because the wall-clock does too.
 
 | instance | rung | estimated FLOPs | measured | achieved per core |
 |---|---|---|---|---|
 | triangular 36 | χ = 500 | 2.4e14 | 3.7 core-h, EPYC 7742 | 18 GFLOP/s |
 | triangular 36 | χ = 1000 | 1.4e15 | 9.4 core-h, EPYC 7742 | 41 GFLOP/s |
 | triangular 36 | χ = 2000 | 9.3e15 | 24.4 core-h, EPYC 7742 | 105 GFLOP/s |
-| J1-J2 10×10, J2 = 0.5 | χ = 500 | 1.9e15 | 37 core-h, EPYC 7763 | 15 GFLOP/s |
-| J1-J2 10×10, J2 = 0.5 | χ = 1000 | 1.6e16 | 88 core-h, EPYC 7763 | 49 GFLOP/s |
-| J1-J2 10×10, J2 = 0.5 | χ = 2000 | 1.2e17 | 221 core-h, EPYC 7763 | 144 GFLOP/s |
+| J1-J2 10×10, J2 = 0.5 | χ = 500 | 2.0e15 | 15.3 core-h, EPYC 7742 | 36 GFLOP/s |
+| J1-J2 10×10, J2 = 0.5 | χ = 1000 | 1.3e16 | 44.6 core-h, EPYC 7742 | 80 GFLOP/s |
+| J1-J2 10×10, J2 = 0.5 | χ = 2000 | 9.4e16 | 181.5 core-h, EPYC 7742 | 145 GFLOP/s |
 
-**The implied rate grows with χ, six- to tenfold from χ = 500 to 2000.**
+**The implied rate grows with χ, four- to sixfold from χ = 500 to 2000.**
 One of these cores peaks at about 40-55 GFLOP/s in double precision. From χ ≈ 1000 upward
 the model therefore counts more arithmetic than the run did: blocks with different Sz are
 never multiplied, and that saving grows with χ. Below it, the run spends time on things the
 model does not count.
 
 The clock is itself uncertain. The calibration repeat took 3.4 core-h on one node and
-8.7 core-h on another of the same partition, for the same sweeps and the same energy.
+8.7 core-h on another of the same partition, for the same sweeps and the same energy, and the
+J1-J2 ladder reached χ = 2000 in 221 core-h on an EPYC 7763 node and in 182 core-h on an EPYC
+7742 node, again with the same three energies.
 
 **A DMRG estimate is therefore good to an order of magnitude, like a network's.** It
 overstates the work of a large-χ run by up to a factor of three against peak. It shares an
