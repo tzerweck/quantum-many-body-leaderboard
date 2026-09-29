@@ -85,26 +85,27 @@ function mark(t, x, y, color, filled, unit, href) {
 // a variational one - and only a result with a cost can be placed; a record that states no
 // cost is named in a line of text under the axis, never drawn as a line across it
 // (Tristan, 2026-09-23). QMBL's own runs are all named, so none is read as published.
-// The method with its whole detail, for a key or an enlarged panel, where there is room.
+// The method with its whole detail, for an enlarged panel, where there is room.
 const fullLabel = r => (r.computed_by === "qmbl" ? shortLabel(r) : `${r.method}${r.method_detail ? ` (${r.method_detail})` : ""}`);
 
-// An instance's own figure: every mark named. Where three or more marks are too close to name
-// in place, their region is boxed and drawn again below at its own scale. Returns the y the
-// footnote starts at.
+// An instance's own figure: every mark named, in place or, where its name finds no room, by a
+// number its hover card names. Where three or more marks are too close to name in place,
+// their region is boxed and drawn again below at its own scale. Returns the y the footnote
+// starts at.
 function drawInstance(t, parts, inst, pts, g) {
   const trial = [], crowd = [];
-  const k0 = drawPanel(t, trial, inst, pts, { ...g, nameAll: true, keyOut: crowd });
-  if (crowd.length < 3) { parts.push(...trial); return g.bottom + 70 + k0; }
+  drawPanel(t, trial, inst, pts, { ...g, nameAll: true, keyOut: crowd });
+  if (crowd.length < 3) { parts.push(...trial); return g.bottom + 70; }
   const cs = crowd.map(p => log(p.cost.value)), es = crowd.map(p => p.e);
   const espan = Math.max(Math.max(...es) - Math.min(...es), 1e-9);
   const box = { c0: 10 ** (Math.min(...cs) - 0.06), c1: 10 ** (Math.max(...cs) + 0.06), e0: Math.min(...es) - 0.2 * espan, e1: Math.max(...es) + 0.2 * espan };
   const inBox = pts.filter(p => p.cost.value >= box.c0 && p.cost.value <= box.c1 && p.e >= box.e0 && p.e <= box.e1);
-  const k1 = drawPanel(t, parts, inst, pts, { ...g, nameAll: true, hide: new Set(inBox), box });
-  const top2 = g.bottom + 70 + k1 + 26, bottom2 = top2 + plotHeight(inBox);
+  drawPanel(t, parts, inst, pts, { ...g, nameAll: true, hide: new Set(inBox), box });
+  const top2 = g.bottom + 70 + 26, bottom2 = top2 + plotHeight(inBox);
   parts.push(text(g.px, top2 - 14, "The boxed region, enlarged", { size: 11.5, fill: t.ink, weight: 600 }));
-  const k2 = drawPanel(t, parts, inst, inBox, { ...g, top: top2, bottom: bottom2, nameAll: true, tight: true,
+  drawPanel(t, parts, inst, inBox, { ...g, top: top2, bottom: bottom2, nameAll: true, tight: true,
     frontIn: frontierOf(pts).filter(p => inBox.includes(p)), recNoteOn: false });
-  return bottom2 + 70 + k2;
+  return bottom2 + 70;
 }
 
 // An instance's own figure names every mark, so it grows with the marks it holds: 300 px for
@@ -212,11 +213,13 @@ function drawPanel(t, parts, inst, pts, { px, left, right, top, bottom, xLabel, 
       const pick = spots.find(c => hits(c) === 0) ?? [...spots].sort((c1, c2) => hits(c1) - hits(c2))[0] ?? { x0: x + 10, x1: x + 10 + w, lx: x + 10, anchor: "start", ty: y };
       // In a crowd a name away from its mark's own row reads as its neighbour's: number it.
       const crowded = centres.some(([cx, cy]) => (cx !== x || cy !== y) && Math.hypot(cx - x, cy - y) < 24);
-      if (nameAll && (hits(pick) > 0 || (pick.ty !== y && crowded))) return { keyed: true, s: fullLabel(p.r) + (p.cost.measuredByQmbl ? " (cost measured by QMBL)" : ""), p, dx: x, dy: y };
+      if (nameAll && (hits(pick) > 0 || (pick.ty !== y && crowded))) return { keyed: true, p, dx: x, dy: y };
       placed.push(pick);
       return { s, w, x: pick.lx, anchor: pick.anchor, y: pick.ty + 4, forced: hits(pick) > 0 };
     });
-    // Numbered marks, left to right, the number in the first free spot touching the mark.
+    // Numbered marks, left to right, the number in the first free spot touching the mark. The
+    // number links to the mark's row as the mark does, so on the site hovering either shows
+    // the row's card, which names it; no key under the axis (Tristan, 2026-09-29).
     const keyed = allLabels.filter(l => l.keyed).sort((a, b) => a.dx - b.dx || a.dy - b.dy);
     keyed.forEach((k, i) => {
       const num = String(i + 1), w = textWidth(num, 9), { dx: x, dy: y } = k;
@@ -229,12 +232,10 @@ function drawPanel(t, parts, inst, pts, { px, left, right, top, bottom, xLabel, 
       const hits = c => covers(c.x0, c.x1, c.ty, [x, y]) + onLabel(c);
       const pick = spots.find(c => hits(c) === 0) ?? [...spots].sort((c1, c2) => hits(c1) - hits(c2))[0];
       placed.push(pick);
-      Object.assign(k, { num, x: pick.lx, y: pick.ty + 3, anchor: pick.anchor });
+      Object.assign(k, { num, x: pick.lx, y: pick.ty + 3, anchor: pick.anchor, box: pick });
     });
     const labels = allLabels.filter(l => !l.keyed).sort((a, b) => a.y - b.y);
     keyOut?.push(...keyed.map(k => k.p));
-    // Two keyed marks with one name are told apart by their source.
-    for (const k of keyed) if (keyed.filter(o => o.s === k.s).length > 1 && k.p.r.arxiv) k.s += ` [arXiv:${k.p.r.arxiv}]`;
     // Nudged down only past labels they actually overlap, horizontally as well as vertically.
     const extent = l => l.anchor === "start" ? [l.x, l.x + l.w] : [l.x - l.w, l.x];
     labels.sort((a, b) => a.y - b.y);
@@ -255,23 +256,15 @@ function drawPanel(t, parts, inst, pts, { px, left, right, top, bottom, xLabel, 
       if (crosses(l0, l1, l.y - 4)) labelClashes.push(`${instLabel(inst)}: "${l.s}"`);
       parts.push(text(l.x, l.y, l.s, { size: 10.5, fill: t.ink2, anchor: l.anchor }));
     }
-    for (const k of keyed) parts.push(text(k.x, k.y, k.num, { size: 9, fill: t.ink2, anchor: k.anchor, weight: 600 }));
+    // A 9 px digit is a small target: an invisible box a little larger than it takes the pointer.
+    // The digit comes second, so the site's hover scale (a.pt > :nth-child(2)) grows it as it grows a mark.
+    for (const k of keyed) parts.push(linked(rowHref(k.p.inst, k.p.r),
+      `<rect x="${n(k.box.x0 - 2)}" y="${n(k.box.ty - 6)}" width="${n(k.box.x1 - k.box.x0 + 4)}" height="11" fill="${t.surface}" fill-opacity="0"/>` +
+      text(k.x, k.y, k.num, { size: 9, fill: t.ink2, anchor: k.anchor, weight: 600 })));
     parts.push(text((left + right) / 2, bottom + 32, xLabel, { size: 10.5, fill: t.ink2, anchor: "middle" }));
     const recNote = recNoteOn && rec && !pts.some(p => p.r === rec);
     if (recNote)
       parts.push(text(left, bottom + 48, `${rec.bound_type === "exact" ? boundLabel(rec) : "record"}: ${recE.toFixed(6).replace("-", "−")} (${shortLabel(rec)}), no cost stated, not drawn`, { size: 9.5, fill: t.muted }));
-    if (!keyed.length) return 0;
-    // The key: "1 ViT   2 fViT ...", wrapped to the plot's width.
-    const lines = [[]];
-    let used = 0;
-    for (const k of keyed) {
-      const item = `${k.num} ${k.s}`, w = textWidth(item, 10) + textWidth("  ·  ", 10);
-      if (used + w > right - left && lines.at(-1).length) { lines.push([]); used = 0; }
-      lines.at(-1).push(item); used += w;
-    }
-    const y0 = bottom + (recNote ? 64 : 50);
-    lines.forEach((l, i) => parts.push(text(left, y0 + 14 * i, l.join("  ·  "), { size: 10, fill: t.ink2 })));
-    return y0 + 14 * (lines.length - 1) - (bottom + 48) + 8;
 }
 
 function costFigure({ name, title, subtitle, costOf, minRows, xLabel, legendItems, footer, describe }) {
