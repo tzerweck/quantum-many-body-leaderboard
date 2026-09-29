@@ -55,6 +55,15 @@ sign)". `family` groups methods for the figures, and `sector` marks an exact dia
 restricted to one symmetry sector. All of these are assigned in
 [`scripts/method_names.mjs`](scripts/method_names.mjs), one entry per published string.
 
+Symmetry and extrapolation are written in fixed slots after the free text, separated by
+"; " and in this order: `symmetric:` (built into the ansatz or the tensors, or named without
+saying how), `projected:` (projected onto, as the source says) and `extrapolated:` (what goes
+to zero or infinity, how in brackets): "72 hidden units; projected: K = 0, spin parity
+(even), A1", "snake path; symmetric: SU(2); extrapolated: χ → ∞ (linear in two-site
+variance)". Groups come from one list (`SYMMETRY_TERMS`). A source that names no group
+reads `unspecified`, which after a named group means further groups the source does not
+name. The validator rejects symmetry or extrapolation wording outside a slot.
+
 `baseline: true` marks a row VarBench **computed itself** rather than collected from a
 paper: a reference calculation run across the instance set so the V-score would have
 something to measure against, not a published state-of-the-art claim. 376 of the 583

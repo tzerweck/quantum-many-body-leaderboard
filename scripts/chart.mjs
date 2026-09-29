@@ -193,20 +193,32 @@ const ABBREVIATED = { "Hierarchical backflow": "HB", "Residual hierarchical back
 const LABEL_MAX = 26;
 // A row QMBL computed itself (DATA.md, computed_by) is marked "QMBL" in its label, in every
 // figure, so it is never read as a published result (Tristan, 2026-09-23).
+// A label names a slot's groups or limit without the slot's key ("aCNN (C4v)", "RNN (variance
+// → 0)"), and a slot that names no group by its key alone ("GCNN (deep, projected)");
+// method_names.mjs describes the slots.
+const SLOT = /^(?:symmetric|projected|extrapolated): /;
+const slotLabel = p => {
+  const [key, value] = [p.slice(0, p.indexOf(": ")), p.slice(p.indexOf(": ") + 2)];
+  const named = value.split(", ").filter(t => !t.startsWith("unspecified"));
+  return named.length ? named.join(", ") : key;
+};
 export function shortLabel(r) {
   let s = ABBREVIATED[r.method] ?? r.method;
   const qmbl = r.computed_by === "qmbl";
+  const pieces = (r.method_detail || "").split("; ").filter(Boolean);
   if (qmbl) {
     // As much of the detail as fits, dropping trailing clauses, then "QMBL"; a bond
-    // dimension goes first, since it is what tells one DMRG rung from the next.
-    const parts = (r.method_detail || "").replace(/,?\s*QMBL (run|implementation)$/, "").split(", ").filter(Boolean)
-      .map(x => x === "translation-symmetric" ? "symmetric" : x);   // labels only; the table keeps the full detail
+    // dimension goes first, since it is what tells one DMRG rung from the next, and a
+    // symmetry next.
+    const slots = pieces.filter(p => SLOT.test(p)).map(p => p === "symmetric: translations" ? "symmetric" : slotLabel(p));
+    const parts = [...slots, ...pieces.filter(p => !SLOT.test(p)).join(", ").split(", ")]
+      .filter(x => x && !/^QMBL (run|implementation)$/.test(x));   // labels only; the table keeps the full detail
     if (r.compute?.bond_dimension) parts.unshift(`χ = ${r.compute.bond_dimension}`);
     let k = parts.length;
     while (k > 0 && `${s} (${parts.slice(0, k).join(", ")}, QMBL)`.length > LABEL_MAX) k--;
     s = k ? `${s} (${parts.slice(0, k).join(", ")}, QMBL)` : `${s} (QMBL)`;
   } else {
-    const withDetail = `${s} (${r.method_detail})`;
+    const withDetail = `${s} (${pieces.map(p => SLOT.test(p) ? slotLabel(p) : p).join(", ")})`;
     if (r.method_detail && withDetail.length <= LABEL_MAX) s = withDetail;
   }
   if (r.bound_type === "projected") {

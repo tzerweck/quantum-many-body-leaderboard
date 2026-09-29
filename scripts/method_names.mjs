@@ -14,8 +14,49 @@
 // sector, extrapolated } - `extrapolated` replaces the detail on the row VarBench printed as
 // an extrapolation inside a DMRG string (emit.mjs), which shares the string with its
 // finite-bond-dimension row.
+//
+// Symmetry and extrapolation are written in slots, after the free text and separated from it
+// and from each other by "; ", in this order (Tristan, 2026-09-29):
+//   symmetric: <groups>     built into the ansatz or the tensors, or named without saying how
+//   projected: <groups>     projected onto, as the source says
+//   extrapolated: <X → 0 or χ → ∞> (<how>)
+// Groups come from SYMMETRY_TERMS. "unspecified" is a source that names no group; after a
+// named group it means further groups the source does not name. validate.mjs holds every
+// row to this (detailIssue).
 
 const LANCZOS = n => n === 1 ? "1 Lanczos step" : `${n} Lanczos steps`;
+
+export const SYMMETRY_TERMS = new Set(["SU(2)", "U(1) charge", "U(1) spin", "translations", "K = 0",
+  "momentum", "spin parity", "spin parity (even)", "point group", "point group (simplified)", "A1", "C3",
+  "C4", "C4v", "C6v", "sublattice", "full symmetry group", "unspecified",
+  "unspecified (symmetry optimization)", "unspecified (symmetrized variants)"]);
+const SLOTS = ["symmetric", "projected", "extrapolated"];
+const EXTRAPOLATION = /^(?:(?:variance|truncation error|Δτ) → 0|χ → ∞)(?: \([^()]+\))?$/;
+// Symmetry or extrapolation wording outside a slot. A Gutzwiller projection removes double
+// occupancy; it is part of the state, not a symmetry.
+const LOOSE = /symmetr|projection|(?<!Gutzwiller)-projected|→ [0∞]|extrapolat/i;
+
+// Why a detail breaks the slot convention, or null.
+export function detailIssue(detail) {
+  const parts = detail ? detail.split("; ") : [];
+  let last = -1;
+  for (const part of parts) {
+    const key = SLOTS.find(s => part.startsWith(`${s}: `));
+    if (!key) {
+      if (last >= 0) return `free text "${part}" after a slot`;
+      if (LOOSE.test(part)) return `symmetry or extrapolation outside a slot: "${part}"`;
+      continue;
+    }
+    const k = SLOTS.indexOf(key);
+    if (k <= last) return `slot "${key}" repeated or out of order`;
+    last = k;
+    const value = part.slice(key.length + 2);
+    if (key === "extrapolated") { if (!EXTRAPOLATION.test(value)) return `extrapolated: "${value}" is not X → 0 or χ → ∞`; continue; }
+    const unknown = value.split(", ").filter(t => !SYMMETRY_TERMS.has(t));
+    if (unknown.length) return `${key}: unknown group ${unknown.map(t => `"${t}"`).join(", ")}`;
+  }
+  return null;
+}
 
 export const NAMES = {
   // ---------------------------------------------------------------- exact
@@ -30,7 +71,7 @@ export const NAMES = {
   "SSE QMC (stochastic series expansion), T -> 0 converged at beta/L = 32 and 64": ["SSE QMC", ""],
   "QMC (continuous-time expansion)": ["CT-QMC", "ground-state projector, Θ = 40, free-fermion trial state; LCT-INT of PRB 91, 235151"],
   "AFQMC (Metropolis), numerically exact": ["AFQMC", ""],
-  "AFQMC (Metropolis, Trotter error extrapolated), numerically exact": ["AFQMC", "Δτ → 0"],
+  "AFQMC (Metropolis, Trotter error extrapolated), numerically exact": ["AFQMC", "extrapolated: Δτ → 0"],
   "AFQMC, sign-problem-free at half filling (tau = 0.01, Trotter error below the statistical error)": ["AFQMC", "Δτ = 0.01"],
 
   // ---------------------------------------------------------------- projected
@@ -46,25 +87,25 @@ export const NAMES = {
   "DMRG": ["DMRG", ""],
   "DMRG (8x4)": ["DMRG", ""],
   "DMRG keeping 4096 states": ["DMRG", "", { bond_dimension: 4096 }],
-  "DMRG on the L x L torus, 4096 SU(2) states": ["DMRG", "SU(2)", { bond_dimension: 4096 }],
-  "DMRG on the L x L torus, 6144 SU(2) states": ["DMRG", "SU(2)", { bond_dimension: 6144 }],
-  "DMRG on the L x L torus, 8192 SU(2) states": ["DMRG", "SU(2)", { bond_dimension: 8192 }],
-  "DMRG, extrapolated in the truncation error (4096-8192 SU(2) states)": ["DMRG", "SU(2), truncation error → 0 from 4096 to 8192 states"],
-  "DMRG, truncation-error extrapolated (Torus 4)": ["DMRG", "truncation error → 0"],
-  "DMRG, truncation-error extrapolated (Torus 6)": ["DMRG", "truncation error → 0"],
-  "SU(2) DMRG, extrapolated (χ→∞, linear fit vs two-site variance), snake path": ["DMRG", "SU(2), snake path, bond dimension → ∞ by a linear fit in the two-site variance"],
+  "DMRG on the L x L torus, 4096 SU(2) states": ["DMRG", "symmetric: SU(2)", { bond_dimension: 4096 }],
+  "DMRG on the L x L torus, 6144 SU(2) states": ["DMRG", "symmetric: SU(2)", { bond_dimension: 6144 }],
+  "DMRG on the L x L torus, 8192 SU(2) states": ["DMRG", "symmetric: SU(2)", { bond_dimension: 8192 }],
+  "DMRG, extrapolated in the truncation error (4096-8192 SU(2) states)": ["DMRG", "symmetric: SU(2); extrapolated: truncation error → 0 (4096 to 8192 states)"],
+  "DMRG, truncation-error extrapolated (Torus 4)": ["DMRG", "extrapolated: truncation error → 0"],
+  "DMRG, truncation-error extrapolated (Torus 6)": ["DMRG", "extrapolated: truncation error → 0"],
+  "SU(2) DMRG, extrapolated (χ→∞, linear fit vs two-site variance), snake path": ["DMRG", "snake path; symmetric: SU(2); extrapolated: χ → ∞ (linear in two-site variance)"],
   "DMRG on TPU (bond dimension = 32768)": ["DMRG", "on TPUs", { bond_dimension: 32768 }],
   "DMRG (max truncation error ~ 1.0E-12)": ["DMRG", "truncation error ~1e-12"],
   "DMRG (max truncation error ~ 1.0E-13)": ["DMRG", "truncation error ~1e-13"],
   "DMRG (max truncation error ~ 1.0E-14)": ["DMRG", "truncation error ~1e-14"],
   "DMRG (max truncation error ~ 2.8E-12)": ["DMRG", "truncation error ~2.8e-12"],
-  "DMRG (MaxTruncError ~1.87E-6, MaxBondDim=10000, Extrapolated Energy = - 251.4628 +/- 0.0019)": ["DMRG", "truncation error ~1.9e-6", { bond_dimension: 10000, extrapolated: "truncation error → 0" }],
-  "DMRG (maxbonddim = 1550, extrapolated energy -12.266149729 +/- 5E-8)": ["DMRG", "", { bond_dimension: 1550, extrapolated: "truncation error → 0" }],
-  "DMRG (MaxBondDim = 1550, Extrap Energy = -12.762823 +/- 2.e-6)": ["DMRG", "", { bond_dimension: 1550, extrapolated: "truncation error → 0" }],
-  "DMRG (MaxBondDim ~1500, Extrap Eng = -9.9450941 +/- 2.9e-7)": ["DMRG", "bond dimension ~1500", { extrapolated: "truncation error → 0" }],
-  "DMRG (MaxLinkDim = 10000, MaxTruncErr~2.0E-05, extrap energy -48.073 +/- 0.004)": ["DMRG", "truncation error ~2e-5", { bond_dimension: 10000, extrapolated: "truncation error → 0" }],
-  "DMRG (MaxLinkDim = 12000, MaxTruncErr~6.6E-06, extrap energy -23.5658 +/- 0.0003)": ["DMRG", "truncation error ~6.6e-6", { bond_dimension: 12000, extrapolated: "truncation error → 0" }],
-  "DMRG (MaxLinkDim=10000, MaxTruncErr ~ 3.4E-5, Extrap Energy -32.0027 +/- 0.0206)": ["DMRG", "truncation error ~3.4e-5", { bond_dimension: 10000, extrapolated: "truncation error → 0" }],
+  "DMRG (MaxTruncError ~1.87E-6, MaxBondDim=10000, Extrapolated Energy = - 251.4628 +/- 0.0019)": ["DMRG", "truncation error ~1.9e-6", { bond_dimension: 10000, extrapolated: "extrapolated: truncation error → 0" }],
+  "DMRG (maxbonddim = 1550, extrapolated energy -12.266149729 +/- 5E-8)": ["DMRG", "", { bond_dimension: 1550, extrapolated: "extrapolated: truncation error → 0" }],
+  "DMRG (MaxBondDim = 1550, Extrap Energy = -12.762823 +/- 2.e-6)": ["DMRG", "", { bond_dimension: 1550, extrapolated: "extrapolated: truncation error → 0" }],
+  "DMRG (MaxBondDim ~1500, Extrap Eng = -9.9450941 +/- 2.9e-7)": ["DMRG", "bond dimension ~1500", { extrapolated: "extrapolated: truncation error → 0" }],
+  "DMRG (MaxLinkDim = 10000, MaxTruncErr~2.0E-05, extrap energy -48.073 +/- 0.004)": ["DMRG", "truncation error ~2e-5", { bond_dimension: 10000, extrapolated: "extrapolated: truncation error → 0" }],
+  "DMRG (MaxLinkDim = 12000, MaxTruncErr~6.6E-06, extrap energy -23.5658 +/- 0.0003)": ["DMRG", "truncation error ~6.6e-6", { bond_dimension: 12000, extrapolated: "extrapolated: truncation error → 0" }],
+  "DMRG (MaxLinkDim=10000, MaxTruncErr ~ 3.4E-5, Extrap Energy -32.0027 +/- 0.0206)": ["DMRG", "truncation error ~3.4e-5", { bond_dimension: 10000, extrapolated: "extrapolated: truncation error → 0" }],
   "DMRG (MaxBondDim ~ 3200)": ["DMRG", "bond dimension ~3200"],
   "DMRG (MaxBondDim ~3200)": ["DMRG", "bond dimension ~3200"],
   "DMRG (MaxBondDim ~1500)": ["DMRG", "bond dimension ~1500"],
@@ -97,11 +138,11 @@ export const NAMES = {
   "2D Recurrent Neural Network (2DRNN)": ["2D RNN", ""],
   "2D RNN wavefunction (best variational)": ["2D RNN", ""],
   "2D RNN wavefunction (iterative retraining, s=4.0, r=0.158)": ["2D RNN", "iterative retraining, s = 4.0, r = 0.158"],
-  "2D RNN wavefunction, zero-variance extrapolation": ["2D RNN", "variance → 0"],
+  "2D RNN wavefunction, zero-variance extrapolation": ["2D RNN", "extrapolated: variance → 0"],
   "2D tensorized-GRU RNN wavefunction, best variational": ["2D RNN", "tensorized GRU"],
-  "2D tensorized-GRU RNN, zero-variance extrapolation": ["2D RNN", "tensorized GRU, variance → 0"],
-  "2D minGRU (3 layers, c4v symmetry, parallel scan)": ["minGRU", "6 layers, d_h = 512, b = 2, C4v"], // arXiv:2605.13807 Table 4: the cold-start network (compute pass 2026-09-27)
-  "2D minGRU, 3 layers, c4v symmetry, iterative retraining (PSR-NQS)": ["minGRU", "3 layers, d_h = 256, b = 2, C4v, iterative retraining"], // Table 5
+  "2D tensorized-GRU RNN, zero-variance extrapolation": ["2D RNN", "tensorized GRU; extrapolated: variance → 0"],
+  "2D minGRU (3 layers, c4v symmetry, parallel scan)": ["minGRU", "6 layers, d_h = 512, b = 2; symmetric: C4v"], // arXiv:2605.13807 Table 4: the cold-start network (compute pass 2026-09-27)
+  "2D minGRU, 3 layers, c4v symmetry, iterative retraining (PSR-NQS)": ["minGRU", "3 layers, d_h = 256, b = 2, iterative retraining; symmetric: C4v"], // Table 5
   "2D pRNN wave function (Marshall-sign-rotated, GRU cell, d_h=200) + Adam optimizer": ["pRNN", "GRU, hidden dimension 200, Marshall sign, Adam"],
   "2D pRNN wave function (Marshall-sign-rotated, GRU cell, d_h=200) + minSR optimizer (regularized)": ["pRNN", "GRU, hidden dimension 200, Marshall sign, MinSR"],
   "Adaptive RNN (hidden dim 32->256, doubling)": ["Adaptive RNN", "hidden dimension 32 → 256"],
@@ -109,15 +150,15 @@ export const NAMES = {
   "Static RNN (hidden dim 256)": ["RNN", "hidden dimension 256"],
   "LSTM": ["LSTM", ""],
   "RNN": ["RNN", ""],
-  "RNN (zero-variance)": ["RNN", "variance → 0"],
-  "RNN + translational symmetry": ["RNN", "translation-symmetric"],
+  "RNN (zero-variance)": ["RNN", "extrapolated: variance → 0"],
+  "RNN + translational symmetry": ["RNN", "symmetric: translations"],
 
   // ---------------------------------------------------------------- transformer / ViT
   "ViT": ["ViT", ""],
-  "ViT with Spatial Attention, zero-variance extrapolation": ["ViT", "spatial attention, b = 4, variance → 0"], // arXiv:2602.02665 Sec. V.2: "b = 4 for the square lattice"
-  "ViT with symmetry restoration": ["ViT", "symmetry restoration, b = 4"],
-  "ViT with Spatial Attention, translations + C6v projection": ["ViT", "spatial attention, b = 3, translations + C6v projection"], // arXiv:2602.02665 Table 1 (triangular)
-  "ViT with Spatial Attention, zero-variance extrapolation (triangular)": ["ViT", "spatial attention, b = 3, variance → 0"],
+  "ViT with Spatial Attention, zero-variance extrapolation": ["ViT", "spatial attention, b = 4; extrapolated: variance → 0"], // arXiv:2602.02665 Sec. V.2: "b = 4 for the square lattice"
+  "ViT with symmetry restoration": ["ViT", "b = 4; projected: unspecified"],
+  "ViT with Spatial Attention, translations + C6v projection": ["ViT", "spatial attention, b = 3; projected: translations, C6v"], // arXiv:2602.02665 Table 1 (triangular)
+  "ViT with Spatial Attention, zero-variance extrapolation (triangular)": ["ViT", "spatial attention, b = 3; extrapolated: variance → 0"],
   "fViT (vision transformer, 2.7e5 params)": ["fViT", ""],
   "Factored attention (ViT, h=10,d=60,b=2,nl=4)": ["ViT", "factored attention, h = 10, d = 60, b = 2, 4 layers"],
   "Decoupled attention (ViT, h=10,d=60,b=2,nl=4)": ["ViT", "decoupled attention, h = 10, d = 60, b = 2, 4 layers"],
@@ -125,7 +166,7 @@ export const NAMES = {
   "Factored-attention transformer (improved, Ns = 2^14, Np = 434760)": ["ViT", "factored attention, improved", { parameters: 434760, samples: 16384 }],
   "Convolutional transformer wave function (CTWF)": ["CTWF", ""],
   "Holographic Quantum Transformer (HQT)": ["HQT", ""],
-  "Holographic Quantum Transformer (HQT), zero-shot 8x8->10x10 transfer": ["HQT", "8x8-trained model projected onto 10x10, then 50 iterations with the backbone frozen and 60 with it unfrozen on 10x10 (110 iterations, Fig. 3)"],
+  "Holographic Quantum Transformer (HQT), zero-shot 8x8->10x10 transfer": ["HQT", "8x8-trained model transferred to 10x10, then 50 iterations with the backbone frozen and 60 with it unfrozen on 10x10 (110 iterations, Fig. 3)"],
   "HQT (Ours)": ["HQT", ""],
   "HQT (Ours), Cold Start": ["HQT", "cold start"],
   "PITQS": ["PITQS", ""],
@@ -134,20 +175,20 @@ export const NAMES = {
   "Transformer backflow + MARCH optimizer": ["Transformer backflow", "MARCH"],
   "NQS (transformer-based backflow ansatz)": ["Transformer backflow", ""],
   "Det": ["Transformer backflow", "Slater determinant", { family: "transformer / ViT" }],
-  "Det, T": ["Transformer backflow", "Slater determinant, translation-restored", { family: "transformer / ViT" }],
+  "Det, T": ["Transformer backflow", "Slater determinant; projected: translations", { family: "transformer / ViT" }],
   "Det-PH": ["Transformer backflow", "particle-hole determinant", { family: "transformer / ViT" }],
   "Pfaffian": ["Transformer backflow", "Pfaffian", { family: "transformer / ViT" }],
   "HFDS-ViT, 8x8 torus": ["HFDS-ViT", ""],
-  "HFDS Symm-ViT-Ti, 8x8 torus": ["HFDS-ViT", "symmetric ViT-Ti"],
+  "HFDS Symm-ViT-Ti, 8x8 torus": ["HFDS-ViT", "ViT-Ti; symmetric: unspecified"],
   "JBf-ViT (vision transformer backflow), 8x8 torus": ["JBf-ViT", ""],
-  "JBf Symm-ViT-Ti, 8x8 torus": ["JBf-ViT", "symmetric ViT-Ti"],
+  "JBf Symm-ViT-Ti, 8x8 torus": ["JBf-ViT", "ViT-Ti; symmetric: unspecified"],
 
   // ---------------------------------------------------------------- CNN / ResNet
   "CNN": ["CNN", ""],
   "CNN (Li et al. 2022, sunway supercomputer)": ["CNN", ""],
   "previous work [47] (Liang et al.)": ["CNN", ""],
   "CNN + MinSR": ["CNN", "MinSR"],
-  "CNN NQS with symmetry projections": ["CNN", "symmetry-projected"],
+  "CNN NQS with symmetry projections": ["CNN", "projected: unspecified"],
   "CNN, REMD [73]": ["CNN", "REMD"],
   "CNN1 (VMC, 100 SR steps)": ["CNN", "100 SR steps"],
   "CNN amplitude+phase NQS, O-tilde method (SR), Eq.(22)": ["CNN", "amplitude and phase, Õ method with SR"],
@@ -160,24 +201,24 @@ export const NAMES = {
   "A9 residual-CNN (wide-shallow), LR=0.008, seed 9 (HPO-selected)": ["ResNet", "A9 wide-shallow, learning rate 0.008, seed 9"],
   "ResNet2 (64 conv layers, >1e6 params), MinSR": ["ResNet", "64 conv layers, >1e6 parameters, MinSR"],
   "ResNet2 (64 conv layers), MinSR": ["ResNet", "64 conv layers, MinSR"],
-  "ResNet2 MinSR, zero-variance extrapolation": ["ResNet", "MinSR, variance → 0"],
+  "ResNet2 MinSR, zero-variance extrapolation": ["ResNet", "MinSR; extrapolated: variance → 0"],
   "ConvNext (6,3,3)[2,2], 2.6e5 params": ["ConvNeXt", "(6,3,3)[2,2]", { parameters: 2.6e5 }],
   "aCNN": ["aCNN", ""],
-  "aCNN(C4)": ["aCNN", "C4"],
-  "aCNN(C4v)": ["aCNN", "C4v"],
+  "aCNN(C4)": ["aCNN", "symmetric: C4"],
+  "aCNN(C4v)": ["aCNN", "symmetric: C4v"],
   "aCNN, sign structure fixed to the exact (ED) one": ["aCNN", "sign structure from ED"],
   "GCNN": ["GCNN", ""],
-  "GCNN (6 layers, 6 feature maps), symmetric ansatz": ["GCNN", "6 layers, 6 feature maps"],
+  "GCNN (6 layers, 6 feature maps), symmetric ansatz": ["GCNN", "6 layers, 6 feature maps; symmetric: unspecified"],
   "GCNN (deep group-convolutional network)": ["GCNN", ""],
   "GCNN (deep group-equivariant CNN)": ["GCNN", ""],
   "GCNN + Lanczos step": ["GCNN", LANCZOS(1)],
   "GCNN, spinon pair-density-wave state (chi0, P_Z2 = -1, q = (pi, pi/sqrt3))": ["GCNN", "spinon pair-density-wave state (χ0, P_Z2 = −1, q = (π, π/√3))"],
   "Group CNN": ["GCNN", ""],
-  "Group CNN (deep, symmetry-projected)": ["GCNN", "symmetry-projected"],
+  "Group CNN (deep, symmetry-projected)": ["GCNN", "deep; projected: unspecified"],
   "Lattice Convolutional Network": ["LCN", "", { family: "CNN / ResNet" }],
   "PixelCNN (deep autoregressive)": ["NAQS", ""],
   "NAQS": ["NAQS", ""],
-  "ACE (16 conv layers) + full symmetry projection": ["ACE", "16 conv layers, symmetry-projected"],
+  "ACE (16 conv layers) + full symmetry projection": ["ACE", "16 conv layers; projected: full symmetry group"],
   "ACE (16 conv layers), no explicit symmetry": ["ACE", "16 conv layers"],
   "ACE (16 conv layers), no symmetry projection": ["ACE", "16 conv layers"],
   "ACE (Accurate Convolutional ansatz for lattice Electrons; deep convolutional backflow NQS)": ["ACE", ""],
@@ -192,47 +233,47 @@ export const NAMES = {
   "RBM wave function + 1-step Lanczos recursion": ["RBM", LANCZOS(1)],
   "RBM wave function + 2-step Lanczos recursion": ["RBM", LANCZOS(2)],
   "RBM + Lanczos recursion": ["RBM", "Lanczos steps"],
-  "RBM with symmetry projections": ["RBM", "symmetry-projected"],
-  "RBM with momentum (K=0), spin-parity (even S), and point-group (A1) projections, 72 hidden units": ["RBM", "K = 0, even spin parity and A1 projections, 72 hidden units"],
-  "RBM with momentum (K=0), spin-parity (even S), and point-group (A1) projections, 96 hidden units": ["RBM", "K = 0, even spin parity and A1 projections, 96 hidden units"],
-  "RBM+PP with momentum (K=0), spin-parity (even S), and point-group (A1) projections, 16 hidden units": ["RBM + PP", "K = 0, even spin parity and A1 projections, 16 hidden units"],
-  "RBM+PP (momentum, spin-parity and simplified point-group projections, 16 hidden units, no sublattice structure)": ["RBM + PP", "K = 0, even spin parity and simplified point-group projections, 16 hidden units, no sublattice structure"],
+  "RBM with symmetry projections": ["RBM", "projected: unspecified"],
+  "RBM with momentum (K=0), spin-parity (even S), and point-group (A1) projections, 72 hidden units": ["RBM", "72 hidden units; projected: K = 0, spin parity (even), A1"],
+  "RBM with momentum (K=0), spin-parity (even S), and point-group (A1) projections, 96 hidden units": ["RBM", "96 hidden units; projected: K = 0, spin parity (even), A1"],
+  "RBM+PP with momentum (K=0), spin-parity (even S), and point-group (A1) projections, 16 hidden units": ["RBM + PP", "16 hidden units; projected: K = 0, spin parity (even), A1"],
+  "RBM+PP (momentum, spin-parity and simplified point-group projections, 16 hidden units, no sublattice structure)": ["RBM + PP", "16 hidden units, no sublattice structure; projected: momentum, spin parity, point group (simplified)"],
   "RBM-fermionic": ["RBM", "fermionic"],
   "mVMC + RBM (as quoted)": ["mVMC + RBM", ""],
   "previous work [23] (Nomura & Imada neural-network solver)": ["mVMC + RBM", "", { family: "RBM" }],
   "many-variable Gutzwiller-projected spinon-mean-field + RBM (mVMC, Ref. [7])": ["mVMC + RBM", ""],
-  "mVMC-RBM (PP + RBM, spin-parity even)": ["mVMC + RBM", "even spin parity"],
-  "spin-parity mVMC-RBM/Lanczos (PP + RBM + 1st Lanczos step, spin-parity even, random initial state)": ["mVMC + RBM", "1 Lanczos step, even spin parity, random initial state"],
-  "mVMC (PP + RBM + 1st step Lanczos, spin-parity projection, Number of RBM neurons: 128)": ["mVMC + RBM", "1 Lanczos step, spin parity, 128 RBM neurons"],
-  "mVMC with SU(2) and momentum projections (gamma point) + RBM + Lanczos (Ncond = 214), alpha = 1, with 4x4 RBM subspace": ["mVMC + RBM", "SU(2) and K = 0 projections, Lanczos, α = 1, 4x4 RBM subspace"],
-  "mVMC with SU(2) and momentum projections (gamma point) + RBM + Lanczos (Ne = 214), alpha = 2, with 1x1 RBM subpsace": ["mVMC + RBM", "SU(2) and K = 0 projections, Lanczos, α = 2, 1x1 RBM subspace"],
-  "mVMC with SU(2) and momentum projections (gamma point) + RBM + Lanczos, (U=4), alpha = 4": ["mVMC + RBM", "SU(2) and K = 0 projections, Lanczos, α = 4"],
-  "mVMC with SU(2) and momentum projections (gamma point) + RBM + Lanczos, (U=4), alpha = 8 with 1x1 RBM subspace": ["mVMC + RBM", "SU(2) and K = 0 projections, Lanczos, α = 8, 1x1 RBM subspace"],
-  "mVMC with SU(2) and momentum projections (gamma point) + RBM + Lanczos, (U=8)": ["mVMC + RBM", "SU(2) and K = 0 projections, Lanczos"],
-  "mVMC with SU(2) and momentum projections (gamma point) + RBM + Lanczos, (U=8) (Ne = 64), alpha = 8 with 1x1 RBM-subspace": ["mVMC + RBM", "SU(2) and K = 0 projections, Lanczos, α = 8, 1x1 RBM subspace"],
-  "mVMC with SU(2) and momentum projections (gamma point) + RBM + Lanczos, (U=8), alpha = 1": ["mVMC + RBM", "SU(2) and K = 0 projections, Lanczos, α = 1"],
-  "mVMC with SU(2) and momentum projections (gamma point) + RBM + Lanczos, (U=8), alpha = 8 with 1x1 RBM subspace": ["mVMC + RBM", "SU(2) and K = 0 projections, Lanczos, α = 8, 1x1 RBM subspace"],
+  "mVMC-RBM (PP + RBM, spin-parity even)": ["mVMC + RBM", "projected: spin parity (even)"],
+  "spin-parity mVMC-RBM/Lanczos (PP + RBM + 1st Lanczos step, spin-parity even, random initial state)": ["mVMC + RBM", "1 Lanczos step, random initial state; projected: spin parity (even)"],
+  "mVMC (PP + RBM + 1st step Lanczos, spin-parity projection, Number of RBM neurons: 128)": ["mVMC + RBM", "1 Lanczos step, 128 RBM neurons; projected: spin parity"],
+  "mVMC with SU(2) and momentum projections (gamma point) + RBM + Lanczos (Ncond = 214), alpha = 1, with 4x4 RBM subspace": ["mVMC + RBM", "Lanczos steps, α = 1, 4x4 RBM subspace; projected: SU(2), K = 0"],
+  "mVMC with SU(2) and momentum projections (gamma point) + RBM + Lanczos (Ne = 214), alpha = 2, with 1x1 RBM subpsace": ["mVMC + RBM", "Lanczos steps, α = 2, 1x1 RBM subspace; projected: SU(2), K = 0"],
+  "mVMC with SU(2) and momentum projections (gamma point) + RBM + Lanczos, (U=4), alpha = 4": ["mVMC + RBM", "Lanczos steps, α = 4; projected: SU(2), K = 0"],
+  "mVMC with SU(2) and momentum projections (gamma point) + RBM + Lanczos, (U=4), alpha = 8 with 1x1 RBM subspace": ["mVMC + RBM", "Lanczos steps, α = 8, 1x1 RBM subspace; projected: SU(2), K = 0"],
+  "mVMC with SU(2) and momentum projections (gamma point) + RBM + Lanczos, (U=8)": ["mVMC + RBM", "Lanczos steps; projected: SU(2), K = 0"],
+  "mVMC with SU(2) and momentum projections (gamma point) + RBM + Lanczos, (U=8) (Ne = 64), alpha = 8 with 1x1 RBM-subspace": ["mVMC + RBM", "Lanczos steps, α = 8, 1x1 RBM subspace; projected: SU(2), K = 0"],
+  "mVMC with SU(2) and momentum projections (gamma point) + RBM + Lanczos, (U=8), alpha = 1": ["mVMC + RBM", "Lanczos steps, α = 1; projected: SU(2), K = 0"],
+  "mVMC with SU(2) and momentum projections (gamma point) + RBM + Lanczos, (U=8), alpha = 8 with 1x1 RBM subspace": ["mVMC + RBM", "Lanczos steps, α = 8, 1x1 RBM subspace; projected: SU(2), K = 0"],
 
   // ---------------------------------------------------------------- classic VMC
-  "mVMC (PP + 1st step Lanczos, spin-parity projection, C3 point-group projection)": ["mVMC", "1 Lanczos step, spin parity and C3 projections"],
-  "mVMC (PP, spin-parity even, C3 projection), max.-flippable dimer initial state": ["mVMC", "even spin parity and C3 projections, max.-flippable dimer initial state"],
-  "mVMC (PP, spin-parity even, C3 projection), random initial state": ["mVMC", "even spin parity and C3 projections, random initial state"],
-  "mVMC (PP, spin-parity even), max.-flippable dimer initial state": ["mVMC", "even spin parity, max.-flippable dimer initial state"],
-  "mVMC (PP, spin-parity even), random initial state": ["mVMC", "even spin parity, random initial state"],
-  "mVMC/Lanczos (PP + 1st Lanczos step, spin-parity even, C3 projection), random initial state": ["mVMC", "1 Lanczos step, even spin parity and C3 projections, random initial state"],
-  "mVMC/Lanczos (PP + 1st Lanczos step, spin-parity even), max.-flippable dimer initial state": ["mVMC", "1 Lanczos step, even spin parity, max.-flippable dimer initial state"],
-  "mVMC/Lanczos (PP + 1st Lanczos step, spin-parity even), random initial state": ["mVMC", "1 Lanczos step, even spin parity, random initial state"],
-  "mVMC and mVMC/Lanczos, extrapolated in the variance": ["mVMC", "Lanczos steps, variance → 0"],
-  "mVMC variance extrapolation (max. flip. initial state)": ["mVMC", "max.-flippable dimer initial state, variance → 0"],
-  "mVMC variance extrapolation (random initial state)": ["mVMC", "random initial state, variance → 0"],
-  "mVMC with SU(2) and point group projection": ["mVMC", "SU(2) and point-group projections"],
-  "mVMC with SU(2) and symmetry projections": ["mVMC", "SU(2) and symmetry projections"],
+  "mVMC (PP + 1st step Lanczos, spin-parity projection, C3 point-group projection)": ["mVMC", "1 Lanczos step; projected: spin parity, C3"],
+  "mVMC (PP, spin-parity even, C3 projection), max.-flippable dimer initial state": ["mVMC", "max.-flippable dimer initial state; projected: spin parity (even), C3"],
+  "mVMC (PP, spin-parity even, C3 projection), random initial state": ["mVMC", "random initial state; projected: spin parity (even), C3"],
+  "mVMC (PP, spin-parity even), max.-flippable dimer initial state": ["mVMC", "max.-flippable dimer initial state; projected: spin parity (even)"],
+  "mVMC (PP, spin-parity even), random initial state": ["mVMC", "random initial state; projected: spin parity (even)"],
+  "mVMC/Lanczos (PP + 1st Lanczos step, spin-parity even, C3 projection), random initial state": ["mVMC", "1 Lanczos step, random initial state; projected: spin parity (even), C3"],
+  "mVMC/Lanczos (PP + 1st Lanczos step, spin-parity even), max.-flippable dimer initial state": ["mVMC", "1 Lanczos step, max.-flippable dimer initial state; projected: spin parity (even)"],
+  "mVMC/Lanczos (PP + 1st Lanczos step, spin-parity even), random initial state": ["mVMC", "1 Lanczos step, random initial state; projected: spin parity (even)"],
+  "mVMC and mVMC/Lanczos, extrapolated in the variance": ["mVMC", "Lanczos steps; extrapolated: variance → 0"],
+  "mVMC variance extrapolation (max. flip. initial state)": ["mVMC", "max.-flippable dimer initial state; extrapolated: variance → 0"],
+  "mVMC variance extrapolation (random initial state)": ["mVMC", "random initial state; extrapolated: variance → 0"],
+  "mVMC with SU(2) and point group projection": ["mVMC", "projected: SU(2), point group"],
+  "mVMC with SU(2) and symmetry projections": ["mVMC", "projected: SU(2), unspecified"],
   "VMC": ["VMC", ""],
   "VMC (p = 2)": ["VMC", LANCZOS(2)],
   "VMC, p = 0 Lanczos steps": ["VMC", ""],
   "VMC + 1 Lanczos step": ["VMC", LANCZOS(1)],
   "VMC + 2 Lanczos steps": ["VMC", LANCZOS(2)],
-  "VMC + Lanczos steps, extrapolated in the variance": ["VMC", "Lanczos steps, variance → 0"],
+  "VMC + Lanczos steps, extrapolated in the variance": ["VMC", "Lanczos steps; extrapolated: variance → 0"],
   "VMC with Dirac spin liquid + Jastrow": ["VMC", "Dirac spin liquid + Jastrow"],
   "VMC with Dirac+field+Jastrow": ["VMC", "Dirac spin liquid + field + Jastrow"],
   "VMC with fermions (flux+neel+Jastrow)": ["VMC", "fermions, flux + Néel + Jastrow"],
@@ -256,8 +297,8 @@ export const NAMES = {
   "VMC2 (entangled-plaquette states VMC)": ["EPS", ""],
   "Jastrow baseline": ["Jastrow", ""],
   "VMC Determinant Slater-Jastrow (RBM) Ansatz": ["Slater-Jastrow", "RBM Jastrow"],
-  "VMC Determinant Slater-Jastrow (RBM) Ansatz with K=0 projections (symmetric wrt translations)": ["Slater-Jastrow", "RBM Jastrow, K = 0"],
-  "VMC Determinant Slater-Backflow-Jastrow (RBM) Ansatz with K=0 projections (symmetric wrt translations)": ["Slater-backflow-Jastrow", "RBM Jastrow, K = 0"],
+  "VMC Determinant Slater-Jastrow (RBM) Ansatz with K=0 projections (symmetric wrt translations)": ["Slater-Jastrow", "RBM Jastrow; projected: K = 0"],
+  "VMC Determinant Slater-Backflow-Jastrow (RBM) Ansatz with K=0 projections (symmetric wrt translations)": ["Slater-backflow-Jastrow", "RBM Jastrow; projected: K = 0"],
   "VMC stripe length=8 (+Jastrow and backflow)": ["VMC", "stripe λ = 8 + Jastrow + backflow"],
   "VMC uniform state (+Jastrow and backflow)": ["VMC", "uniform + Jastrow + backflow"],
   "VMC with Neel AF (+Jastrow and backflow)": ["VMC", "Néel + Jastrow + backflow"],
@@ -299,17 +340,17 @@ export const NAMES = {
   "Tensor-Backflow + 1 Lanczos step (Ep=1), direct optimization, 10x10 lattice, PBC": ["Tensor backflow", "direct optimization, 1 Lanczos step"],
   "Tensor-Backflow + 1 Lanczos step (Ep=1), direct optimization, 12x12 lattice, PBC": ["Tensor backflow", "direct optimization, 1 Lanczos step"],
   "Tensor-Backflow + 1 Lanczos step (Ep=1), direct optimization, 8x8 lattice, PBC": ["Tensor backflow", "direct optimization, 1 Lanczos step"],
-  "Tensor-Backflow family, zero-variance extrapolation, PBC": ["Tensor backflow", "variance → 0"],
+  "Tensor-Backflow family, zero-variance extrapolation, PBC": ["Tensor backflow", "extrapolated: variance → 0"],
   "HFPS (hidden-fermion Pfaffian state)": ["HFPS", ""],
   "HFPS (initialized without a pairing field, metastable state)": ["HFPS", "no pairing field at initialization, metastable"],
   "HFPS + CNN Jastrow, VMC": ["HFPS", "CNN Jastrow"],
-  "HFPS + sublattice-symmetric CNN Jastrow (VMC)": ["HFPS", "sublattice-symmetric CNN Jastrow"],
-  "HFPS + sublattice-symmetric CNN Jastrow, VMC": ["HFPS", "sublattice-symmetric CNN Jastrow"],
-  "HFPS + symmetry projection": ["HFPS", "symmetry-projected"],
+  "HFPS + sublattice-symmetric CNN Jastrow (VMC)": ["HFPS", "CNN Jastrow; symmetric: sublattice"],
+  "HFPS + sublattice-symmetric CNN Jastrow, VMC": ["HFPS", "CNN Jastrow; symmetric: sublattice"],
+  "HFPS + symmetry projection": ["HFPS", "projected: unspecified"],
   "Hidden-Fermion Pfaffian State (HFPS) + CNN Jastrow, VMC, small-scale (no sublattice symmetry) benchmark, ~150K parameters": ["HFPS", "CNN Jastrow, ~150K parameters"],
   "Hidden-fermion determinant state (HFDS), 8x4 cylinder": ["HFDS", ""],
   "Hidden-fermion determinant state (HFDS), 8x8 torus": ["HFDS", ""],
-  "VMC Hidden Fermion Determinant State Ansatz (N_hidden = 10. Single hidden layer fully connected net with alpha = 64). C4 and K = 0 projections": ["HFDS", "10 hidden fermions, 1-layer FFN with α = 64, C4 and K = 0 projections"],
+  "VMC Hidden Fermion Determinant State Ansatz (N_hidden = 10. Single hidden layer fully connected net with alpha = 64). C4 and K = 0 projections": ["HFDS", "10 hidden fermions, 1-layer FFN with α = 64; projected: K = 0, C4"],
   "VMC Hidden Fermion Determinant State Ansatz (N_hidden = 16, fully parametrized hidden sub-matrix, hidden-unit density alpha = 1)": ["HFDS", "16 hidden fermions, full hidden sub-matrix, α = 1"],
   "VMC Hidden Fermion Determinant State Ansatz (N_hidden = 16. Single hidden layer fully connected net with alpha = 1). Soft mean-field constraint for Neel order.": ["HFDS", "16 hidden fermions, 1-layer FFN with α = 1, Néel mean-field constraint"],
   "VMC Hidden Fermion Determinant State Ansatz (N_hidden = 16. Single hidden layer fully connected net with alpha = 14). Soft mean-field constraint for lambda = 8 stripe order.": ["HFDS", "16 hidden fermions, 1-layer FFN with α = 14, stripe λ = 8 mean-field constraint"],
@@ -318,14 +359,14 @@ export const NAMES = {
   "VMC Hidden Fermion Determinant State Ansatz (N_hidden = 8. Single hidden layer fully connected net with alpha = 32)": ["HFDS", "8 hidden fermions, 1-layer FFN with α = 32"],
   "Jastrow-backflow (JBf), 8x4 cylinder": ["Jastrow-backflow", ""],
   "Jastrow-backflow (JBf), 8x8 torus": ["Jastrow-backflow", ""],
-  "NNBF, 32 determinants + free projection to the fully symmetric state": ["NNBF", "32 determinants, symmetry-projected"],
-  "NNBF, symmetry optimization with 32 determinants": ["NNBF", "32 determinants, symmetry-optimized"],
-  "MLP-NNBF, 128 determinants, symmetry-optimized+projected": ["NNBF", "MLP, 128 determinants, symmetry-optimized and projected"],
-  "MLP-NNBF, 4 determinants (symmetry-optimized)": ["NNBF", "MLP, 4 determinants, symmetry-optimized"],
+  "NNBF, 32 determinants + free projection to the fully symmetric state": ["NNBF", "32 determinants; projected: full symmetry group"],
+  "NNBF, symmetry optimization with 32 determinants": ["NNBF", "32 determinants; symmetric: unspecified (symmetry optimization)"],
+  "MLP-NNBF, 128 determinants, symmetry-optimized+projected": ["NNBF", "MLP, 128 determinants; symmetric: unspecified (symmetry optimization); projected: unspecified"],
+  "MLP-NNBF, 4 determinants (symmetry-optimized)": ["NNBF", "MLP, 4 determinants; symmetric: unspecified (symmetry optimization)"],
   "MLP-NNBF, n_h=8192 (2-layer)": ["NNBF", "MLP, 2 layers, n_h = 8192"],
   "base MLP-NNBF, n_h=128": ["NNBF", "MLP, n_h = 128"],
   "Neural Network Backflow (NNB) VMC, quoted from ref [31]": ["NNBF", ""],
-  "zero-variance extrapolation (NNBF + symmetrized variants)": ["NNBF", "symmetrized variants, variance → 0", { family: "backflow / Pfaffian" }],
+  "zero-variance extrapolation (NNBF + symmetrized variants)": ["NNBF", "symmetric: unspecified (symmetrized variants); extrapolated: variance → 0", { family: "backflow / Pfaffian" }],
   "VAFQMC": ["VAFQMC", ""],
   "VAFQMC (N_l=4)": ["VAFQMC", "N_l = 4"],
   "VAFQMC stripe length 8": ["VAFQMC", "stripe λ = 8"],
@@ -339,19 +380,19 @@ export const NAMES = {
   "GNN-2": ["GNN", "separate network per output (GNN-2)"],
   "Graph neural network": ["GNN", ""],
   "MLP": ["MLP", ""],
-  "Symmetric FFN, Relu, 32 features per translation": ["FFN", "symmetric, ReLU, 32 features per translation"],
+  "Symmetric FFN, Relu, 32 features per translation": ["FFN", "ReLU, 32 features per translation; symmetric: unspecified"],
   "NN + Gutzwiller": ["Neural Gutzwiller", "", { family: "other NQS" }],
   "ClebschTree": ["ClebschTree", ""],
   "Grassmann Variational Monte Carlo (GVMC): CNN (ConvNeXt-style) backflow + complex RBM neural wave function, Grassmannian Stochastic Reconfiguration (SPRING/Woodbury), ground state |E0> in the (qx,qy,qsf)=(0,0,0) sector": ["GVMC", "ConvNeXt backflow + complex RBM, Grassmannian SR"],
   "Grassmann Variational Monte Carlo (GVMC): CNN backflow + complex RBM neural wave function, Grassmannian Stochastic Reconfiguration (SPRING/Woodbury), ground state |E0> in the (qx,qy,qsf)=(0,0,0)=Gamma sector": ["GVMC", "CNN backflow + complex RBM, Grassmannian SR"],
 
   // ---------------------------------------------------------------- VQE / circuit
-  "VQE + symm. circuit (64 pars., exact grad, statevector)": ["VQE", "symmetric circuit, exact gradients, statevector", { parameters: 64 }],
-  "VQE + symm. circuit (64 pars., 2^14 samples/grad)": ["VQE", "symmetric circuit, 2^14 samples per gradient", { parameters: 64 }],
-  "VQE + symm. circuit (96 pars., exact grads & metric, statevector)": ["VQE", "symmetric circuit, exact gradients and metric, statevector", { parameters: 96 }],
-  "VQE + symm. circuit (96 pars., Ns = 2^14 per par, statevector)": ["VQE", "symmetric circuit, 2^14 samples per parameter, statevector", { parameters: 96 }],
-  "VQE (SR + symm. + 108 variational pars)": ["VQE", "symmetric circuit, SR", { parameters: 108 }],
-  "VQE (SR + symm. + 64 par)": ["VQE", "symmetric circuit, SR", { parameters: 64 }],
+  "VQE + symm. circuit (64 pars., exact grad, statevector)": ["VQE", "exact gradients, statevector; symmetric: unspecified", { parameters: 64 }],
+  "VQE + symm. circuit (64 pars., 2^14 samples/grad)": ["VQE", "2^14 samples per gradient; symmetric: unspecified", { parameters: 64 }],
+  "VQE + symm. circuit (96 pars., exact grads & metric, statevector)": ["VQE", "exact gradients and metric, statevector; symmetric: unspecified", { parameters: 96 }],
+  "VQE + symm. circuit (96 pars., Ns = 2^14 per par, statevector)": ["VQE", "2^14 samples per parameter, statevector; symmetric: unspecified", { parameters: 96 }],
+  "VQE (SR + symm. + 108 variational pars)": ["VQE", "SR; symmetric: unspecified", { parameters: 108 }],
+  "VQE (SR + symm. + 64 par)": ["VQE", "SR; symmetric: unspecified", { parameters: 64 }],
   "VQE HV (d = 24)": ["VQE", "Hamiltonian variational, depth 24"],
   "VQE R-CX (d = 10)": ["VQE", "R-CX, depth 10"],
 };
@@ -371,8 +412,8 @@ export const FAMILY = {
 const QMBL_RUN = ", QMBL cost-to-reproduce run";
 Object.assign(NAMES, {
   ["RBM (alpha = 1)" + QMBL_RUN]: ["RBM", "α = 1, QMBL run"],
-  ["RBM, translation-symmetric (alpha = 4)" + QMBL_RUN]: ["RBM", "translation-symmetric, α = 4, QMBL run"],
-  ["GCNN (translations, 4 layers, 8 features)" + QMBL_RUN]: ["GCNN", "translations, 4 layers, 8 features, QMBL run", { family: "CNN / ResNet" }],
+  ["RBM, translation-symmetric (alpha = 4)" + QMBL_RUN]: ["RBM", "α = 4, QMBL run; symmetric: translations"],
+  ["GCNN (translations, 4 layers, 8 features)" + QMBL_RUN]: ["GCNN", "4 layers, 8 features, QMBL run; symmetric: translations", { family: "CNN / ResNet" }],
   ["ViT (factored attention, 2x2 patches, d = 60, 4 layers, 10 heads)" + QMBL_RUN]: ["ViT", "factored attention, b = 2, d = 60, 4 layers, 10 heads, QMBL implementation"],
 });
 
@@ -383,8 +424,8 @@ export const PATTERNS = [
   [/^Exact Diagonalization (\S+\.\S+) (-?1)$/, m => ["ED", "", { sector: `${m[1]}, spin flip ${m[2] === "1" ? "+1" : "−1"}` }]],
   [/^DMRG \((?:bond dimension|Bond dimension) = (\d+)\)$/, m => ["DMRG", "", { bond_dimension: +m[1] }]],
   [/^DMRG \((?:MaxBondDim|maxbonddim) ?=? ?(\d+)\)$/, m => ["DMRG", "", { bond_dimension: +m[1] }]],
-  [/^DMRG \(bond dimension (\d+)\) using fork tensor product states with U\(1\) symmetries for charge and spin sector$/, m => ["DMRG", "fork tensor product states, U(1) charge and spin", { bond_dimension: +m[1] }]],
-  [/^DMRG \(bond dimension (\d+)\) using fork tensor product states with U\(1\) symmetry for charge sector$/, m => ["DMRG", "fork tensor product states, U(1) charge", { bond_dimension: +m[1] }]],
+  [/^DMRG \(bond dimension (\d+)\) using fork tensor product states with U\(1\) symmetries for charge and spin sector$/, m => ["DMRG", "fork tensor product states; symmetric: U(1) charge, U(1) spin", { bond_dimension: +m[1] }]],
+  [/^DMRG \(bond dimension (\d+)\) using fork tensor product states with U\(1\) symmetry for charge sector$/, m => ["DMRG", "fork tensor product states; symmetric: U(1) charge", { bond_dimension: +m[1] }]],
   [/^DMRG \(MaxLinkDim = (\d+), MaxTruncErr~([\d.]+)E-0?(\d+)\)$/, m => ["DMRG", `truncation error ~${+m[2]}e-${m[3]}`, { bond_dimension: +m[1] }]],
 ];
 

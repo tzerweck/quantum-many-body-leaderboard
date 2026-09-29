@@ -1,6 +1,7 @@
 import fs from "node:fs"; import path from "node:path";
 import { expectedDof, expectedEinf, vScore, perSiteDivisor, groundStateExact, stochasticExact } from "./units.mjs";
 import { FAMILIES } from "./views.mjs";
+import { detailIssue } from "./method_names.mjs";
 const FAMILY_NAMES = new Set([...FAMILIES.map(([f]) => f), "other"]);
 const issues = [], rounding = []; let rows = 0, checkedD = 0, checkedE = 0, checkedV = 0, checkedC = 0, checkedCov = 0;
 for (const m of fs.readdirSync("data")) {
@@ -17,6 +18,9 @@ for (const m of fs.readdirSync("data")) {
       if (!r.method || typeof r.method_detail !== "string" || !r.method_as_published)
         issues.push(`METHOD ${at}: not named, published "${r.method_as_published ?? r.method}" (add it to scripts/method_names.mjs)`);
       else if (!FAMILY_NAMES.has(r.family)) issues.push(`FAMILY ${at}: "${r.family}" for "${r.method}"`);
+      // Symmetry and extrapolation in the detail are written in slots (method_names.mjs).
+      const di = typeof r.method_detail === "string" ? detailIssue(r.method_detail) : null;
+      if (di) issues.push(`DETAIL ${at}: ${di} in "${r.method_detail}"`);
       if (eD != null && r.dof != null) { checkedD++; if (r.dof !== eD) issues.push(`DOF   ${at}: stored ${r.dof}, expected ${eD}`); }
       if (eE != null && r.einf != null) { checkedE++; if (Math.abs(r.einf - eE) > 1e-9 * Math.max(1, Math.abs(eE))) issues.push(`EINF  ${at}: stored ${r.einf}, expected ${eE}`); }
       if (r.v_score != null) { checkedV++;
