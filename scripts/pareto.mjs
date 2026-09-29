@@ -85,27 +85,22 @@ function mark(t, x, y, color, filled, unit, href) {
 // a variational one - and only a result with a cost can be placed; a record that states no
 // cost is named in a line of text under the axis, never drawn as a line across it
 // (Tristan, 2026-09-23). QMBL's own runs are all named, so none is read as published.
-// The method with its whole detail, for an enlarged panel, where there is room.
+// The method with its whole detail, for marks drawn as one whose short names coincide.
 const fullLabel = r => (r.computed_by === "qmbl" ? shortLabel(r) : `${r.method}${r.method_detail ? ` (${r.method_detail})` : ""}`);
 
-// An instance's own figure: every mark named, in place or, where its name finds no room, by a
-// number its hover card names. Where three or more marks are too close to name in place,
-// their region is boxed and drawn again below at its own scale. Returns the y the footnote
-// starts at.
+// An instance's own figure: every mark named in place where it can be. Where three or more
+// marks still find no room, their region is boxed and drawn again, enlarged, in an inset in
+// the plot's top right corner, a second crowd's in the top left (Tristan, 2026-09-29: no
+// second panel under the plot). Returns the y the footnote starts at.
 function drawInstance(t, parts, inst, pts, g) {
   const trial = [], crowd = [];
   drawPanel(t, trial, inst, pts, { ...g, nameAll: true, keyOut: crowd });
-  if (crowd.length < 3) { parts.push(...trial); return g.bottom + 70; }
-  const cs = crowd.map(p => log(p.cost.value)), es = crowd.map(p => p.e);
-  const espan = Math.max(Math.max(...es) - Math.min(...es), 1e-9);
-  const box = { c0: 10 ** (Math.min(...cs) - 0.06), c1: 10 ** (Math.max(...cs) + 0.06), e0: Math.min(...es) - 0.2 * espan, e1: Math.max(...es) + 0.2 * espan };
-  const inBox = pts.filter(p => p.cost.value >= box.c0 && p.cost.value <= box.c1 && p.e >= box.e0 && p.e <= box.e1);
-  drawPanel(t, parts, inst, pts, { ...g, nameAll: true, hide: new Set(inBox), box });
-  const top2 = g.bottom + 70 + 26, bottom2 = top2 + plotHeight(inBox);
-  parts.push(text(g.px, top2 - 14, "The boxed region, enlarged", { size: 11.5, fill: t.ink, weight: 600 }));
-  drawPanel(t, parts, inst, inBox, { ...g, top: top2, bottom: bottom2, nameAll: true, tight: true,
-    frontIn: frontierOf(pts).filter(p => inBox.includes(p)), recNoteOn: false });
-  return bottom2 + 70;
+  if (crowd.length >= 3) {
+    const zoomed = [];
+    if (drawPanel(t, zoomed, inst, pts, { ...g, nameAll: true, zoom: crowd })) { parts.push(...zoomed); return g.bottom + 70; }
+  }
+  parts.push(...trial);
+  return g.bottom + 70;
 }
 
 // An instance's own figure names every mark, so it grows with the marks it holds: 300 px for
@@ -115,75 +110,110 @@ const plotHeight = pts => 300 + 16 * Math.max(0, pts.length - 12);
 // Labels the placement could not keep off the frontier line; the build prints them.
 const labelClashes = [];
 
-function drawPanel(t, parts, inst, pts, { px, left, right, top, bottom, xLabel, title, nameAll = false,
-  hide = null, box = null, tight = false, frontIn = null, recNoteOn = true, keyOut = null }) {
-  const plotH = bottom - top;
-    const rec = recordOf(inst), recE = rec ? rec.energy / perSiteDivisor(inst) : null;
-    const front = frontIn ?? frontierOf(pts);
-    // An enlarged panel names each mark in full: its neighbours there are the ones it is confused with.
-    const nameOf = p => (tight ? fullLabel(p.r) : shortLabel(p.r)) + (p.cost.measuredByQmbl ? " (cost measured by QMBL)" : "");
-    if (title) parts.push(text(px, top - 14, title, { size: 12.5, fill: t.ink, weight: 600 }));
-    parts.push(text(right, top - 14, perSiteLabel(inst), { size: 9.5, fill: t.muted, anchor: "end" }));
-    // Cost axis: a decade either side of the data. Energy axis: linear, as in the
-    // record-over-time figure, so the record and an exact energy sit where they are.
-    const cs = pts.map(p => p.cost.value);
-    const lo = log(Math.min(...cs)), hi = log(Math.max(...cs)), wide = Math.max(0.3 - (hi - lo), 0) / 2;
-    const x0 = tight ? 10 ** (lo - 0.12 - wide) : 10 ** Math.floor(lo - 0.5), x1 = tight ? 10 ** (hi + 0.12 + wide) : 10 ** Math.ceil(hi + 0.5);
-    const X = logScale(x0, x1, left, right);
-    const es = pts.map(p => p.e);
-    const span = Math.max(Math.max(...es) - Math.min(...es), 1e-6);
-    const step = niceStep(span / 4);
-    const e0 = Math.floor((Math.min(...es) - span * 0.08) / step) * step;
-    const e1 = Math.ceil((Math.max(...es) + span * 0.08) / step) * step;
-    const Y = e => bottom - ((e - e0) / (e1 - e0)) * plotH;
-    const decimals = Math.max(0, -Math.floor(Math.log10(step)));
-    for (let i = 0; i <= Math.round((e1 - e0) / step); i++) {
-      const v = e0 + i * step;
-      parts.push(hline(left, right, Y(v), t.grid));
-      parts.push(text(left - 6, Y(v) + 4, v.toFixed(decimals).replace("-", "−"), { size: 10, fill: t.muted, anchor: "end", nums: true }));
+// The frontier's staircase as horizontal and vertical segments on screen.
+const stairs = (front, X, Y) => front.slice(1).flatMap((p, i) => {
+  const x0 = X(front[i].cost.value), y0 = Y(front[i].e), x1 = X(p.cost.value), y1 = Y(p.e);
+  return [{ x0, x1, y0, y1: y0 }, { x0: x1, x1, y0, y1 }];
+});
+
+// Where each name goes, for the marks `pts` at X/Y inside left/right/top/bottom. Beside its
+// mark where that covers nothing - no other mark, label or line, not the frontier, nothing in
+// `avoid`. In an instance's own figure (`nameAll`) a name with no such spot, or one that would
+// sit off its mark's row in a crowd, where it reads as a neighbour's, goes in a lane above or
+// below the mark with a vertical line to it (Tristan, 2026-09-29, in place of numbers and an
+// enlarged panel); what is still left is numbered. Marks drawn as one, within 4 px, are named
+// together, a line each in the order they lie from top to bottom, in full where their short
+// names coincide.
+function layoutLabels({ pts, named, X, Y, front, left, right, top, bottom, nameOf, nameAll, avoid = [], distinguish = false }) {
+  const centres = pts.map(p => [X(p.cost.value), Y(p.e)]);
+  const segs = stairs(front, X, Y);
+  // The label's glyph box: baseline at ty + 4, cap height about 8 at 10.5 px.
+  const crosses = (x0, x1, ty) => segs.filter(g => Math.max(g.x0, x0 - 1) <= Math.min(g.x1, x1 + 1) &&
+    Math.max(Math.min(g.y0, g.y1), ty - 5) <= Math.min(Math.max(g.y0, g.y1), ty + 7)).length;
+  const mine = (cx, cy, own) => own.some(([ox, oy]) => ox === cx && oy === cy);
+  const blocked = (x0, x1, y0, y1) => avoid.filter(r => x0 < r.x1 && r.x0 < x1 && y0 < r.y1 && r.y0 < y1).length;
+  // A mark is clear of a name when its dot misses the glyph box; the small overview panels,
+  // which name the frontier only, keep their older, looser margin.
+  const [above, below] = nameAll ? [10, 12] : [9, 9];
+  const covers = (x0, x1, ty, own) => centres.filter(([cx, cy]) => !mine(cx, cy, own) && cx + 6 > x0 && cx - 6 < x1 && cy > ty - above && cy < ty + below).length +
+    crosses(x0, x1, ty) + blocked(x0 - 1, x1 + 1, ty - 5, ty + 7);
+
+  const items = [];
+  for (const p of [...named].sort((a, b) => X(a.cost.value) - X(b.cost.value) || Y(a.e) - Y(b.e))) {
+    const x = X(p.cost.value), y = Y(p.e);
+    const it = nameAll && items.find(i => i.own.some(([ox, oy]) => Math.abs(ox - x) <= 6 && Math.abs(oy - y) <= 6));
+    if (it) { it.ps.push(p); it.own.push([x, y]); } else items.push({ ps: [p], own: [[x, y]] });
+  }
+  for (const it of items) {
+    it.ps.sort((a, b) => Y(a.e) - Y(b.e));
+    it.own = it.ps.map(p => [X(p.cost.value), Y(p.e)]);
+    // Short names that coincide take as few of the clauses of their detail that tell them
+    // apart as it takes: "ViT (T5 attention)" and "ViT (decoupled attention)".
+    const short = it.ps.map(nameOf);
+    let names = short;
+    const shared = () => new Set(names).size < names.length;
+    if (shared()) {
+      const clauses = it.ps.map(p => (p.r.method_detail || "").split(", ").filter(Boolean));
+      const differ = it.ps.map((p, i) => {
+        const peers = short.flatMap((s, j) => (s === short[i] ? [j] : []));
+        return peers.length < 2 ? null : clauses[i].filter(cl => !peers.every(j => clauses[j].includes(cl)));
+      });
+      for (let c = 1; shared() && c <= Math.max(1, ...differ.map(d => d?.length ?? 0)); c++)
+        names = it.ps.map((p, i) => (!differ[i] ? short[i] : (p.r.computed_by === "qmbl" ? fullLabel(p.r) : `${p.r.method}${differ[i].length ? ` (${differ[i].slice(0, c).join(", ")})` : ""}`) +
+          (p.cost.measuredByQmbl ? " (cost measured by QMBL)" : "")));
     }
-    if (!tight)
-      for (let k2 = Math.ceil(log(x0)); k2 <= Math.floor(log(x1)); k2++)
-        parts.push(text(X(10 ** k2), bottom + 16, pow10(k2), { size: 10, fill: t.muted, anchor: "middle", nums: true }));
-    else  // an enlarged range may hold no power of ten: 1, 2 and 5 of each decade
-      for (let k2 = Math.floor(log(x0)); k2 <= Math.ceil(log(x1)); k2++)
-        for (const m of [1, 2, 5]) {
-          const v = m * 10 ** k2;
-          if (v >= x0 && v <= x1) parts.push(text(X(v), bottom + 16, m === 1 ? pow10(k2) : `${m}×${pow10(k2)}`, { size: 10, fill: t.muted, anchor: "middle", nums: true }));
-        }
-    if (front.length > 1) {
-      let d = `M${n(X(front[0].cost.value))} ${n(Y(front[0].e))}`;
-      for (const p of front.slice(1)) d += `H${n(X(p.cost.value))}V${n(Y(p.e))}`;
-      parts.push(`<path d="${d}" fill="none" stroke="${t.series[0]}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" opacity="0.7"/>`);
+    if (shared()) names = names.map((s, i) => (it.ps[i].r.arxiv ? `${s} [arXiv:${it.ps[i].r.arxiv}]` : s));
+    const x = it.own.reduce((a, o) => a + o[0], 0) / it.own.length, y = it.own.reduce((a, o) => a + o[1], 0) / it.own.length;
+    Object.assign(it, { names, k: names.length, w: Math.max(...names.map(s => textWidth(s, 10.5))), x, y,
+      top: it.own[0][1], bottom: it.own.at(-1)[1], front: it.ps.some(p => front.includes(p)),
+      crowded: centres.some(([cx, cy]) => !mine(cx, cy, it.own) && Math.hypot(cx - x, cy - y) < 24) });
+  }
+  // In an inset, where the marks are one crowd, marks that share a short name are told apart
+  // the same way, by as few of the clauses that differ as it takes.
+  if (distinguish) {
+    const byName = new Map();
+    for (const it of items.filter(i => i.k === 1)) byName.set(it.names[0], [...(byName.get(it.names[0]) ?? []), it]);
+    for (const peers of byName.values()) {
+      const clauses = peers.map(it => (it.ps[0].r.method_detail || "").split(", ").filter(Boolean));
+      const differ = clauses.map(cl => cl.filter(c => !clauses.every(o => o.includes(c))));
+      if (peers.length < 2 || differ.every(d => !d.length)) continue;
+      let names = peers.map(it => it.names[0]);
+      for (let c = 1; new Set(names).size < names.length && c <= Math.max(...differ.map(d => d.length)); c++)
+        names = peers.map((it, i) => {
+          const p = it.ps[0];
+          if (!differ[i].length) return it.names[0];
+          return (p.r.computed_by === "qmbl" ? fullLabel(p.r) : `${p.r.method} (${differ[i].slice(0, c).join(", ")})`) + (p.cost.measuredByQmbl ? " (cost measured by QMBL)" : "");
+        });
+      peers.forEach((it, i) => Object.assign(it, { names: [names[i]], w: textWidth(names[i], 10.5) }));
     }
-    for (const p of [...pts].sort((a, b) => a.eligible - b.eligible))
-      parts.push(mark(t, X(p.cost.value), Y(p.e), t.series[BOUNDS[p.r.bound_type]], p.eligible, p.cost.unit, rowHref(p.inst, p.r)));
-    // An instance's own figure names every mark (Tristan, 2026-09-24: a dot without a name
-    // cannot be read); the small overview panels name the frontier only, where naming them
-    // all piles the labels on each other. Frontier points are placed first.
-    const named = new Set([...front, ...(nameAll ? pts : [])].filter(p => !hide?.has(p)));
-    if (box) {
-      // at least clear of the marks it frames; the panel below says what the box is
-      const bx0 = X(box.c0) - 8, bx1 = X(box.c1) + 8, by0 = Y(box.e1) - 8, by1 = Y(box.e0) + 8;
-      parts.push(`<rect x="${n(bx0)}" y="${n(by0)}" width="${n(bx1 - bx0)}" height="${n(by1 - by0)}" fill="none" stroke="${t.muted}" stroke-width="1" stroke-dasharray="3 3" rx="3"/>`);
-    }
-    // A label may not run across another mark or the frontier: of the spots it fits, the one
-    // covering fewest wins (a "ViT (QMBL)" label over a published ViT's dot reads as ours, and
-    // the staircase leaves every frontier point to the right, through a label placed there).
-    const centres = pts.map(p => [X(p.cost.value), Y(p.e)]);
-    const segs = front.slice(1).flatMap((p, i) => {
-      const x0 = X(front[i].cost.value), y0 = Y(front[i].e), x1 = X(p.cost.value), y1 = Y(p.e);
-      return [{ x0, x1, y0, y1: y0 }, { x0: x1, x1, y0, y1 }];
-    });
-    // The label's glyph box: baseline at ty + 4, cap height about 8 at 10.5 px.
-    const crosses = (x0, x1, ty) => segs.filter(g => Math.max(g.x0, x0 - 1) <= Math.min(g.x1, x1 + 1) &&
-      Math.max(Math.min(g.y0, g.y1), ty - 5) <= Math.min(Math.max(g.y0, g.y1), ty + 7)).length;
-    const covers = (x0, x1, y, self) => centres.filter(([cx, cy]) => !(cx === self?.[0] && cy === self?.[1]) && cx + 6 > x0 && cx - 6 < x1 && Math.abs(cy - y) < 9).length + crosses(x0, x1, y);
-    // Placed top to bottom, each label also avoiding the labels placed before it.
-    const placed = [];
-    const onLabel = c => placed.filter(l => c.x0 < l.x1 && l.x0 < c.x1 && Math.abs(c.ty - l.ty) < 12).length;
-    const allLabels = [...named].sort((a, b) => front.includes(b) - front.includes(a) || Y(a.e) - Y(b.e)).map(p => {
-      const s = nameOf(p), w = textWidth(s, 10.5), x = X(p.cost.value), y = Y(p.e);
+  }
+
+  const lines = (it, c) => it.names.map((s, i) => ({ ...c, ty: c.ty + 12 * i }));
+  const onLabel = (b, pl) => pl.filter(l => b.x0 < l.x1 && l.x0 < b.x1 && Math.abs(b.ty - l.ty) < 12).length;
+  const onLeader = (b, ld) => ld.filter(l => l.x > b.x0 - 2 && l.x < b.x1 + 2 && l.y1 > b.ty - 6 && l.y0 < b.ty + 8).length;
+  const hits = (it, c, pl, ld) => lines(it, c).reduce((a, b) => a + covers(b.x0, b.x1, b.ty, it.own) + onLabel(b, pl) + onLeader(b, ld), 0);
+  const dist = ([cx, cy], b) => Math.hypot(Math.max(b.x0 - cx, 0, cx - b.x1), Math.max(b.y0 - cy, 0, cy - b.y1));
+  const nearest = (it, c) => {
+    const b = { x0: c.x0, x1: c.x1, y0: c.ty - 5, y1: c.ty + 12 * (it.k - 1) + 7 }, own = Math.min(...it.own.map(o => dist(o, b)));
+    return !centres.some(o => !mine(o[0], o[1], it.own) && dist(o, b) < own + 6);
+  };
+  // A line runs through no mark, label, other line or the frontier.
+  const leaderFree = (lx, ya, yb, own, pl, ld) => ya < yb &&
+    !centres.some(([cx, cy]) => !mine(cx, cy, own) && Math.abs(cx - lx) < 7.5 && cy + 6.5 > ya && cy - 6.5 < yb) &&
+    !pl.some(l => lx > l.x0 - 2 && lx < l.x1 + 2 && l.ty + 7 > ya && l.ty - 6 < yb) &&
+    !ld.some(l => Math.abs(l.x - lx) < 4 && l.y1 > ya - 2 && l.y0 < yb + 2) &&
+    !segs.some(g => (g.y0 === g.y1 ? lx >= g.x0 && lx <= g.x1 && g.y0 > ya && g.y0 < yb
+      : Math.abs(g.x0 - lx) < 4 && Math.max(g.y0, g.y1) > ya && Math.min(g.y0, g.y1) < yb)) &&
+    !blocked(lx - 1, lx + 1, ya, yb);
+
+  const run = (order, demote = new Set()) => {
+    const placed = [], leaders = [], at = new Map();
+    for (const it of order) {
+      if (demote.has(it)) continue;
+      const { x, y, w, k } = it, mid = y - 6 * (k - 1);
+      // A spot's `ty` is where a one-line name sits; several lines are centred on the mark's
+      // row beside it, end in that line above it and start in it below.
+      const lift = ty => (ty === y ? mid : ty < y ? ty - 12 * (k - 1) : ty);
       // Beside the mark on the right, then the left, then above or below it, then diagonally;
       // the first that fits the plot and covers nothing, else the one covering fewest.
       const spots = [
@@ -199,72 +229,297 @@ function drawPanel(t, parts, inst, pts, { px, left, right, top, bottom, xLabel, 
         { x0: x - 4, x1: x - 4 + w, ty: y + 28, anchor: "start", lx: x - 4 },
         { x0: x - w + 4, x1: x + 4, ty: y - 32, anchor: "end", lx: x + 4 },
         { x0: x - w + 4, x1: x + 4, ty: y + 28, anchor: "end", lx: x + 4 },
-      ].filter(c => c.x0 >= left && c.x1 <= right && c.ty - 8 > top && c.ty + 4 < bottom);
+      ].map(c => ({ ...c, ty: lift(c.ty) })).filter(c => c.x0 >= left && c.x1 <= right && c.ty - 8 > top && c.ty + 12 * (k - 1) + 4 < bottom);
       // In a narrow panel nothing beside the mark may fit: centred above or below it, kept inside.
       const cx = Math.min(Math.max(x - w / 2, left), right - w);
       // Then farther up or down, clear of the staircase's vertical through the mark itself.
-      for (const ty of [y - 13, y + 16, y - 26, y + 29, y - 39, y + 42]) {
-        if (ty - 8 <= top || ty + 4 >= bottom) continue;
+      for (const ty of [y - 13, y + 16, y - 26, y + 29, y - 39, y + 42].map(lift)) {
+        if (ty - 8 <= top || ty + 12 * (k - 1) + 4 >= bottom) continue;
         spots.push({ x0: cx, x1: cx + w, ty, anchor: "start", lx: cx });
         if (x + 8 + w <= right) spots.push({ x0: x + 8, x1: x + 8 + w, ty, anchor: "start", lx: x + 8 });
         if (x - 8 - w >= left) spots.push({ x0: x - 8 - w, x1: x - 8, ty, anchor: "end", lx: x - 8 });
       }
-      const hits = c => covers(c.x0, c.x1, c.ty, [x, y]) + onLabel(c);
-      const pick = spots.find(c => hits(c) === 0) ?? [...spots].sort((c1, c2) => hits(c1) - hits(c2))[0] ?? { x0: x + 10, x1: x + 10 + w, lx: x + 10, anchor: "start", ty: y };
-      // In a crowd a name away from its mark's own row reads as its neighbour's: number it.
-      const crowded = centres.some(([cx, cy]) => (cx !== x || cy !== y) && Math.hypot(cx - x, cy - y) < 24);
-      if (nameAll && (hits(pick) > 0 || (pick.ty !== y && crowded))) return { keyed: true, p, dx: x, dy: y };
-      placed.push(pick);
-      return { s, w, x: pick.lx, anchor: pick.anchor, y: pick.ty + 4, forced: hits(pick) > 0 };
-    });
+      // A name off its mark's row is taken only close by (20 px), and in a crowd, where it
+      // reads as the nearest mark's, only where its own mark is nearest by a clear margin;
+      // farther off it goes to a lane, with a line to its mark.
+      const h = c => hits(it, c, placed, leaders);
+      const gap = c => (c.ty < mid ? it.top - c.ty - 12 * (k - 1) : c.ty - it.bottom);
+      const ok = c => h(c) === 0 && (!nameAll || c.ty === mid || (gap(c) <= 20 && (!it.crowded || nearest(it, c))));
+      const pick = spots.find(ok) ?? (nameAll ? null : [...spots].sort((c1, c2) => h(c1) - h(c2))[0] ?? { x0: x + 10, x1: x + 10 + w, lx: x + 10, anchor: "start", ty: mid });
+      if (!pick) continue;
+      const forced = h(pick) > 0;
+      placed.push(...lines(it, pick));
+      at.set(it, { c: pick, forced });
+    }
+    // The lanes stack like stairs: marks taken right to left with names running right (or the
+    // mirror image), so each line passes left of every name nearer the mark's row. Of the four
+    // ways the one naming the most with the shortest lines wins.
+    const rest = order.filter(it => !at.has(it));
+    if (nameAll && rest.length) {
+      const callouts = (seq, anchors) => {
+        const pl = [...placed], ld = [...leaders], got = new Map();
+        let length = 0;
+        for (const it of seq) {
+          const { x, w, k } = it;
+          search: for (let lane = 0; lane < 14; lane++) for (const side of [-1, 1]) {
+            // The lane holds the line nearest the mark: a block above ends in it, one below starts in it.
+            const ty = side < 0 ? it.top - 22 - 13 * lane - 12 * (k - 1) : it.bottom + 21 + 13 * lane;
+            const [ya, yb] = side < 0 ? [ty + 12 * (k - 1) + 8, it.top - 8] : [it.bottom + 8, ty - 6];
+            if (ty - 8 <= top || ty + 12 * (k - 1) + 4 >= bottom || !leaderFree(x, ya, yb, it.own, pl, ld)) continue;
+            for (const anchor of anchors) {
+              const lx = anchor === "start" ? x - 3 : x + 3;
+              const c = anchor === "start" ? { x0: lx, x1: lx + w, ty, anchor, lx } : { x0: lx - w, x1: lx, ty, anchor, lx };
+              if (c.x0 < left || c.x1 > right || hits(it, c, pl, ld) > 0) continue;
+              const lead = { x, y0: ya, y1: yb };
+              pl.push(...lines(it, c)); ld.push(lead); got.set(it, { c, lead }); length += yb - ya;
+              break search;
+            }
+          }
+        }
+        return { got, length };
+      };
+      const rtl = [...rest].sort((a, b) => b.x - a.x || a.y - b.y), ltr = [...rtl].reverse();
+      const best = [callouts(rtl, ["start"]), callouts(ltr, ["end"]), callouts(rtl, ["start", "end"]), callouts(ltr, ["end", "start"])]
+        .sort((a, b) => b.got.size - a.got.size || a.length - b.length)[0];
+      for (const [it, { c, lead }] of best.got) { placed.push(...lines(it, c)); leaders.push(lead); at.set(it, { c, forced: false, lead }); }
+    }
     // Numbered marks, left to right, the number in the first free spot touching the mark. The
     // number links to the mark's row as the mark does, so on the site hovering either shows
     // the row's card, which names it; no key under the axis (Tristan, 2026-09-29).
-    const keyed = allLabels.filter(l => l.keyed).sort((a, b) => a.dx - b.dx || a.dy - b.dy);
-    keyed.forEach((k, i) => {
-      const num = String(i + 1), w = textWidth(num, 9), { dx: x, dy: y } = k;
+    const keyed = order.filter(it => !at.has(it)).flatMap(it => it.ps.map((p, i) => ({ p, mx: it.own[i][0], my: it.own[i][1] })))
+      .sort((a, b) => a.mx - b.mx || a.my - b.my);
+    keyed.forEach((kd, i) => {
+      const num = String(i + 1), w = textWidth(num, 9), { mx: x, my: y } = kd;
       const spots = [
         { x0: x + 7, x1: x + 7 + w, ty: y, anchor: "start", lx: x + 7 },
         { x0: x - 7 - w, x1: x - 7, ty: y, anchor: "end", lx: x - 7 },
         { x0: x - w / 2, x1: x + w / 2, ty: y - 10, anchor: "middle", lx: x },
         { x0: x - w / 2, x1: x + w / 2, ty: y + 11, anchor: "middle", lx: x },
       ];
-      const hits = c => covers(c.x0, c.x1, c.ty, [x, y]) + onLabel(c);
-      const pick = spots.find(c => hits(c) === 0) ?? [...spots].sort((c1, c2) => hits(c1) - hits(c2))[0];
+      const h = c => covers(c.x0, c.x1, c.ty, [[x, y]]) + onLabel(c, placed) + onLeader(c, leaders);
+      const pick = spots.find(c => h(c) === 0) ?? [...spots].sort((c1, c2) => h(c1) - h(c2))[0];
       placed.push(pick);
-      Object.assign(k, { num, x: pick.lx, y: pick.ty + 3, anchor: pick.anchor, box: pick });
+      Object.assign(kd, { num, x: pick.lx, y: pick.ty + 3, anchor: pick.anchor, box: pick });
     });
-    const labels = allLabels.filter(l => !l.keyed).sort((a, b) => a.y - b.y);
-    keyOut?.push(...keyed.map(k => k.p));
-    // Nudged down only past labels they actually overlap, horizontally as well as vertically.
-    const extent = l => l.anchor === "start" ? [l.x, l.x + l.w] : [l.x - l.w, l.x];
-    labels.sort((a, b) => a.y - b.y);
-    for (let a = 1; a < labels.length; a++) {
-      if (!labels[a].forced) continue;
-      const [a0, a1] = extent(labels[a]);
-      for (let b = 0; b < a; b++) {
-        const [b0, b1] = extent(labels[b]);
-        if (a0 < b1 && b0 < a1 && Math.abs(labels[a].y - labels[b].y) < 12) {
-          labels[a].y = labels[b].y + 12;
-          // pushed onto the frontier line: step on past it
-          for (let k = 0; k < 3 && crosses(a0, a1, labels[a].y - 4); k++) labels[a].y += 12;
-        }
+    let calls = 0, frontCalls = 0, length = 0;
+    for (const [it, a] of at) if (a.lead) { calls++; frontCalls += it.front; length += a.lead.y1 - a.lead.y0; }
+    return { order, at, leaders, keyed, fails: order.length - at.size, calls, frontCalls, length };
+  };
+
+  // The frontier's marks first, top to bottom. Where that leaves a mark numbered or on a line,
+  // the other orders are tried as well and the best kept: fewest numbered, then fewest lines.
+  const byY = (a, b) => a.y - b.y;
+  const orders = [[...items].sort((a, b) => b.front - a.front || byY(a, b))];
+  if (nameAll) orders.push([...items].sort(byY), [...items].sort((a, b) => byY(b, a)), [...items].sort((a, b) => a.x - b.x), [...items].sort((a, b) => b.x - a.x));
+  const worse = (a, b) => a.fails - b.fails || a.calls - b.calls || a.frontCalls - b.frontCalls || a.length - b.length;
+  let best = run(orders[0]);
+  for (const o of orders.slice(1)) {
+    if (!best.fails && !best.calls) break;
+    const r = run(o);
+    if (worse(r, best) < 0) best = r;
+  }
+  // Then the marks still unnamed go first, and the marks near them are named from lanes
+  // too, so that one name set beside its mark no longer blocks every lane of its neighbour.
+  const demote = new Set();
+  for (let i = 0, cur = best; i < 4 && cur.fails; i++) {
+    const failed = cur.order.filter(it => !cur.at.has(it));
+    for (const it of items) if (failed.some(f => f !== it && Math.abs(f.x - it.x) < 90 && Math.abs(f.y - it.y) < 40)) demote.add(it);
+    cur = run([...failed, ...cur.order.filter(it => cur.at.has(it))], demote);
+    if (worse(cur, best) < 0) best = cur;
+  }
+  const out = [];
+  for (const [it, { c, forced }] of best.at)
+    it.names.forEach((s, i) => out.push({ s, w: textWidth(s, 10.5), x: c.lx, anchor: c.anchor, y: c.ty + 12 * i + 4, forced }));
+  return { lines: out, leaders: best.leaders, keyed: best.keyed, crosses };
+}
+
+// Lines to marks, names and numbers, as layoutLabels placed them.
+function drawLabels(t, parts, inst, L) {
+  const extent = l => (l.anchor === "start" ? [l.x, l.x + l.w] : [l.x - l.w, l.x]);
+  for (const l of L.leaders) parts.push(`<path d="M${n(l.x)} ${n(l.y0)}V${n(l.y1)}" stroke="${t.muted}" stroke-width="1"/>`);
+  for (const l of L.lines) {
+    const [l0, l1] = extent(l);
+    if (L.crosses(l0, l1, l.y - 4)) labelClashes.push(`${instLabel(inst)}: "${l.s}"`);
+    parts.push(text(l.x, l.y, l.s, { size: 10.5, fill: t.ink2, anchor: l.anchor }));
+  }
+  // A 9 px digit is a small target: an invisible box a little larger than it takes the pointer.
+  // The digit comes second, so the site's hover scale (a.pt > :nth-child(2)) grows it as it grows a mark.
+  for (const k of L.keyed) parts.push(linked(rowHref(k.p.inst, k.p.r),
+    `<rect x="${n(k.box.x0 - 2)}" y="${n(k.box.ty - 6)}" width="${n(k.box.x1 - k.box.x0 + 4)}" height="11" fill="${t.surface}" fill-opacity="0"/>` +
+    text(k.x, k.y, k.num, { size: 9, fill: t.ink2, anchor: k.anchor, weight: 600 })));
+}
+
+const meets = (a, r) => a.x0 < r.x1 && r.x0 < a.x1 && a.y0 < r.y1 && r.y0 < a.y1;
+
+// An inset's frame: in the plot's top right corner, clear of the marks, the frontier and what
+// is in `avoid` (the boxes, other insets), else the top left; null where neither holds 240 x
+// 120 px. Its size is what its marks need - `wT` by `hT` - or as near as the free space allows.
+function insetFrame(centres, segs, avoid, { left, right, top, bottom }, wT, hT) {
+  const free = r => !avoid.some(a => meets({ x0: a.x0 - 6, x1: a.x1 + 6, y0: a.y0 - 6, y1: a.y1 + 6 }, r)) && !centres.some(([cx, cy]) => meets({ x0: cx - 10, x1: cx + 10, y0: cy - 10, y1: cy + 10 }, r)) &&
+    !segs.some(g => meets({ x0: g.x0 - 2, x1: g.x1 + 2, y0: Math.min(g.y0, g.y1) - 2, y1: Math.max(g.y0, g.y1) + 2 }, r));
+  for (const side of ["right", "left"]) {
+    let best = null;
+    for (let w = Math.min(Math.round(0.8 * (right - left)), Math.max(wT, 240)); w >= 240; w -= 10)
+      for (let h = Math.min(Math.round(0.8 * (bottom - top)), Math.max(hT, 120)); h >= 120; h -= 10) {
+        const x0 = side === "right" ? right - 4 - w : left + 4, r = { x0, x1: x0 + w, y0: top + 4, y1: top + 4 + h };
+        if (!free(r)) continue;
+        if (!best || w * h > (best.x1 - best.x0) * (best.y1 - best.y0)) best = r;
+        break;
+      }
+    if (best) return best;
+  }
+  return null;
+}
+
+// The boxed region again, enlarged, in its frame inside the plot: its own gridlines and tick
+// labels, the frontier's steps between the marks inside the box, and every mark named as in
+// the plot.
+function drawInset(t, parts, inst, pts, front, r, box, nameOf, heading) {
+  parts.push(`<rect x="${n(r.x0)}" y="${n(r.y0)}" width="${n(r.x1 - r.x0)}" height="${n(r.y1 - r.y0)}" fill="${t.surface}" stroke="${t.muted}" stroke-width="1" stroke-dasharray="3 3" rx="3"/>`);
+  parts.push(text(r.x0 + 8, r.y0 + 15, heading, { size: 9.5, fill: t.muted }));
+  const left = r.x0 + 52, right = r.x1 - 10, top = r.y0 + 30, bottom = r.y1 - 22;
+  const X = logScale(box.c0, box.c1, left, right);
+  const Y = e => bottom - ((e - box.e0) / (box.e1 - box.e0)) * (bottom - top);
+  // Names may use the whole frame, clear of its heading and tick labels.
+  const tickBoxes = [{ x0: r.x0, x1: r.x0 + 8 + textWidth(heading, 9.5), y0: r.y0, y1: r.y0 + 20 }];
+  const step = niceStep((box.e1 - box.e0) / 3), decimals = Math.max(0, -Math.floor(Math.log10(step)));
+  for (let i = Math.ceil(box.e0 / step); i * step <= box.e1; i++) {
+    const s = (i * step).toFixed(decimals).replace("-", "−"), y = Y(i * step);
+    parts.push(hline(left, right, y, t.grid));
+    parts.push(text(left - 5, y + 3.5, s, { size: 9, fill: t.muted, anchor: "end", nums: true }));
+    tickBoxes.push({ x0: left - 7 - textWidth(s, 9), x1: left - 3, y0: y - 5, y1: y + 5 });
+  }
+  // 1, 2 and 5 of each decade, or every digit where the box holds fewer than two of those.
+  const ticks = ms => { const out = []; for (let k = Math.floor(log(box.c0)); k <= Math.ceil(log(box.c1)); k++) for (const m of ms) { const v = m * 10 ** k; if (v >= box.c0 && v <= box.c1) out.push([m, k, v]); } return out; };
+  const xt = ticks([1, 2, 5]).length >= 2 ? ticks([1, 2, 5]) : ticks([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  for (const [m, k, v] of xt) {
+    const s = m === 1 ? pow10(k) : `${m}×${pow10(k)}`, w = textWidth(s, 9);
+    parts.push(text(X(v), bottom + 14, s, { size: 9, fill: t.muted, anchor: "middle", nums: true }));
+    tickBoxes.push({ x0: X(v) - w / 2 - 2, x1: X(v) + w / 2 + 2, y0: bottom + 5, y1: bottom + 17 });
+  }
+  if (front.length > 1) {
+    let d = `M${n(X(front[0].cost.value))} ${n(Y(front[0].e))}`;
+    for (const p of front.slice(1)) d += `H${n(X(p.cost.value))}V${n(Y(p.e))}`;
+    parts.push(`<path d="${d}" fill="none" stroke="${t.series[0]}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" opacity="0.7"/>`);
+  }
+  for (const p of [...pts].sort((a, b) => a.eligible - b.eligible))
+    parts.push(mark(t, X(p.cost.value), Y(p.e), t.series[BOUNDS[p.r.bound_type]], p.eligible, p.cost.unit, rowHref(p.inst, p.r)));
+  // Names told apart where that still names every mark, else the short ones if they name more.
+  const lay = distinguish => layoutLabels({ pts, named: pts, X, Y, front, left: r.x0 + 6, right: r.x1 - 6, top: r.y0 + 14, bottom: r.y1 - 4, nameOf, nameAll: true, avoid: tickBoxes, distinguish });
+  let L = lay(true);
+  if (L.keyed.length) { const S = lay(false); if (S.keyed.length < L.keyed.length) L = S; }
+  drawLabels(t, parts, inst, L);
+}
+
+// A panel: axes, frontier, marks and names. With `zoom`, the marks that found no room, their
+// region is boxed and its marks are named in an inset instead; returns false when the plot
+// has no room for one, so the caller keeps the panel without it.
+function drawPanel(t, parts, inst, pts, { px, left, right, top, bottom, xLabel, title, nameAll = false, zoom = null, keyOut = null }) {
+  const plotH = bottom - top;
+  const rec = recordOf(inst), recE = rec ? rec.energy / perSiteDivisor(inst) : null;
+  const front = frontierOf(pts);
+  const nameOf = p => shortLabel(p.r) + (p.cost.measuredByQmbl ? " (cost measured by QMBL)" : "");
+  // Cost axis: a decade either side of the data. Energy axis: linear, as in the
+  // record-over-time figure, so the record and an exact energy sit where they are.
+  const cs = pts.map(p => p.cost.value);
+  const x0 = 10 ** Math.floor(log(Math.min(...cs)) - 0.5), x1 = 10 ** Math.ceil(log(Math.max(...cs)) + 0.5);
+  const X = logScale(x0, x1, left, right);
+  const es = pts.map(p => p.e);
+  const span = Math.max(Math.max(...es) - Math.min(...es), 1e-6);
+  const step = niceStep(span / 4);
+  const e0 = Math.floor((Math.min(...es) - span * 0.08) / step) * step;
+  const e1 = Math.ceil((Math.max(...es) + span * 0.08) / step) * step;
+  const Y = e => bottom - ((e - e0) / (e1 - e0)) * plotH;
+  // The boxes: the marks to zoom on, in clusters of marks less than 80 px apart (a lone one
+  // stays in the plot), each with a margin and grown until every mark it touches is one of its
+  // own; boxes that meet merge. The rightmost gets an inset in the top right corner, the next
+  // one in the top left. A box is at least clear of the marks it frames; the inset's own
+  // heading says what it is.
+  const zooms = [];
+  if (zoom) {
+    const pos = p => [X(p.cost.value), Y(p.e)];
+    let clusters = [];
+    for (const p of zoom) {
+      const near = clusters.filter(c => c.some(q => Math.hypot(pos(q)[0] - pos(p)[0], pos(q)[1] - pos(p)[1]) < 80));
+      clusters = [...clusters.filter(c => !near.includes(c)), [p, ...near.flat()]];
+    }
+    const boxOf = members => {
+      for (let i = 0; ; i++) {
+        const cs = members.map(p => log(p.cost.value)), es = members.map(p => p.e);
+        const espan = Math.max(Math.max(...es) - Math.min(...es), 0.02 * (e1 - e0));
+        const box = { c0: 10 ** (Math.min(...cs) - 0.06), c1: 10 ** (Math.max(...cs) + 0.06), e0: Math.min(...es) - 0.2 * espan, e1: Math.max(...es) + 0.2 * espan };
+        const rect = { x0: X(box.c0) - 8, x1: X(box.c1) + 8, y0: Y(box.e1) - 8, y1: Y(box.e0) + 8 };
+        const inBox = pts.filter(p => X(p.cost.value) > rect.x0 - 7 && X(p.cost.value) < rect.x1 + 7 && Y(p.e) > rect.y0 - 7 && Y(p.e) < rect.y1 + 7);
+        if (i === 7 || inBox.every(p => members.includes(p))) return { box, rect, inBox };
+        members = [...new Set([...members, ...inBox])];
+      }
+    };
+    let boxes = clusters.filter(c => c.length >= 2).map(boxOf);
+    for (let a = 0; a < boxes.length; a++)
+      for (let b = a + 1; b < boxes.length; b++)
+        if (meets(boxes[a].rect, boxes[b].rect)) { boxes = [...boxes.filter((_, i) => i !== a && i !== b), boxOf([...boxes[a].inBox, ...boxes[b].inBox])]; a = -1; break; }
+    const midX = z => z.inBox.reduce((sum, p) => sum + pos(p)[0], 0) / z.inBox.length;
+    for (const z of boxes.sort((a, b) => midX(b) - midX(a))) {
+      // What the inset's marks need: their widest name beside a spread of marks, and a row each.
+      const nameW = Math.max(...z.inBox.map(p => Math.min(200, Math.max(textWidth(nameOf(p), 10.5), p.r.method_detail ? textWidth(`${p.r.method} (${p.r.method_detail.split(", ")[0]})`, 10.5) : 0))));
+      z.frame = insetFrame(pts.map(pos), stairs(front, X, Y), [...boxes.map(b => b.rect), ...zooms.map(q => q.frame)], { left, right, top, bottom },
+        Math.min(560, 110 + nameW + 14 * z.inBox.length), Math.min(440, 80 + 26 * z.inBox.length));
+      if (z.frame) zooms.push(z);
+    }
+    if (!zooms.length) return false;
+  }
+  if (title) parts.push(text(px, top - 14, title, { size: 12.5, fill: t.ink, weight: 600 }));
+  parts.push(text(right, top - 14, perSiteLabel(inst), { size: 9.5, fill: t.muted, anchor: "end" }));
+  const decimals = Math.max(0, -Math.floor(Math.log10(step)));
+  for (let i = 0; i <= Math.round((e1 - e0) / step); i++) {
+    const v = e0 + i * step;
+    parts.push(hline(left, right, Y(v), t.grid));
+    parts.push(text(left - 6, Y(v) + 4, v.toFixed(decimals).replace("-", "−"), { size: 10, fill: t.muted, anchor: "end", nums: true }));
+  }
+  for (let k2 = Math.ceil(log(x0)); k2 <= Math.floor(log(x1)); k2++)
+    parts.push(text(X(10 ** k2), bottom + 16, pow10(k2), { size: 10, fill: t.muted, anchor: "middle", nums: true }));
+  if (front.length > 1) {
+    let d = `M${n(X(front[0].cost.value))} ${n(Y(front[0].e))}`;
+    for (const p of front.slice(1)) d += `H${n(X(p.cost.value))}V${n(Y(p.e))}`;
+    parts.push(`<path d="${d}" fill="none" stroke="${t.series[0]}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" opacity="0.7"/>`);
+  }
+  for (const p of [...pts].sort((a, b) => a.eligible - b.eligible))
+    parts.push(mark(t, X(p.cost.value), Y(p.e), t.series[BOUNDS[p.r.bound_type]], p.eligible, p.cost.unit, rowHref(p.inst, p.r)));
+  // Two boxes are lettered from the left, "a" over the box and "Box a, enlarged" on its inset.
+  zooms.sort((a, b) => a.rect.x0 - b.rect.x0).forEach((z, i) => {
+    const { rect: r, box, inBox, frame } = z, tag = zooms.length > 1 ? "ab"[i] : null;
+    parts.push(`<rect x="${n(r.x0)}" y="${n(r.y0)}" width="${n(r.x1 - r.x0)}" height="${n(r.y1 - r.y0)}" fill="none" stroke="${t.muted}" stroke-width="1" stroke-dasharray="3 3" rx="3"/>`);
+    if (tag) { parts.push(text(r.x0 + 1, r.y0 - 4, tag, { size: 10, fill: t.muted, weight: 600 })); z.tagRect = { x0: r.x0, x1: r.x0 + 9, y0: r.y0 - 14, y1: r.y0 }; }
+    drawInset(t, parts, inst, inBox, front.filter(p => inBox.includes(p)), frame, box, nameOf, tag ? `Box ${tag}, enlarged` : "The boxed region, enlarged");
+  });
+  // An instance's own figure names every mark (Tristan, 2026-09-24: a dot without a name
+  // cannot be read); the small overview panels name the frontier only, where naming them
+  // all piles the labels on each other.
+  const hide = new Set(zooms.flatMap(z => z.inBox));
+  const named = [...new Set([...front, ...(nameAll ? pts : [])])].filter(p => !hide.has(p));
+  const L = layoutLabels({ pts, named, X, Y, front, left, right, top, bottom, nameOf, nameAll, avoid: zooms.flatMap(z => [z.rect, z.frame, ...(z.tagRect ? [z.tagRect] : [])]) });
+  keyOut?.push(...L.keyed.map(k => k.p));
+  // An overview label with no free spot is nudged down only past labels it actually overlaps,
+  // horizontally as well as vertically.
+  const labels = L.lines.sort((a, b) => a.y - b.y);
+  const extent = l => (l.anchor === "start" ? [l.x, l.x + l.w] : [l.x - l.w, l.x]);
+  for (let a = 1; a < labels.length; a++) {
+    if (!labels[a].forced) continue;
+    const [a0, a1] = extent(labels[a]);
+    for (let b = 0; b < a; b++) {
+      const [b0, b1] = extent(labels[b]);
+      if (a0 < b1 && b0 < a1 && Math.abs(labels[a].y - labels[b].y) < 12) {
+        labels[a].y = labels[b].y + 12;
+        // pushed onto the frontier line: step on past it
+        for (let k = 0; k < 3 && L.crosses(a0, a1, labels[a].y - 4); k++) labels[a].y += 12;
       }
     }
-    for (const l of labels) {
-      const [l0, l1] = extent(l);
-      if (crosses(l0, l1, l.y - 4)) labelClashes.push(`${instLabel(inst)}: "${l.s}"`);
-      parts.push(text(l.x, l.y, l.s, { size: 10.5, fill: t.ink2, anchor: l.anchor }));
-    }
-    // A 9 px digit is a small target: an invisible box a little larger than it takes the pointer.
-    // The digit comes second, so the site's hover scale (a.pt > :nth-child(2)) grows it as it grows a mark.
-    for (const k of keyed) parts.push(linked(rowHref(k.p.inst, k.p.r),
-      `<rect x="${n(k.box.x0 - 2)}" y="${n(k.box.ty - 6)}" width="${n(k.box.x1 - k.box.x0 + 4)}" height="11" fill="${t.surface}" fill-opacity="0"/>` +
-      text(k.x, k.y, k.num, { size: 9, fill: t.ink2, anchor: k.anchor, weight: 600 })));
-    parts.push(text((left + right) / 2, bottom + 32, xLabel, { size: 10.5, fill: t.ink2, anchor: "middle" }));
-    const recNote = recNoteOn && rec && !pts.some(p => p.r === rec);
-    if (recNote)
-      parts.push(text(left, bottom + 48, `${rec.bound_type === "exact" ? boundLabel(rec) : "record"}: ${recE.toFixed(6).replace("-", "−")} (${shortLabel(rec)}), no cost stated, not drawn`, { size: 9.5, fill: t.muted }));
+  }
+  drawLabels(t, parts, inst, L);
+  parts.push(text((left + right) / 2, bottom + 32, xLabel, { size: 10.5, fill: t.ink2, anchor: "middle" }));
+  if (rec && !pts.some(p => p.r === rec))
+    parts.push(text(left, bottom + 48, `${rec.bound_type === "exact" ? boundLabel(rec) : "record"}: ${recE.toFixed(6).replace("-", "−")} (${shortLabel(rec)}), no cost stated, not drawn`, { size: 9.5, fill: t.muted }));
+  return true;
 }
 
 function costFigure({ name, title, subtitle, costOf, minRows, xLabel, legendItems, footer, describe }) {
