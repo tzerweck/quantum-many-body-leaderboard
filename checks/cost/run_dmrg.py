@@ -13,7 +13,6 @@ import argparse
 import json
 import os
 import platform
-import socket
 import subprocess
 import sys
 import time
@@ -21,7 +20,7 @@ import time
 T_START = time.perf_counter()
 WALL_START = time.time()
 
-from monitor import Monitor  # noqa: E402  (protocol v1.4: CPU time, clocks and node load beside the wall-clock)
+from monitor import Monitor, public_argv  # noqa: E402  (protocol v1.4: CPU time, clocks and node load beside the wall-clock)
 MON = Monitor()
 
 import numpy as np  # noqa: E402
@@ -137,10 +136,9 @@ def main():
             json.dump(dict(schema="qmbl-cost-run-dmrg-1", instance_id=args.instance, label="DMRG", rungs=rungs, cores=cores,
                            protocol=dict(algorithm="two-site DMRG, TeNPy, finite MPS on the torus with long-range couplings, Sz conserved, Neel product start, mixer on, a new engine per rung on the previous rung's state",
                                          max_sweeps=args.max_sweeps, max_E_err=args.max_e_err, svd_min=1e-10, mpo_bond_dimension=int(max(M.H_MPO.chi))),
-                           hardware=dict(host=socket.gethostname(), cpu=cpu_model(), slurm_job_id=os.environ.get("SLURM_JOB_ID"),
-                                         slurm_partition=os.environ.get("SLURM_JOB_PARTITION"), cores=cores),
+                           hardware=dict(cpu=cpu_model(), slurm_job_id=os.environ.get("SLURM_JOB_ID"), cores=cores),
                            software=dict(python=platform.python_version(), tenpy=tenpy.__version__, numpy=np.__version__, script="checks/cost/run_dmrg.py",
-                                         commit=os.environ.get("QMBL_COMMIT") or git_commit(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")), argv=sys.argv[1:]),
+                                         commit=os.environ.get("QMBL_COMMIT") or git_commit(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")), argv=public_argv(sys.argv[1:])),
                            timing=dict(started_utc=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(WALL_START)), ended_utc=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))),
                       f, indent=1)
 

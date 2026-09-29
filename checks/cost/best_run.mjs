@@ -5,7 +5,7 @@
 //
 // Every run is kept in results/runs/<name>--<slurm job>.json with its trace; results/<name>.json is
 // the chosen one, and only it becomes a row (add_cost_runs.mjs reads results/*.json). Run after
-// every `euler/sync.sh --fetch`, from the repo root:
+// every `slurm/sync.sh --fetch`, from the repo root:
 //     node checks/cost/best_run.mjs
 // DMRG is deterministic and run once; its results files are left alone.
 import fs from "node:fs";

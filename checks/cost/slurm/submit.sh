@@ -1,30 +1,33 @@
 #!/usr/bin/env bash
 # Submit the first batch of QMBL cost-to-reproduce runs on the cluster (README.md, protocol of
 # 2026-09-21). Run on the cluster from ~/agent-runs/qmbl-cost after `sync.sh` copied this directory:
-#     bash euler/submit.sh [nqs|dmrg|all] [--dry] [job-name ...]     (names restrict the batch)
-# Every job writes to $SCRATCH/agent-runs/qmbl-cost/<job-name>/ and copies its results JSON,
+#     bash slurm/submit.sh [nqs|dmrg|all] [--dry] [job-name ...]     (names restrict the batch)
+# Partitions, the request that pins the 80 GB card and the scratch directory come from slurm/site.env.
+# Every job writes to $SCRATCH_DIR/agent-runs/qmbl-cost/<job-name>/ and copies its results JSON,
 # trace and parameters into ~/agent-runs/qmbl-cost/results/ when done.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+[ -f slurm/site.env ] || { echo "slurm/site.env is missing: copy slurm/site.env.example and fill it in" >&2; exit 2; }
+set -a; source slurm/site.env; set +a
 what="${1:-all}"; shift || true
 dry=""; [ "${1:-}" = "--dry" ] && { dry=1; shift; }
 ONLY=("$@")
 wanted() { [ ${#ONLY[@]} -eq 0 ] && return 0; for n in "${ONLY[@]}"; do [ "$n" = "$1" ] && return 0; done; return 1; }
 HERE="$PWD"
-SCR="/cluster/scratch/$USER/agent-runs/qmbl-cost"
-mkdir -p "$SCR" "$HERE/results" "$HERE/euler/logs"
+SCR="$SCRATCH_DIR/agent-runs/qmbl-cost"
+mkdir -p "$SCR" "$HERE/results" "$HERE/slurm/logs"
 COMMIT="$(cat "$HERE/COMMIT" 2>/dev/null || echo unknown)"
 
-# name  instance  model  partition  time
+# name  instance  model  partition (gpu-4h or gpu-24h, resolved in site.env)  time
 NQS_JOBS=(
-  "rbm-j1j2-100      J1J2/square_100_P_0.5       rbm      gpupr.4h   04:00:00"
-  "rbm-tri-36        Heisenberg/triangular_36_P  rbm      gpupr.4h   04:00:00"
-  "rbmsymm-j1j2-100  J1J2/square_100_P_0.5       rbmsymm  gpupr.4h   04:00:00"
-  "rbmsymm-tri-36    Heisenberg/triangular_36_P  rbmsymm  gpupr.4h   04:00:00"
-  "gcnn-j1j2-100     J1J2/square_100_P_0.5       gcnn     gpupr.24h  24:00:00"
-  "gcnn-tri-36       Heisenberg/triangular_36_P  gcnn     gpupr.24h  24:00:00"
-  "vit-j1j2-100      J1J2/square_100_P_0.5       vit      gpupr.24h  24:00:00"
-  "vit-tri-36        Heisenberg/triangular_36_P  vit      gpupr.24h  24:00:00"
+  "rbm-j1j2-100      J1J2/square_100_P_0.5       rbm      gpu-4h     04:00:00"
+  "rbm-tri-36        Heisenberg/triangular_36_P  rbm      gpu-4h     04:00:00"
+  "rbmsymm-j1j2-100  J1J2/square_100_P_0.5       rbmsymm  gpu-4h     04:00:00"
+  "rbmsymm-tri-36    Heisenberg/triangular_36_P  rbmsymm  gpu-4h     04:00:00"
+  "gcnn-j1j2-100     J1J2/square_100_P_0.5       gcnn     gpu-24h    24:00:00"
+  "gcnn-tri-36       Heisenberg/triangular_36_P  gcnn     gpu-24h    24:00:00"
+  "vit-j1j2-100      J1J2/square_100_P_0.5       vit      gpu-24h    24:00:00"
+  "vit-tri-36        Heisenberg/triangular_36_P  vit      gpu-24h    24:00:00"
 )
 # name  instance  time  chi ladder (comma-separated)  destination (results = a row; calibration = never a row)
 DMRG_JOBS=(
@@ -46,7 +49,8 @@ if [ "$what" = nqs ] || [ "$what" = all ]; then
 for spec in "${NQS_JOBS[@]}"; do
   read -r name inst model part tlim <<<"$spec"
   wanted "$name" || continue
-  f="$HERE/euler/$name.sbatch"
+  case "$part" in gpu-4h) part="$PART_GPU_4H";; gpu-24h) part="$PART_GPU_24H";; *) echo "unknown partition $part" >&2; exit 2;; esac
+  f="$HERE/slurm/$name.sbatch"
   cat > "$f" <<SB
 #!/bin/bash
 #SBATCH --job-name=qmbl-cost-$name
@@ -56,9 +60,9 @@ for spec in "${NQS_JOBS[@]}"; do
 #SBATCH --cpus-per-task=8
 #SBATCH --mem-per-cpu=8G
 #SBATCH --gpus=1
-#SBATCH --gres=gpumem:80g
-#SBATCH --output=$HERE/euler/logs/%x-%j.out
-#SBATCH --error=$HERE/euler/logs/%x-%j.err
+#SBATCH $GPU_PIN
+#SBATCH --output=$HERE/slurm/logs/%x-%j.out
+#SBATCH --error=$HERE/slurm/logs/%x-%j.err
 set -euo pipefail
 source "\$HOME/agent-runs/env-jax.sh"
 export QMBL_COMMIT="$COMMIT" JAX_ENABLE_X64=1
@@ -80,17 +84,17 @@ for spec in "${DMRG_JOBS[@]}"; do
   read -r name inst tlim chis dest mem <<<"$spec"
   mkdir -p "$HERE/$dest"
   wanted "$name" || continue
-  f="$HERE/euler/$name.sbatch"
+  f="$HERE/slurm/$name.sbatch"
   cat > "$f" <<SB
 #!/bin/bash
 #SBATCH --job-name=qmbl-cost-$name
-#SBATCH --partition=normal.120h
+#SBATCH --partition=$PART_CPU_120H
 #SBATCH --time=$tlim
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem-per-cpu=${mem:-8G}
-#SBATCH --output=$HERE/euler/logs/%x-%j.out
-#SBATCH --error=$HERE/euler/logs/%x-%j.err
+#SBATCH --output=$HERE/slurm/logs/%x-%j.out
+#SBATCH --error=$HERE/slurm/logs/%x-%j.err
 set -euo pipefail
 source "\$HOME/agent-runs/env-jax.sh"
 export QMBL_COMMIT="$COMMIT" OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 OPENBLAS_NUM_THREADS=8

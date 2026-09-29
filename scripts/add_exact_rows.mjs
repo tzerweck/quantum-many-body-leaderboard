@@ -195,7 +195,7 @@ console.log(`batch B: ${added - before[0]} exact rows (${created - before[1]} ne
 // ground state (RULES.md 11: that row is removed in removals.mjs and this one stands).
 //
 // Heisenberg/pyrochlore-2x2x2_32_P: VarBench's -66.1514 is -0.5168078 per site; the ground state
-// of the same 32-site cluster is -66.15792523719963. Two diagonalizations on 99problems, 2026-09-16
+// of the same 32-site cluster is -66.15792523719963. Two diagonalizations on an AMD EPYC 9654 server, 2026-09-16
 // (checks/pyrochlore-32-ed/): Lanczos over the whole S^z = 0 space (601,080,390 states, no
 // symmetry) and over the fully symmetric sector of the cluster's 384-element space group times
 // spin inversion (789,438 states); they agree to 1.2e-11. Geometry from VarBench's own
@@ -207,7 +207,7 @@ put("Heisenberg/pyrochlore-2x2x2_32_P",
   { energy: -66.15792523719963, sigma: null,
     src: { ref: "QMBL, checks/pyrochlore-32-ed/ (exact diagonalization of VarBench's 32-site cluster, two codes)", pr: false },
     method: "Exact diagonalization", why: "Lanczos exact diagonalization of the full S^z = 0 space, computed by QMBL; deterministic",
-    read: "ed_full.py (numba matrix-free Lanczos, S^z = 0, no spatial symmetry, 601,080,390 states, residual 6.9e-10) and ed_perm.py (fully symmetric sector of the 384-element space group x spin inversion, 789,438 states, residual 6.3e-10), 99problems, 2026-09-16",
+    read: "ed_full.py (numba matrix-free Lanczos, S^z = 0, no spatial symmetry, 601,080,390 states, residual 6.9e-10) and ed_perm.py (fully symmetric sector of the 384-element space group x spin inversion, 789,438 states, residual 6.3e-10), an AMD EPYC 9654 server, 2026-09-16",
     reported: "-66.15792523719963 (ed_full.py) | -66.15792523721132 (ed_perm.py)",
     note: "Pauli total; E/N = -0.51685879 in S.S units. The ground state is the unique fully symmetric singlet; the lowest S^z = 1 level -63.40912320391 gives the triplet gap (E1 - E0)/4 = 0.68720, the 0.6872 printed for this cluster in arXiv:2010.03563 Table I and arXiv:2101.08787 Table II, whose E/N = -0.5168 is this energy truncated. Replaces VarBench's exact row -66.1514 (-0.5168078 per site), 6.5e-3 above it (RULES.md 11, removals.mjs).",
     source: "qmbl-verify-2026-09-16", checked: "2026-09-16" });

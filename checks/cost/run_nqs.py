@@ -17,7 +17,6 @@ import argparse
 import json
 import os
 import platform
-import socket
 import subprocess
 import sys
 import time
@@ -25,7 +24,7 @@ import time
 T_START = time.perf_counter()
 WALL_START = time.time()
 
-from monitor import Monitor  # noqa: E402  (protocol v1.4: CPU time, clocks and node load beside the wall-clock)
+from monitor import Monitor, public_argv  # noqa: E402  (protocol v1.4: CPU time, clocks and node load beside the wall-clock)
 MON = Monitor()
 
 import numpy as np  # noqa: E402
@@ -321,10 +320,10 @@ def main():
         timing=dict(wall_seconds=wall, wall_hms=hms(wall), setup_seconds=t_train0 - T_START, train_seconds=t_train1 - t_train0,
                     eval_seconds=t_end - t_train1, seconds_per_step_last_100=float(np.mean(np.diff(step_times[-101:]))) if len(step_times) > 101 else None,
                     started_utc=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(WALL_START)), ended_utc=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())),
-        hardware=dict(devices=[str(d) for d in devices], device_kind=devices[0].device_kind, n_devices=len(devices), host=socket.gethostname(),
-                      slurm_job_id=os.environ.get("SLURM_JOB_ID"), slurm_partition=os.environ.get("SLURM_JOB_PARTITION"), cpus=os.environ.get("SLURM_CPUS_PER_TASK")),
+        hardware=dict(devices=[str(d) for d in devices], device_kind=devices[0].device_kind, n_devices=len(devices),
+                      slurm_job_id=os.environ.get("SLURM_JOB_ID"), cpus=os.environ.get("SLURM_CPUS_PER_TASK")),
         software=dict(python=platform.python_version(), netket=nk.__version__, jax=jax.__version__, flax=flax.__version__,
-                      script="checks/cost/run_nqs.py", commit=os.environ.get("QMBL_COMMIT") or git_commit(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")), argv=sys.argv[1:]),
+                      script="checks/cost/run_nqs.py", commit=os.environ.get("QMBL_COMMIT") or git_commit(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")), argv=public_argv(sys.argv[1:])),
         files=dict(trace=os.path.basename(trace_path), params=os.path.basename(ckpt_path)),
         resources=MON.summary(),
     )

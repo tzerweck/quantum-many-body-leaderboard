@@ -31,7 +31,6 @@ import hashlib
 import json
 import math
 import platform
-import socket
 import sys
 import time
 import types
@@ -252,7 +251,7 @@ def environment(tag):
         jaxlib = None
     dev = jax.devices()[0]
     return {
-        "backend": jax.default_backend(), "device_kind": dev.device_kind, "host": socket.gethostname(),
+        "backend": jax.default_backend(), "device_kind": dev.device_kind,
         "python": platform.python_version(), "netket": nk.__version__, "jax": jax.__version__,
         "jaxlib": jaxlib, "flax": flax.__version__, "pass": tag,
         "ran_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),

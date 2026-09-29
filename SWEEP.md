@@ -77,7 +77,7 @@ which parses every number from the committed text (the generator reproduces the 
     −0.488820(2)). The previous holder was Hu et al.'s VMC with two Lanczos steps.
   - 6x6 J2 = 0.55 now has an exact row (Schulz, −0.495178). Before it, Gong et al.'s DMRG held the record.
 - **QMBL's Lanczos settles the 6x6 exact energies** (`qmbl-runs/qmbl-ed-2026-09-28`, E2's `ed_sym.py`
-  unchanged, 99problems, 60 min, 72 GB). It computed the C4v one-dimensional sectors with even spin at
+  unchanged, an AMD EPYC 9654 server, 60 min, 72 GB). It computed the C4v one-dimensional sectors with even spin at
   k = 0, and at M for J2 = 0.45 and 0.65. First it reproduced the stored J2 = 0.5 exact energy to all 12 digits.
   - Ground-state energy per site: −0.638095436 (J2 = 0.1), −0.599046322 (0.2), −0.515657392 (0.45),
     −0.495177700 (0.55), −0.506587859 (0.65), each in k = 0 A1.

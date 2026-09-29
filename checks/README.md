@@ -43,7 +43,7 @@ by *full summation*: the RBM's true variational energy with zero Monte-Carlo err
 variational principle then gives a hard answer instead of a statistical one. Three seeds per
 instance; the training trace is kept so its minimum can be compared against the published value.
 
-**Result** (`results-tfising-rbm.json`, spiritbox, netket 3.22.4, 2026-09-11).
+**Result** (`results-tfising-rbm.json`, an AMD EPYC 9554 server with NVIDIA L40S cards, netket 3.22.4, 2026-09-11).
 
 | | chain_10_P_1 | chain_10_O_1 |
 |---|---|---|
@@ -86,7 +86,7 @@ N = 32), the full-summation energy of the same parameters (N = 10), and five rep
 2^20-sample estimates with tau_corr and R_hat. `trace_summary.json` holds the training
 trace minima and every 100th step.
 
-**Result** (99problems, 2026-09-19; `run.log`, `*.eval.json`).
+**Result** (an AMD EPYC 9654 server with NVIDIA H100 NVL cards, 2026-09-19; `run.log`, `*.eval.json`).
 
 | | chain_10_P_1 | chain_10_O_1 | chain_32_P_0.5 |
 |---|---|---|---|
@@ -173,7 +173,7 @@ do not decide between that number and a lower one. Is the stored energy the grou
 **Design.** Lanczos ground state of `H = sum_b sigma_i . sigma_j` (Pauli) on the cluster VarBench's
 own generator builds: `programs/mVMC_RBM/src/StdFace/Pyrochlore.c` of varbench/methods, 2 x 2 x 2
 fcc cells of four sites, 96 bonds, every site six-fold, cross-checked against a real-space
-nearest-neighbour list. Two codes on 99problems, 2026-09-16: `ed_full.py`, matrix-free over the
+nearest-neighbour list. Two codes on an AMD EPYC 9654 server, 2026-09-16: `ed_full.py`, matrix-free over the
 whole S^z = 0 space (601,080,390 states, no spatial symmetry, true residual measured on a rebuilt
 Ritz vector), and `ed_perm.py` (with `ed_sym.py`), in the fully symmetric sector of the cluster's
 384-element space group times spin inversion (789,438 states). An S^z = 1 run gives the triplet gap.

@@ -116,7 +116,7 @@ and the row says so in its method string. Nothing here is attached to anyone els
     and whether the ViT stalls. On J1-J2 10 × 10 repeated runs agree to about 1e-4 per site.
   - **The rule:** the row is the lowest final energy among the configuration's v1.4 runs that
     stand. [`best_run.mjs`](best_run.mjs) keeps every run in `results/runs/` and writes the
-    chosen one to `results/<name>.json`. `euler/sync.sh --fetch` calls it.
+    chosen one to `results/<name>.json`. `slurm/sync.sh --fetch` calls it.
   - **What the row says:** its note gives the number of runs, not their spread. v1.3 runs are
     not candidates, because they lack the hardware record.
 
@@ -168,7 +168,7 @@ The FLOP estimate (DATA.md, `nqs-v2`) models one forward pass of a network as
   transcendental functions counted apart. Per configuration is the difference between batches
   of 16 and 1024, so work on the parameters alone is not charged to each configuration.
   XLA's own cost analysis of the same program sits beside it: lowered, compiled for the CPU,
-  and compiled for the runs' own A100 80 GB (`euler/submit_flops.sh`, job 15565887).
+  and compiled for the runs' own A100 80 GB (`slurm/submit_flops.sh`, job 15565887).
 - **Where.** Nothing runs, so the count needs no card: it is made on the H100 host's CPU with
   the runs' NetKet and JAX versions (`h100/forward-flops.sh start`, then `fetch`), for every
   instance and ansatz `run_nqs.py` knows, and written to `forward-flops.json`.
@@ -221,7 +221,11 @@ arithmetic.
 - `sr_flops.py`, `sr-flops.json` — the counted SR step of the eight runs (above).
 - `forward_flops.py`, `forward-flops.json` — the counted forward pass of every network (above);
   `h100/forward-flops.sh` and `h100/forward-flops-run.sh` run it on the H100 host.
-- `euler/` — the sbatch scripts as submitted, and `submit.sh`.
+- `slurm/` — `submit.sh`, `submit_ed.sh` and `submit_flops.sh`, the sbatch scripts they wrote, and the jobs' logs.
+  The cluster's own settings (ssh host, partitions, the request that pins the 80 GB card, the
+  scratch path) are in a gitignored `slurm/site.env`; `slurm/site.env.example` lists them.
+- `scrub.mjs` — drops the node, the partition and paths on the cluster from results files and
+  logs (run by `slurm/sync.sh --fetch`); the validator checks the rows the same way.
 - `results/` — one JSON per configuration (the best of its runs), with its `.trace.jsonl` and `.params.msgpack`; `results/runs/` holds every v1.4 run as `<name>--<Slurm job>.json` with its trace, never rows.
 - `calibration/` — runs made to calibrate an estimate, never rows (`add_cost_runs.mjs` reads
   `results/` only). `dmrg-cal-tri-36` repeats the chi = 500 rung on the triangular 36 torus

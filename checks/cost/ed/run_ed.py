@@ -16,7 +16,6 @@ import json
 import os
 import platform
 import resource
-import socket
 import subprocess
 import sys
 import time
@@ -25,7 +24,7 @@ T_START = time.perf_counter()
 WALL_START = time.time()
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
-from monitor import Monitor  # noqa: E402
+from monitor import Monitor, public_argv  # noqa: E402
 MON = Monitor()
 
 TOL_REL = 1e-8
@@ -117,12 +116,11 @@ def main():
                     started_utc=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(WALL_START)), ended_utc=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())),
         cores=cores, cpu_core_hours=wall / 3600 * cores,
         peak_rss_gb=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1e6,
-        hardware=dict(cpu=cpu_model(), host=socket.gethostname(), slurm_job_id=os.environ.get("SLURM_JOB_ID"),
-                      slurm_partition=os.environ.get("SLURM_JOB_PARTITION"), cores=cores),
+        hardware=dict(cpu=cpu_model(), slurm_job_id=os.environ.get("SLURM_JOB_ID"), cores=cores),
         software=dict(python=platform.python_version(), netket=nk.__version__, scipy=scipy.__version__, numpy=np.__version__,
                       sparse_build=f"NetKet get_conn_padded in blocks of {CHUNK} basis states, stacked as SciPy CSR",
                       eigensolver="scipy.sparse.linalg.eigsh (ARPACK), k = 1, which = SA, default tolerance",
-                      script="checks/cost/ed/run_ed.py", commit=os.environ.get("QMBL_COMMIT"), argv=sys.argv[1:]),
+                      script="checks/cost/ed/run_ed.py", commit=os.environ.get("QMBL_COMMIT"), argv=public_argv(sys.argv[1:])),
         resources=MON.summary(),
     )
     os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)

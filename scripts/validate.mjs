@@ -1,4 +1,5 @@
 import fs from "node:fs"; import path from "node:path";
+import { leaksIn } from "../checks/cost/scrub.mjs";
 import { expectedDof, expectedEinf, vScore, perSiteDivisor, groundStateExact, stochasticExact } from "./units.mjs";
 import { FAMILIES } from "./views.mjs";
 import { detailIssue } from "./method_names.mjs";
@@ -115,6 +116,8 @@ for (const m of fs.readdirSync("data")) {
         if (!c || (c.gpu_hours == null && c.cpu_core_hours == null) || !c.device || c.scope !== "row" || !/checks\/cost\/results\//.test(c.source || ""))
           issues.push(`RUN ${at}: QMBL run without a measured compute block (hours, device, scope row, results file)`);
         if (!r.verified?.reported_as) issues.push(`RUN ${at}: QMBL run without verified.reported_as`);
+        const leak = leaksIn(JSON.stringify(r));
+        if (leak.length) issues.push(`RUN ${at}: names the cluster (${leak.join(", ")}); public text names the hardware only`);
       }
       // An error bar or variance the paper does not print must say who produced it and be
       // checkable against a committed file (DATA.md, the `error_metrics` block).
@@ -138,7 +141,8 @@ for (const m of fs.readdirSync("data")) {
       if (!(x.core_hours > 0)) issues.push(`${at}: core_hours ${x.core_hours}`);
       if (!inst.rows.some(r => r.bound_type === "exact" && r.energy === x.reproduces?.energy)) issues.push(`${at}: reproduces no exact row`);
       if (x.results_file && !fs.existsSync(x.results_file)) issues.push(`${at}: results file ${x.results_file} missing`);
-      if (/euler/i.test(JSON.stringify(x))) issues.push(`${at}: names the cluster; public text names the CPU only`);
+      const leak = leaksIn(JSON.stringify(x));
+      if (leak.length) issues.push(`${at}: names the cluster (${leak.join(", ")}); public text names the hardware only`);
     }
     // `coverage` is instance level: when its literature was last checked and by what.
     // A check that found nothing is as real as one that added a row, so `found: 0` is

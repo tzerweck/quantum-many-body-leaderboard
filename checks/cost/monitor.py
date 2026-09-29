@@ -135,3 +135,9 @@ class Monitor:
             out["gpu"] = dict(sm_mhz=_stats([x["sm"] for x in g]), sm_max_mhz=g[0]["sm_max"] if g else None,
                               utilisation_percent=_stats([x["util"] for x in g]), power_watts=_stats([x["power"] for x in g]))
         return out
+
+
+def public_argv(argv):
+    """The command line as a results file may publish it: absolute paths (the cluster's scratch or
+    home) reduced to file names, so the file names the hardware and never the cluster (2026-09-29)."""
+    return [os.path.basename(a) if a.startswith("/") else a for a in argv]
