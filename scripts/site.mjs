@@ -794,9 +794,19 @@ function allRows(inst) {
       <td class="num">${yearCell(r) ?? '<span class="muted">n/a</span>'}</td>
     </tr>`;
   }).join("");
-  return `
+  return `${rec ? "" : `
+    <p class="muted">No record: ${esc(noRecordReason(inst))}.</p>`}
     <table class="next"><thead><tr><th>${perSiteLabel(inst)}</th><th>distance to record</th><th>&sigma;</th><th>kind</th><th>method</th><th>source</th><th>year</th></tr></thead><tbody>${rows}</tbody></table>
     <p class="links"><a href="${jsonUrl(inst)}">JSON</a></p>`;
+}
+
+// The Table's energy column: the record, or on an instance without one the lowest unflagged
+// variational or exact row. Whether it is a record, and why not, shows when the row opens
+// (Tristan, 2026-09-29).
+function bestRow(inst) {
+  const sorted = [...inst.rows].sort((a, b) => a.energy - b.energy);
+  return sorted.find(r => !r.defect && (r.bound_type === "variational" || r.bound_type === "exact"))
+    ?? sorted.find(r => !r.defect) ?? sorted[0];
 }
 
 function instancesPage() {
@@ -807,14 +817,13 @@ function instancesPage() {
       const rec = recordOf(inst);
       const label = instanceLabel(inst);
       const search = searchIndex(inst, name);
-      const cells = rec
-        ? `<td class="record">${energyCell(rec, inst)}</td><td>${esc(rec.method)} ${citeHtml(rec)}</td>`
-        : `<td class="none">no record</td><td>${esc(noRecordReason(inst))}</td>`;
+      const shown = rec ?? bestRow(inst);
+      const cells = `<td class="record">${energyCell(shown, inst)}</td><td>${esc(shown.method)}</td><td>${citeHtml(shown)}</td>`;
       const id = `x-${inst.instance_id.replace(/[^\w-]/g, "_")}`;
       return `<tr class="inst" data-search="${esc(search.own)}" data-methods="${esc(search.methods)}" data-lattice="${esc(latticeOf(inst))}" data-size="${sizeBand(inst)}">
         <th scope="row"><button type="button" aria-expanded="false" aria-controls="${id}">${esc(label)}</button></th>
         ${cells}<td class="num">${inst.rows.length}</td></tr>
-      <tr class="more" id="${id}" hidden><td colspan="4">${allRows(inst)}</td></tr>`;
+      <tr class="more" id="${id}" hidden><td colspan="5">${allRows(inst)}</td></tr>`;
     });
     const lattices = [...new Set(group.map(latticeOf))].sort();
     const bands = SIZE_BANDS.filter(([key]) => group.some(i => sizeBand(i) === key));
@@ -827,7 +836,7 @@ function instancesPage() {
       <p class="muted"><span class="count">${group.length} instances</span>, energies as <code>${perSiteLabel(group[0])}</code></p>
       ${badges}
       <div class="scroll"><table class="leaderboard">
-        <thead><tr><th>instance</th><th>record</th><th>method</th><th>rows</th></tr></thead>
+        <thead><tr><th>instance</th><th>energy</th><th>method</th><th>source</th><th>rows</th></tr></thead>
         <tbody>${rows.join("")}</tbody></table></div>
     </section>`;
   }).join("\n");
@@ -1277,7 +1286,6 @@ tbody tr:hover { background: var(--surface); }
 tbody th { font-weight: 500; }
 td.num, td .num { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
 td.record .num { font-weight: 600; color: var(--record); }
-td.none { color: var(--muted); }
 .leaderboard th[scope="row"] { min-width: 14rem; }
 .rows tr.is-record td { background: color-mix(in srgb, var(--accent) 7%, transparent); }
 .rows tr.is-flagged td:first-child { box-shadow: inset 3px 0 0 var(--flag); }
