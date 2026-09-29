@@ -298,7 +298,8 @@ Per training stage:
   multiply-add, not the 4 `c_x` = 2 assumed; `c_x` is now 4 for such networks in JAX codes
   (above). XLA's own cost analysis, which arXiv:2606.02794 used, counts a complex
   multiply-add as 2 FLOPs like a real one: it agrees with the count to 0.1 % on the real-valued
-  ViT and reads the complex networks 2-4 times low.
+  ViT and reads the complex networks 2-4 times low. Compiled for an A100 it counts no matrix
+  product at all (they become cuBLAS calls) and reads 0.5-70 % of the count.
 
 These are statements about the run, stored in the compute block's `evaluation` object (with
 the stages as a list, each with its own iterations, samples, parameters and m), never costs;

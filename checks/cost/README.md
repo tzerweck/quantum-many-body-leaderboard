@@ -158,9 +158,8 @@ The FLOP estimate (DATA.md, `nqs-v2`) models one forward pass of a network as
   factors are complex; elementwise operations 1 per element (a complex multiply 6);
   transcendental functions counted apart. Per configuration is the difference between batches
   of 16 and 1024, so work on the parameters alone is not charged to each configuration.
-  XLA's own cost analysis of the same program sits beside it (lowered, and compiled for the
-  CPU; `forward-flops-run.sh` adds a GPU compilation when the host has an eligible card, and on
-  2026-09-29 it had none).
+  XLA's own cost analysis of the same program sits beside it: lowered, compiled for the CPU,
+  and compiled for the runs' own A100 80 GB on Euler (`euler/submit_flops.sh`, job 15565887).
 - **Where.** Nothing runs, so the count needs no card: it is made on the H100 host's CPU with
   the runs' NetKet and JAX versions (`h100/forward-flops.sh start`, then `fetch`), for every
   instance and ansatz `run_nqs.py` knows, and written to `forward-flops.json`.
@@ -173,7 +172,11 @@ The FLOP estimate (DATA.md, `nqs-v2`) models one forward pass of a network as
   and JAX promotes the real spin configuration to complex, so every multiply-add is complex by
   complex (8 FLOPs where the model assumed 4). XLA counts a complex multiply-add as 2 FLOPs,
   like a real one, so its analysis agrees with the count to 0.1 % on the ViT and reads the
-  complex networks 2-4 times low.
+  complex networks 2-4 times low. Compiled for the A100 it counts no matrix product at all:
+  those become cuBLAS calls, which it reads as nothing (a 64 x 128 x 32 matrix product: -1
+  FLOP). Its GPU count is therefore 0.5-70 % of the traced one, lowest where the network is
+  mostly matrix products, and is kept as a record only; its lowered analysis gives no count on
+  the GPU backend.
 
 ## Files
 
