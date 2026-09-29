@@ -35,6 +35,7 @@ node scripts/figures.mjs
 node scripts/size_accuracy.mjs
 node scripts/size_energy.mjs
 node scripts/pareto.mjs
+node scripts/size_cost.mjs
 node scripts/logo.mjs
 # Generated output, gitignored. Built here too so a site that no longer renders the data
 # fails locally rather than in the Pages workflow.

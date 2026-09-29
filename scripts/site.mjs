@@ -417,6 +417,27 @@ const sliderRules = ({ id, f }) => (f.strip ? f.stops.map((s, k) =>
 #${id}-${k}:checked ~ .track label[for="${id}-${k}"] { color: #fff; background: var(--accent); border-color: var(--accent); }
 #${id}-${k}:focus-visible ~ .track label[for="${id}-${k}"] { outline: 2px solid var(--accent); outline-offset: 2px; }`).join("\n") : "");
 
+// Cost against system size (size_cost.mjs; Tristan, 2026-09-29): on J1-J2 at J2 = 0.5, QMBL's own
+// size ladder in hours, and each lattice's frontier in estimated FLOPs, a badge each as the cost
+// section's axes. The two stay separate figures: hours and FLOPs are never put on one axis.
+const SIZE_FIGS = [
+  ["QMBL's runs, hours", ["cost-vs-size-ladder", "J1-J2 at J2 = 0.5: what QMBL's own runs cost as the lattice grows",
+    "Hours against the lattice size for QMBL's own runs under one protocol: four networks on one GPU, DMRG on eight CPU cores, a dot per run."]],
+  ["best on each lattice, estimated FLOPs", ["cost-vs-size-frontier", "J1-J2 at J2 = 0.5: what the best results on each lattice cost, in estimated FLOPs",
+    "On each lattice size, the results nothing beats for less on that lattice, at their estimated cost in floating-point operations."]],
+].filter(([, [name]]) => fs.existsSync(`figures/${name}.svg`));
+function sizeSwitcher() {
+  if (!SIZE_FIGS.length) return "";
+  return `<section class="tabs" id="cost-vs-size">
+  <h2>What the cost grows to with the lattice</h2>
+  <p class="muted">J1-J2 at J2 = 0.5 on the periodic L × L squares, where QMBL runs the common ansätze itself at every size
+  and the most results have a cost. First QMBL's own runs, measured in hours under one protocol; then, size by size, the results
+  that nothing beats for less on that lattice, at their estimated FLOP count (<a href="${DATA}#how-a-flop-count-is-estimated">how</a>).
+  Energies of different sizes are never compared: each lattice's own figure in the section above shows its energies.</p>
+  ${tabs("size-axis", SIZE_FIGS.map(([label, entry]) => [esc(label), figure(entry)]))}
+</section>`;
+}
+
 function energySwitcher() {
   if (!ENERGY_FIGS.length) return "";
   return `<section class="tabs" id="energy-by-hamiltonian">
@@ -427,7 +448,7 @@ function energySwitcher() {
 </section>`;
 }
 
-const TAB_CSS = [tabRules("cost-axis", COMPUTE_AXES.length), ...COMPUTE_TABS.map(([id, n]) => tabRules(id, n)),
+const TAB_CSS = [tabRules("cost-axis", COMPUTE_AXES.length), tabRules("size-axis", SIZE_FIGS.length), ...COMPUTE_TABS.map(([id, n]) => tabRules(id, n)),
   tabRules("energy-group", ENERGY_FIGS.length),
   ...ENERGY_FIGS.map(([, figs], j) => tabRules(`energy-${j}`, figs.length)), ...SLIDERS.map(sliderRules)].join("\n");
 
@@ -584,7 +605,7 @@ function homePage() {
   const figures = [figure(overview), `<details class="fig-more">
   <summary>Look at the best published energies, by method family</summary>
 ${figure(byFamily)}
-</details>`, energySwitcher(), computeSwitcher()].join("\n");
+</details>`, energySwitcher(), computeSwitcher(), sizeSwitcher()].join("\n");
   const linked = new Set([...[...figures.matchAll(/href="\/instances\/#(r-[\w-]+)"/g)].map(m => m[1]),
     ...[...figures.matchAll(/data-rows="([\w -]+)"/g)].flatMap(m => m[1].split(" "))]);
   const cards = instances.flatMap(inst => inst.rows.filter(r => linked.has(rowId(inst, r)))

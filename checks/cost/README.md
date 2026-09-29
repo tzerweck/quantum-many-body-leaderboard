@@ -144,6 +144,10 @@ and the row says so in its method string. Nothing here is attached to anyone els
     discards), joined along each chain; NetKet's statistics of the joined array are those of one
     call on the same samples (checked by `h100/eval_check.py`). Nothing else changes, so the
     rows made before stand; the two 16 x 16 runs are rerun from the start.
+  - **Where it shows (2026-09-29).** `scripts/size_cost.mjs` draws the ladder, hours against the
+    lattice size with a dot per run, and beside it each J1-J2 lattice's FLOPs frontier against the
+    size, on the front page under "What the cost grows to with the lattice"; its footnote names the
+    runs that have not landed yet.
 
 ## What a run becomes
 
