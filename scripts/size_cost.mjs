@@ -13,6 +13,7 @@
 //
 // Every result is a dot and only a dot (no line joins the sizes), each links to its row, and
 // QMBL's runs are named "QMBL".
+import fs from "node:fs";
 import { recordEligible, exactEligible, perSiteDivisor } from "./units.mjs";
 import { collect } from "./summary.mjs";
 import { hoursOf } from "./cost.mjs";
@@ -78,8 +79,15 @@ const ladder = SQUARES.flatMap(inst => inst.rows.filter(r => r.computed_by === "
   if (/H100 size ladder/.test(r.method_detail || "") && ansatzOf(r)) return [{ r, inst, cost, key: ansatzOf(r) }];
   return [];
 }));
-const missing = [
-  ...ANSATZ.flatMap(([key, name]) => LADDER.nqs.filter(L => !ladder.some(p => p.key === key && side(p.inst.n_sites) === L)).map(L => `${name} on ${L}×${L}`)),
+// A run that finished but whose final evaluation did not equilibrate is no row (checks/cost/README.md,
+// R-hat below 1.05); its results file says so, and the footnote says it rather than "still running".
+const resultOf = name => { try { return JSON.parse(fs.readFileSync(`checks/cost/results/${name}.json`, "utf8")); } catch { return null; } };
+const unequilibrated = [], missing = [
+  ...ANSATZ.flatMap(([key, name]) => LADDER.nqs.filter(L => !ladder.some(p => p.key === key && side(p.inst.n_sites) === L)).flatMap(L => {
+    const res = resultOf(`h100-${key}-j1j2-${L * L}`);
+    if (res && !(res.r_hat < 1.05)) { unequilibrated.push(`${name} on ${L}×${L} (R-hat ${res.r_hat.toFixed(2)})`); return []; }
+    return [`${name} on ${L}×${L}`];
+  })),
   ...LADDER.dmrg.filter(L => LADDER.chi.some(c => !ladder.some(p => p.key === `dmrg-${c}` && side(p.inst.n_sites) === L))).map(L => `DMRG on ${L}×${L}`),
 ];
 // The four ansätze of one size cost alike on the small lattices, so they are drawn side by side,
@@ -107,7 +115,8 @@ write("cost-vs-size-ladder", t => {
   drawNames(t, parts, layoutLabels({ pts, named, X, Y, front: [], left, right: W - PAD, top, bottom, nameOf: nameOfLadder, nameAll: true }));
   const fn = footnote(t, "GPU-hours are wall-clock from process start to the end of the final evaluation, JIT compilation and sampling included; " +
     "a DMRG rung's core-hours are counted from process start, so each includes the rungs below it. The two units are never converted into each other. " +
-    "Hover a mark for its energy." + (missing.length ? ` Still running: ${missing.join(", ")}.` : ""), bottom + 58);
+    "Hover a mark for its energy." + (unequilibrated.length ? ` Not drawn: ${unequilibrated.join(", ")}, which finished but whose final evaluation did not equilibrate, so under the protocol it is no row.` : "") +
+    (missing.length ? ` Still running: ${missing.join(", ")}.` : ""), bottom + 58);
   parts.push(fn.svg);
   return doc(t, fn.bottom + 24, title, ladder.map(p => `${nameOfLadder(p)} ${side(p.inst.n_sites)}x${side(p.inst.n_sites)} ${p.cost.value.toFixed(3)} ${p.cost.unit === "cpu" ? "CPU core-h" : "GPU-h"}`).join(", "), parts);
 });
@@ -149,4 +158,5 @@ write("cost-vs-size-frontier", t => {
 });
 
 console.log(`${OUT}/: ${written.length} files (cost against size: ladder ${ladder.length} runs on ${new Set(ladder.map(p => p.inst.n_sites)).size} sizes` +
+  `${unequilibrated.length ? `, not rows ${unequilibrated.join(", ")}` : ""}` +
   `${missing.length ? `, still running ${missing.join(", ")}` : ""}; frontier ${frontier.length} rows on ${new Set(frontier.map(p => p.inst.n_sites)).size} sizes)`);
