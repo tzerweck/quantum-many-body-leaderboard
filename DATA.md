@@ -667,7 +667,8 @@ or upholding it. A value the maintainers corrected is listed in `corrections` on
 each entry with the value it replaced (`from`), where the new one was read, and why, on
 imported rows and, since 2026-09-30, on rows QMBL added itself alike
 ([`scripts/corrections.mjs`](scripts/corrections.mjs)). A field of the row's `compute` block or
-of its verification note is corrected the same way (`compute.parameters`, `verified.note`), and
+of its verification is corrected the same way (`compute.parameters`, `verified.note`, and
+`verified.secondary_of` where the paper a number was quoted from turns out to have produced it), and
 so are an instance's `params`, whose old value stays in the instance's own `corrections`. An exact row whose printed value is
 QMBL's recomputed energy rounded or truncated carries QMBL's digits, the printed value in
 `corrections` ([RULES.md §11](RULES.md#11-corrections)). `verified` records a check that

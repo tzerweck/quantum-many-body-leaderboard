@@ -139,7 +139,7 @@ for (const f of files) {
         peer_reviewed: false, source: `qmbl-cost-${day}`, provenance: "primary", computed_by: "qmbl",
         verified: { checked_on: day, method: `${sw.script} (TeNPy ${sw.tenpy}) on ${res.cores} cores, protocol checks/cost/README.md`,
           reported_as: said,
-          note: `${res.protocol.algorithm}; MPO bond dimension ${res.protocol.mpo_bond_dimension}; converged at ${res.protocol.max_E_err} in the energy or ${res.protocol.max_sweeps} sweeps. ` +
+          note: `${res.protocol.algorithm}; MPO bond dimension ${res.protocol.mpo_bond_dimension}; stopping rule max_sweeps ${res.protocol.max_sweeps}, max_E_err ${res.protocol.max_E_err} (TeNPy also requires |Delta S| < 1e-5 by default and stops only once the sweep count exceeds max_sweeps); this rung ran ${rung.sweeps} sweeps${rung.sweeps > res.protocol.max_sweeps ? ", the cap" : ""}. ` +
             `Energy computed in S.S units and stored x4 (Pauli, the instance's convention).`,
           secondary_of: null },
         compute: {

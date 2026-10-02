@@ -18,7 +18,9 @@ const FIELDS = new Set(["energy", "sigma", "energy_variance", "dof", "einf", "me
 const NESTED = {
   compute: new Set(["parameters", "gpu_hours", "device", "n_devices", "samples", "wall_clock", "cpu_core_hours",
     "bond_dimension", "iterations", "reported_as", "source", "scope", "confidence", "note"]),
-  verified: new Set(["note"]),
+  // secondary_of names the paper a quoted number was read in; a later reading may find that paper
+  // produced it (it is then the row's reference, and the reading was of the primary source)
+  verified: new Set(["note", "secondary_of"]),
 };
 // The instance's own definition (RULES.md 2): the entry's match names the instance alone, states the
 // value it replaces, and that value stays on the instance, in its `corrections`.

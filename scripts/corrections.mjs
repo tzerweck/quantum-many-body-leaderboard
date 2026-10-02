@@ -17,7 +17,7 @@
 //        `sampled` (true or false) states whether the energy is a Monte Carlo estimate, read from the
 //        source (RULES.md 6), and its `from` is the verdict the method string gave the row.
 //        compute.<field> (a compute pass's statement: parameters, samples, ..., scope, confidence,
-//        reported_as, source, note) and verified.note are fields inside a block another script
+//        reported_as, source, note), verified.note and verified.secondary_of are fields inside a block another script
 //        writes, and that script may write it again: such an entry states the value it replaces,
 //        `from`, or for text the one passage it rewrites, `edit: [old, new]` in place of `to`, and
 //        the build stops if the block no longer holds it. A correction never creates a block.
@@ -13370,5 +13370,536 @@ export const CORRECTIONS = [
     "checked_on": "2026-09-29",
     "reason": "RULES.md 2: t2, V1 and V2 existed only in the '_t12_UV1V2' of the id (metric flag M9), so the stored params described the plain Hubbard model, against which the row's +322.35 means nothing. The density terms are written as the program behind the row defines them (conversion).",
     "source_entry": "VB2-varbench-code-hubbard#105 (qmbl-verify 2026-09-29; skeptic upheld)"
+  },
+  // qmbl-verify 2026-09-29, handoff (reader, 2026-10-02), ruling R1 (Tristan, 2026-10-02): the open entries
+  // of the pass that a rule or precedent settles, as the reader's triage proposed them. RH2#0-9: numbers
+  // first printed in the VarBench dataset (author uploads their papers do not print, or show only as
+  // plotted points), cited to it with the uploader named and the paper kept as the method reference
+  // (ruling 1, extended by A5); RH2#10: peer_reviewed follows the venue that printed the number
+  // (ruling 4). RH2#12-15: the unstarred 8 x 8 CP-AFQMC cells of arXiv:2308.08594 Table I are that
+  // paper's own runs (retried with open sources), primary, with what that changes on the row.
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Gamma.D6.A1 1",
+      "energy": -99.3243731393
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number deposited by Alexander Wietek on 2022-02-11 as the S.S total -24.8310932848, 'Exact Diagonalization (not published)', commit 7277cf5, x4 in 878bf7a; the stored -99.3243731393 is in 203e37e (2024-07-18) and in Wietek's 48-sector table, PR #10, 4aa5e29 (2024-07-29); method: A. Wietek et al., Phys. Rev. X 14, 021010 (2024), arXiv:2303.01585, which plots the spectrum as (E - E0)/J1 only)",
+    "reported_as": "VarBench J1J2/triangular_sqrt48_PP_48.md_0.125.md at 7277cf5: '| -24.8310932848 | 10^{-10} | | Exact Diagonalization (not published) |'; J1J2/triangular_48_P_0.125.md at 203e37e and 4aa5e29: '| -99.3243731393 | 3.24e-13 | | 48 | 0 | Exact Diagonalization Gamma.D6.A1 1 |'",
+    "location": "VarBench history of J1J2/triangular_48_P_0.125.md (git log --follow: 1fa8a1c, 7277cf5 2022-02-11 A. Wietek; 878bf7a 2022-07-11 D. Wu 'Fix missing factor of 4'; 956b014; 203e37e 2024-07-18 D. Wu 'Update ED result from Phys. Rev. X 14, 021010, 2024'; 4aa5e29 2024-07-29 A. Wietek PR #10)",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git show / git log -S), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "VA1#10 (not_found, skeptic upheld) read PRX 14, 021010 v1, v2, journal PDF and TeX: no absolute energy anywhere; every spectrum figure plots (E - E0)/J1. The number is the first author's 2022 deposit. This row is the instance's exact reference (record); only the citation changes, and the paper stays as the method reference. The 47 sector minima of the same table (now the instance's spectrum) are Wietek's PR #10 deposits on the same footing; their re-citation is not generated here (TRIAGE.md, section a). Settled by RULES.md 8 ('A number first printed in a dataset is cited to the dataset, with the author's paper kept as the method reference and the upload named'; ruling 1 of 2026-09-30, extended by A5 of 2026-10-02 to author uploads a paper shows only as a plotted point); not applied by the 2026-09-29 pass because the readers left it ambiguous or not_found. Format and wording follow the corrections.mjs block 'Numbers first printed in the VarBench dataset'.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#10 (qmbl-verify 2026-09-29, open entry), as RH2#0 (handoff reader, triage of 2026-10-02); ruling R1, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_64_P_0.5",
+      "method": "RBM+PP with momentum (K=0), spin-parity (even S), and point-group (A1) projections, 16 hidden units",
+      "energy": -127.73465
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by Yusuke Nomura on 2021-10-13, commit 5dec36f; method: Y. Nomura and M. Imada, Phys. Rev. X 11, 031034 (2021), arXiv:2005.14142, which prints the 8x8 RBM+PP energy with the simplified point-group projection, -0.498886(1), not this full-A1 value)",
+    "reported_as": "VarBench J1J2/square_8_PP_64_0.5.md at 5dec36f: '| -127.73465 | 0.00048 | 0.25(2) | RBM+PP with momentum (K=0), spin-parity (even S), and point-group (A1) projections, 16 hidden units (Method Ref: Phys. Rev. X 11, 031034 (2021)) |'",
+    "location": "VarBench history of J1J2/square_64_P_0.5.md: created 5dec36f (2021-10-13, yusukenomura 'Create square_8_PP_64_0.5.md'), value unchanged since (git log -S'127.73465')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git show / git log -S), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "VA6#0/#1 (skeptic upheld) and VJ2#20/#21 read arXiv:2005.14142 v1-v6 and the journal PDF: the printed 8x8 values are -0.498886(1) (Table I, simplified projection) and -0.498460(6) (4x4 sublattice); -127.73465/256 = -0.49896348 is in neither, and the journal's figures do not plot it. The uploader labels the paper 'Method Ref'. This row holds the J1J2/square_64_P_0.5 variational record; the record stays, only the citation changes (as for Sorella's nine records under ruling 1). Settled by RULES.md 8 ('A number first printed in a dataset is cited to the dataset, with the author's paper kept as the method reference and the upload named'; ruling 1 of 2026-09-30, extended by A5 of 2026-10-02 to author uploads a paper shows only as a plotted point); not applied by the 2026-09-29 pass because the readers left it ambiguous or not_found. Format and wording follow the corrections.mjs block 'Numbers first printed in the VarBench dataset'.",
+    "source_entry": "VA6-j1j2-heisenberg-hubbard-tfising#0, VA6-j1j2-heisenberg-hubbard-tfising#1, VJ2-journal-other#20, VJ2-journal-other#21 (qmbl-verify 2026-09-29, open entries), as RH2#1 (handoff reader, triage of 2026-10-02); ruling R1, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_36_P_0.5",
+      "method": "RBM+PP with momentum (K=0), spin-parity (even S), and point-group (A1) projections, 16 hidden units",
+      "energy": -72.54722
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by Yusuke Nomura on 2021-10-13, commit b8b0d37; method: Y. Nomura and M. Imada, Phys. Rev. X 11, 031034 (2021), arXiv:2005.14142, which prints the 6x6 RBM+PP energy with the simplified point-group projection, -0.503765(1), not this full-A1 value)",
+    "reported_as": "VarBench J1J2/square_6_PP_35_0.5.md at b8b0d37 (renamed square_6_PP_36_0.5.md in f97cf5f the same day): '| -72.54722 | 0.00016 | 0.037(1) | RBM+PP with momentum (K=0), spin-parity (even S), and point-group (A1) projections, 16 hidden units (Method Ref: Phys. Rev. X 11, 031034 (2021)) |'",
+    "location": "VarBench history of J1J2/square_36_P_0.5.md: created b8b0d37 (2021-10-13, yusukenomura), value unchanged since (git log -S'72.54722')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git show / git log -S), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "VA6#2 and VJ2#19 read arXiv:2005.14142 v1-v6 and the journal PDF: the printed 6x6 values are -0.503765(1) (v4-v6 and journal, stored separately as a primary row) and -0.503704(5) (v1-v3); -72.54722/144 = -0.50380014 is in neither. Not a record (ED holds the instance). Settled by RULES.md 8 ('A number first printed in a dataset is cited to the dataset, with the author's paper kept as the method reference and the upload named'; ruling 1 of 2026-09-30, extended by A5 of 2026-10-02 to author uploads a paper shows only as a plotted point); not applied by the 2026-09-29 pass because the readers left it ambiguous or not_found. Format and wording follow the corrections.mjs block 'Numbers first printed in the VarBench dataset'.",
+    "source_entry": "VA6-j1j2-heisenberg-hubbard-tfising#2, VJ2-journal-other#19 (qmbl-verify 2026-09-29, open entries), as RH2#2 (handoff reader, triage of 2026-10-02); ruling R1, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "Heisenberg/pyrochlore-2x2x2_32_P",
+      "method": "RBM with symmetry projections",
+      "energy": -65.949
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by Nikita Astrakhantsev on 2021-09-15, commit 90ada82; method: N. Astrakhantsev et al., Phys. Rev. X 11, 041021 (2021), arXiv:2101.08787, which shows this state only as plotted points in Fig. 2(a))",
+    "reported_as": "VarBench Heisenberg/pyrochlore_2_PPP_32.md at 90ada82: '| -65.949 | 0.003 | 0.0512 | RBM with symmetry projections | pyrochlore/RBM32 |' (earlier per-site forms in ef22cb4 2021-07-23, 75b568a, bba13a8)",
+    "location": "VarBench history of Heisenberg/pyrochlore-2x2x2_32_P.md: 90ada82 (2021-09-15, Nikita Astrakhantsev, 'Update pyrochlore_2_PPP_32.md'), first commit carrying -65.949",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git show / git log -S), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "VA5#1 read arXiv:2101.08787 v1 and v2: Table II has mVMC, NQS CNN, ED and DMRG columns only, and the RBM appears as plotted points in Fig. 2(a). Same case as the shuriken mVMC uploads of the same author (ruling A5): a figure-only state, so the uploaded number is cited to the dataset. Not a record (QMBL's exact row holds the instance). Settled by RULES.md 8 ('A number first printed in a dataset is cited to the dataset, with the author's paper kept as the method reference and the upload named'; ruling 1 of 2026-09-30, extended by A5 of 2026-10-02 to author uploads a paper shows only as a plotted point); not applied by the 2026-09-29 pass because the readers left it ambiguous or not_found. Format and wording follow the corrections.mjs block 'Numbers first printed in the VarBench dataset'.",
+    "source_entry": "VA5-hubbard-heisenberg-tfising-j1j2#1 (qmbl-verify 2026-09-29, open entry), as RH2#3 (handoff reader, triage of 2026-10-02); ruling R1, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "Heisenberg/triangular_144_O",
+      "method": "2D Gated RNN",
+      "energy": -294.896
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by Mohamed Hibat-Allah on 2022-02-15 as the S.S total -73.724, commit ff3ad5b, x4 to the Pauli total by Dian Wu in 878bf7a (2022-07-11); method: M. Hibat-Allah, R. G. Melko and J. Carrasquilla, arXiv:2207.14314 (NeurIPS 2021 workshop ML4PS), which plots only (E_RNN - E_DMRG)/N, Fig. 3(b)) [code](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/triangular_144_O/vmc_2DgatedtensorizedRNN.sh)",
+    "reported_as": "VarBench Heisenberg/triangular_12_OO_144.md at ff3ad5b: energy -73.724 (S.S total); x4 = -294.896 in 878bf7a",
+    "location": "VarBench history: ff3ad5b (2022-02-15, Mohamed Hibat-Allah, 'Create triangular_*_OO_*.md'); 878bf7a (2022-07-11, Dian Wu, 'Fix missing factor of 4'), first commit carrying -294.896",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git show / git log -S), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "VA5#17-#19 read arXiv:2207.14314 v1, v2 and the NeurIPS ML4PS workshop PDF: no energy of these states is printed; Fig. 3(b) plots the difference to the authors' DMRG, which is not printed either, and the upload is consistent with the plotted difference (VA5). A figure-only state as in ruling A5. The [code] link is kept, as for the Tensor-RNN case. Not a record. Settled by RULES.md 8 ('A number first printed in a dataset is cited to the dataset, with the author's paper kept as the method reference and the upload named'; ruling 1 of 2026-09-30, extended by A5 of 2026-10-02 to author uploads a paper shows only as a plotted point); not applied by the 2026-09-29 pass because the readers left it ambiguous or not_found. Format and wording follow the corrections.mjs block 'Numbers first printed in the VarBench dataset'.",
+    "source_entry": "VA5-hubbard-heisenberg-tfising-j1j2#17 (qmbl-verify 2026-09-29, open entry), as RH2#4 (handoff reader, triage of 2026-10-02); ruling R1, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "Heisenberg/triangular_196_O",
+      "method": "2D Gated RNN",
+      "energy": -402.804
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by Mohamed Hibat-Allah on 2022-02-15 as the S.S total -100.701, commit 1bf1095, x4 to the Pauli total by Dian Wu in 878bf7a (2022-07-11); method: M. Hibat-Allah, R. G. Melko and J. Carrasquilla, arXiv:2207.14314 (NeurIPS 2021 workshop ML4PS), which plots only (E_RNN - E_DMRG)/N, Fig. 3(b)) [code](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/triangular_196_O/vmc_2DgatedtensorizedRNN.sh)",
+    "reported_as": "VarBench Heisenberg/triangular_14_OO_196.md at 1bf1095: energy -100.701 (S.S total); x4 = -402.804 in 878bf7a",
+    "location": "VarBench history: 1bf1095 (2022-02-15, Mohamed Hibat-Allah, 'Create triangular_*_OO_*.md'); 878bf7a (2022-07-11, Dian Wu, 'Fix missing factor of 4'), first commit carrying -402.804",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git show / git log -S), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "VA5#17-#19 read arXiv:2207.14314 v1, v2 and the NeurIPS ML4PS workshop PDF: no energy of these states is printed; Fig. 3(b) plots the difference to the authors' DMRG, which is not printed either, and the upload is consistent with the plotted difference (VA5). A figure-only state as in ruling A5. The [code] link is kept, as for the Tensor-RNN case. This row holds the instance's variational record; the record stays, only the citation changes. Settled by RULES.md 8 ('A number first printed in a dataset is cited to the dataset, with the author's paper kept as the method reference and the upload named'; ruling 1 of 2026-09-30, extended by A5 of 2026-10-02 to author uploads a paper shows only as a plotted point); not applied by the 2026-09-29 pass because the readers left it ambiguous or not_found. Format and wording follow the corrections.mjs block 'Numbers first printed in the VarBench dataset'.",
+    "source_entry": "VA5-hubbard-heisenberg-tfising-j1j2#18 (qmbl-verify 2026-09-29, open entry), as RH2#5 (handoff reader, triage of 2026-10-02); ruling R1, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "Heisenberg/triangular_256_O",
+      "method": "2D Gated RNN",
+      "energy": -529.08
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by Mohamed Hibat-Allah on 2022-02-15 as the S.S total -132.270, commit 36d51f4, x4 to the Pauli total by Dian Wu in 878bf7a (2022-07-11); method: M. Hibat-Allah, R. G. Melko and J. Carrasquilla, arXiv:2207.14314 (NeurIPS 2021 workshop ML4PS), which plots only (E_RNN - E_DMRG)/N, Fig. 3(b)) [code](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/triangular_256_O/vmc_2DgatedtensorizedRNN.sh)",
+    "reported_as": "VarBench Heisenberg/triangular_16_OO_256.md at 36d51f4: energy -132.270 (S.S total); x4 = -529.08 in 878bf7a",
+    "location": "VarBench history: 36d51f4 (2022-02-15, Mohamed Hibat-Allah, 'Create triangular_*_OO_*.md'); 878bf7a (2022-07-11, Dian Wu, 'Fix missing factor of 4'), first commit carrying -529.08",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git show / git log -S), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "VA5#17-#19 read arXiv:2207.14314 v1, v2 and the NeurIPS ML4PS workshop PDF: no energy of these states is printed; Fig. 3(b) plots the difference to the authors' DMRG, which is not printed either, and the upload is consistent with the plotted difference (VA5). A figure-only state as in ruling A5. The [code] link is kept, as for the Tensor-RNN case. This row holds the instance's variational record; the record stays, only the citation changes. Settled by RULES.md 8 ('A number first printed in a dataset is cited to the dataset, with the author's paper kept as the method reference and the upload named'; ruling 1 of 2026-09-30, extended by A5 of 2026-10-02 to author uploads a paper shows only as a plotted point); not applied by the 2026-09-29 pass because the readers left it ambiguous or not_found. Format and wording follow the corrections.mjs block 'Numbers first printed in the VarBench dataset'.",
+    "source_entry": "VA5-hubbard-heisenberg-tfising-j1j2#19 (qmbl-verify 2026-09-29, open entry), as RH2#6 (handoff reader, triage of 2026-10-02); ruling R1, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "TFIsing/square_400_O_3",
+      "method": "1D MPS-RNN (bond dimension = 64)",
+      "energy": -1269.6048
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by Dian Wu on 2022-07-11, commit 0524667; method: D. Wu, R. Rossi, F. Vicentini and G. Carleo, Phys. Rev. Research 5, L032001 (2023), arXiv:2206.12363, which prints and plots no transverse-field Ising energy) [code](https://github.com/cqsl/mps-rnn)",
+    "reported_as": "VarBench TfIsing/square_20_OO_400_3.md at 0524667 ('Add Tensorial RNN'): '1D MPS-RNN (bond dimension = 64), arXiv:2206.12363' with energy -1269.6048",
+    "location": "VarBench history of TFIsing/square_400_O_3.md: 0524667 (2022-07-11, Dian Wu), first commit carrying the value (git log -S); reference relinked to PRR 5, L032001 in 6e9f6b8 (2024-07-11)",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git show / git log -S), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "VA5#29-#31 read arXiv:2206.12363 v1, v2 and the HAL deposit with its Supplemental Material; VJ2#6-#8 read the published PRR 5, L032001: no 20 x 20 transverse-field Ising energy is printed or plotted in any (the only 20 x 20 TFIM content is Fig. S4(b), spin correlations of chi = 16 states, no energy, no h). Same footing as the 10x10 Tensor-RNN upload of the same author (ruling A5). The [code] link is kept. Settled by RULES.md 8 ('A number first printed in a dataset is cited to the dataset, with the author's paper kept as the method reference and the upload named'; ruling 1 of 2026-09-30, extended by A5 of 2026-10-02 to author uploads a paper shows only as a plotted point); not applied by the 2026-09-29 pass because the readers left it ambiguous or not_found. Format and wording follow the corrections.mjs block 'Numbers first printed in the VarBench dataset'.",
+    "source_entry": "VA5-hubbard-heisenberg-tfising-j1j2#29, VJ2-journal-other#6 (qmbl-verify 2026-09-29, open entries), as RH2#7 (handoff reader, triage of 2026-10-02); ruling R1, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "TFIsing/square_400_O_3",
+      "method": "2D MPS-RNN (bond dimension = 64)",
+      "energy": -1272.7488
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by Dian Wu on 2022-07-11, commit 0524667; method: D. Wu, R. Rossi, F. Vicentini and G. Carleo, Phys. Rev. Research 5, L032001 (2023), arXiv:2206.12363, which prints and plots no transverse-field Ising energy) [code](https://github.com/cqsl/mps-rnn)",
+    "reported_as": "VarBench TfIsing/square_20_OO_400_3.md at 0524667 ('Add Tensorial RNN'): '2D MPS-RNN (bond dimension = 64), arXiv:2206.12363' with energy -1272.7488",
+    "location": "VarBench history of TFIsing/square_400_O_3.md: 0524667 (2022-07-11, Dian Wu), first commit carrying the value (git log -S); reference relinked to PRR 5, L032001 in 6e9f6b8 (2024-07-11)",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git show / git log -S), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "VA5#29-#31 read arXiv:2206.12363 v1, v2 and the HAL deposit with its Supplemental Material; VJ2#6-#8 read the published PRR 5, L032001: no 20 x 20 transverse-field Ising energy is printed or plotted in any (the only 20 x 20 TFIM content is Fig. S4(b), spin correlations of chi = 16 states, no energy, no h). Same footing as the 10x10 Tensor-RNN upload of the same author (ruling A5). The [code] link is kept. Settled by RULES.md 8 ('A number first printed in a dataset is cited to the dataset, with the author's paper kept as the method reference and the upload named'; ruling 1 of 2026-09-30, extended by A5 of 2026-10-02 to author uploads a paper shows only as a plotted point); not applied by the 2026-09-29 pass because the readers left it ambiguous or not_found. Format and wording follow the corrections.mjs block 'Numbers first printed in the VarBench dataset'.",
+    "source_entry": "VA5-hubbard-heisenberg-tfising-j1j2#30, VJ2-journal-other#7 (qmbl-verify 2026-09-29, open entries), as RH2#8 (handoff reader, triage of 2026-10-02); ruling R1, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "TFIsing/square_400_O_3",
+      "method": "Tensor-RNN (bond dimension = 64)",
+      "energy": -1272.7616
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by Dian Wu on 2022-07-11, commit 0524667; method: D. Wu, R. Rossi, F. Vicentini and G. Carleo, Phys. Rev. Research 5, L032001 (2023), arXiv:2206.12363, which prints and plots no transverse-field Ising energy) [code](https://github.com/cqsl/mps-rnn)",
+    "reported_as": "VarBench TfIsing/square_20_OO_400_3.md at 0524667 ('Add Tensorial RNN'): 'Tensor-RNN (bond dimension = 64), arXiv:2206.12363' with energy -1272.7616",
+    "location": "VarBench history of TFIsing/square_400_O_3.md: 0524667 (2022-07-11, Dian Wu), first commit carrying the value (git log -S); reference relinked to PRR 5, L032001 in 6e9f6b8 (2024-07-11)",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git show / git log -S), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "VA5#29-#31 read arXiv:2206.12363 v1, v2 and the HAL deposit with its Supplemental Material; VJ2#6-#8 read the published PRR 5, L032001: no 20 x 20 transverse-field Ising energy is printed or plotted in any (the only 20 x 20 TFIM content is Fig. S4(b), spin correlations of chi = 16 states, no energy, no h). Same footing as the 10x10 Tensor-RNN upload of the same author (ruling A5). The [code] link is kept. Settled by RULES.md 8 ('A number first printed in a dataset is cited to the dataset, with the author's paper kept as the method reference and the upload named'; ruling 1 of 2026-09-30, extended by A5 of 2026-10-02 to author uploads a paper shows only as a plotted point); not applied by the 2026-09-29 pass because the readers left it ambiguous or not_found. Format and wording follow the corrections.mjs block 'Numbers first printed in the VarBench dataset'.",
+    "source_entry": "VA5-hubbard-heisenberg-tfising-j1j2#31, VJ2-journal-other#8 (qmbl-verify 2026-09-29, open entries), as RH2#9 (handoff reader, triage of 2026-10-02); ruling R1, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "Heisenberg/square_36_O",
+      "method": "RNN",
+      "energy": -86.906304
+    },
+    "field": "peer_reviewed",
+    "to": true,
+    "reported_as": "arXiv:2502.17144v3 Table V, block 'open 6 x 6', row 'RNN [38]': -0.603516(1) (VP16#34 reading; applied as verified.second_read)",
+    "location": "arXiv:2502.17144v3 Table V (= Phys. Rev. B 112, 134450 (2025)); [38] = arXiv:2207.14314 (NeurIPS 2021 ML4PS workshop, non-archival), whose text gives this result only as a relative error in Fig. 2(a)",
+    "version_read": "arXiv:2502.17144v3 and arXiv:2207.14314 v1, v2 as read by VP16 (2026-09-29)",
+    "conversion": "none",
+    "checked_on": "2026-10-02",
+    "reason": "VP16#35 asked whether a non-archival workshop paper counts as peer reviewed. RULES.md 8.1 (ruling 4, 2026-09-30) answers it: 'peer_reviewed follows the venue that printed the number'. The digits of this secondary row are printed only in the refereed Phys. Rev. B 112, 134450 (2025), whose co-author is the producing paper's first author, so true, as for Nomura's numbers in PRB 108, 054410. The reference already names the quoting paper.",
+    "source_entry": "VP16-heisenberg-hubbard-j1j2-tfising#35 (qmbl-verify 2026-09-29, open entry), as RH2#10 (handoff reader, triage of 2026-10-02); ruling R1, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_64_P_25_4",
+      "method": "AFQMC (constrained-path)",
+      "energy": -72.48192
+    },
+    "field": "reference",
+    "to": "Levy, Morales & Zhang, Automatic Order Detection and Restoration Through Systematically Improvable Variational Wave Functions, Phys. Rev. Research 6, 013237 (2024), arXiv:2308.08594 (Table I, constrained-path AFQMC, a cell without the release-constraint star; the column names AFQMC [17, 18], H. Shi and S. Zhang, Phys. Rev. B 88, 125132 (2013) and J. P. F. LeBlanc et al., Phys. Rev. X 5, 041041 (2015), as its method references)",
+    "reported_as": "-1.13253(3) (E_AFQMC/N, no release-constraint star)",
+    "location": "arXiv:2308.08594v2 Table I, column 8 x 8, n = 0.78125, U = 4, row E_AFQMC/N; methods paragraph (pypdf layout l. 250-254)",
+    "version_read": "arXiv:2308.08594v2 (= Phys. Rev. Research 6, 013237); LeBlanc et al. supplemental data zip (Caltech record k3sdg-d1267, fetched 2026-10-02); arXiv:1505.02290v2; arXiv:1307.2147v3",
+    "checked_on": "2026-10-02",
+    "source_entry": "VP12-heisenberg-j1j2-hubbard#28 (qmbl-verify 2026-09-29, ambiguous), retried as RH2#12 (handoff reader, 2026-10-02) with the recommendation R1 accepts; ruling R1, Tristan 2026-10-02",
+    "conversion": "-1.13253 x 64 = -72.48192; sigma 3e-5 x 64 = 0.00192 (both as stored, unchanged)",
+    "reason": "VP12 asked which calculation produced this cell and at which boundary. Table I of arXiv:2308.08594v2 credits its AFQMC column to [17, 18] and stars the cells that are exact from release-constraint AFQMC [17]; this cell has no star. The reader read neither cited paper's text nor data to contain it: Shi & Zhang (arXiv:1307.2147v3) print 8 x 8 entries at (14,14) and (22,22) only, and LeBlanc et al.'s supplemental data (Caltech authors record k3sdg-d1267) hold densities 0.3, 0.6, 0.8, 0.875 and 1 with no 8 x 8 AFQMC file (their 8 x 8 files are the fixed-node DMC that Table I credits to [18]; their finite-size AFQMC is twist-averaged, arXiv:1505.02290v2 Sec. II). The paper says it obtained constrained-path results itself ('Constrained-path AFQMC results are obtained using protocols similar to those in Refs. [28, 34-36] including self-consistently optimized constraints [37]'), on the PBC square cluster its caption names, which is this instance. So the number is cited to arXiv:2308.08594 as its own, with [17, 18] named as the method references; a confirmation from S. Zhang would close it. Projected, not a variational bound: no record either way."
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_64_P_25_4",
+      "method": "AFQMC (constrained-path)",
+      "energy": -72.48192
+    },
+    "field": "provenance",
+    "to": "primary",
+    "reported_as": "-1.13253(3) (E_AFQMC/N, no release-constraint star)",
+    "location": "arXiv:2308.08594v2 Table I, column 8 x 8, n = 0.78125, U = 4, row E_AFQMC/N; methods paragraph (pypdf layout l. 250-254)",
+    "version_read": "arXiv:2308.08594v2 (= Phys. Rev. Research 6, 013237); LeBlanc et al. supplemental data zip (Caltech record k3sdg-d1267, fetched 2026-10-02); arXiv:1505.02290v2; arXiv:1307.2147v3",
+    "checked_on": "2026-10-02",
+    "source_entry": "VP12-heisenberg-j1j2-hubbard#28 (qmbl-verify 2026-09-29, ambiguous), retried as RH2#12 (handoff reader, 2026-10-02) with the recommendation R1 accepts; ruling R1, Tristan 2026-10-02",
+    "conversion": "none",
+    "reason": "Follows the reference entry: the cell is arXiv:2308.08594's own constrained-path run, not a quote of [17, 18], so the row is primary."
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_64_P_25_4",
+      "method": "AFQMC (constrained-path)",
+      "energy": -72.48192
+    },
+    "field": "verified.secondary_of",
+    "from": "arXiv:2308.08594",
+    "to": null,
+    "reported_as": "-1.13253(3) (E_AFQMC/N, no release-constraint star)",
+    "location": "arXiv:2308.08594v2 Table I, column 8 x 8, n = 0.78125, U = 4, row E_AFQMC/N; methods paragraph (pypdf layout l. 250-254)",
+    "version_read": "arXiv:2308.08594v2 (= Phys. Rev. Research 6, 013237); LeBlanc et al. supplemental data zip (Caltech record k3sdg-d1267, fetched 2026-10-02); arXiv:1505.02290v2; arXiv:1307.2147v3",
+    "checked_on": "2026-10-02",
+    "source_entry": "VP12-heisenberg-j1j2-hubbard#28 (qmbl-verify 2026-09-29, ambiguous), retried as RH2#12 (handoff reader, 2026-10-02) with the recommendation R1 accepts; ruling R1, Tristan 2026-10-02",
+    "conversion": "none",
+    "reason": "The 2026-09-15 reading named arXiv:2308.08594 as the paper quoting the number; it is the paper that produced it (reference entry), so that reading was of the primary source. Left standing, it would also make the row's own identifier read as a quoting source (paperOf, enrich_sources.mjs)."
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_64_P_25_4",
+      "method": "AFQMC (constrained-path)",
+      "energy": -72.48192
+    },
+    "field": "compute.note",
+    "edit": [
+      "Neither original paper states a cost for this 8 x 8 constrained-path AFQMC energy: the finite-size 8 x 8 doped entries (N = 50 and 56 electrons) are in the supplemental data sets of LeBlanc et al., whose main text gives only the generic AFQMC settings",
+      "Neither paper the table credits for its AFQMC column states a cost for this 8 x 8 constrained-path AFQMC energy, and neither holds it (the 2026-10-02 reading of LeBlanc et al.'s supplemental data found no 8 x 8 AFQMC file at this filling): LeBlanc et al.'s main text gives only the generic AFQMC settings"
+    ],
+    "reported_as": "-1.13253(3) (E_AFQMC/N, no release-constraint star)",
+    "location": "arXiv:2308.08594v2 Table I, column 8 x 8, n = 0.78125, U = 4, row E_AFQMC/N; methods paragraph (pypdf layout l. 250-254)",
+    "version_read": "arXiv:2308.08594v2 (= Phys. Rev. Research 6, 013237); LeBlanc et al. supplemental data zip (Caltech record k3sdg-d1267, fetched 2026-10-02); arXiv:1505.02290v2; arXiv:1307.2147v3",
+    "checked_on": "2026-10-02",
+    "source_entry": "VP12-heisenberg-j1j2-hubbard#28 (qmbl-verify 2026-09-29, ambiguous), retried as RH2#12 (handoff reader, 2026-10-02) with the recommendation R1 accepts; ruling R1, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The 2026-09-16 compute pass placed this cell in LeBlanc et al.'s supplemental data; the reader of 2026-10-02 found no 8 x 8 AFQMC file there (see the reference entry). Wording only."
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_64_P_25_4",
+      "method": "AFQMC (constrained-path)",
+      "energy": -72.48192
+    },
+    "field": "compute.note",
+    "edit": [
+      "The citing paper arXiv:2308.08594 quotes the numbers without cost information.",
+      "arXiv:2308.08594, whose own constrained-path runs these are ('Constrained-path AFQMC results are obtained using protocols similar to those in Refs. [28, 34-36] including self-consistently optimized constraints [37]'), gives no cost for them that the compute pass of 2026-09-16 found."
+    ],
+    "reported_as": "-1.13253(3) (E_AFQMC/N, no release-constraint star)",
+    "location": "arXiv:2308.08594v2 Table I, column 8 x 8, n = 0.78125, U = 4, row E_AFQMC/N; methods paragraph (pypdf layout l. 250-254)",
+    "version_read": "arXiv:2308.08594v2 (= Phys. Rev. Research 6, 013237); LeBlanc et al. supplemental data zip (Caltech record k3sdg-d1267, fetched 2026-10-02); arXiv:1505.02290v2; arXiv:1307.2147v3",
+    "checked_on": "2026-10-02",
+    "source_entry": "VP12-heisenberg-j1j2-hubbard#28 (qmbl-verify 2026-09-29, ambiguous), retried as RH2#12 (handoff reader, 2026-10-02) with the recommendation R1 accepts; ruling R1, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The note called arXiv:2308.08594 the citing paper; it produced the number (reference entry). Wording only; no cost statement is added."
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_64_P_25_8",
+      "method": "AFQMC (constrained-path)",
+      "energy": -59.2128
+    },
+    "field": "reference",
+    "to": "Levy, Morales & Zhang, Automatic Order Detection and Restoration Through Systematically Improvable Variational Wave Functions, Phys. Rev. Research 6, 013237 (2024), arXiv:2308.08594 (Table I, constrained-path AFQMC, a cell without the release-constraint star; the column names AFQMC [17, 18], H. Shi and S. Zhang, Phys. Rev. B 88, 125132 (2013) and J. P. F. LeBlanc et al., Phys. Rev. X 5, 041041 (2015), as its method references)",
+    "reported_as": "-0.9252(1) (E_AFQMC/N, no release-constraint star)",
+    "location": "arXiv:2308.08594v2 Table I, column 8 x 8, n = 0.78125, U = 8, row E_AFQMC/N; methods paragraph (pypdf layout l. 250-254)",
+    "version_read": "arXiv:2308.08594v2 (= Phys. Rev. Research 6, 013237); LeBlanc et al. supplemental data zip (Caltech record k3sdg-d1267, fetched 2026-10-02); arXiv:1505.02290v2; arXiv:1307.2147v3",
+    "checked_on": "2026-10-02",
+    "source_entry": "VP12-heisenberg-j1j2-hubbard#30 (qmbl-verify 2026-09-29, ambiguous), retried as RH2#13 (handoff reader, 2026-10-02) with the recommendation R1 accepts; ruling R1, Tristan 2026-10-02",
+    "conversion": "-0.9252 x 64 = -59.2128; sigma 1e-4 x 64 = 0.0064 (both as stored, unchanged)",
+    "reason": "VP12 asked which calculation produced this cell and at which boundary. Table I of arXiv:2308.08594v2 credits its AFQMC column to [17, 18] and stars the cells that are exact from release-constraint AFQMC [17]; this cell has no star. The reader read neither cited paper's text nor data to contain it: Shi & Zhang (arXiv:1307.2147v3) print 8 x 8 entries at (14,14) and (22,22) only, and LeBlanc et al.'s supplemental data (Caltech authors record k3sdg-d1267) hold densities 0.3, 0.6, 0.8, 0.875 and 1 with no 8 x 8 AFQMC file (their 8 x 8 files are the fixed-node DMC that Table I credits to [18]; their finite-size AFQMC is twist-averaged, arXiv:1505.02290v2 Sec. II). The paper says it obtained constrained-path results itself ('Constrained-path AFQMC results are obtained using protocols similar to those in Refs. [28, 34-36] including self-consistently optimized constraints [37]'), on the PBC square cluster its caption names, which is this instance. So the number is cited to arXiv:2308.08594 as its own, with [17, 18] named as the method references; a confirmation from S. Zhang would close it. Projected, not a variational bound: no record either way."
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_64_P_25_8",
+      "method": "AFQMC (constrained-path)",
+      "energy": -59.2128
+    },
+    "field": "provenance",
+    "to": "primary",
+    "reported_as": "-0.9252(1) (E_AFQMC/N, no release-constraint star)",
+    "location": "arXiv:2308.08594v2 Table I, column 8 x 8, n = 0.78125, U = 8, row E_AFQMC/N; methods paragraph (pypdf layout l. 250-254)",
+    "version_read": "arXiv:2308.08594v2 (= Phys. Rev. Research 6, 013237); LeBlanc et al. supplemental data zip (Caltech record k3sdg-d1267, fetched 2026-10-02); arXiv:1505.02290v2; arXiv:1307.2147v3",
+    "checked_on": "2026-10-02",
+    "source_entry": "VP12-heisenberg-j1j2-hubbard#30 (qmbl-verify 2026-09-29, ambiguous), retried as RH2#13 (handoff reader, 2026-10-02) with the recommendation R1 accepts; ruling R1, Tristan 2026-10-02",
+    "conversion": "none",
+    "reason": "Follows the reference entry: the cell is arXiv:2308.08594's own constrained-path run, not a quote of [17, 18], so the row is primary."
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_64_P_25_8",
+      "method": "AFQMC (constrained-path)",
+      "energy": -59.2128
+    },
+    "field": "verified.secondary_of",
+    "from": "arXiv:2308.08594",
+    "to": null,
+    "reported_as": "-0.9252(1) (E_AFQMC/N, no release-constraint star)",
+    "location": "arXiv:2308.08594v2 Table I, column 8 x 8, n = 0.78125, U = 8, row E_AFQMC/N; methods paragraph (pypdf layout l. 250-254)",
+    "version_read": "arXiv:2308.08594v2 (= Phys. Rev. Research 6, 013237); LeBlanc et al. supplemental data zip (Caltech record k3sdg-d1267, fetched 2026-10-02); arXiv:1505.02290v2; arXiv:1307.2147v3",
+    "checked_on": "2026-10-02",
+    "source_entry": "VP12-heisenberg-j1j2-hubbard#30 (qmbl-verify 2026-09-29, ambiguous), retried as RH2#13 (handoff reader, 2026-10-02) with the recommendation R1 accepts; ruling R1, Tristan 2026-10-02",
+    "conversion": "none",
+    "reason": "The 2026-09-15 reading named arXiv:2308.08594 as the paper quoting the number; it is the paper that produced it (reference entry), so that reading was of the primary source. Left standing, it would also make the row's own identifier read as a quoting source (paperOf, enrich_sources.mjs)."
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_64_P_25_8",
+      "method": "AFQMC (constrained-path)",
+      "energy": -59.2128
+    },
+    "field": "compute.note",
+    "edit": [
+      "Neither original paper states a cost for this 8 x 8 constrained-path AFQMC energy: the finite-size 8 x 8 doped entries (N = 50 and 56 electrons) are in the supplemental data sets of LeBlanc et al., whose main text gives only the generic AFQMC settings",
+      "Neither paper the table credits for its AFQMC column states a cost for this 8 x 8 constrained-path AFQMC energy, and neither holds it (the 2026-10-02 reading of LeBlanc et al.'s supplemental data found no 8 x 8 AFQMC file at this filling): LeBlanc et al.'s main text gives only the generic AFQMC settings"
+    ],
+    "reported_as": "-0.9252(1) (E_AFQMC/N, no release-constraint star)",
+    "location": "arXiv:2308.08594v2 Table I, column 8 x 8, n = 0.78125, U = 8, row E_AFQMC/N; methods paragraph (pypdf layout l. 250-254)",
+    "version_read": "arXiv:2308.08594v2 (= Phys. Rev. Research 6, 013237); LeBlanc et al. supplemental data zip (Caltech record k3sdg-d1267, fetched 2026-10-02); arXiv:1505.02290v2; arXiv:1307.2147v3",
+    "checked_on": "2026-10-02",
+    "source_entry": "VP12-heisenberg-j1j2-hubbard#30 (qmbl-verify 2026-09-29, ambiguous), retried as RH2#13 (handoff reader, 2026-10-02) with the recommendation R1 accepts; ruling R1, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The 2026-09-16 compute pass placed this cell in LeBlanc et al.'s supplemental data; the reader of 2026-10-02 found no 8 x 8 AFQMC file there (see the reference entry). Wording only."
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_64_P_25_8",
+      "method": "AFQMC (constrained-path)",
+      "energy": -59.2128
+    },
+    "field": "compute.note",
+    "edit": [
+      "The citing paper arXiv:2308.08594 quotes the numbers without cost information.",
+      "arXiv:2308.08594, whose own constrained-path runs these are ('Constrained-path AFQMC results are obtained using protocols similar to those in Refs. [28, 34-36] including self-consistently optimized constraints [37]'), gives no cost for them that the compute pass of 2026-09-16 found."
+    ],
+    "reported_as": "-0.9252(1) (E_AFQMC/N, no release-constraint star)",
+    "location": "arXiv:2308.08594v2 Table I, column 8 x 8, n = 0.78125, U = 8, row E_AFQMC/N; methods paragraph (pypdf layout l. 250-254)",
+    "version_read": "arXiv:2308.08594v2 (= Phys. Rev. Research 6, 013237); LeBlanc et al. supplemental data zip (Caltech record k3sdg-d1267, fetched 2026-10-02); arXiv:1505.02290v2; arXiv:1307.2147v3",
+    "checked_on": "2026-10-02",
+    "source_entry": "VP12-heisenberg-j1j2-hubbard#30 (qmbl-verify 2026-09-29, ambiguous), retried as RH2#13 (handoff reader, 2026-10-02) with the recommendation R1 accepts; ruling R1, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The note called arXiv:2308.08594 the citing paper; it produced the number (reference entry). Wording only; no cost statement is added."
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_64_P_28_4",
+      "method": "AFQMC (constrained-path)",
+      "energy": -65.23072
+    },
+    "field": "reference",
+    "to": "Levy, Morales & Zhang, Automatic Order Detection and Restoration Through Systematically Improvable Variational Wave Functions, Phys. Rev. Research 6, 013237 (2024), arXiv:2308.08594 (Table I, constrained-path AFQMC, a cell without the release-constraint star; the column names AFQMC [17, 18], H. Shi and S. Zhang, Phys. Rev. B 88, 125132 (2013) and J. P. F. LeBlanc et al., Phys. Rev. X 5, 041041 (2015), as its method references)",
+    "reported_as": "-1.01923(6) (E_AFQMC/N, no release-constraint star)",
+    "location": "arXiv:2308.08594v2 Table I, column 8 x 8, n = 0.875, U = 4, row E_AFQMC/N; methods paragraph (pypdf layout l. 250-254)",
+    "version_read": "arXiv:2308.08594v2 (= Phys. Rev. Research 6, 013237); LeBlanc et al. supplemental data zip (Caltech record k3sdg-d1267, fetched 2026-10-02); arXiv:1505.02290v2; arXiv:1307.2147v3",
+    "checked_on": "2026-10-02",
+    "source_entry": "VP12-heisenberg-j1j2-hubbard#32 (qmbl-verify 2026-09-29, ambiguous), retried as RH2#14 (handoff reader, 2026-10-02) with the recommendation R1 accepts; ruling R1, Tristan 2026-10-02",
+    "conversion": "-1.01923 x 64 = -65.23072; sigma 6e-5 x 64 = 0.00384 (both as stored, unchanged)",
+    "reason": "VP12 asked which calculation produced this cell and at which boundary. Table I of arXiv:2308.08594v2 credits its AFQMC column to [17, 18] and stars the cells that are exact from release-constraint AFQMC [17]; this cell has no star. The reader read neither cited paper's text nor data to contain it: Shi & Zhang (arXiv:1307.2147v3) print 8 x 8 entries at (14,14) and (22,22) only, and LeBlanc et al.'s supplemental data (Caltech authors record k3sdg-d1267) hold densities 0.3, 0.6, 0.8, 0.875 and 1 with no 8 x 8 AFQMC file (their 8 x 8 files are the fixed-node DMC that Table I credits to [18]; their finite-size AFQMC is twist-averaged, arXiv:1505.02290v2 Sec. II). The paper says it obtained constrained-path results itself ('Constrained-path AFQMC results are obtained using protocols similar to those in Refs. [28, 34-36] including self-consistently optimized constraints [37]'), on the PBC square cluster its caption names, which is this instance. So the number is cited to arXiv:2308.08594 as its own, with [17, 18] named as the method references; a confirmation from S. Zhang would close it. Projected, not a variational bound: no record either way."
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_64_P_28_4",
+      "method": "AFQMC (constrained-path)",
+      "energy": -65.23072
+    },
+    "field": "provenance",
+    "to": "primary",
+    "reported_as": "-1.01923(6) (E_AFQMC/N, no release-constraint star)",
+    "location": "arXiv:2308.08594v2 Table I, column 8 x 8, n = 0.875, U = 4, row E_AFQMC/N; methods paragraph (pypdf layout l. 250-254)",
+    "version_read": "arXiv:2308.08594v2 (= Phys. Rev. Research 6, 013237); LeBlanc et al. supplemental data zip (Caltech record k3sdg-d1267, fetched 2026-10-02); arXiv:1505.02290v2; arXiv:1307.2147v3",
+    "checked_on": "2026-10-02",
+    "source_entry": "VP12-heisenberg-j1j2-hubbard#32 (qmbl-verify 2026-09-29, ambiguous), retried as RH2#14 (handoff reader, 2026-10-02) with the recommendation R1 accepts; ruling R1, Tristan 2026-10-02",
+    "conversion": "none",
+    "reason": "Follows the reference entry: the cell is arXiv:2308.08594's own constrained-path run, not a quote of [17, 18], so the row is primary."
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_64_P_28_4",
+      "method": "AFQMC (constrained-path)",
+      "energy": -65.23072
+    },
+    "field": "verified.secondary_of",
+    "from": "arXiv:2308.08594",
+    "to": null,
+    "reported_as": "-1.01923(6) (E_AFQMC/N, no release-constraint star)",
+    "location": "arXiv:2308.08594v2 Table I, column 8 x 8, n = 0.875, U = 4, row E_AFQMC/N; methods paragraph (pypdf layout l. 250-254)",
+    "version_read": "arXiv:2308.08594v2 (= Phys. Rev. Research 6, 013237); LeBlanc et al. supplemental data zip (Caltech record k3sdg-d1267, fetched 2026-10-02); arXiv:1505.02290v2; arXiv:1307.2147v3",
+    "checked_on": "2026-10-02",
+    "source_entry": "VP12-heisenberg-j1j2-hubbard#32 (qmbl-verify 2026-09-29, ambiguous), retried as RH2#14 (handoff reader, 2026-10-02) with the recommendation R1 accepts; ruling R1, Tristan 2026-10-02",
+    "conversion": "none",
+    "reason": "The 2026-09-15 reading named arXiv:2308.08594 as the paper quoting the number; it is the paper that produced it (reference entry), so that reading was of the primary source. Left standing, it would also make the row's own identifier read as a quoting source (paperOf, enrich_sources.mjs)."
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_64_P_28_4",
+      "method": "AFQMC (constrained-path)",
+      "energy": -65.23072
+    },
+    "field": "compute.note",
+    "edit": [
+      "Neither original paper states a cost for this 8 x 8 constrained-path AFQMC energy: the finite-size 8 x 8 doped entries (N = 50 and 56 electrons) are in the supplemental data sets of LeBlanc et al., whose main text gives only the generic AFQMC settings",
+      "Neither paper the table credits for its AFQMC column states a cost for this 8 x 8 constrained-path AFQMC energy, and neither holds it (the 2026-10-02 reading of LeBlanc et al.'s supplemental data found no 8 x 8 AFQMC file at this filling): LeBlanc et al.'s main text gives only the generic AFQMC settings"
+    ],
+    "reported_as": "-1.01923(6) (E_AFQMC/N, no release-constraint star)",
+    "location": "arXiv:2308.08594v2 Table I, column 8 x 8, n = 0.875, U = 4, row E_AFQMC/N; methods paragraph (pypdf layout l. 250-254)",
+    "version_read": "arXiv:2308.08594v2 (= Phys. Rev. Research 6, 013237); LeBlanc et al. supplemental data zip (Caltech record k3sdg-d1267, fetched 2026-10-02); arXiv:1505.02290v2; arXiv:1307.2147v3",
+    "checked_on": "2026-10-02",
+    "source_entry": "VP12-heisenberg-j1j2-hubbard#32 (qmbl-verify 2026-09-29, ambiguous), retried as RH2#14 (handoff reader, 2026-10-02) with the recommendation R1 accepts; ruling R1, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The 2026-09-16 compute pass placed this cell in LeBlanc et al.'s supplemental data; the reader of 2026-10-02 found no 8 x 8 AFQMC file there (see the reference entry). Wording only."
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_64_P_28_4",
+      "method": "AFQMC (constrained-path)",
+      "energy": -65.23072
+    },
+    "field": "compute.note",
+    "edit": [
+      "The citing paper arXiv:2308.08594 quotes the numbers without cost information.",
+      "arXiv:2308.08594, whose own constrained-path runs these are ('Constrained-path AFQMC results are obtained using protocols similar to those in Refs. [28, 34-36] including self-consistently optimized constraints [37]'), gives no cost for them that the compute pass of 2026-09-16 found."
+    ],
+    "reported_as": "-1.01923(6) (E_AFQMC/N, no release-constraint star)",
+    "location": "arXiv:2308.08594v2 Table I, column 8 x 8, n = 0.875, U = 4, row E_AFQMC/N; methods paragraph (pypdf layout l. 250-254)",
+    "version_read": "arXiv:2308.08594v2 (= Phys. Rev. Research 6, 013237); LeBlanc et al. supplemental data zip (Caltech record k3sdg-d1267, fetched 2026-10-02); arXiv:1505.02290v2; arXiv:1307.2147v3",
+    "checked_on": "2026-10-02",
+    "source_entry": "VP12-heisenberg-j1j2-hubbard#32 (qmbl-verify 2026-09-29, ambiguous), retried as RH2#14 (handoff reader, 2026-10-02) with the recommendation R1 accepts; ruling R1, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The note called arXiv:2308.08594 the citing paper; it produced the number (reference entry). Wording only; no cost statement is added."
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_64_P_28_8",
+      "method": "AFQMC (constrained-path)",
+      "energy": -48.7424
+    },
+    "field": "reference",
+    "to": "Levy, Morales & Zhang, Automatic Order Detection and Restoration Through Systematically Improvable Variational Wave Functions, Phys. Rev. Research 6, 013237 (2024), arXiv:2308.08594 (Table I, constrained-path AFQMC, a cell without the release-constraint star; the column names AFQMC [17, 18], H. Shi and S. Zhang, Phys. Rev. B 88, 125132 (2013) and J. P. F. LeBlanc et al., Phys. Rev. X 5, 041041 (2015), as its method references)",
+    "reported_as": "-0.7616(1) (E_AFQMC/N, no release-constraint star)",
+    "location": "arXiv:2308.08594v2 Table I, column 8 x 8, n = 0.875, U = 8, row E_AFQMC/N; methods paragraph (pypdf layout l. 250-254)",
+    "version_read": "arXiv:2308.08594v2 (= Phys. Rev. Research 6, 013237); LeBlanc et al. supplemental data zip (Caltech record k3sdg-d1267, fetched 2026-10-02); arXiv:1505.02290v2; arXiv:1307.2147v3",
+    "checked_on": "2026-10-02",
+    "source_entry": "VP12-heisenberg-j1j2-hubbard#34 (qmbl-verify 2026-09-29, ambiguous), retried as RH2#15 (handoff reader, 2026-10-02) with the recommendation R1 accepts; ruling R1, Tristan 2026-10-02",
+    "conversion": "-0.7616 x 64 = -48.7424; sigma 1e-4 x 64 = 0.0064 (both as stored, unchanged)",
+    "reason": "VP12 asked which calculation produced this cell and at which boundary. Table I of arXiv:2308.08594v2 credits its AFQMC column to [17, 18] and stars the cells that are exact from release-constraint AFQMC [17]; this cell has no star. The reader read neither cited paper's text nor data to contain it: Shi & Zhang (arXiv:1307.2147v3) print 8 x 8 entries at (14,14) and (22,22) only, and LeBlanc et al.'s supplemental data (Caltech authors record k3sdg-d1267) hold densities 0.3, 0.6, 0.8, 0.875 and 1 with no 8 x 8 AFQMC file (their 8 x 8 files are the fixed-node DMC that Table I credits to [18]; their finite-size AFQMC is twist-averaged, arXiv:1505.02290v2 Sec. II). The paper says it obtained constrained-path results itself ('Constrained-path AFQMC results are obtained using protocols similar to those in Refs. [28, 34-36] including self-consistently optimized constraints [37]'), on the PBC square cluster its caption names, which is this instance. So the number is cited to arXiv:2308.08594 as its own, with [17, 18] named as the method references; a confirmation from S. Zhang would close it. Projected, not a variational bound: no record either way."
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_64_P_28_8",
+      "method": "AFQMC (constrained-path)",
+      "energy": -48.7424
+    },
+    "field": "provenance",
+    "to": "primary",
+    "reported_as": "-0.7616(1) (E_AFQMC/N, no release-constraint star)",
+    "location": "arXiv:2308.08594v2 Table I, column 8 x 8, n = 0.875, U = 8, row E_AFQMC/N; methods paragraph (pypdf layout l. 250-254)",
+    "version_read": "arXiv:2308.08594v2 (= Phys. Rev. Research 6, 013237); LeBlanc et al. supplemental data zip (Caltech record k3sdg-d1267, fetched 2026-10-02); arXiv:1505.02290v2; arXiv:1307.2147v3",
+    "checked_on": "2026-10-02",
+    "source_entry": "VP12-heisenberg-j1j2-hubbard#34 (qmbl-verify 2026-09-29, ambiguous), retried as RH2#15 (handoff reader, 2026-10-02) with the recommendation R1 accepts; ruling R1, Tristan 2026-10-02",
+    "conversion": "none",
+    "reason": "Follows the reference entry: the cell is arXiv:2308.08594's own constrained-path run, not a quote of [17, 18], so the row is primary."
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_64_P_28_8",
+      "method": "AFQMC (constrained-path)",
+      "energy": -48.7424
+    },
+    "field": "verified.secondary_of",
+    "from": "arXiv:2308.08594",
+    "to": null,
+    "reported_as": "-0.7616(1) (E_AFQMC/N, no release-constraint star)",
+    "location": "arXiv:2308.08594v2 Table I, column 8 x 8, n = 0.875, U = 8, row E_AFQMC/N; methods paragraph (pypdf layout l. 250-254)",
+    "version_read": "arXiv:2308.08594v2 (= Phys. Rev. Research 6, 013237); LeBlanc et al. supplemental data zip (Caltech record k3sdg-d1267, fetched 2026-10-02); arXiv:1505.02290v2; arXiv:1307.2147v3",
+    "checked_on": "2026-10-02",
+    "source_entry": "VP12-heisenberg-j1j2-hubbard#34 (qmbl-verify 2026-09-29, ambiguous), retried as RH2#15 (handoff reader, 2026-10-02) with the recommendation R1 accepts; ruling R1, Tristan 2026-10-02",
+    "conversion": "none",
+    "reason": "The 2026-09-15 reading named arXiv:2308.08594 as the paper quoting the number; it is the paper that produced it (reference entry), so that reading was of the primary source. Left standing, it would also make the row's own identifier read as a quoting source (paperOf, enrich_sources.mjs)."
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_64_P_28_8",
+      "method": "AFQMC (constrained-path)",
+      "energy": -48.7424
+    },
+    "field": "compute.note",
+    "edit": [
+      "Neither original paper states a cost for this 8 x 8 constrained-path AFQMC energy: the finite-size 8 x 8 doped entries (N = 50 and 56 electrons) are in the supplemental data sets of LeBlanc et al., whose main text gives only the generic AFQMC settings",
+      "Neither paper the table credits for its AFQMC column states a cost for this 8 x 8 constrained-path AFQMC energy, and neither holds it (the 2026-10-02 reading of LeBlanc et al.'s supplemental data found no 8 x 8 AFQMC file at this filling): LeBlanc et al.'s main text gives only the generic AFQMC settings"
+    ],
+    "reported_as": "-0.7616(1) (E_AFQMC/N, no release-constraint star)",
+    "location": "arXiv:2308.08594v2 Table I, column 8 x 8, n = 0.875, U = 8, row E_AFQMC/N; methods paragraph (pypdf layout l. 250-254)",
+    "version_read": "arXiv:2308.08594v2 (= Phys. Rev. Research 6, 013237); LeBlanc et al. supplemental data zip (Caltech record k3sdg-d1267, fetched 2026-10-02); arXiv:1505.02290v2; arXiv:1307.2147v3",
+    "checked_on": "2026-10-02",
+    "source_entry": "VP12-heisenberg-j1j2-hubbard#34 (qmbl-verify 2026-09-29, ambiguous), retried as RH2#15 (handoff reader, 2026-10-02) with the recommendation R1 accepts; ruling R1, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The 2026-09-16 compute pass placed this cell in LeBlanc et al.'s supplemental data; the reader of 2026-10-02 found no 8 x 8 AFQMC file there (see the reference entry). Wording only."
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_64_P_28_8",
+      "method": "AFQMC (constrained-path)",
+      "energy": -48.7424
+    },
+    "field": "compute.note",
+    "edit": [
+      "The citing paper arXiv:2308.08594 quotes the numbers without cost information.",
+      "arXiv:2308.08594, whose own constrained-path runs these are ('Constrained-path AFQMC results are obtained using protocols similar to those in Refs. [28, 34-36] including self-consistently optimized constraints [37]'), gives no cost for them that the compute pass of 2026-09-16 found."
+    ],
+    "reported_as": "-0.7616(1) (E_AFQMC/N, no release-constraint star)",
+    "location": "arXiv:2308.08594v2 Table I, column 8 x 8, n = 0.875, U = 8, row E_AFQMC/N; methods paragraph (pypdf layout l. 250-254)",
+    "version_read": "arXiv:2308.08594v2 (= Phys. Rev. Research 6, 013237); LeBlanc et al. supplemental data zip (Caltech record k3sdg-d1267, fetched 2026-10-02); arXiv:1505.02290v2; arXiv:1307.2147v3",
+    "checked_on": "2026-10-02",
+    "source_entry": "VP12-heisenberg-j1j2-hubbard#34 (qmbl-verify 2026-09-29, ambiguous), retried as RH2#15 (handoff reader, 2026-10-02) with the recommendation R1 accepts; ruling R1, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The note called arXiv:2308.08594 the citing paper; it produced the number (reference entry). Wording only; no cost statement is added."
   },
 ];

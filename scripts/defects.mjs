@@ -338,7 +338,19 @@ export const DEFECTS = [
     "flag": "sigma-understated",
     "finding": "The printed bar 7e-8 per site is np.std(intercepts)/np.sqrt(Nb), Nb = 1000, the standard error of the mean of the wild-bootstrap intercepts (HeisenbergRNN@29bf62a get_zer_var_energies.ipynb cells 12-13), not the uncertainty of the extrapolated energy. Reproduced here with independent code (out/VP7-arxiv-2502-17144/work2/r2_zv_repro.py: same s = 1, 2, 4 runs, OLS, np.random.seed(100)): intercept mean -0.6788717699 and SE 6.80e-8 equal the authors' zero_var_energies.pkl to 1e-11 relative, and the printed value to its digits. The spread of the refits is 2.15e-6 per site (31x the bar). The fit has 6 points but 4 distinct runs (at L = 6 the s = 1 and s = 2 runs are identical for both rates). Against the ED (VarBench) value -0.6788721500 the row sits above by 3.80e-7 per site: 5 printed sigma, 0.2 bootstrap SD. Value and bound_type (extrapolated) are right: Table III (L = 6) and Table V (periodic 6 x 6) print −0.67887177(7), x 4 x 36 = -97.75753488. The earlier pass flagged only the zero-variance rows that sit below the SSE value; the bar is the same quantity on every zero-variance row of this paper, above or below.",
     "source_entry": "VP7-arxiv-2502-17144#38 (qmbl-verify 2026-09-29; skeptic refuted; only the propagated error was refuted and is dropped from the finding; ruling 6, Tristan 2026-09-30)"
-  }
+  },
+  // qmbl-verify 2026-09-29, handoff (reader, 2026-10-02), ruling R1 (Tristan, 2026-10-02): a quote whose
+  // number the cited paper does not hold as read, flagged as the Shallow CNN row was (VP13#52).
+  {
+    "match": {
+      "instance": "Heisenberg/triangular_900_P",
+      "method": "Jastrow-Gutzwiller",
+      "energy": -1963.2528
+    },
+    "flag": "quote-not-in-primary",
+    "finding": "Quote check in the citing paper passed: arXiv:2602.02665v1 Table I, 30 x 30 block, prints 'Jastrow-Gutzwiller -0.545348 [71]' with no error bar (-0.545348 x 4 x 900 = -1963.2528, the stored energy); [71] = E. Ghorbani, L. F. Tocchio and F. Becca, Phys. Rev. B 93, 085111 (2016). In the cited paper as read (arXiv:1512.03356 v1 and v2, VP15; the published PRB 93, 085111 PDF, VJ2), I could not locate -0.545348 or any 30 x 30 cluster: its tables are 18 x 18 ('All data are presented on the 18 x 18 cluster'), its 6 x 6 figures carry the exact Lanczos energies, and no thermodynamic-limit or size-scaling energy of the isotropic Jastrow-Gutzwiller state is printed. Also read without a hit: Iqbal, Hu, Thomale, Poilblanc & Becca, arXiv:1601.06018v4 (VMC 6x6 -0.548025(3), 2D limit -0.545321(7)); Ferrari & Becca, arXiv:1903.05691v3; a web search for '0.545348' (only arXiv:2602.02665). The citing paper's acknowledgements thank F. Becca 'for useful discussions' only. The row carries a number its cited source does not contain, the case of the Shallow CNN row on J1J2/square_100_P_0.5 (VP13#52), which commit A flagged 'quote-not-in-primary' rather than removing it. Not a record holder on the instance. Resolution: the authors of arXiv:2602.02665 or F. Becca to say where -0.545348 is printed, or removal under RULES.md 8 ('A cited number that cannot be found in the cited source is not admissible').",
+    "source_entry": "VJ2-journal-other#54, VP15-hubbard-j1j2-heisenberg#32 (qmbl-verify 2026-09-29, not_found), as RH2#11 (handoff reader, triage of 2026-10-02) by precedent VP13#52; ruling R1, Tristan 2026-10-02"
+  },
 ];
 
 export const SHARED = {

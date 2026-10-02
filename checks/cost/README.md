@@ -52,8 +52,11 @@ and the row says so in its method string. Nothing here is attached to anyone els
   architecture (`vit.py`).
 - **DMRG** (`run_dmrg.py`, TeNPy). Two-site DMRG on the torus as a finite MPS with
   long-range couplings, S_z conserved, mixer on, a ladder of maximum bond dimensions
-  500, 1000, 2000 in one process, a new engine per rung on the previous rung's state, at
-  most 15 sweeps per rung or converged at 1e-6 in the energy. Each rung is a row; its cost
+  500, 1000, 2000 in one process, a new engine per rung on the previous rung's state,
+  max_sweeps 15 and max_E_err 1e-6 per rung; TeNPy 1.1.1 stops once the count exceeds
+  max_sweeps and calls a rung converged only if |dE| < 1e-6 and |dS| < 1e-5; no rung met
+  it, every rung ran 16 sweeps (the last without the mixer), at 12 x 12 still falling by
+  7e-5 to 2.4e-3 per sweep (S.S) at the cap. Each rung is a row; its cost
   is the wall-clock since process start, so reaching chi = 2000 is costed with the rungs
   before it. Jobs get 120 h: a sweep scales as chi^3, and the 10 x 10 torus took 6 min per
   sweep at chi = 500.
