@@ -81,11 +81,18 @@ const ladder = SQUARES.flatMap(inst => inst.rows.filter(r => r.computed_by === "
 }));
 // A run that finished but whose final evaluation did not equilibrate is no row (checks/cost/README.md,
 // R-hat below 1.05); its results file says so, and the footnote says it rather than "still running".
+const runsOf = name => { try { return fs.readdirSync("checks/cost/results/runs").filter(f => f.startsWith(`${name}--`) && f.endsWith(".json")).map(f => JSON.parse(fs.readFileSync(`checks/cost/results/runs/${f}`, "utf8"))); } catch { return []; } };
 const resultOf = name => { try { return JSON.parse(fs.readFileSync(`checks/cost/results/${name}.json`, "utf8")); } catch { return null; } };
 const unequilibrated = [], missing = [
   ...ANSATZ.flatMap(([key, name]) => LADDER.nqs.filter(L => !ladder.some(p => p.key === key && side(p.inst.n_sites) === L)).flatMap(L => {
     const res = resultOf(`h100-${key}-j1j2-${L * L}`);
-    if (res && !(res.r_hat < 1.05)) { unequilibrated.push(`${name} on ${L}×${L} (R-hat ${res.r_hat.toFixed(2)})`); return []; }
+    if (res && !(res.r_hat < 1.05)) {
+      // Every run of the configuration (best_run.mjs keeps them under results/runs/), none of which stands.
+      const all = runsOf(`h100-${key}-j1j2-${L * L}`).map(r => r.r_hat).filter(Number.isFinite).sort((a, b) => a - b);
+      const hats = all.length ? all : [res.r_hat];
+      unequilibrated.push(`${name} on ${L}×${L} (${hats.length > 1 ? `${hats.length} runs, R-hat ${hats.slice(0, -1).map(h => h.toFixed(2)).join(", ")} and ${hats.at(-1).toFixed(2)}` : `R-hat ${hats[0].toFixed(2)}`})`);
+      return [];
+    }
     return [`${name} on ${L}×${L}`];
   })),
   ...LADDER.dmrg.filter(L => LADDER.chi.some(c => !ladder.some(p => p.key === `dmrg-${c}` && side(p.inst.n_sites) === L))).map(L => `DMRG on ${L}×${L}`),
