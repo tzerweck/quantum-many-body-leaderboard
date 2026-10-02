@@ -72,6 +72,9 @@ export function variationalRecordOf(inst) {
 export function summarize(instances) {
   const s = {
     instances: instances.length, rows: 0,
+    // The sector minima in an instance's `spectrum` (DATA.md) are levels, not results:
+    // `rows` and every count by row leave them out, and they are counted here alone.
+    spectrum_entries: 0,
     by_bound: {}, by_source: {}, by_provenance: {},
     vscore_rows: 0, no_variance: 0, no_sigma: 0, no_error_metrics: 0, flagged: 0,
     // Rows VarBench computed itself rather than collected from a paper, and the subset
@@ -91,6 +94,7 @@ export function summarize(instances) {
     needs_review: [],
   };
   for (const inst of instances) {
+    s.spectrum_entries += inst.spectrum?.length ?? 0;
     for (const r of inst.rows) {
       s.rows++;
       const key = r.bound_type || "needs-review";

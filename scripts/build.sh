@@ -24,6 +24,9 @@ node scripts/apply_removals.mjs
 node scripts/apply_corrections.mjs
 # After every script that matches rows by their published method string.
 node scripts/apply_method_names.mjs
+# The rows are final: a sector minimum other than the ground state's leaves them for the
+# instance's `spectrum` (DATA.md), taking whatever the overlays wrote on it.
+node scripts/apply_spectrum.mjs
 # Instance-level, after the names are final: the exact row a QMBL ED run reproduced is matched by its published string.
 node scripts/add_ed_cost.mjs
 node scripts/validate.mjs

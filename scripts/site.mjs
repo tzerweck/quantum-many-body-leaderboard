@@ -158,7 +158,7 @@ const BOUND_NOTE = {
   variational: "Where the instance is not solved, the record is the lowest eligible energy in this group; where it is, the lowest eligible energy here is the best variational bound and the closest challenger to the exact one.",
   projected: "Variational only within a constraint: fixed-node, constrained-path, GFMC on a trial state. Node- or constraint-dependent, so not cleanly comparable to each other or to the group above, and never the record.",
   extrapolated: "Zero-variance, bond-dimension or Trotter-error extrapolations. Not a bound: no ansatz ever reached the number, so it cannot hold the record.",
-  exact: "Exact diagonalization, an exact solution, or sign-problem-free QMC where that is established: the answer, not a claim about it, and therefore the record wherever one exists. QMC is exact only within its statistical error bar, which it must state, and its rows read exact (stochastic); an exact diagonalization outranks it. Sector-resolved diagonalizations state the lowest energy in one symmetry sector and do not hold it.",
+  exact: "Exact diagonalization, an exact solution, or sign-problem-free QMC where that is established: the answer, not a claim about it, and therefore the record wherever one exists. QMC is exact only within its statistical error bar, which it must state, and its rows read exact (stochastic); an exact diagonalization outranks it. A diagonalization resolved by symmetry sector is listed for the ground state's sector only; the lowest energies of the other sectors are the instance's spectrum, in its JSON, and hold nothing.",
   null: "The method string does not say whether the energy is sign-problem-free or constrained, so no bound_type could be assigned without guessing.",
 };
 

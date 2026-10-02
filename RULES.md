@@ -125,10 +125,10 @@ instance is solved, otherwise the **lowest eligible `variational` energy**. `pro
   row such as `Exact Diagonalization 0.C1.A -1` states the lowest energy in one symmetry sector,
   which is the ground-state energy only if that sector is the ground state's. Case:
   `J1J2/triangular_48_P_0.125` carries all 48 sectors of Wietek et al. (PRX 14, 021010), whose
-  App. B names Γ.A1 (spin-flip +1) as the ground state; that row holds the record and the other
-  47 do not (ruling of 2026-09-16: they move to a per-instance spectrum record). `SECTOR_RESOLVED`
-  and `groundStateExact` in `scripts/units.mjs` draw the line, and the validator excludes the
-  same sector rows from the variational-principle check for the same reason.
+  App. B names Γ.A1 (spin-flip +1) as the ground state; that row holds the record, and the
+  other 47 are not rows but the instance's `spectrum` (rulings of 2026-09-16 and 2026-09-30;
+  [DATA.md](DATA.md#the-lowest-energy-of-each-symmetry-sector-spectrum)), where they hold
+  nothing. `groundStateExact` in `scripts/units.mjs` draws the line.
 - Rows whose error bars overlap at **2 sigma** share the rank.
 - **A sampled energy must state its `sigma` to be eligible.** `sigma` must also state how it
   was estimated. An error bar that ignores autocorrelation understates by around an order of
@@ -300,8 +300,9 @@ ranks, can hold a record, and is cited to its run script, job and commit.
    0.47% below HFDS on 4x8 with 25x its variance, and is the better state. The check stands; what it establishes is a question to
    the authors, which is how the HQT case in 8.1 is carried.
 4. **The variational principle**: no `variational` row may sit below an `exact` row in the
-   same instance. Sector-resolved ED rows are excluded, since an unconstrained state may
-   legitimately sit below the lowest state of one sector. A violation counts only past
+   same instance. The lowest state of one sector other than the ground state's is not a row
+   (§6), since an unconstrained state may legitimately sit below it; the validator checks
+   that no level of a `spectrum` lies below the ground state. A violation counts only past
    3 sigma - the row's own, combined in quadrature with the exact row's where that row is
    stochastic - or past a relative 1e-8 when neither states one. A stochastic exact row
    without `sigma` is itself an issue.

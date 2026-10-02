@@ -52,7 +52,8 @@ or the source. `method_as_published` is the string exactly as the source printed
 dimension, parameter count or sample count lives in `compute`, not in the detail, and the
 site prints the three as one label: "CNN-MPS (bond dimension 20, h = 32, l = 20, Marshall
 sign)". `family` groups methods for the figures, and `sector` marks an exact diagonalization
-restricted to one symmetry sector. All of these are assigned in
+restricted to one symmetry sector (on a row, only the ground state's sector; the others are
+the instance's `spectrum`, below). All of these are assigned in
 [`scripts/method_names.mjs`](scripts/method_names.mjs), one entry per published string.
 
 Symmetry and extrapolation are written in fixed slots after the free text, separated by
@@ -509,6 +510,36 @@ is why "we looked, and there is nothing newer" is worth the same bookkeeping as 
 `screened` names the papers when there are few, `screened_count` replaces it when there are
 many. `found` is how many of the screened papers the instance carries an energy from, read
 off its rows at build time, so it cannot disagree with the page.
+
+## The lowest energy of each symmetry sector: `spectrum`
+
+Per instance, not per row. A diagonalization resolved by symmetry sector states the lowest
+energy in each sector, and only the ground state's sector is a ground-state energy: that row
+stays a row and holds the record, and the minima of the other sectors are the instance's
+`spectrum` (Tristan, 2026-09-16 and 2026-09-30). One instance has one:
+`J1J2/triangular_48_P_0.125`, whose 48 sectors of the S<sup>z</sup> = 0 space come from
+Wietek et al. (PRX 14, 021010), App. B naming Γ.A1 (spin flip +1) the ground state. One of
+its 47 entries, the compute block cut:
+
+```json
+"spectrum": [
+  { "energy": -98.7034711151, "sigma": 0.00000556, "energy_variance": null, "dof": 48, "einf": 0, "v_score": null,
+    "method": "ED", "method_detail": "", "method_as_published": "Exact Diagonalization Gamma.D6.E2 1",
+    "family": "other", "sector": "Gamma.D6.E2, spin flip +1", "bound_type": "exact",
+    "bound_type_reason": "exact diagonalization|ex",
+    "reference": "[paper](https://journals.aps.org/prx/abstract/10.1103/PhysRevX.14.021010)",
+    "source": "varbench@2024-10-22", "provenance": "imported", "compute": { "...": "..." } }
+]
+```
+
+**A level of the spectrum is not a result.** Each entry is the complete row it was, lowest
+first, moved by [`scripts/apply_spectrum.mjs`](scripts/apply_spectrum.mjs) after every
+overlay has run, so a correction or verification written against the row still lands on it.
+Entries hold no record, are not drawn and are not counted in `rows`; `data/_summary.json`
+counts them as `spectrum_entries`. The validator requires each to be exact and to name its
+sector, and none to lie below the ground state. Which sector is the ground state is a ruling
+(`groundStateExact` in [`scripts/units.mjs`](scripts/units.mjs)): an instance with no
+ground-state row keeps its sector rows as rows, and the validator reports them.
 
 ## Units and conventions
 

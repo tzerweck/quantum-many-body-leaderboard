@@ -18,6 +18,12 @@ for (const id of process.argv.slice(2)) {
     const prov = r.baseline ? "baseline" : (r.provenance || "");
     console.log(`  ${mark}${err} ${(r.energy / f).toFixed(7)}  V=${v}  ${prov.padEnd(9)} ${methodLabel(r).slice(0, 50)}`);
   }
+  // A spectrum's sector minima are not rows (DATA.md) and rank for nothing: one line says
+  // they are there and where the lowest of them sits.
+  if (d.spectrum?.length) {
+    const low = d.spectrum.reduce((a, b) => (b.energy < a.energy ? b : a));
+    console.log(`  +  spectrum: ${d.spectrum.length} sector minima, not rows; the lowest ${(low.energy / f).toFixed(7)} (sector ${low.sector})`);
+  }
   console.log("  legend: ! flagged  P projected  X extrapolated  ? unclassified"
     + "\n          o no error metric found in the source read - needs verification, not a criticism");
   // A flagged row is listed in place but cannot hold the record (RULES.md 6.1). Suspicion is

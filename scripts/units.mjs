@@ -63,15 +63,17 @@ export function methodLabel(r) {
 // Sector-resolved exact diagonalization: VarBench's "Exact Diagonalization 0.C1.A -1" is the
 // lowest state in ONE symmetry sector, not the ground state, so an unconstrained variational
 // energy may legitimately sit below it and it cannot stand in for the instance's exact
-// energy. Such a row carries `sector` (scripts/method_names.mjs), and the record, the
-// validator and the table matcher all ask groundStateExact.
+// energy. Such a row carries `sector` (scripts/method_names.mjs); where the instance has its
+// ground-state row, apply_spectrum.mjs moves it off the rows into the instance's `spectrum`,
+// and the record, the validator, the figures and the table matcher ask groundStateExact.
 //
 // The one sector row that IS the ground state. J1J2/triangular_48_P_0.125 carries all 48
 // (k.irrep, spin-flip) sectors of the Sz = 0 space from Wietek et al., PRX 14, 021010, whose
 // App. B names Gamma.A1 (spin-flip +1) as the ground state; the qmbl-verify pass of
 // 2026-09-15 confirmed the number against the paper's own upload, and Tristan ruled on
-// 2026-09-16 (qmbl-verify DECISIONS.md, 3c) that this row stays and the other 47 move to a
-// per-instance spectrum record. Until that move lands the sector is named here.
+// 2026-09-16 (qmbl-verify DECISIONS.md, 3c; reconfirmed 2026-09-30) that this row stays and
+// the other 47 move to a per-instance spectrum record, which the build does since 2026-09-30.
+// The sector named here is the row that stays.
 const RULED_GROUND_STATE_SECTOR = "Gamma.D6.A1, spin flip +1";
 
 // Does this exact row state the ground-state energy, rather than a sector minimum?

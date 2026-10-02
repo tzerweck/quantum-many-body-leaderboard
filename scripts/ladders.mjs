@@ -42,7 +42,8 @@ const gcd = (a, b) => (b ? gcd(b, a % b) : a);
 // energy. A flagged row is drawn too, with a slashed mark (Tristan, 2026-09-18: the reader
 // sees the number and that it is contested; RULES.md 6.1 keeps it off the records and so
 // off the record line), except a row flagged wrong-instance, whose energy belongs on
-// another axis. Rows without a bound type and sector-resolved diagonalizations are not.
+// another axis. Rows without a bound type are not, nor the minimum of a sector other than
+// the ground state's, which the build moves to the instance's `spectrum` (DATA.md).
 const BOUNDS = new Set(["variational", "projected", "extrapolated"]);
 export const drawnRows = inst => inst.rows.filter(r => r.defect?.flag !== "wrong-instance" && (r.bound_type === "exact" ? groundStateExact(r) : BOUNDS.has(r.bound_type)));
 

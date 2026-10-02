@@ -4,7 +4,7 @@ import { expectedDof, expectedEinf, vScore, perSiteDivisor, groundStateExact, st
 import { FAMILIES } from "./views.mjs";
 import { detailIssue } from "./method_names.mjs";
 const FAMILY_NAMES = new Set([...FAMILIES.map(([f]) => f), "other"]);
-const issues = [], rounding = []; let rows = 0, checkedD = 0, checkedE = 0, checkedV = 0, checkedC = 0, checkedCov = 0;
+const issues = [], rounding = []; let rows = 0, checkedD = 0, checkedE = 0, checkedV = 0, checkedC = 0, checkedCov = 0, checkedS = 0;
 for (const m of fs.readdirSync("data")) {
   const dir = path.join("data", m);
   if (!fs.statSync(dir).isDirectory()) continue;
@@ -28,14 +28,17 @@ for (const m of fs.readdirSync("data")) {
         const v = vScore(r.energy_variance, r.dof, r.energy, r.einf);
         if (v == null || Math.abs(v - r.v_score) > 1e-9 * v) issues.push(`VSCORE ${at}: stored ${r.v_score}, recomputed ${v}`); }
       // Variational principle: no strict bound may sit below an exact row in the same
-      // instance. Sector-resolved ED rows are excluded - they are the lowest state in
-      // ONE symmetry sector, so an unconstrained variational state may legitimately
-      // sit below them. Violations within 3 sigma, or under a relative 1e-8 where no error
-      // bar is stated, are tolerated and only counted.
+      // instance. Every exact row states the ground-state energy: the lowest state of ONE
+      // symmetry sector, which an unconstrained variational state may legitimately sit
+      // below, is not a row (apply_spectrum.mjs moves it to the instance's `spectrum`,
+      // checked below), and a row still carrying one is an issue of its own. Violations
+      // within 3 sigma, or under a relative 1e-8 where no error bar is stated, are tolerated
+      // and only counted.
       // A stochastic exact energy (sign-problem-free QMC) is exact only within its error bar,
       // so the error bar is required (RULES.md 4).
+      if (r.sector && !groundStateExact(r)) issues.push(`SECTOR ${at}: the minimum of sector ${r.sector} is a row, not in the spectrum (apply_spectrum.mjs moves it once the instance has a ground-state row; units.mjs names the sector)`);
       if (stochasticExact(r) && r.sigma == null) issues.push(`SIGMA ${at}: exact (stochastic) row without an error bar "${r.method.slice(0,38)}"`);
-      if (groundStateExact(r) && perSiteDivisor(inst) != null) {
+      if (r.bound_type === "exact" && perSiteDivisor(inst) != null) {
         // A stochastic exact reference carries an error bar of its own; the two combine.
         const refSigma = stochasticExact(r) ? r.sigma : null;
         for (const o of inst.rows) {
@@ -159,6 +162,33 @@ for (const m of fs.readdirSync("data")) {
           issues.push(`COVERAGE ${at}: neither a screened list nor a screened_count`);
       }
     }
+    // `spectrum` is instance level (DATA.md): the minimum of every symmetry sector but the
+    // ground state's, each the complete row it was. Beside a ground-state row, exact, naming a
+    // sector that is not the ground state's, and no lower than the ground state, which is the
+    // minimum over all sectors (tolerated as in the bound check above).
+    if (inst.spectrum != null) {
+      const gs = inst.rows.filter(groundStateExact);
+      if (!Array.isArray(inst.spectrum)) issues.push(`SPECTRUM ${inst.instance_id}: not an array`);
+      else {
+        if (!gs.length) issues.push(`SPECTRUM ${inst.instance_id}: no ground-state row beside the spectrum`);
+        for (const [j, s] of inst.spectrum.entries()) {
+          checkedS++;
+          const at = `${inst.instance_id}.spectrum[${j}]`;
+          if (s.bound_type !== "exact") issues.push(`SPECTRUM ${at}: bound_type ${s.bound_type}`);
+          if (!s.sector) issues.push(`SPECTRUM ${at}: no sector`);
+          else if (groundStateExact(s)) issues.push(`SPECTRUM ${at}: sector ${s.sector} is the ground state's, which is a row`);
+          if (typeof s.energy !== "number" || !s.reference) issues.push(`SPECTRUM ${at}: no energy or no reference`);
+          for (const g of gs) {
+            if (!(s.energy < g.energy)) continue;
+            const gap = g.energy - s.energy, rel = gap / Math.abs(g.energy);
+            const refSigma = stochasticExact(g) ? g.sigma : null;
+            const sigma = s.sigma != null || refSigma != null ? Math.hypot(s.sigma ?? 0, refSigma ?? 0) : null;
+            ((sigma != null ? gap > 3 * sigma : rel > 1e-8) ? issues : rounding).push(
+              `SPECTRUM ${at}: sector ${s.sector} at ${s.energy}, below the ground state ${g.energy} (rel ${rel.toExponential(1)})`);
+          }
+        }
+      }
+    }
   }
 }
 // The TFIsing unit convention, asserted rather than assumed.
@@ -194,6 +224,6 @@ for (const f of fs.readdirSync(path.join("data", "TFIsing"))) {
 }
 
 console.log(`rows=${rows}  dof_checked=${checkedD}  einf_checked=${checkedE}  vscore_checked=${checkedV}  tfising_exact_checked=${checkedT}`);
-console.log(`compute_blocks=${checkedC}  coverage_entries=${checkedCov}`);
+console.log(`compute_blocks=${checkedC}  coverage_entries=${checkedCov}  spectrum_entries=${checkedS}`);
 console.log(`tolerated bound violations (within 3 sigma, or rel < 1e-8 where neither states one; ignored): ${rounding.length}`);
 console.log(issues.length ? `\n${issues.length} ISSUES:\n` + issues.slice(0, 25).join("\n") : "\nall checks pass");
