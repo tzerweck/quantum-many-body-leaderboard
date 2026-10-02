@@ -90,8 +90,8 @@ export function instanceLabel(inst) {
     const shown = Number(fill.toFixed(4));
     parts.push(`n ${shown === fill ? "=" : "&asymp;"} ${shown}`);
   }
-  // VarBench does not document these Hamiltonian variants, so they are shown as named
-  // rather than interpreted.
+  // The Hubbard variants VarBench names by suffix keep that name in the label; their couplings
+  // (t2, V1, V2) are in params and written out on the instance page.
   for (const v of inst.instance_id.matchAll(/_(t12|UV1V2)(?=_|$)/g)) parts.push(v[1]);
   return parts.join(", ");
 }

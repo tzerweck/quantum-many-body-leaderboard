@@ -412,8 +412,11 @@ recomputation is recorded on its verification (ruling of the same day).
 
 Every other correction keeps the old value on the row, listed with its source and reason in
 `scripts/corrections.mjs`. That holds for rows QMBL added itself as for imported ones (since
-2026-09-30; before, such a row was fixed in its loader's input, which left no trace on the row).
+2026-09-30; before, such a row was fixed in its loader's input, which left no trace on the row),
+for what a row states beside its energy, a compute block's fields and a verification's note, and
+for an instance's couplings, whose old values stay on the instance.
 A loader that is itself wrong, a bond count or a unit, is fixed in place, and the values it
 published before stay on its rows. An instance whose name carries a different parameter from the
-one its rows were computed at is renamed, with the old name and the reason recorded on it
-(`scripts/relabels.mjs`); rows computed at the named parameter keep the old name.
+one its rows were computed at, a coupling or an impurity's bath size, is renamed, with the old
+name and the reason recorded on it (`scripts/relabels.mjs`); rows computed at the named
+parameter keep the old name.

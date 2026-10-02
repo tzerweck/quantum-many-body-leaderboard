@@ -253,9 +253,13 @@ function hamiltonian(inst) {
     case "TFIsing":
       return { formula: `H = &minus;${sum(nn)} &sigma;<sup>z</sup><sub>i</sub>&sigma;<sup>z</sup><sub>j</sub> &minus; h ${sum("i")} &sigma;<sup>x</sup><sub>i</sub>`,
         note: `Transverse field h = ${p.h}. Already in Pauli operators, with no S&middot;S term to rescale, so the per-site energy is E/N.` };
-    case "Hubbard":
-      return { formula: `H = &minus;t ${sum(`${nn},&sigma;`)} (c<sup>&dagger;</sup><sub>i&sigma;</sub>c<sub>j&sigma;</sub> + h.c.) + U ${sum("i")} n<sub>i&uarr;</sub>n<sub>i&darr;</sub>`,
-        note: `t = 1, U = ${p.U}, N<sub>&uarr;</sub> = N<sub>&darr;</sub> = ${p.Nf} on ${inst.n_sites} sites.` };
+    case "Hubbard": {
+      // The t12 and UV1V2 variants state their further couplings in params (DATA.md).
+      const hop = (t, bonds) => `&minus;${t} ${sum(`${bonds},&sigma;`)} (c<sup>&dagger;</sup><sub>i&sigma;</sub>c<sub>j&sigma;</sub> + h.c.)`;
+      const dd = (v, bonds) => ` + ${v} ${sum(bonds)} n<sub>i</sub>n<sub>j</sub>`;
+      return { formula: `H = ${p.t2 == null ? hop("t", nn) : `${hop("t<sub>1</sub>", nn)} ${hop("t<sub>2</sub>", nnn)}`} + U ${sum("i")} n<sub>i&uarr;</sub>n<sub>i&darr;</sub>${p.V1 == null ? "" : dd("V<sub>1</sub>", nn) + dd("V<sub>2</sub>", nnn)}`,
+        note: `${p.t2 == null ? "t = 1" : `t<sub>1</sub> = ${p.t1}, t<sub>2</sub> = ${p.t2}`}, U = ${p.U}${p.V1 == null ? "" : `, V<sub>1</sub> = ${p.V1}, V<sub>2</sub> = ${p.V2}`}, N<sub>&uarr;</sub> = N<sub>&darr;</sub> = ${p.Nf} on ${inst.n_sites} sites.` };
+    }
     case "tV":
       return { formula: `H = &minus;t ${sum(nn)} (c<sup>&dagger;</sup><sub>i</sub>c<sub>j</sub> + h.c.) + V ${sum(nn)} n<sub>i</sub>n<sub>j</sub>`,
         note: `Spinless fermions, t = 1, V = ${p.V}, ${p.Nf} particles on ${inst.n_sites} sites.` };
@@ -265,26 +269,30 @@ function hamiltonian(inst) {
   }
 }
 
-// Hamiltonian variants VarBench does not document. Named, never interpreted.
+// The Hubbard variants VarBench names by suffix. Their couplings are VarBench's notes on these runs
+// and Eq. (S6) of its supplement, in params since 2026-10-02 (corrections.mjs), and the formula above
+// writes them out; this says where they come from and what the density terms couple.
 function variantNote(inst) {
-  if (/_t12(?=_|$)/.test(inst.instance_id))
-    return "This instance is the <code>t12</code> variant: it carries a second-neighbour hopping in addition to the above. Upstream does not document its value, so the variant is identified by name rather than written out.";
+  const notes = `<a href="https://github.com/varbench/varbench/blob/main/Hubbard/supplements/Imada_group_overview.md">VarBench's notes on these runs</a> and Eq. (S6) of its supplement`;
   if (/_UV1V2(?=_|$)/.test(inst.instance_id))
-    return "This instance is the <code>UV1V2</code> variant: it carries extended density-density interactions V<sub>1</sub>, V<sub>2</sub> in addition to U. Upstream does not document their values, so the variant is identified by name rather than written out.";
+    return `This instance is the <code>t12</code> variant with the <code>UV1V2</code> interactions: a next-nearest-neighbour hopping t<sub>2</sub>, and density-density terms on nearest (V<sub>1</sub>) and next-nearest neighbours (V<sub>2</sub>), each bond once, between the total densities n<sub>i</sub> = n<sub>i&uarr;</sub> + n<sub>i&darr;</sub> as mVMC, the program behind its row, defines them (Eq. (S6) prints them between equal spins). Couplings from ${notes}.`;
+  if (/_t12(?=_|$)/.test(inst.instance_id))
+    return `This instance is the <code>t12</code> variant: a next-nearest-neighbour hopping t<sub>2</sub>, written as in Eq. (S6). Couplings from ${notes}.`;
   return null;
 }
 
-// An instance renamed because VarBench's name carries a different coupling from the one its
-// rows were computed at, and the instance left holding the rows run at the named one
+// An instance renamed because VarBench's name carries a different coupling or size from the one
+// its rows were computed at, and the instance left holding the rows run at the named one
 // (scripts/relabels.mjs).
 function relabelNote(inst) {
   const link = id => `<a href="/i/${id}/"><code>${esc(id)}</code></a>`;
-  const evidence = `<a href="${REPO}/tree/main/checks/hubbard-u-labels">checks/hubbard-u-labels</a>`;
+  // a directory or a file in the repository
+  const evidence = path => { const p = path.replace(/\/$/, ""); return `<a href="${REPO}/${p === path ? "blob" : "tree"}/main/${p}">${esc(p)}</a>`; };
   if (inst.relabelled) {
     const from = instances.some(i => i.instance_id === inst.relabelled.from) ? link(inst.relabelled.from) : `<code>${esc(inst.relabelled.from)}</code>`;
-    return `Upstream this instance is ${from}. ${esc(inst.relabelled.reason)} Evidence: ${evidence}.`;
+    return `Upstream this instance is ${from}. ${esc(inst.relabelled.reason)} Evidence: ${evidence(inst.relabelled.evidence)}.`;
   }
-  if (inst.split) return `${esc(inst.split.reason)} The published results for this Hamiltonian are on ${link(inst.split.to)}. Evidence: ${evidence}.`;
+  if (inst.split) return `${esc(inst.split.reason)} The published results for this Hamiltonian are on ${link(inst.split.to)}. Evidence: ${evidence(inst.split.evidence)}.`;
   return null;
 }
 

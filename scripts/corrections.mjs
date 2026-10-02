@@ -16,6 +16,13 @@
 //        `method` is the published string (the short name and detail follow in method_names.mjs);
 //        `sampled` (true or false) states whether the energy is a Monte Carlo estimate, read from the
 //        source (RULES.md 6), and its `from` is the verdict the method string gave the row.
+//        compute.<field> (a compute pass's statement: parameters, samples, ..., scope, confidence,
+//        reported_as, source, note) and verified.note are fields inside a block another script
+//        writes, and that script may write it again: such an entry states the value it replaces,
+//        `from`, or for text the one passage it rewrites, `edit: [old, new]` in place of `to`, and
+//        the build stops if the block no longer holds it. A correction never creates a block.
+//        params is the instance's own (RULES.md 2): the match names the instance alone, the entry
+//        states `from`, and the old value stays on the instance, in its `corrections`.
 // to:    the corrected value in the STORED convention (RULES.md 5); `conversion` shows the arithmetic.
 // source_entry: the verification proposal and ruling behind the entry.
 export const CORRECTIONS = [
@@ -1129,7 +1136,7 @@ export const CORRECTIONS = [
   // VA2-10-1103-physrevx-7-031013 (64)
   {
     "match": {
-      "instance": "Impurity/SB-DMFT-MI-HF_9",
+      "instance": "Impurity/SB-DMFT-MI-HF_10",
       "method": "DMRG (bond dimension 100) using fork tensor product states with U(1) symmetries for charge and spin sector",
       "energy": -34.58052046520677
     },
@@ -1145,7 +1152,7 @@ export const CORRECTIONS = [
   },
   {
     "match": {
-      "instance": "Impurity/SB-DMFT-MI-HF_9",
+      "instance": "Impurity/SB-DMFT-MI-HF_10",
       "method": "DMRG (bond dimension 100) using fork tensor product states with U(1) symmetries for charge and spin sector",
       "energy": -34.58052046520677
     },
@@ -1161,7 +1168,7 @@ export const CORRECTIONS = [
   },
   {
     "match": {
-      "instance": "Impurity/SB-DMFT-MI-HF_9",
+      "instance": "Impurity/SB-DMFT-MI-HF_10",
       "method": "Exact diagonalization",
       "energy": -34.58052046520682
     },
@@ -1177,7 +1184,7 @@ export const CORRECTIONS = [
   },
   {
     "match": {
-      "instance": "Impurity/SB-DMFT-MI-HF_9",
+      "instance": "Impurity/SB-DMFT-MI-HF_10",
       "method": "Exact diagonalization",
       "energy": -34.58052046520682
     },
@@ -11364,5 +11371,2004 @@ export const CORRECTIONS = [
     "checked_on": "2026-09-29",
     "reason": "RULES 3: method_as_published is the method string exactly as the source printed it. Table 3 labels this row 'HF' (text: 'Hartree-Fock (HF) approximation'); '(mean-field baseline)' is a reader's gloss that appears nowhere in the paper, and the paper's seven other HF rows already carry 'HF'. method_names.mjs maps both strings to 'Hartree-Fock', so the short name is unchanged; compute-rows keys by (instance, energy, reference), not by method. Everything else confirmed: V/t = 1, Np = 13, L = 6, PBC (Sec. 3, Eq. 58, table header) match the instance; own computation ('this work' / the paper's own HF); bound_type variational correct (HF determinant energy, the paper's 'expected upper bound'); peer_reviewed true (SciPost Phys. 14, 171 (2023)). Instance reference: ED -22.077372358. Independent convention check: uniform Hartree-Fock of Eq. (58) on the 6x6 PBC torus with Np = 13 gives E = -28 + 20V/3 (Hartree 72 (13/36)^2 V, Fock -72 (7/36)^2 V), reproducing -27.933333, -27.333333, -21.333333 at V/t = 0.01, 0.1, 1. No duplicate on the instance (no other HF/arSJVMC row, no quote of this number). Metric flag (M2: 3.37% above the instance's exact reference; no known constant shift explains it): settled from the source - the paper prints this HF energy beside its own exact reference in the same table; the gap is the Hartree-Fock error at this V/t (no constant shift: the uniform HF check fixes the convention), not a unit or convention slip.",
     "source_entry": "VP9-tv-hubbard-heisenberg#10 (qmbl-verify 2026-09-29; skeptic upheld)"
+  },
+  // ---------------------------------------------------------------------------------------
+  // qmbl-verify 2026-09-29, handoff (2026-10-02): the upheld corrections that apply_corrections.mjs
+  // could not take before it read fields inside a compute block, a verification's note and an
+  // instance's params (see the header). The compute statements are corrected where the pass read
+  // them: VJ1's reading of Sorella's journal supplement (22 rows), VA1's of PRX 14, 021010 (the
+  // ground-state row, and the 47 sector minima of its spectrum, which carry the same block), VP4's
+  // fit points (8), and the parameter counts of Nomura's RBM (VA5, 2), ResNet2 (VP14, 2) and CNN1 at
+  // J2 = 0.6 (VP5, 1) with what their blocks say about them; then VP16's verification note (1) and
+  // the t12 couplings (VB2, 2 instances). source_entry names the proposal and the skeptic's verdict.
+  // VJ1-journal-sorella (22 rows): the compute note said this row's energy is tabulated in the
+  // Supplementary Information, which prints only twist-averaged energies (no skeptic; journal re-read).
+  {
+    "match": {
+      "instance": "Hubbard/rectangular-14x16_224_P_98_8",
+      "method": "VAFQMC stripe length=7",
+      "energy": -169.858976
+    },
+    "field": "compute.note",
+    "edit": [
+      "Individual filling/U energies are tabulated in the Supplementary Information, not in the main arXiv text.",
+      "The Supplementary Information (journal and arXiv v2, identical tables) tabulates twist-averaged (TABC, 256 or 1024 twists) energies per filling and U; this row's single-cluster value is not among them (VJ1 reading of the journal version, 2026-09-30)."
+    ],
+    "reported_as": "SM p. 1: 'all the following calculations have been done by using twisted average boundary conditions [...] averaged, at fixed variational parameters, over the N_T^2 = 256, (N_T^2 = 1024) boundary conditions for U/t = 8, 6 (U/t = 4)'",
+    "location": "Supplemental Material p. 1 and Tables I-XVIII",
+    "version_read": "Journal version Phys. Rev. B 107, 115133 (2023) and its Supplemental Material (sources/journal/sorella-prb107-115133.pdf, -SM.pdf; pypdf layout and plain text; vector figures replayed)",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-30",
+    "reason": "The 2026-09-16 compute pass wrote this note without reading the SM. As it stands, it tells a reader that this row's energy is in the Supplementary Information. The SM prints only twist-averaged energies, none of them this row's single-cluster value. Wording only; no number changes.",
+    "source_entry": "VJ1-journal-sorella#2 (qmbl-verify 2026-09-29; journal re-read, no skeptic)"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_256_PA_107_8",
+      "method": "VAFQMC stripe length 8 APBC along the stripe",
+      "energy": -210.772224
+    },
+    "field": "compute.note",
+    "edit": [
+      "Individual filling/U energies are tabulated in the Supplementary Information, not in the main arXiv text.",
+      "The Supplementary Information (journal and arXiv v2, identical tables) tabulates twist-averaged (TABC, 256 or 1024 twists) energies per filling and U; this row's single-cluster value is not among them (VJ1 reading of the journal version, 2026-09-30)."
+    ],
+    "reported_as": "SM p. 1: 'all the following calculations have been done by using twisted average boundary conditions [...] averaged, at fixed variational parameters, over the N_T^2 = 256, (N_T^2 = 1024) boundary conditions for U/t = 8, 6 (U/t = 4)'",
+    "location": "Supplemental Material p. 1 and Tables I-XVIII",
+    "version_read": "Journal version Phys. Rev. B 107, 115133 (2023) and its Supplemental Material (sources/journal/sorella-prb107-115133.pdf, -SM.pdf; pypdf layout and plain text; vector figures replayed)",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-30",
+    "reason": "The 2026-09-16 compute pass wrote this note without reading the SM. As it stands, it tells a reader that this row's energy is in the Supplementary Information. The SM prints only twist-averaged energies, none of them this row's single-cluster value. Wording only; no number changes.",
+    "source_entry": "VJ1-journal-sorella#5 (qmbl-verify 2026-09-29; journal re-read, no skeptic)"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_256_PA_128_8",
+      "method": "VAFQMC",
+      "energy": -134.2125
+    },
+    "field": "compute.note",
+    "edit": [
+      "(half-filling or small-cluster benchmark entries from the Supplementary Information)",
+      "(not in the Supplementary Information, whose clusters are all twist-averaged lattices from 12x12 to 24x24 at tau t <= 2.6; the value is the author's VarBench upload)"
+    ],
+    "reported_as": "SM p. 1: 'all the following calculations have been done by using twisted average boundary conditions [...] averaged, at fixed variational parameters, over the N_T^2 = 256, (N_T^2 = 1024) boundary conditions for U/t = 8, 6 (U/t = 4)'",
+    "location": "Supplemental Material p. 1 and Tables I-XVIII",
+    "version_read": "Journal version Phys. Rev. B 107, 115133 (2023) and its Supplemental Material (sources/journal/sorella-prb107-115133.pdf, -SM.pdf; pypdf layout and plain text; vector figures replayed)",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-30",
+    "reason": "The 2026-09-16 compute pass wrote this note without reading the SM. As it stands, it tells a reader that this row's energy is in the Supplementary Information. The SM prints only twist-averaged energies, none of them this row's single-cluster value, and it has no 50-site, 8x8 or PBC x APBC entry at all. Wording only; no number changes.",
+    "source_entry": "VJ1-journal-sorella#8 (qmbl-verify 2026-09-29; journal re-read, no skeptic)"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_256_PA_128_8",
+      "method": "VAFQMC",
+      "energy": -134.2125
+    },
+    "field": "compute.note",
+    "edit": [
+      "Individual filling/U energies are tabulated in the Supplementary Information, not in the main arXiv text.",
+      "The Supplementary Information (journal and arXiv v2, identical tables) tabulates twist-averaged (TABC, 256 or 1024 twists) energies per filling and U; this row's single-cluster value is not among them (VJ1 reading of the journal version, 2026-09-30)."
+    ],
+    "reported_as": "SM p. 1: 'all the following calculations have been done by using twisted average boundary conditions [...] averaged, at fixed variational parameters, over the N_T^2 = 256, (N_T^2 = 1024) boundary conditions for U/t = 8, 6 (U/t = 4)'",
+    "location": "Supplemental Material p. 1 and Tables I-XVIII",
+    "version_read": "Journal version Phys. Rev. B 107, 115133 (2023) and its Supplemental Material (sources/journal/sorella-prb107-115133.pdf, -SM.pdf; pypdf layout and plain text; vector figures replayed)",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-30",
+    "reason": "The 2026-09-16 compute pass wrote this note without reading the SM. As it stands, it tells a reader that this row's energy is in the Supplementary Information. The SM prints only twist-averaged energies, none of them this row's single-cluster value, and it has no 50-site, 8x8 or PBC x APBC entry at all. Wording only; no number changes.",
+    "source_entry": "VJ1-journal-sorella#8 (qmbl-verify 2026-09-29; journal re-read, no skeptic)"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_256_P_106_8",
+      "method": "VAFQMC stripe length=8",
+      "energy": -214.496512
+    },
+    "field": "compute.note",
+    "edit": [
+      "Individual filling/U energies are tabulated in the Supplementary Information, not in the main arXiv text.",
+      "The Supplementary Information (journal and arXiv v2, identical tables) tabulates twist-averaged (TABC, 256 or 1024 twists) energies per filling and U; this row's single-cluster value is not among them (VJ1 reading of the journal version, 2026-09-30)."
+    ],
+    "reported_as": "SM p. 1: 'all the following calculations have been done by using twisted average boundary conditions [...] averaged, at fixed variational parameters, over the N_T^2 = 256, (N_T^2 = 1024) boundary conditions for U/t = 8, 6 (U/t = 4)'",
+    "location": "Supplemental Material p. 1 and Tables I-XVIII",
+    "version_read": "Journal version Phys. Rev. B 107, 115133 (2023) and its Supplemental Material (sources/journal/sorella-prb107-115133.pdf, -SM.pdf; pypdf layout and plain text; vector figures replayed)",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-30",
+    "reason": "The 2026-09-16 compute pass wrote this note without reading the SM. As it stands, it tells a reader that this row's energy is in the Supplementary Information. The SM prints only twist-averaged energies, none of them this row's single-cluster value. Wording only; no number changes.",
+    "source_entry": "VJ1-journal-sorella#11 (qmbl-verify 2026-09-29; journal re-read, no skeptic)"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_256_P_108_8",
+      "method": "VAFQMC stripe length=8",
+      "energy": -207.867904
+    },
+    "field": "compute.note",
+    "edit": [
+      "Individual filling/U energies are tabulated in the Supplementary Information, not in the main arXiv text.",
+      "The Supplementary Information (journal and arXiv v2, identical tables) tabulates twist-averaged (TABC, 256 or 1024 twists) energies per filling and U; this row's single-cluster value is not among them (VJ1 reading of the journal version, 2026-09-30)."
+    ],
+    "reported_as": "SM p. 1: 'all the following calculations have been done by using twisted average boundary conditions [...] averaged, at fixed variational parameters, over the N_T^2 = 256, (N_T^2 = 1024) boundary conditions for U/t = 8, 6 (U/t = 4)'",
+    "location": "Supplemental Material p. 1 and Tables I-XVIII",
+    "version_read": "Journal version Phys. Rev. B 107, 115133 (2023) and its Supplemental Material (sources/journal/sorella-prb107-115133.pdf, -SM.pdf; pypdf layout and plain text; vector figures replayed)",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-30",
+    "reason": "The 2026-09-16 compute pass wrote this note without reading the SM. As it stands, it tells a reader that this row's energy is in the Supplementary Information. The SM prints only twist-averaged energies, none of them this row's single-cluster value. Wording only; no number changes.",
+    "source_entry": "VJ1-journal-sorella#14 (qmbl-verify 2026-09-29; journal re-read, no skeptic)"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_256_P_109_8",
+      "method": "VAFQMC stripe length=8",
+      "energy": -204.534272
+    },
+    "field": "compute.note",
+    "edit": [
+      "Individual filling/U energies are tabulated in the Supplementary Information, not in the main arXiv text.",
+      "The Supplementary Information (journal and arXiv v2, identical tables) tabulates twist-averaged (TABC, 256 or 1024 twists) energies per filling and U; this row's single-cluster value is not among them (VJ1 reading of the journal version, 2026-09-30)."
+    ],
+    "reported_as": "SM p. 1: 'all the following calculations have been done by using twisted average boundary conditions [...] averaged, at fixed variational parameters, over the N_T^2 = 256, (N_T^2 = 1024) boundary conditions for U/t = 8, 6 (U/t = 4)'",
+    "location": "Supplemental Material p. 1 and Tables I-XVIII",
+    "version_read": "Journal version Phys. Rev. B 107, 115133 (2023) and its Supplemental Material (sources/journal/sorella-prb107-115133.pdf, -SM.pdf; pypdf layout and plain text; vector figures replayed)",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-30",
+    "reason": "The 2026-09-16 compute pass wrote this note without reading the SM. As it stands, it tells a reader that this row's energy is in the Supplementary Information. The SM prints only twist-averaged energies, none of them this row's single-cluster value. Wording only; no number changes.",
+    "source_entry": "VJ1-journal-sorella#17 (qmbl-verify 2026-09-29; journal re-read, no skeptic)"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_256_P_110_8",
+      "method": "VAFQMC stripe length=8",
+      "energy": -201.037056
+    },
+    "field": "compute.note",
+    "edit": [
+      "Individual filling/U energies are tabulated in the Supplementary Information, not in the main arXiv text.",
+      "The Supplementary Information (journal and arXiv v2, identical tables) tabulates twist-averaged (TABC, 256 or 1024 twists) energies per filling and U; this row's single-cluster value is not among them (VJ1 reading of the journal version, 2026-09-30)."
+    ],
+    "reported_as": "SM p. 1: 'all the following calculations have been done by using twisted average boundary conditions [...] averaged, at fixed variational parameters, over the N_T^2 = 256, (N_T^2 = 1024) boundary conditions for U/t = 8, 6 (U/t = 4)'",
+    "location": "Supplemental Material p. 1 and Tables I-XVIII",
+    "version_read": "Journal version Phys. Rev. B 107, 115133 (2023) and its Supplemental Material (sources/journal/sorella-prb107-115133.pdf, -SM.pdf; pypdf layout and plain text; vector figures replayed)",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-30",
+    "reason": "The 2026-09-16 compute pass wrote this note without reading the SM. As it stands, it tells a reader that this row's energy is in the Supplementary Information. The SM prints only twist-averaged energies, none of them this row's single-cluster value. Wording only; no number changes.",
+    "source_entry": "VJ1-journal-sorella#20 (qmbl-verify 2026-09-29; journal re-read, no skeptic)"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_256_P_111_8",
+      "method": "VAFQMC stripe length=8",
+      "energy": -197.620992
+    },
+    "field": "compute.note",
+    "edit": [
+      "Individual filling/U energies are tabulated in the Supplementary Information, not in the main arXiv text.",
+      "The Supplementary Information (journal and arXiv v2, identical tables) tabulates twist-averaged (TABC, 256 or 1024 twists) energies per filling and U; this row's single-cluster value is not among them (VJ1 reading of the journal version, 2026-09-30)."
+    ],
+    "reported_as": "SM p. 1: 'all the following calculations have been done by using twisted average boundary conditions [...] averaged, at fixed variational parameters, over the N_T^2 = 256, (N_T^2 = 1024) boundary conditions for U/t = 8, 6 (U/t = 4)'",
+    "location": "Supplemental Material p. 1 and Tables I-XVIII",
+    "version_read": "Journal version Phys. Rev. B 107, 115133 (2023) and its Supplemental Material (sources/journal/sorella-prb107-115133.pdf, -SM.pdf; pypdf layout and plain text; vector figures replayed)",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-30",
+    "reason": "The 2026-09-16 compute pass wrote this note without reading the SM. As it stands, it tells a reader that this row's energy is in the Supplementary Information. The SM prints only twist-averaged energies, none of them this row's single-cluster value. Wording only; no number changes.",
+    "source_entry": "VJ1-journal-sorella#23 (qmbl-verify 2026-09-29; journal re-read, no skeptic)"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_256_P_112_4",
+      "method": "VAFQMC stripe length=8",
+      "energy": -263.465472
+    },
+    "field": "compute.note",
+    "edit": [
+      "Individual filling/U energies are tabulated in the Supplementary Information, not in the main arXiv text.",
+      "The Supplementary Information (journal and arXiv v2, identical tables) tabulates twist-averaged (TABC, 256 or 1024 twists) energies per filling and U; this row's single-cluster value is not among them (VJ1 reading of the journal version, 2026-09-30)."
+    ],
+    "reported_as": "SM p. 1: 'all the following calculations have been done by using twisted average boundary conditions [...] averaged, at fixed variational parameters, over the N_T^2 = 256, (N_T^2 = 1024) boundary conditions for U/t = 8, 6 (U/t = 4)'",
+    "location": "Supplemental Material p. 1 and Tables I-XVIII",
+    "version_read": "Journal version Phys. Rev. B 107, 115133 (2023) and its Supplemental Material (sources/journal/sorella-prb107-115133.pdf, -SM.pdf; pypdf layout and plain text; vector figures replayed)",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-30",
+    "reason": "The 2026-09-16 compute pass wrote this note without reading the SM. As it stands, it tells a reader that this row's energy is in the Supplementary Information. The SM prints only twist-averaged energies, none of them this row's single-cluster value. Wording only; no number changes.",
+    "source_entry": "VJ1-journal-sorella#26 (qmbl-verify 2026-09-29; journal re-read, no skeptic)"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_256_P_112_6",
+      "method": "VAFQMC stripe length=8",
+      "energy": -221.676288
+    },
+    "field": "compute.note",
+    "edit": [
+      "Individual filling/U energies are tabulated in the Supplementary Information, not in the main arXiv text.",
+      "The Supplementary Information (journal and arXiv v2, identical tables) tabulates twist-averaged (TABC, 256 or 1024 twists) energies per filling and U; this row's single-cluster value is not among them (VJ1 reading of the journal version, 2026-09-30)."
+    ],
+    "reported_as": "SM p. 1: 'all the following calculations have been done by using twisted average boundary conditions [...] averaged, at fixed variational parameters, over the N_T^2 = 256, (N_T^2 = 1024) boundary conditions for U/t = 8, 6 (U/t = 4)'",
+    "location": "Supplemental Material p. 1 and Tables I-XVIII",
+    "version_read": "Journal version Phys. Rev. B 107, 115133 (2023) and its Supplemental Material (sources/journal/sorella-prb107-115133.pdf, -SM.pdf; pypdf layout and plain text; vector figures replayed)",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-30",
+    "reason": "The 2026-09-16 compute pass wrote this note without reading the SM. As it stands, it tells a reader that this row's energy is in the Supplementary Information. The SM prints only twist-averaged energies, none of them this row's single-cluster value. Wording only; no number changes.",
+    "source_entry": "VJ1-journal-sorella#29 (qmbl-verify 2026-09-29; journal re-read, no skeptic)"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_256_P_112_8",
+      "method": "VAFQMC stripe length 8",
+      "energy": -194.215
+    },
+    "field": "compute.note",
+    "edit": [
+      "Individual filling/U energies are tabulated in the Supplementary Information, not in the main arXiv text.",
+      "The Supplementary Information (journal and arXiv v2, identical tables) tabulates twist-averaged (TABC, 256 or 1024 twists) energies per filling and U; this row's single-cluster value is not among them (VJ1 reading of the journal version, 2026-09-30)."
+    ],
+    "reported_as": "SM p. 1: 'all the following calculations have been done by using twisted average boundary conditions [...] averaged, at fixed variational parameters, over the N_T^2 = 256, (N_T^2 = 1024) boundary conditions for U/t = 8, 6 (U/t = 4)'",
+    "location": "Supplemental Material p. 1 and Tables I-XVIII",
+    "version_read": "Journal version Phys. Rev. B 107, 115133 (2023) and its Supplemental Material (sources/journal/sorella-prb107-115133.pdf, -SM.pdf; pypdf layout and plain text; vector figures replayed)",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-30",
+    "reason": "The 2026-09-16 compute pass wrote this note without reading the SM. As it stands, it tells a reader that this row's energy is in the Supplementary Information. The SM prints only twist-averaged energies, none of them this row's single-cluster value. Wording only; no number changes.",
+    "source_entry": "VJ1-journal-sorella#32 (qmbl-verify 2026-09-29; journal re-read, no skeptic)"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_256_P_113_8",
+      "method": "VAFQMC stripe length=8",
+      "energy": -190.605312
+    },
+    "field": "compute.note",
+    "edit": [
+      "Individual filling/U energies are tabulated in the Supplementary Information, not in the main arXiv text.",
+      "The Supplementary Information (journal and arXiv v2, identical tables) tabulates twist-averaged (TABC, 256 or 1024 twists) energies per filling and U; this row's single-cluster value is not among them (VJ1 reading of the journal version, 2026-09-30)."
+    ],
+    "reported_as": "SM p. 1: 'all the following calculations have been done by using twisted average boundary conditions [...] averaged, at fixed variational parameters, over the N_T^2 = 256, (N_T^2 = 1024) boundary conditions for U/t = 8, 6 (U/t = 4)'",
+    "location": "Supplemental Material p. 1 and Tables I-XVIII",
+    "version_read": "Journal version Phys. Rev. B 107, 115133 (2023) and its Supplemental Material (sources/journal/sorella-prb107-115133.pdf, -SM.pdf; pypdf layout and plain text; vector figures replayed)",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-30",
+    "reason": "The 2026-09-16 compute pass wrote this note without reading the SM. As it stands, it tells a reader that this row's energy is in the Supplementary Information. The SM prints only twist-averaged energies, none of them this row's single-cluster value. Wording only; no number changes.",
+    "source_entry": "VJ1-journal-sorella#35 (qmbl-verify 2026-09-29; journal re-read, no skeptic)"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_256_P_114_4",
+      "method": "VAFQMC stripe length=8",
+      "energy": -258.174464
+    },
+    "field": "compute.note",
+    "edit": [
+      "Individual filling/U energies are tabulated in the Supplementary Information, not in the main arXiv text.",
+      "The Supplementary Information (journal and arXiv v2, identical tables) tabulates twist-averaged (TABC, 256 or 1024 twists) energies per filling and U; this row's single-cluster value is not among them (VJ1 reading of the journal version, 2026-09-30)."
+    ],
+    "reported_as": "SM p. 1: 'all the following calculations have been done by using twisted average boundary conditions [...] averaged, at fixed variational parameters, over the N_T^2 = 256, (N_T^2 = 1024) boundary conditions for U/t = 8, 6 (U/t = 4)'",
+    "location": "Supplemental Material p. 1 and Tables I-XVIII",
+    "version_read": "Journal version Phys. Rev. B 107, 115133 (2023) and its Supplemental Material (sources/journal/sorella-prb107-115133.pdf, -SM.pdf; pypdf layout and plain text; vector figures replayed)",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-30",
+    "reason": "The 2026-09-16 compute pass wrote this note without reading the SM. As it stands, it tells a reader that this row's energy is in the Supplementary Information. The SM prints only twist-averaged energies, none of them this row's single-cluster value. Wording only; no number changes.",
+    "source_entry": "VJ1-journal-sorella#38 (qmbl-verify 2026-09-29; journal re-read, no skeptic)"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_256_P_114_6",
+      "method": "VAFQMC stripe length=8",
+      "energy": -215.188224
+    },
+    "field": "compute.note",
+    "edit": [
+      "Individual filling/U energies are tabulated in the Supplementary Information, not in the main arXiv text.",
+      "The Supplementary Information (journal and arXiv v2, identical tables) tabulates twist-averaged (TABC, 256 or 1024 twists) energies per filling and U; this row's single-cluster value is not among them (VJ1 reading of the journal version, 2026-09-30)."
+    ],
+    "reported_as": "SM p. 1: 'all the following calculations have been done by using twisted average boundary conditions [...] averaged, at fixed variational parameters, over the N_T^2 = 256, (N_T^2 = 1024) boundary conditions for U/t = 8, 6 (U/t = 4)'",
+    "location": "Supplemental Material p. 1 and Tables I-XVIII",
+    "version_read": "Journal version Phys. Rev. B 107, 115133 (2023) and its Supplemental Material (sources/journal/sorella-prb107-115133.pdf, -SM.pdf; pypdf layout and plain text; vector figures replayed)",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-30",
+    "reason": "The 2026-09-16 compute pass wrote this note without reading the SM. As it stands, it tells a reader that this row's energy is in the Supplementary Information. The SM prints only twist-averaged energies, none of them this row's single-cluster value. Wording only; no number changes.",
+    "source_entry": "VJ1-journal-sorella#41 (qmbl-verify 2026-09-29; journal re-read, no skeptic)"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_256_P_114_8",
+      "method": "VAFQMC stripe length=8",
+      "energy": -186.978304
+    },
+    "field": "compute.note",
+    "edit": [
+      "Individual filling/U energies are tabulated in the Supplementary Information, not in the main arXiv text.",
+      "The Supplementary Information (journal and arXiv v2, identical tables) tabulates twist-averaged (TABC, 256 or 1024 twists) energies per filling and U; this row's single-cluster value is not among them (VJ1 reading of the journal version, 2026-09-30)."
+    ],
+    "reported_as": "SM p. 1: 'all the following calculations have been done by using twisted average boundary conditions [...] averaged, at fixed variational parameters, over the N_T^2 = 256, (N_T^2 = 1024) boundary conditions for U/t = 8, 6 (U/t = 4)'",
+    "location": "Supplemental Material p. 1 and Tables I-XVIII",
+    "version_read": "Journal version Phys. Rev. B 107, 115133 (2023) and its Supplemental Material (sources/journal/sorella-prb107-115133.pdf, -SM.pdf; pypdf layout and plain text; vector figures replayed)",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-30",
+    "reason": "The 2026-09-16 compute pass wrote this note without reading the SM. As it stands, it tells a reader that this row's energy is in the Supplementary Information. The SM prints only twist-averaged energies, none of them this row's single-cluster value. Wording only; no number changes.",
+    "source_entry": "VJ1-journal-sorella#44 (qmbl-verify 2026-09-29; journal re-read, no skeptic)"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_256_P_115_8",
+      "method": "VAFQMC stripe length=8",
+      "energy": -183.254272
+    },
+    "field": "compute.note",
+    "edit": [
+      "Individual filling/U energies are tabulated in the Supplementary Information, not in the main arXiv text.",
+      "The Supplementary Information (journal and arXiv v2, identical tables) tabulates twist-averaged (TABC, 256 or 1024 twists) energies per filling and U; this row's single-cluster value is not among them (VJ1 reading of the journal version, 2026-09-30)."
+    ],
+    "reported_as": "SM p. 1: 'all the following calculations have been done by using twisted average boundary conditions [...] averaged, at fixed variational parameters, over the N_T^2 = 256, (N_T^2 = 1024) boundary conditions for U/t = 8, 6 (U/t = 4)'",
+    "location": "Supplemental Material p. 1 and Tables I-XVIII",
+    "version_read": "Journal version Phys. Rev. B 107, 115133 (2023) and its Supplemental Material (sources/journal/sorella-prb107-115133.pdf, -SM.pdf; pypdf layout and plain text; vector figures replayed)",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-30",
+    "reason": "The 2026-09-16 compute pass wrote this note without reading the SM. As it stands, it tells a reader that this row's energy is in the Supplementary Information. The SM prints only twist-averaged energies, none of them this row's single-cluster value. Wording only; no number changes.",
+    "source_entry": "VJ1-journal-sorella#47 (qmbl-verify 2026-09-29; journal re-read, no skeptic)"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_256_P_116_8",
+      "method": "VAFQMC stripe length=8",
+      "energy": -179.546368
+    },
+    "field": "compute.note",
+    "edit": [
+      "Individual filling/U energies are tabulated in the Supplementary Information, not in the main arXiv text.",
+      "The Supplementary Information (journal and arXiv v2, identical tables) tabulates twist-averaged (TABC, 256 or 1024 twists) energies per filling and U; this row's single-cluster value is not among them (VJ1 reading of the journal version, 2026-09-30)."
+    ],
+    "reported_as": "SM p. 1: 'all the following calculations have been done by using twisted average boundary conditions [...] averaged, at fixed variational parameters, over the N_T^2 = 256, (N_T^2 = 1024) boundary conditions for U/t = 8, 6 (U/t = 4)'",
+    "location": "Supplemental Material p. 1 and Tables I-XVIII",
+    "version_read": "Journal version Phys. Rev. B 107, 115133 (2023) and its Supplemental Material (sources/journal/sorella-prb107-115133.pdf, -SM.pdf; pypdf layout and plain text; vector figures replayed)",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-30",
+    "reason": "The 2026-09-16 compute pass wrote this note without reading the SM. As it stands, it tells a reader that this row's energy is in the Supplementary Information. The SM prints only twist-averaged energies, none of them this row's single-cluster value. Wording only; no number changes.",
+    "source_entry": "VJ1-journal-sorella#50 (qmbl-verify 2026-09-29; journal re-read, no skeptic)"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_256_P_117_8",
+      "method": "VAFQMC stripe length=8",
+      "energy": -175.81568
+    },
+    "field": "compute.note",
+    "edit": [
+      "Individual filling/U energies are tabulated in the Supplementary Information, not in the main arXiv text.",
+      "The Supplementary Information (journal and arXiv v2, identical tables) tabulates twist-averaged (TABC, 256 or 1024 twists) energies per filling and U; this row's single-cluster value is not among them (VJ1 reading of the journal version, 2026-09-30)."
+    ],
+    "reported_as": "SM p. 1: 'all the following calculations have been done by using twisted average boundary conditions [...] averaged, at fixed variational parameters, over the N_T^2 = 256, (N_T^2 = 1024) boundary conditions for U/t = 8, 6 (U/t = 4)'",
+    "location": "Supplemental Material p. 1 and Tables I-XVIII",
+    "version_read": "Journal version Phys. Rev. B 107, 115133 (2023) and its Supplemental Material (sources/journal/sorella-prb107-115133.pdf, -SM.pdf; pypdf layout and plain text; vector figures replayed)",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-30",
+    "reason": "The 2026-09-16 compute pass wrote this note without reading the SM. As it stands, it tells a reader that this row's energy is in the Supplementary Information. The SM prints only twist-averaged energies, none of them this row's single-cluster value. Wording only; no number changes.",
+    "source_entry": "VJ1-journal-sorella#53 (qmbl-verify 2026-09-29; journal re-read, no skeptic)"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_256_P_118_8",
+      "method": "VAFQMC stripe length=8",
+      "energy": -172.069888
+    },
+    "field": "compute.note",
+    "edit": [
+      "Individual filling/U energies are tabulated in the Supplementary Information, not in the main arXiv text.",
+      "The Supplementary Information (journal and arXiv v2, identical tables) tabulates twist-averaged (TABC, 256 or 1024 twists) energies per filling and U; this row's single-cluster value is not among them (VJ1 reading of the journal version, 2026-09-30)."
+    ],
+    "reported_as": "SM p. 1: 'all the following calculations have been done by using twisted average boundary conditions [...] averaged, at fixed variational parameters, over the N_T^2 = 256, (N_T^2 = 1024) boundary conditions for U/t = 8, 6 (U/t = 4)'",
+    "location": "Supplemental Material p. 1 and Tables I-XVIII",
+    "version_read": "Journal version Phys. Rev. B 107, 115133 (2023) and its Supplemental Material (sources/journal/sorella-prb107-115133.pdf, -SM.pdf; pypdf layout and plain text; vector figures replayed)",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-30",
+    "reason": "The 2026-09-16 compute pass wrote this note without reading the SM. As it stands, it tells a reader that this row's energy is in the Supplementary Information. The SM prints only twist-averaged energies, none of them this row's single-cluster value. Wording only; no number changes.",
+    "source_entry": "VJ1-journal-sorella#56 (qmbl-verify 2026-09-29; journal re-read, no skeptic)"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_256_P_120_8",
+      "method": "VAFQMC stripe length=8",
+      "energy": -163.975424
+    },
+    "field": "compute.note",
+    "edit": [
+      "Individual filling/U energies are tabulated in the Supplementary Information, not in the main arXiv text.",
+      "The Supplementary Information (journal and arXiv v2, identical tables) tabulates twist-averaged (TABC, 256 or 1024 twists) energies per filling and U; this row's single-cluster value is not among them (VJ1 reading of the journal version, 2026-09-30)."
+    ],
+    "reported_as": "SM p. 1: 'all the following calculations have been done by using twisted average boundary conditions [...] averaged, at fixed variational parameters, over the N_T^2 = 256, (N_T^2 = 1024) boundary conditions for U/t = 8, 6 (U/t = 4)'",
+    "location": "Supplemental Material p. 1 and Tables I-XVIII",
+    "version_read": "Journal version Phys. Rev. B 107, 115133 (2023) and its Supplemental Material (sources/journal/sorella-prb107-115133.pdf, -SM.pdf; pypdf layout and plain text; vector figures replayed)",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-30",
+    "reason": "The 2026-09-16 compute pass wrote this note without reading the SM. As it stands, it tells a reader that this row's energy is in the Supplementary Information. The SM prints only twist-averaged energies, none of them this row's single-cluster value. Wording only; no number changes.",
+    "source_entry": "VJ1-journal-sorella#59 (qmbl-verify 2026-09-29; journal re-read, no skeptic)"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_50_P_21_8",
+      "method": "VAFQMC",
+      "energy": -41.1638
+    },
+    "field": "compute.note",
+    "edit": [
+      "(half-filling or small-cluster benchmark entries from the Supplementary Information)",
+      "(not in the Supplementary Information, whose clusters are all twist-averaged lattices from 12x12 to 24x24 at tau t <= 2.6; the value is the author's VarBench upload)"
+    ],
+    "reported_as": "SM p. 1: 'all the following calculations have been done by using twisted average boundary conditions [...] averaged, at fixed variational parameters, over the N_T^2 = 256, (N_T^2 = 1024) boundary conditions for U/t = 8, 6 (U/t = 4)'",
+    "location": "Supplemental Material p. 1 and Tables I-XVIII",
+    "version_read": "Journal version Phys. Rev. B 107, 115133 (2023) and its Supplemental Material (sources/journal/sorella-prb107-115133.pdf, -SM.pdf; pypdf layout and plain text; vector figures replayed)",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-30",
+    "reason": "The 2026-09-16 compute pass wrote this note without reading the SM. As it stands, it tells a reader that this row's energy is in the Supplementary Information. The SM prints only twist-averaged energies, none of them this row's single-cluster value, and it has no 50-site, 8x8 or PBC x APBC entry at all. Wording only; no number changes.",
+    "source_entry": "VJ1-journal-sorella#62 (qmbl-verify 2026-09-29; journal re-read, no skeptic)"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_50_P_21_8",
+      "method": "VAFQMC",
+      "energy": -41.1638
+    },
+    "field": "compute.note",
+    "edit": [
+      "Individual filling/U energies are tabulated in the Supplementary Information, not in the main arXiv text.",
+      "The Supplementary Information (journal and arXiv v2, identical tables) tabulates twist-averaged (TABC, 256 or 1024 twists) energies per filling and U; this row's single-cluster value is not among them (VJ1 reading of the journal version, 2026-09-30)."
+    ],
+    "reported_as": "SM p. 1: 'all the following calculations have been done by using twisted average boundary conditions [...] averaged, at fixed variational parameters, over the N_T^2 = 256, (N_T^2 = 1024) boundary conditions for U/t = 8, 6 (U/t = 4)'",
+    "location": "Supplemental Material p. 1 and Tables I-XVIII",
+    "version_read": "Journal version Phys. Rev. B 107, 115133 (2023) and its Supplemental Material (sources/journal/sorella-prb107-115133.pdf, -SM.pdf; pypdf layout and plain text; vector figures replayed)",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-30",
+    "reason": "The 2026-09-16 compute pass wrote this note without reading the SM. As it stands, it tells a reader that this row's energy is in the Supplementary Information. The SM prints only twist-averaged energies, none of them this row's single-cluster value, and it has no 50-site, 8x8 or PBC x APBC entry at all. Wording only; no number changes.",
+    "source_entry": "VJ1-journal-sorella#62 (qmbl-verify 2026-09-29; journal re-read, no skeptic)"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_64_PO_32_8",
+      "method": "VAFQMC",
+      "energy": -31.964
+    },
+    "field": "compute.note",
+    "edit": [
+      "(half-filling or small-cluster benchmark entries from the Supplementary Information)",
+      "(not in the Supplementary Information, whose clusters are all twist-averaged lattices from 12x12 to 24x24 at tau t <= 2.6; the value is the author's VarBench upload)"
+    ],
+    "reported_as": "SM p. 1: 'all the following calculations have been done by using twisted average boundary conditions [...] averaged, at fixed variational parameters, over the N_T^2 = 256, (N_T^2 = 1024) boundary conditions for U/t = 8, 6 (U/t = 4)'",
+    "location": "Supplemental Material p. 1 and Tables I-XVIII",
+    "version_read": "Journal version Phys. Rev. B 107, 115133 (2023) and its Supplemental Material (sources/journal/sorella-prb107-115133.pdf, -SM.pdf; pypdf layout and plain text; vector figures replayed)",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-30",
+    "reason": "The 2026-09-16 compute pass wrote this note without reading the SM. As it stands, it tells a reader that this row's energy is in the Supplementary Information. The SM prints only twist-averaged energies, none of them this row's single-cluster value, and it has no 50-site, 8x8 or PBC x APBC entry at all. Wording only; no number changes.",
+    "source_entry": "VJ1-journal-sorella#65 (qmbl-verify 2026-09-29; journal re-read, no skeptic)"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_64_PO_32_8",
+      "method": "VAFQMC",
+      "energy": -31.964
+    },
+    "field": "compute.note",
+    "edit": [
+      "Individual filling/U energies are tabulated in the Supplementary Information, not in the main arXiv text.",
+      "The Supplementary Information (journal and arXiv v2, identical tables) tabulates twist-averaged (TABC, 256 or 1024 twists) energies per filling and U; this row's single-cluster value is not among them (VJ1 reading of the journal version, 2026-09-30)."
+    ],
+    "reported_as": "SM p. 1: 'all the following calculations have been done by using twisted average boundary conditions [...] averaged, at fixed variational parameters, over the N_T^2 = 256, (N_T^2 = 1024) boundary conditions for U/t = 8, 6 (U/t = 4)'",
+    "location": "Supplemental Material p. 1 and Tables I-XVIII",
+    "version_read": "Journal version Phys. Rev. B 107, 115133 (2023) and its Supplemental Material (sources/journal/sorella-prb107-115133.pdf, -SM.pdf; pypdf layout and plain text; vector figures replayed)",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-30",
+    "reason": "The 2026-09-16 compute pass wrote this note without reading the SM. As it stands, it tells a reader that this row's energy is in the Supplementary Information. The SM prints only twist-averaged energies, none of them this row's single-cluster value, and it has no 50-site, 8x8 or PBC x APBC entry at all. Wording only; no number changes.",
+    "source_entry": "VJ1-journal-sorella#65 (qmbl-verify 2026-09-29; journal re-read, no skeptic)"
+  },
+  // VA1-10-1103-physrevx-14-021010#9: where the 48 sector energies of J1J2/triangular_48_P_0.125 come
+  // from. The proposal names the ground-state row; the 47 sector minima carry the same block and get the
+  // same sentence (they move to the instance's spectrum after this script, apply_spectrum.mjs).
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Gamma.D6.A1 1",
+      "energy": -99.3243731393
+    },
+    "field": "compute.note",
+    "edit": [
+      "Sector energies themselves are from the paper's spectrum data (Fig. 3 / appendix), fetched/2303.01585.txt.",
+      "The paper plots only (E - E0)/J1 (Fig. 2(b), Fig. 5(a), Fig. 6(b)); the absolute sector energies are the first author's VarBench deposits (ground state 2022-02-11, 7277cf5; all 48 sectors PR #10, 4aa5e29, 2024-07-29)."
+    ],
+    "reported_as": "FIG. 2. Energy spectrum of the J1-J2 model on the triangular lattice for N = 36 ... and for N = 48 at J2/J1 = 0.125 in panel (b) [axis (E - E0)/J1]; FIG. 3. Overlaps of low-energy levels of the J1-J2 model with various ansatz wave functions",
+    "location": "journal PDF p. 4 (Fig. 2) and p. 6 (Fig. 3); arXiv v2 same numbering",
+    "version_read": "arXiv:2303.01585v2 TeX-source figure files (vbs_V_-1p0.pdf md5 fc32c298, j1j2_spectra.png md5 c671dd6f; byte-identical to v1) and the journal PDF, Phys. Rev. X 14, 021010 (2024); text read in v1, v2 (PDF and HTML) and the journal PDF",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "Fig. 3 is the overlap figure, not the spectrum, and the paper prints no absolute sector energy; the compute pass of 2026-09-16 named them as the energies' source. The deposits are in VarBench's history (7277cf5 and 4aa5e29, both A. Wietek). Wording only; no number changes.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#9 (qmbl-verify 2026-09-29; skeptic upheld)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Gamma.D6.E2 1",
+      "energy": -98.7034711151
+    },
+    "field": "compute.note",
+    "edit": [
+      "Sector energies themselves are from the paper's spectrum data (Fig. 3 / appendix), fetched/2303.01585.txt.",
+      "The paper plots only (E - E0)/J1 (Fig. 2(b), Fig. 5(a), Fig. 6(b)); the absolute sector energies are the first author's VarBench deposits (ground state 2022-02-11, 7277cf5; all 48 sectors PR #10, 4aa5e29, 2024-07-29)."
+    ],
+    "reported_as": "FIG. 2. Energy spectrum of the J1-J2 model on the triangular lattice for N = 36 ... and for N = 48 at J2/J1 = 0.125 in panel (b) [axis (E - E0)/J1]; FIG. 3. Overlaps of low-energy levels of the J1-J2 model with various ansatz wave functions",
+    "location": "journal PDF p. 4 (Fig. 2) and p. 6 (Fig. 3); arXiv v2 same numbering",
+    "version_read": "arXiv:2303.01585v2 TeX-source figure files (vbs_V_-1p0.pdf md5 fc32c298, j1j2_spectra.png md5 c671dd6f; byte-identical to v1) and the journal PDF, Phys. Rev. X 14, 021010 (2024); text read in v1, v2 (PDF and HTML) and the journal PDF",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "Fig. 3 is the overlap figure, not the spectrum, and the paper prints no absolute sector energy; the compute pass of 2026-09-16 named them as the energies' source. The deposits are in VarBench's history (7277cf5 and 4aa5e29, both A. Wietek). Wording only; no number changes. The same block sits on every sector minimum of the instance.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#9 (qmbl-verify 2026-09-29; skeptic upheld), carried to the sector minima that share its block (handoff 2026-10-02)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization X2.D1.A 1",
+      "energy": -97.834443385
+    },
+    "field": "compute.note",
+    "edit": [
+      "Sector energies themselves are from the paper's spectrum data (Fig. 3 / appendix), fetched/2303.01585.txt.",
+      "The paper plots only (E - E0)/J1 (Fig. 2(b), Fig. 5(a), Fig. 6(b)); the absolute sector energies are the first author's VarBench deposits (ground state 2022-02-11, 7277cf5; all 48 sectors PR #10, 4aa5e29, 2024-07-29)."
+    ],
+    "reported_as": "FIG. 2. Energy spectrum of the J1-J2 model on the triangular lattice for N = 36 ... and for N = 48 at J2/J1 = 0.125 in panel (b) [axis (E - E0)/J1]; FIG. 3. Overlaps of low-energy levels of the J1-J2 model with various ansatz wave functions",
+    "location": "journal PDF p. 4 (Fig. 2) and p. 6 (Fig. 3); arXiv v2 same numbering",
+    "version_read": "arXiv:2303.01585v2 TeX-source figure files (vbs_V_-1p0.pdf md5 fc32c298, j1j2_spectra.png md5 c671dd6f; byte-identical to v1) and the journal PDF, Phys. Rev. X 14, 021010 (2024); text read in v1, v2 (PDF and HTML) and the journal PDF",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "Fig. 3 is the overlap figure, not the spectrum, and the paper prints no absolute sector energy; the compute pass of 2026-09-16 named them as the energies' source. The deposits are in VarBench's history (7277cf5 and 4aa5e29, both A. Wietek). Wording only; no number changes. The same block sits on every sector minimum of the instance.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#9 (qmbl-verify 2026-09-29; skeptic upheld), carried to the sector minima that share its block (handoff 2026-10-02)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization X1.D1.A 1",
+      "energy": -97.6530994904
+    },
+    "field": "compute.note",
+    "edit": [
+      "Sector energies themselves are from the paper's spectrum data (Fig. 3 / appendix), fetched/2303.01585.txt.",
+      "The paper plots only (E - E0)/J1 (Fig. 2(b), Fig. 5(a), Fig. 6(b)); the absolute sector energies are the first author's VarBench deposits (ground state 2022-02-11, 7277cf5; all 48 sectors PR #10, 4aa5e29, 2024-07-29)."
+    ],
+    "reported_as": "FIG. 2. Energy spectrum of the J1-J2 model on the triangular lattice for N = 36 ... and for N = 48 at J2/J1 = 0.125 in panel (b) [axis (E - E0)/J1]; FIG. 3. Overlaps of low-energy levels of the J1-J2 model with various ansatz wave functions",
+    "location": "journal PDF p. 4 (Fig. 2) and p. 6 (Fig. 3); arXiv v2 same numbering",
+    "version_read": "arXiv:2303.01585v2 TeX-source figure files (vbs_V_-1p0.pdf md5 fc32c298, j1j2_spectra.png md5 c671dd6f; byte-identical to v1) and the journal PDF, Phys. Rev. X 14, 021010 (2024); text read in v1, v2 (PDF and HTML) and the journal PDF",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "Fig. 3 is the overlap figure, not the spectrum, and the paper prints no absolute sector energy; the compute pass of 2026-09-16 named them as the energies' source. The deposits are in VarBench's history (7277cf5 and 4aa5e29, both A. Wietek). Wording only; no number changes. The same block sits on every sector minimum of the instance.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#9 (qmbl-verify 2026-09-29; skeptic upheld), carried to the sector minima that share its block (handoff 2026-10-02)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Gamma.D6.A2 1",
+      "energy": -97.5148828301
+    },
+    "field": "compute.note",
+    "edit": [
+      "Sector energies themselves are from the paper's spectrum data (Fig. 3 / appendix), fetched/2303.01585.txt.",
+      "The paper plots only (E - E0)/J1 (Fig. 2(b), Fig. 5(a), Fig. 6(b)); the absolute sector energies are the first author's VarBench deposits (ground state 2022-02-11, 7277cf5; all 48 sectors PR #10, 4aa5e29, 2024-07-29)."
+    ],
+    "reported_as": "FIG. 2. Energy spectrum of the J1-J2 model on the triangular lattice for N = 36 ... and for N = 48 at J2/J1 = 0.125 in panel (b) [axis (E - E0)/J1]; FIG. 3. Overlaps of low-energy levels of the J1-J2 model with various ansatz wave functions",
+    "location": "journal PDF p. 4 (Fig. 2) and p. 6 (Fig. 3); arXiv v2 same numbering",
+    "version_read": "arXiv:2303.01585v2 TeX-source figure files (vbs_V_-1p0.pdf md5 fc32c298, j1j2_spectra.png md5 c671dd6f; byte-identical to v1) and the journal PDF, Phys. Rev. X 14, 021010 (2024); text read in v1, v2 (PDF and HTML) and the journal PDF",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "Fig. 3 is the overlap figure, not the spectrum, and the paper prints no absolute sector energy; the compute pass of 2026-09-16 named them as the energies' source. The deposits are in VarBench's history (7277cf5 and 4aa5e29, both A. Wietek). Wording only; no number changes. The same block sits on every sector minimum of the instance.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#9 (qmbl-verify 2026-09-29; skeptic upheld), carried to the sector minima that share its block (handoff 2026-10-02)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization K.D3.A1 -1",
+      "energy": -97.4765394893
+    },
+    "field": "compute.note",
+    "edit": [
+      "Sector energies themselves are from the paper's spectrum data (Fig. 3 / appendix), fetched/2303.01585.txt.",
+      "The paper plots only (E - E0)/J1 (Fig. 2(b), Fig. 5(a), Fig. 6(b)); the absolute sector energies are the first author's VarBench deposits (ground state 2022-02-11, 7277cf5; all 48 sectors PR #10, 4aa5e29, 2024-07-29)."
+    ],
+    "reported_as": "FIG. 2. Energy spectrum of the J1-J2 model on the triangular lattice for N = 36 ... and for N = 48 at J2/J1 = 0.125 in panel (b) [axis (E - E0)/J1]; FIG. 3. Overlaps of low-energy levels of the J1-J2 model with various ansatz wave functions",
+    "location": "journal PDF p. 4 (Fig. 2) and p. 6 (Fig. 3); arXiv v2 same numbering",
+    "version_read": "arXiv:2303.01585v2 TeX-source figure files (vbs_V_-1p0.pdf md5 fc32c298, j1j2_spectra.png md5 c671dd6f; byte-identical to v1) and the journal PDF, Phys. Rev. X 14, 021010 (2024); text read in v1, v2 (PDF and HTML) and the journal PDF",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "Fig. 3 is the overlap figure, not the spectrum, and the paper prints no absolute sector energy; the compute pass of 2026-09-16 named them as the energies' source. The deposits are in VarBench's history (7277cf5 and 4aa5e29, both A. Wietek). Wording only; no number changes. The same block sits on every sector minimum of the instance.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#9 (qmbl-verify 2026-09-29; skeptic upheld), carried to the sector minima that share its block (handoff 2026-10-02)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization M.D2.B2 1",
+      "energy": -97.2186312049
+    },
+    "field": "compute.note",
+    "edit": [
+      "Sector energies themselves are from the paper's spectrum data (Fig. 3 / appendix), fetched/2303.01585.txt.",
+      "The paper plots only (E - E0)/J1 (Fig. 2(b), Fig. 5(a), Fig. 6(b)); the absolute sector energies are the first author's VarBench deposits (ground state 2022-02-11, 7277cf5; all 48 sectors PR #10, 4aa5e29, 2024-07-29)."
+    ],
+    "reported_as": "FIG. 2. Energy spectrum of the J1-J2 model on the triangular lattice for N = 36 ... and for N = 48 at J2/J1 = 0.125 in panel (b) [axis (E - E0)/J1]; FIG. 3. Overlaps of low-energy levels of the J1-J2 model with various ansatz wave functions",
+    "location": "journal PDF p. 4 (Fig. 2) and p. 6 (Fig. 3); arXiv v2 same numbering",
+    "version_read": "arXiv:2303.01585v2 TeX-source figure files (vbs_V_-1p0.pdf md5 fc32c298, j1j2_spectra.png md5 c671dd6f; byte-identical to v1) and the journal PDF, Phys. Rev. X 14, 021010 (2024); text read in v1, v2 (PDF and HTML) and the journal PDF",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "Fig. 3 is the overlap figure, not the spectrum, and the paper prints no absolute sector energy; the compute pass of 2026-09-16 named them as the energies' source. The deposits are in VarBench's history (7277cf5 and 4aa5e29, both A. Wietek). Wording only; no number changes. The same block sits on every sector minimum of the instance.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#9 (qmbl-verify 2026-09-29; skeptic upheld), carried to the sector minima that share its block (handoff 2026-10-02)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization M.D2.A1 -1",
+      "energy": -97.1935450193
+    },
+    "field": "compute.note",
+    "edit": [
+      "Sector energies themselves are from the paper's spectrum data (Fig. 3 / appendix), fetched/2303.01585.txt.",
+      "The paper plots only (E - E0)/J1 (Fig. 2(b), Fig. 5(a), Fig. 6(b)); the absolute sector energies are the first author's VarBench deposits (ground state 2022-02-11, 7277cf5; all 48 sectors PR #10, 4aa5e29, 2024-07-29)."
+    ],
+    "reported_as": "FIG. 2. Energy spectrum of the J1-J2 model on the triangular lattice for N = 36 ... and for N = 48 at J2/J1 = 0.125 in panel (b) [axis (E - E0)/J1]; FIG. 3. Overlaps of low-energy levels of the J1-J2 model with various ansatz wave functions",
+    "location": "journal PDF p. 4 (Fig. 2) and p. 6 (Fig. 3); arXiv v2 same numbering",
+    "version_read": "arXiv:2303.01585v2 TeX-source figure files (vbs_V_-1p0.pdf md5 fc32c298, j1j2_spectra.png md5 c671dd6f; byte-identical to v1) and the journal PDF, Phys. Rev. X 14, 021010 (2024); text read in v1, v2 (PDF and HTML) and the journal PDF",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "Fig. 3 is the overlap figure, not the spectrum, and the paper prints no absolute sector energy; the compute pass of 2026-09-16 named them as the energies' source. The deposits are in VarBench's history (7277cf5 and 4aa5e29, both A. Wietek). Wording only; no number changes. The same block sits on every sector minimum of the instance.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#9 (qmbl-verify 2026-09-29; skeptic upheld), carried to the sector minima that share its block (handoff 2026-10-02)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Z.D1.A -1",
+      "energy": -97.0958765689
+    },
+    "field": "compute.note",
+    "edit": [
+      "Sector energies themselves are from the paper's spectrum data (Fig. 3 / appendix), fetched/2303.01585.txt.",
+      "The paper plots only (E - E0)/J1 (Fig. 2(b), Fig. 5(a), Fig. 6(b)); the absolute sector energies are the first author's VarBench deposits (ground state 2022-02-11, 7277cf5; all 48 sectors PR #10, 4aa5e29, 2024-07-29)."
+    ],
+    "reported_as": "FIG. 2. Energy spectrum of the J1-J2 model on the triangular lattice for N = 36 ... and for N = 48 at J2/J1 = 0.125 in panel (b) [axis (E - E0)/J1]; FIG. 3. Overlaps of low-energy levels of the J1-J2 model with various ansatz wave functions",
+    "location": "journal PDF p. 4 (Fig. 2) and p. 6 (Fig. 3); arXiv v2 same numbering",
+    "version_read": "arXiv:2303.01585v2 TeX-source figure files (vbs_V_-1p0.pdf md5 fc32c298, j1j2_spectra.png md5 c671dd6f; byte-identical to v1) and the journal PDF, Phys. Rev. X 14, 021010 (2024); text read in v1, v2 (PDF and HTML) and the journal PDF",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "Fig. 3 is the overlap figure, not the spectrum, and the paper prints no absolute sector energy; the compute pass of 2026-09-16 named them as the energies' source. The deposits are in VarBench's history (7277cf5 and 4aa5e29, both A. Wietek). Wording only; no number changes. The same block sits on every sector minimum of the instance.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#9 (qmbl-verify 2026-09-29; skeptic upheld), carried to the sector minima that share its block (handoff 2026-10-02)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization 0.C1.A 1",
+      "energy": -97.0283840497
+    },
+    "field": "compute.note",
+    "edit": [
+      "Sector energies themselves are from the paper's spectrum data (Fig. 3 / appendix), fetched/2303.01585.txt.",
+      "The paper plots only (E - E0)/J1 (Fig. 2(b), Fig. 5(a), Fig. 6(b)); the absolute sector energies are the first author's VarBench deposits (ground state 2022-02-11, 7277cf5; all 48 sectors PR #10, 4aa5e29, 2024-07-29)."
+    ],
+    "reported_as": "FIG. 2. Energy spectrum of the J1-J2 model on the triangular lattice for N = 36 ... and for N = 48 at J2/J1 = 0.125 in panel (b) [axis (E - E0)/J1]; FIG. 3. Overlaps of low-energy levels of the J1-J2 model with various ansatz wave functions",
+    "location": "journal PDF p. 4 (Fig. 2) and p. 6 (Fig. 3); arXiv v2 same numbering",
+    "version_read": "arXiv:2303.01585v2 TeX-source figure files (vbs_V_-1p0.pdf md5 fc32c298, j1j2_spectra.png md5 c671dd6f; byte-identical to v1) and the journal PDF, Phys. Rev. X 14, 021010 (2024); text read in v1, v2 (PDF and HTML) and the journal PDF",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "Fig. 3 is the overlap figure, not the spectrum, and the paper prints no absolute sector energy; the compute pass of 2026-09-16 named them as the energies' source. The deposits are in VarBench's history (7277cf5 and 4aa5e29, both A. Wietek). Wording only; no number changes. The same block sits on every sector minimum of the instance.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#9 (qmbl-verify 2026-09-29; skeptic upheld), carried to the sector minima that share its block (handoff 2026-10-02)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Y.D1.B 1",
+      "energy": -96.9477428863
+    },
+    "field": "compute.note",
+    "edit": [
+      "Sector energies themselves are from the paper's spectrum data (Fig. 3 / appendix), fetched/2303.01585.txt.",
+      "The paper plots only (E - E0)/J1 (Fig. 2(b), Fig. 5(a), Fig. 6(b)); the absolute sector energies are the first author's VarBench deposits (ground state 2022-02-11, 7277cf5; all 48 sectors PR #10, 4aa5e29, 2024-07-29)."
+    ],
+    "reported_as": "FIG. 2. Energy spectrum of the J1-J2 model on the triangular lattice for N = 36 ... and for N = 48 at J2/J1 = 0.125 in panel (b) [axis (E - E0)/J1]; FIG. 3. Overlaps of low-energy levels of the J1-J2 model with various ansatz wave functions",
+    "location": "journal PDF p. 4 (Fig. 2) and p. 6 (Fig. 3); arXiv v2 same numbering",
+    "version_read": "arXiv:2303.01585v2 TeX-source figure files (vbs_V_-1p0.pdf md5 fc32c298, j1j2_spectra.png md5 c671dd6f; byte-identical to v1) and the journal PDF, Phys. Rev. X 14, 021010 (2024); text read in v1, v2 (PDF and HTML) and the journal PDF",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "Fig. 3 is the overlap figure, not the spectrum, and the paper prints no absolute sector energy; the compute pass of 2026-09-16 named them as the energies' source. The deposits are in VarBench's history (7277cf5 and 4aa5e29, both A. Wietek). Wording only; no number changes. The same block sits on every sector minimum of the instance.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#9 (qmbl-verify 2026-09-29; skeptic upheld), carried to the sector minima that share its block (handoff 2026-10-02)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Gamma.D6.B1 -1",
+      "energy": -96.914108562
+    },
+    "field": "compute.note",
+    "edit": [
+      "Sector energies themselves are from the paper's spectrum data (Fig. 3 / appendix), fetched/2303.01585.txt.",
+      "The paper plots only (E - E0)/J1 (Fig. 2(b), Fig. 5(a), Fig. 6(b)); the absolute sector energies are the first author's VarBench deposits (ground state 2022-02-11, 7277cf5; all 48 sectors PR #10, 4aa5e29, 2024-07-29)."
+    ],
+    "reported_as": "FIG. 2. Energy spectrum of the J1-J2 model on the triangular lattice for N = 36 ... and for N = 48 at J2/J1 = 0.125 in panel (b) [axis (E - E0)/J1]; FIG. 3. Overlaps of low-energy levels of the J1-J2 model with various ansatz wave functions",
+    "location": "journal PDF p. 4 (Fig. 2) and p. 6 (Fig. 3); arXiv v2 same numbering",
+    "version_read": "arXiv:2303.01585v2 TeX-source figure files (vbs_V_-1p0.pdf md5 fc32c298, j1j2_spectra.png md5 c671dd6f; byte-identical to v1) and the journal PDF, Phys. Rev. X 14, 021010 (2024); text read in v1, v2 (PDF and HTML) and the journal PDF",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "Fig. 3 is the overlap figure, not the spectrum, and the paper prints no absolute sector energy; the compute pass of 2026-09-16 named them as the energies' source. The deposits are in VarBench's history (7277cf5 and 4aa5e29, both A. Wietek). Wording only; no number changes. The same block sits on every sector minimum of the instance.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#9 (qmbl-verify 2026-09-29; skeptic upheld), carried to the sector minima that share its block (handoff 2026-10-02)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization M.D2.B1 1",
+      "energy": -96.8417378948
+    },
+    "field": "compute.note",
+    "edit": [
+      "Sector energies themselves are from the paper's spectrum data (Fig. 3 / appendix), fetched/2303.01585.txt.",
+      "The paper plots only (E - E0)/J1 (Fig. 2(b), Fig. 5(a), Fig. 6(b)); the absolute sector energies are the first author's VarBench deposits (ground state 2022-02-11, 7277cf5; all 48 sectors PR #10, 4aa5e29, 2024-07-29)."
+    ],
+    "reported_as": "FIG. 2. Energy spectrum of the J1-J2 model on the triangular lattice for N = 36 ... and for N = 48 at J2/J1 = 0.125 in panel (b) [axis (E - E0)/J1]; FIG. 3. Overlaps of low-energy levels of the J1-J2 model with various ansatz wave functions",
+    "location": "journal PDF p. 4 (Fig. 2) and p. 6 (Fig. 3); arXiv v2 same numbering",
+    "version_read": "arXiv:2303.01585v2 TeX-source figure files (vbs_V_-1p0.pdf md5 fc32c298, j1j2_spectra.png md5 c671dd6f; byte-identical to v1) and the journal PDF, Phys. Rev. X 14, 021010 (2024); text read in v1, v2 (PDF and HTML) and the journal PDF",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "Fig. 3 is the overlap figure, not the spectrum, and the paper prints no absolute sector energy; the compute pass of 2026-09-16 named them as the energies' source. The deposits are in VarBench's history (7277cf5 and 4aa5e29, both A. Wietek). Wording only; no number changes. The same block sits on every sector minimum of the instance.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#9 (qmbl-verify 2026-09-29; skeptic upheld), carried to the sector minima that share its block (handoff 2026-10-02)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization X2.D1.B 1",
+      "energy": -96.722959862
+    },
+    "field": "compute.note",
+    "edit": [
+      "Sector energies themselves are from the paper's spectrum data (Fig. 3 / appendix), fetched/2303.01585.txt.",
+      "The paper plots only (E - E0)/J1 (Fig. 2(b), Fig. 5(a), Fig. 6(b)); the absolute sector energies are the first author's VarBench deposits (ground state 2022-02-11, 7277cf5; all 48 sectors PR #10, 4aa5e29, 2024-07-29)."
+    ],
+    "reported_as": "FIG. 2. Energy spectrum of the J1-J2 model on the triangular lattice for N = 36 ... and for N = 48 at J2/J1 = 0.125 in panel (b) [axis (E - E0)/J1]; FIG. 3. Overlaps of low-energy levels of the J1-J2 model with various ansatz wave functions",
+    "location": "journal PDF p. 4 (Fig. 2) and p. 6 (Fig. 3); arXiv v2 same numbering",
+    "version_read": "arXiv:2303.01585v2 TeX-source figure files (vbs_V_-1p0.pdf md5 fc32c298, j1j2_spectra.png md5 c671dd6f; byte-identical to v1) and the journal PDF, Phys. Rev. X 14, 021010 (2024); text read in v1, v2 (PDF and HTML) and the journal PDF",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "Fig. 3 is the overlap figure, not the spectrum, and the paper prints no absolute sector energy; the compute pass of 2026-09-16 named them as the energies' source. The deposits are in VarBench's history (7277cf5 and 4aa5e29, both A. Wietek). Wording only; no number changes. The same block sits on every sector minimum of the instance.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#9 (qmbl-verify 2026-09-29; skeptic upheld), carried to the sector minima that share its block (handoff 2026-10-02)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization X1.D1.B 1",
+      "energy": -96.6555615785
+    },
+    "field": "compute.note",
+    "edit": [
+      "Sector energies themselves are from the paper's spectrum data (Fig. 3 / appendix), fetched/2303.01585.txt.",
+      "The paper plots only (E - E0)/J1 (Fig. 2(b), Fig. 5(a), Fig. 6(b)); the absolute sector energies are the first author's VarBench deposits (ground state 2022-02-11, 7277cf5; all 48 sectors PR #10, 4aa5e29, 2024-07-29)."
+    ],
+    "reported_as": "FIG. 2. Energy spectrum of the J1-J2 model on the triangular lattice for N = 36 ... and for N = 48 at J2/J1 = 0.125 in panel (b) [axis (E - E0)/J1]; FIG. 3. Overlaps of low-energy levels of the J1-J2 model with various ansatz wave functions",
+    "location": "journal PDF p. 4 (Fig. 2) and p. 6 (Fig. 3); arXiv v2 same numbering",
+    "version_read": "arXiv:2303.01585v2 TeX-source figure files (vbs_V_-1p0.pdf md5 fc32c298, j1j2_spectra.png md5 c671dd6f; byte-identical to v1) and the journal PDF, Phys. Rev. X 14, 021010 (2024); text read in v1, v2 (PDF and HTML) and the journal PDF",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "Fig. 3 is the overlap figure, not the spectrum, and the paper prints no absolute sector energy; the compute pass of 2026-09-16 named them as the energies' source. The deposits are in VarBench's history (7277cf5 and 4aa5e29, both A. Wietek). Wording only; no number changes. The same block sits on every sector minimum of the instance.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#9 (qmbl-verify 2026-09-29; skeptic upheld), carried to the sector minima that share its block (handoff 2026-10-02)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Y.D1.A 1",
+      "energy": -96.5822631024
+    },
+    "field": "compute.note",
+    "edit": [
+      "Sector energies themselves are from the paper's spectrum data (Fig. 3 / appendix), fetched/2303.01585.txt.",
+      "The paper plots only (E - E0)/J1 (Fig. 2(b), Fig. 5(a), Fig. 6(b)); the absolute sector energies are the first author's VarBench deposits (ground state 2022-02-11, 7277cf5; all 48 sectors PR #10, 4aa5e29, 2024-07-29)."
+    ],
+    "reported_as": "FIG. 2. Energy spectrum of the J1-J2 model on the triangular lattice for N = 36 ... and for N = 48 at J2/J1 = 0.125 in panel (b) [axis (E - E0)/J1]; FIG. 3. Overlaps of low-energy levels of the J1-J2 model with various ansatz wave functions",
+    "location": "journal PDF p. 4 (Fig. 2) and p. 6 (Fig. 3); arXiv v2 same numbering",
+    "version_read": "arXiv:2303.01585v2 TeX-source figure files (vbs_V_-1p0.pdf md5 fc32c298, j1j2_spectra.png md5 c671dd6f; byte-identical to v1) and the journal PDF, Phys. Rev. X 14, 021010 (2024); text read in v1, v2 (PDF and HTML) and the journal PDF",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "Fig. 3 is the overlap figure, not the spectrum, and the paper prints no absolute sector energy; the compute pass of 2026-09-16 named them as the energies' source. The deposits are in VarBench's history (7277cf5 and 4aa5e29, both A. Wietek). Wording only; no number changes. The same block sits on every sector minimum of the instance.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#9 (qmbl-verify 2026-09-29; skeptic upheld), carried to the sector minima that share its block (handoff 2026-10-02)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Gamma.D6.E1 -1",
+      "energy": -96.5143890817
+    },
+    "field": "compute.note",
+    "edit": [
+      "Sector energies themselves are from the paper's spectrum data (Fig. 3 / appendix), fetched/2303.01585.txt.",
+      "The paper plots only (E - E0)/J1 (Fig. 2(b), Fig. 5(a), Fig. 6(b)); the absolute sector energies are the first author's VarBench deposits (ground state 2022-02-11, 7277cf5; all 48 sectors PR #10, 4aa5e29, 2024-07-29)."
+    ],
+    "reported_as": "FIG. 2. Energy spectrum of the J1-J2 model on the triangular lattice for N = 36 ... and for N = 48 at J2/J1 = 0.125 in panel (b) [axis (E - E0)/J1]; FIG. 3. Overlaps of low-energy levels of the J1-J2 model with various ansatz wave functions",
+    "location": "journal PDF p. 4 (Fig. 2) and p. 6 (Fig. 3); arXiv v2 same numbering",
+    "version_read": "arXiv:2303.01585v2 TeX-source figure files (vbs_V_-1p0.pdf md5 fc32c298, j1j2_spectra.png md5 c671dd6f; byte-identical to v1) and the journal PDF, Phys. Rev. X 14, 021010 (2024); text read in v1, v2 (PDF and HTML) and the journal PDF",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "Fig. 3 is the overlap figure, not the spectrum, and the paper prints no absolute sector energy; the compute pass of 2026-09-16 named them as the energies' source. The deposits are in VarBench's history (7277cf5 and 4aa5e29, both A. Wietek). Wording only; no number changes. The same block sits on every sector minimum of the instance.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#9 (qmbl-verify 2026-09-29; skeptic upheld), carried to the sector minima that share its block (handoff 2026-10-02)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization M.D2.A2 -1",
+      "energy": -96.4814676427
+    },
+    "field": "compute.note",
+    "edit": [
+      "Sector energies themselves are from the paper's spectrum data (Fig. 3 / appendix), fetched/2303.01585.txt.",
+      "The paper plots only (E - E0)/J1 (Fig. 2(b), Fig. 5(a), Fig. 6(b)); the absolute sector energies are the first author's VarBench deposits (ground state 2022-02-11, 7277cf5; all 48 sectors PR #10, 4aa5e29, 2024-07-29)."
+    ],
+    "reported_as": "FIG. 2. Energy spectrum of the J1-J2 model on the triangular lattice for N = 36 ... and for N = 48 at J2/J1 = 0.125 in panel (b) [axis (E - E0)/J1]; FIG. 3. Overlaps of low-energy levels of the J1-J2 model with various ansatz wave functions",
+    "location": "journal PDF p. 4 (Fig. 2) and p. 6 (Fig. 3); arXiv v2 same numbering",
+    "version_read": "arXiv:2303.01585v2 TeX-source figure files (vbs_V_-1p0.pdf md5 fc32c298, j1j2_spectra.png md5 c671dd6f; byte-identical to v1) and the journal PDF, Phys. Rev. X 14, 021010 (2024); text read in v1, v2 (PDF and HTML) and the journal PDF",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "Fig. 3 is the overlap figure, not the spectrum, and the paper prints no absolute sector energy; the compute pass of 2026-09-16 named them as the energies' source. The deposits are in VarBench's history (7277cf5 and 4aa5e29, both A. Wietek). Wording only; no number changes. The same block sits on every sector minimum of the instance.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#9 (qmbl-verify 2026-09-29; skeptic upheld), carried to the sector minima that share its block (handoff 2026-10-02)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization 0.C1.A -1",
+      "energy": -96.4643112641
+    },
+    "field": "compute.note",
+    "edit": [
+      "Sector energies themselves are from the paper's spectrum data (Fig. 3 / appendix), fetched/2303.01585.txt.",
+      "The paper plots only (E - E0)/J1 (Fig. 2(b), Fig. 5(a), Fig. 6(b)); the absolute sector energies are the first author's VarBench deposits (ground state 2022-02-11, 7277cf5; all 48 sectors PR #10, 4aa5e29, 2024-07-29)."
+    ],
+    "reported_as": "FIG. 2. Energy spectrum of the J1-J2 model on the triangular lattice for N = 36 ... and for N = 48 at J2/J1 = 0.125 in panel (b) [axis (E - E0)/J1]; FIG. 3. Overlaps of low-energy levels of the J1-J2 model with various ansatz wave functions",
+    "location": "journal PDF p. 4 (Fig. 2) and p. 6 (Fig. 3); arXiv v2 same numbering",
+    "version_read": "arXiv:2303.01585v2 TeX-source figure files (vbs_V_-1p0.pdf md5 fc32c298, j1j2_spectra.png md5 c671dd6f; byte-identical to v1) and the journal PDF, Phys. Rev. X 14, 021010 (2024); text read in v1, v2 (PDF and HTML) and the journal PDF",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "Fig. 3 is the overlap figure, not the spectrum, and the paper prints no absolute sector energy; the compute pass of 2026-09-16 named them as the energies' source. The deposits are in VarBench's history (7277cf5 and 4aa5e29, both A. Wietek). Wording only; no number changes. The same block sits on every sector minimum of the instance.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#9 (qmbl-verify 2026-09-29; skeptic upheld), carried to the sector minima that share its block (handoff 2026-10-02)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization X2.D1.A -1",
+      "energy": -96.4368007071
+    },
+    "field": "compute.note",
+    "edit": [
+      "Sector energies themselves are from the paper's spectrum data (Fig. 3 / appendix), fetched/2303.01585.txt.",
+      "The paper plots only (E - E0)/J1 (Fig. 2(b), Fig. 5(a), Fig. 6(b)); the absolute sector energies are the first author's VarBench deposits (ground state 2022-02-11, 7277cf5; all 48 sectors PR #10, 4aa5e29, 2024-07-29)."
+    ],
+    "reported_as": "FIG. 2. Energy spectrum of the J1-J2 model on the triangular lattice for N = 36 ... and for N = 48 at J2/J1 = 0.125 in panel (b) [axis (E - E0)/J1]; FIG. 3. Overlaps of low-energy levels of the J1-J2 model with various ansatz wave functions",
+    "location": "journal PDF p. 4 (Fig. 2) and p. 6 (Fig. 3); arXiv v2 same numbering",
+    "version_read": "arXiv:2303.01585v2 TeX-source figure files (vbs_V_-1p0.pdf md5 fc32c298, j1j2_spectra.png md5 c671dd6f; byte-identical to v1) and the journal PDF, Phys. Rev. X 14, 021010 (2024); text read in v1, v2 (PDF and HTML) and the journal PDF",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "Fig. 3 is the overlap figure, not the spectrum, and the paper prints no absolute sector energy; the compute pass of 2026-09-16 named them as the energies' source. The deposits are in VarBench's history (7277cf5 and 4aa5e29, both A. Wietek). Wording only; no number changes. The same block sits on every sector minimum of the instance.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#9 (qmbl-verify 2026-09-29; skeptic upheld), carried to the sector minima that share its block (handoff 2026-10-02)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization X1.D1.A -1",
+      "energy": -96.4289679218
+    },
+    "field": "compute.note",
+    "edit": [
+      "Sector energies themselves are from the paper's spectrum data (Fig. 3 / appendix), fetched/2303.01585.txt.",
+      "The paper plots only (E - E0)/J1 (Fig. 2(b), Fig. 5(a), Fig. 6(b)); the absolute sector energies are the first author's VarBench deposits (ground state 2022-02-11, 7277cf5; all 48 sectors PR #10, 4aa5e29, 2024-07-29)."
+    ],
+    "reported_as": "FIG. 2. Energy spectrum of the J1-J2 model on the triangular lattice for N = 36 ... and for N = 48 at J2/J1 = 0.125 in panel (b) [axis (E - E0)/J1]; FIG. 3. Overlaps of low-energy levels of the J1-J2 model with various ansatz wave functions",
+    "location": "journal PDF p. 4 (Fig. 2) and p. 6 (Fig. 3); arXiv v2 same numbering",
+    "version_read": "arXiv:2303.01585v2 TeX-source figure files (vbs_V_-1p0.pdf md5 fc32c298, j1j2_spectra.png md5 c671dd6f; byte-identical to v1) and the journal PDF, Phys. Rev. X 14, 021010 (2024); text read in v1, v2 (PDF and HTML) and the journal PDF",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "Fig. 3 is the overlap figure, not the spectrum, and the paper prints no absolute sector energy; the compute pass of 2026-09-16 named them as the energies' source. The deposits are in VarBench's history (7277cf5 and 4aa5e29, both A. Wietek). Wording only; no number changes. The same block sits on every sector minimum of the instance.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#9 (qmbl-verify 2026-09-29; skeptic upheld), carried to the sector minima that share its block (handoff 2026-10-02)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization K.D3.E -1",
+      "energy": -96.4257227302
+    },
+    "field": "compute.note",
+    "edit": [
+      "Sector energies themselves are from the paper's spectrum data (Fig. 3 / appendix), fetched/2303.01585.txt.",
+      "The paper plots only (E - E0)/J1 (Fig. 2(b), Fig. 5(a), Fig. 6(b)); the absolute sector energies are the first author's VarBench deposits (ground state 2022-02-11, 7277cf5; all 48 sectors PR #10, 4aa5e29, 2024-07-29)."
+    ],
+    "reported_as": "FIG. 2. Energy spectrum of the J1-J2 model on the triangular lattice for N = 36 ... and for N = 48 at J2/J1 = 0.125 in panel (b) [axis (E - E0)/J1]; FIG. 3. Overlaps of low-energy levels of the J1-J2 model with various ansatz wave functions",
+    "location": "journal PDF p. 4 (Fig. 2) and p. 6 (Fig. 3); arXiv v2 same numbering",
+    "version_read": "arXiv:2303.01585v2 TeX-source figure files (vbs_V_-1p0.pdf md5 fc32c298, j1j2_spectra.png md5 c671dd6f; byte-identical to v1) and the journal PDF, Phys. Rev. X 14, 021010 (2024); text read in v1, v2 (PDF and HTML) and the journal PDF",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "Fig. 3 is the overlap figure, not the spectrum, and the paper prints no absolute sector energy; the compute pass of 2026-09-16 named them as the energies' source. The deposits are in VarBench's history (7277cf5 and 4aa5e29, both A. Wietek). Wording only; no number changes. The same block sits on every sector minimum of the instance.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#9 (qmbl-verify 2026-09-29; skeptic upheld), carried to the sector minima that share its block (handoff 2026-10-02)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Z.D1.B 1",
+      "energy": -96.3509561853
+    },
+    "field": "compute.note",
+    "edit": [
+      "Sector energies themselves are from the paper's spectrum data (Fig. 3 / appendix), fetched/2303.01585.txt.",
+      "The paper plots only (E - E0)/J1 (Fig. 2(b), Fig. 5(a), Fig. 6(b)); the absolute sector energies are the first author's VarBench deposits (ground state 2022-02-11, 7277cf5; all 48 sectors PR #10, 4aa5e29, 2024-07-29)."
+    ],
+    "reported_as": "FIG. 2. Energy spectrum of the J1-J2 model on the triangular lattice for N = 36 ... and for N = 48 at J2/J1 = 0.125 in panel (b) [axis (E - E0)/J1]; FIG. 3. Overlaps of low-energy levels of the J1-J2 model with various ansatz wave functions",
+    "location": "journal PDF p. 4 (Fig. 2) and p. 6 (Fig. 3); arXiv v2 same numbering",
+    "version_read": "arXiv:2303.01585v2 TeX-source figure files (vbs_V_-1p0.pdf md5 fc32c298, j1j2_spectra.png md5 c671dd6f; byte-identical to v1) and the journal PDF, Phys. Rev. X 14, 021010 (2024); text read in v1, v2 (PDF and HTML) and the journal PDF",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "Fig. 3 is the overlap figure, not the spectrum, and the paper prints no absolute sector energy; the compute pass of 2026-09-16 named them as the energies' source. The deposits are in VarBench's history (7277cf5 and 4aa5e29, both A. Wietek). Wording only; no number changes. The same block sits on every sector minimum of the instance.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#9 (qmbl-verify 2026-09-29; skeptic upheld), carried to the sector minima that share its block (handoff 2026-10-02)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization X0.D1.A 1",
+      "energy": -96.3236008361
+    },
+    "field": "compute.note",
+    "edit": [
+      "Sector energies themselves are from the paper's spectrum data (Fig. 3 / appendix), fetched/2303.01585.txt.",
+      "The paper plots only (E - E0)/J1 (Fig. 2(b), Fig. 5(a), Fig. 6(b)); the absolute sector energies are the first author's VarBench deposits (ground state 2022-02-11, 7277cf5; all 48 sectors PR #10, 4aa5e29, 2024-07-29)."
+    ],
+    "reported_as": "FIG. 2. Energy spectrum of the J1-J2 model on the triangular lattice for N = 36 ... and for N = 48 at J2/J1 = 0.125 in panel (b) [axis (E - E0)/J1]; FIG. 3. Overlaps of low-energy levels of the J1-J2 model with various ansatz wave functions",
+    "location": "journal PDF p. 4 (Fig. 2) and p. 6 (Fig. 3); arXiv v2 same numbering",
+    "version_read": "arXiv:2303.01585v2 TeX-source figure files (vbs_V_-1p0.pdf md5 fc32c298, j1j2_spectra.png md5 c671dd6f; byte-identical to v1) and the journal PDF, Phys. Rev. X 14, 021010 (2024); text read in v1, v2 (PDF and HTML) and the journal PDF",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "Fig. 3 is the overlap figure, not the spectrum, and the paper prints no absolute sector energy; the compute pass of 2026-09-16 named them as the energies' source. The deposits are in VarBench's history (7277cf5 and 4aa5e29, both A. Wietek). Wording only; no number changes. The same block sits on every sector minimum of the instance.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#9 (qmbl-verify 2026-09-29; skeptic upheld), carried to the sector minima that share its block (handoff 2026-10-02)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Z.D1.A 1",
+      "energy": -96.2907393386
+    },
+    "field": "compute.note",
+    "edit": [
+      "Sector energies themselves are from the paper's spectrum data (Fig. 3 / appendix), fetched/2303.01585.txt.",
+      "The paper plots only (E - E0)/J1 (Fig. 2(b), Fig. 5(a), Fig. 6(b)); the absolute sector energies are the first author's VarBench deposits (ground state 2022-02-11, 7277cf5; all 48 sectors PR #10, 4aa5e29, 2024-07-29)."
+    ],
+    "reported_as": "FIG. 2. Energy spectrum of the J1-J2 model on the triangular lattice for N = 36 ... and for N = 48 at J2/J1 = 0.125 in panel (b) [axis (E - E0)/J1]; FIG. 3. Overlaps of low-energy levels of the J1-J2 model with various ansatz wave functions",
+    "location": "journal PDF p. 4 (Fig. 2) and p. 6 (Fig. 3); arXiv v2 same numbering",
+    "version_read": "arXiv:2303.01585v2 TeX-source figure files (vbs_V_-1p0.pdf md5 fc32c298, j1j2_spectra.png md5 c671dd6f; byte-identical to v1) and the journal PDF, Phys. Rev. X 14, 021010 (2024); text read in v1, v2 (PDF and HTML) and the journal PDF",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "Fig. 3 is the overlap figure, not the spectrum, and the paper prints no absolute sector energy; the compute pass of 2026-09-16 named them as the energies' source. The deposits are in VarBench's history (7277cf5 and 4aa5e29, both A. Wietek). Wording only; no number changes. The same block sits on every sector minimum of the instance.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#9 (qmbl-verify 2026-09-29; skeptic upheld), carried to the sector minima that share its block (handoff 2026-10-02)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization X0.D1.A -1",
+      "energy": -96.1430463315
+    },
+    "field": "compute.note",
+    "edit": [
+      "Sector energies themselves are from the paper's spectrum data (Fig. 3 / appendix), fetched/2303.01585.txt.",
+      "The paper plots only (E - E0)/J1 (Fig. 2(b), Fig. 5(a), Fig. 6(b)); the absolute sector energies are the first author's VarBench deposits (ground state 2022-02-11, 7277cf5; all 48 sectors PR #10, 4aa5e29, 2024-07-29)."
+    ],
+    "reported_as": "FIG. 2. Energy spectrum of the J1-J2 model on the triangular lattice for N = 36 ... and for N = 48 at J2/J1 = 0.125 in panel (b) [axis (E - E0)/J1]; FIG. 3. Overlaps of low-energy levels of the J1-J2 model with various ansatz wave functions",
+    "location": "journal PDF p. 4 (Fig. 2) and p. 6 (Fig. 3); arXiv v2 same numbering",
+    "version_read": "arXiv:2303.01585v2 TeX-source figure files (vbs_V_-1p0.pdf md5 fc32c298, j1j2_spectra.png md5 c671dd6f; byte-identical to v1) and the journal PDF, Phys. Rev. X 14, 021010 (2024); text read in v1, v2 (PDF and HTML) and the journal PDF",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "Fig. 3 is the overlap figure, not the spectrum, and the paper prints no absolute sector energy; the compute pass of 2026-09-16 named them as the energies' source. The deposits are in VarBench's history (7277cf5 and 4aa5e29, both A. Wietek). Wording only; no number changes. The same block sits on every sector minimum of the instance.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#9 (qmbl-verify 2026-09-29; skeptic upheld), carried to the sector minima that share its block (handoff 2026-10-02)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization X0.D1.B 1",
+      "energy": -96.0665487981
+    },
+    "field": "compute.note",
+    "edit": [
+      "Sector energies themselves are from the paper's spectrum data (Fig. 3 / appendix), fetched/2303.01585.txt.",
+      "The paper plots only (E - E0)/J1 (Fig. 2(b), Fig. 5(a), Fig. 6(b)); the absolute sector energies are the first author's VarBench deposits (ground state 2022-02-11, 7277cf5; all 48 sectors PR #10, 4aa5e29, 2024-07-29)."
+    ],
+    "reported_as": "FIG. 2. Energy spectrum of the J1-J2 model on the triangular lattice for N = 36 ... and for N = 48 at J2/J1 = 0.125 in panel (b) [axis (E - E0)/J1]; FIG. 3. Overlaps of low-energy levels of the J1-J2 model with various ansatz wave functions",
+    "location": "journal PDF p. 4 (Fig. 2) and p. 6 (Fig. 3); arXiv v2 same numbering",
+    "version_read": "arXiv:2303.01585v2 TeX-source figure files (vbs_V_-1p0.pdf md5 fc32c298, j1j2_spectra.png md5 c671dd6f; byte-identical to v1) and the journal PDF, Phys. Rev. X 14, 021010 (2024); text read in v1, v2 (PDF and HTML) and the journal PDF",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "Fig. 3 is the overlap figure, not the spectrum, and the paper prints no absolute sector energy; the compute pass of 2026-09-16 named them as the energies' source. The deposits are in VarBench's history (7277cf5 and 4aa5e29, both A. Wietek). Wording only; no number changes. The same block sits on every sector minimum of the instance.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#9 (qmbl-verify 2026-09-29; skeptic upheld), carried to the sector minima that share its block (handoff 2026-10-02)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization K.D3.E 1",
+      "energy": -96.0123967672
+    },
+    "field": "compute.note",
+    "edit": [
+      "Sector energies themselves are from the paper's spectrum data (Fig. 3 / appendix), fetched/2303.01585.txt.",
+      "The paper plots only (E - E0)/J1 (Fig. 2(b), Fig. 5(a), Fig. 6(b)); the absolute sector energies are the first author's VarBench deposits (ground state 2022-02-11, 7277cf5; all 48 sectors PR #10, 4aa5e29, 2024-07-29)."
+    ],
+    "reported_as": "FIG. 2. Energy spectrum of the J1-J2 model on the triangular lattice for N = 36 ... and for N = 48 at J2/J1 = 0.125 in panel (b) [axis (E - E0)/J1]; FIG. 3. Overlaps of low-energy levels of the J1-J2 model with various ansatz wave functions",
+    "location": "journal PDF p. 4 (Fig. 2) and p. 6 (Fig. 3); arXiv v2 same numbering",
+    "version_read": "arXiv:2303.01585v2 TeX-source figure files (vbs_V_-1p0.pdf md5 fc32c298, j1j2_spectra.png md5 c671dd6f; byte-identical to v1) and the journal PDF, Phys. Rev. X 14, 021010 (2024); text read in v1, v2 (PDF and HTML) and the journal PDF",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "Fig. 3 is the overlap figure, not the spectrum, and the paper prints no absolute sector energy; the compute pass of 2026-09-16 named them as the energies' source. The deposits are in VarBench's history (7277cf5 and 4aa5e29, both A. Wietek). Wording only; no number changes. The same block sits on every sector minimum of the instance.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#9 (qmbl-verify 2026-09-29; skeptic upheld), carried to the sector minima that share its block (handoff 2026-10-02)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization X0.D1.B -1",
+      "energy": -95.9591878447
+    },
+    "field": "compute.note",
+    "edit": [
+      "Sector energies themselves are from the paper's spectrum data (Fig. 3 / appendix), fetched/2303.01585.txt.",
+      "The paper plots only (E - E0)/J1 (Fig. 2(b), Fig. 5(a), Fig. 6(b)); the absolute sector energies are the first author's VarBench deposits (ground state 2022-02-11, 7277cf5; all 48 sectors PR #10, 4aa5e29, 2024-07-29)."
+    ],
+    "reported_as": "FIG. 2. Energy spectrum of the J1-J2 model on the triangular lattice for N = 36 ... and for N = 48 at J2/J1 = 0.125 in panel (b) [axis (E - E0)/J1]; FIG. 3. Overlaps of low-energy levels of the J1-J2 model with various ansatz wave functions",
+    "location": "journal PDF p. 4 (Fig. 2) and p. 6 (Fig. 3); arXiv v2 same numbering",
+    "version_read": "arXiv:2303.01585v2 TeX-source figure files (vbs_V_-1p0.pdf md5 fc32c298, j1j2_spectra.png md5 c671dd6f; byte-identical to v1) and the journal PDF, Phys. Rev. X 14, 021010 (2024); text read in v1, v2 (PDF and HTML) and the journal PDF",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "Fig. 3 is the overlap figure, not the spectrum, and the paper prints no absolute sector energy; the compute pass of 2026-09-16 named them as the energies' source. The deposits are in VarBench's history (7277cf5 and 4aa5e29, both A. Wietek). Wording only; no number changes. The same block sits on every sector minimum of the instance.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#9 (qmbl-verify 2026-09-29; skeptic upheld), carried to the sector minima that share its block (handoff 2026-10-02)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization M.D2.A1 1",
+      "energy": -95.895488336
+    },
+    "field": "compute.note",
+    "edit": [
+      "Sector energies themselves are from the paper's spectrum data (Fig. 3 / appendix), fetched/2303.01585.txt.",
+      "The paper plots only (E - E0)/J1 (Fig. 2(b), Fig. 5(a), Fig. 6(b)); the absolute sector energies are the first author's VarBench deposits (ground state 2022-02-11, 7277cf5; all 48 sectors PR #10, 4aa5e29, 2024-07-29)."
+    ],
+    "reported_as": "FIG. 2. Energy spectrum of the J1-J2 model on the triangular lattice for N = 36 ... and for N = 48 at J2/J1 = 0.125 in panel (b) [axis (E - E0)/J1]; FIG. 3. Overlaps of low-energy levels of the J1-J2 model with various ansatz wave functions",
+    "location": "journal PDF p. 4 (Fig. 2) and p. 6 (Fig. 3); arXiv v2 same numbering",
+    "version_read": "arXiv:2303.01585v2 TeX-source figure files (vbs_V_-1p0.pdf md5 fc32c298, j1j2_spectra.png md5 c671dd6f; byte-identical to v1) and the journal PDF, Phys. Rev. X 14, 021010 (2024); text read in v1, v2 (PDF and HTML) and the journal PDF",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "Fig. 3 is the overlap figure, not the spectrum, and the paper prints no absolute sector energy; the compute pass of 2026-09-16 named them as the energies' source. The deposits are in VarBench's history (7277cf5 and 4aa5e29, both A. Wietek). Wording only; no number changes. The same block sits on every sector minimum of the instance.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#9 (qmbl-verify 2026-09-29; skeptic upheld), carried to the sector minima that share its block (handoff 2026-10-02)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Y.D1.A -1",
+      "energy": -95.8701895419
+    },
+    "field": "compute.note",
+    "edit": [
+      "Sector energies themselves are from the paper's spectrum data (Fig. 3 / appendix), fetched/2303.01585.txt.",
+      "The paper plots only (E - E0)/J1 (Fig. 2(b), Fig. 5(a), Fig. 6(b)); the absolute sector energies are the first author's VarBench deposits (ground state 2022-02-11, 7277cf5; all 48 sectors PR #10, 4aa5e29, 2024-07-29)."
+    ],
+    "reported_as": "FIG. 2. Energy spectrum of the J1-J2 model on the triangular lattice for N = 36 ... and for N = 48 at J2/J1 = 0.125 in panel (b) [axis (E - E0)/J1]; FIG. 3. Overlaps of low-energy levels of the J1-J2 model with various ansatz wave functions",
+    "location": "journal PDF p. 4 (Fig. 2) and p. 6 (Fig. 3); arXiv v2 same numbering",
+    "version_read": "arXiv:2303.01585v2 TeX-source figure files (vbs_V_-1p0.pdf md5 fc32c298, j1j2_spectra.png md5 c671dd6f; byte-identical to v1) and the journal PDF, Phys. Rev. X 14, 021010 (2024); text read in v1, v2 (PDF and HTML) and the journal PDF",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "Fig. 3 is the overlap figure, not the spectrum, and the paper prints no absolute sector energy; the compute pass of 2026-09-16 named them as the energies' source. The deposits are in VarBench's history (7277cf5 and 4aa5e29, both A. Wietek). Wording only; no number changes. The same block sits on every sector minimum of the instance.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#9 (qmbl-verify 2026-09-29; skeptic upheld), carried to the sector minima that share its block (handoff 2026-10-02)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Y.D1.B -1",
+      "energy": -95.7758437002
+    },
+    "field": "compute.note",
+    "edit": [
+      "Sector energies themselves are from the paper's spectrum data (Fig. 3 / appendix), fetched/2303.01585.txt.",
+      "The paper plots only (E - E0)/J1 (Fig. 2(b), Fig. 5(a), Fig. 6(b)); the absolute sector energies are the first author's VarBench deposits (ground state 2022-02-11, 7277cf5; all 48 sectors PR #10, 4aa5e29, 2024-07-29)."
+    ],
+    "reported_as": "FIG. 2. Energy spectrum of the J1-J2 model on the triangular lattice for N = 36 ... and for N = 48 at J2/J1 = 0.125 in panel (b) [axis (E - E0)/J1]; FIG. 3. Overlaps of low-energy levels of the J1-J2 model with various ansatz wave functions",
+    "location": "journal PDF p. 4 (Fig. 2) and p. 6 (Fig. 3); arXiv v2 same numbering",
+    "version_read": "arXiv:2303.01585v2 TeX-source figure files (vbs_V_-1p0.pdf md5 fc32c298, j1j2_spectra.png md5 c671dd6f; byte-identical to v1) and the journal PDF, Phys. Rev. X 14, 021010 (2024); text read in v1, v2 (PDF and HTML) and the journal PDF",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "Fig. 3 is the overlap figure, not the spectrum, and the paper prints no absolute sector energy; the compute pass of 2026-09-16 named them as the energies' source. The deposits are in VarBench's history (7277cf5 and 4aa5e29, both A. Wietek). Wording only; no number changes. The same block sits on every sector minimum of the instance.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#9 (qmbl-verify 2026-09-29; skeptic upheld), carried to the sector minima that share its block (handoff 2026-10-02)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Z.D1.B -1",
+      "energy": -95.7222960611
+    },
+    "field": "compute.note",
+    "edit": [
+      "Sector energies themselves are from the paper's spectrum data (Fig. 3 / appendix), fetched/2303.01585.txt.",
+      "The paper plots only (E - E0)/J1 (Fig. 2(b), Fig. 5(a), Fig. 6(b)); the absolute sector energies are the first author's VarBench deposits (ground state 2022-02-11, 7277cf5; all 48 sectors PR #10, 4aa5e29, 2024-07-29)."
+    ],
+    "reported_as": "FIG. 2. Energy spectrum of the J1-J2 model on the triangular lattice for N = 36 ... and for N = 48 at J2/J1 = 0.125 in panel (b) [axis (E - E0)/J1]; FIG. 3. Overlaps of low-energy levels of the J1-J2 model with various ansatz wave functions",
+    "location": "journal PDF p. 4 (Fig. 2) and p. 6 (Fig. 3); arXiv v2 same numbering",
+    "version_read": "arXiv:2303.01585v2 TeX-source figure files (vbs_V_-1p0.pdf md5 fc32c298, j1j2_spectra.png md5 c671dd6f; byte-identical to v1) and the journal PDF, Phys. Rev. X 14, 021010 (2024); text read in v1, v2 (PDF and HTML) and the journal PDF",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "Fig. 3 is the overlap figure, not the spectrum, and the paper prints no absolute sector energy; the compute pass of 2026-09-16 named them as the energies' source. The deposits are in VarBench's history (7277cf5 and 4aa5e29, both A. Wietek). Wording only; no number changes. The same block sits on every sector minimum of the instance.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#9 (qmbl-verify 2026-09-29; skeptic upheld), carried to the sector minima that share its block (handoff 2026-10-02)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization X2.D1.B -1",
+      "energy": -95.6379830325
+    },
+    "field": "compute.note",
+    "edit": [
+      "Sector energies themselves are from the paper's spectrum data (Fig. 3 / appendix), fetched/2303.01585.txt.",
+      "The paper plots only (E - E0)/J1 (Fig. 2(b), Fig. 5(a), Fig. 6(b)); the absolute sector energies are the first author's VarBench deposits (ground state 2022-02-11, 7277cf5; all 48 sectors PR #10, 4aa5e29, 2024-07-29)."
+    ],
+    "reported_as": "FIG. 2. Energy spectrum of the J1-J2 model on the triangular lattice for N = 36 ... and for N = 48 at J2/J1 = 0.125 in panel (b) [axis (E - E0)/J1]; FIG. 3. Overlaps of low-energy levels of the J1-J2 model with various ansatz wave functions",
+    "location": "journal PDF p. 4 (Fig. 2) and p. 6 (Fig. 3); arXiv v2 same numbering",
+    "version_read": "arXiv:2303.01585v2 TeX-source figure files (vbs_V_-1p0.pdf md5 fc32c298, j1j2_spectra.png md5 c671dd6f; byte-identical to v1) and the journal PDF, Phys. Rev. X 14, 021010 (2024); text read in v1, v2 (PDF and HTML) and the journal PDF",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "Fig. 3 is the overlap figure, not the spectrum, and the paper prints no absolute sector energy; the compute pass of 2026-09-16 named them as the energies' source. The deposits are in VarBench's history (7277cf5 and 4aa5e29, both A. Wietek). Wording only; no number changes. The same block sits on every sector minimum of the instance.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#9 (qmbl-verify 2026-09-29; skeptic upheld), carried to the sector minima that share its block (handoff 2026-10-02)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization X1.D1.B -1",
+      "energy": -95.5777670451
+    },
+    "field": "compute.note",
+    "edit": [
+      "Sector energies themselves are from the paper's spectrum data (Fig. 3 / appendix), fetched/2303.01585.txt.",
+      "The paper plots only (E - E0)/J1 (Fig. 2(b), Fig. 5(a), Fig. 6(b)); the absolute sector energies are the first author's VarBench deposits (ground state 2022-02-11, 7277cf5; all 48 sectors PR #10, 4aa5e29, 2024-07-29)."
+    ],
+    "reported_as": "FIG. 2. Energy spectrum of the J1-J2 model on the triangular lattice for N = 36 ... and for N = 48 at J2/J1 = 0.125 in panel (b) [axis (E - E0)/J1]; FIG. 3. Overlaps of low-energy levels of the J1-J2 model with various ansatz wave functions",
+    "location": "journal PDF p. 4 (Fig. 2) and p. 6 (Fig. 3); arXiv v2 same numbering",
+    "version_read": "arXiv:2303.01585v2 TeX-source figure files (vbs_V_-1p0.pdf md5 fc32c298, j1j2_spectra.png md5 c671dd6f; byte-identical to v1) and the journal PDF, Phys. Rev. X 14, 021010 (2024); text read in v1, v2 (PDF and HTML) and the journal PDF",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "Fig. 3 is the overlap figure, not the spectrum, and the paper prints no absolute sector energy; the compute pass of 2026-09-16 named them as the energies' source. The deposits are in VarBench's history (7277cf5 and 4aa5e29, both A. Wietek). Wording only; no number changes. The same block sits on every sector minimum of the instance.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#9 (qmbl-verify 2026-09-29; skeptic upheld), carried to the sector minima that share its block (handoff 2026-10-02)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization K.D3.A1 1",
+      "energy": -95.4097231118
+    },
+    "field": "compute.note",
+    "edit": [
+      "Sector energies themselves are from the paper's spectrum data (Fig. 3 / appendix), fetched/2303.01585.txt.",
+      "The paper plots only (E - E0)/J1 (Fig. 2(b), Fig. 5(a), Fig. 6(b)); the absolute sector energies are the first author's VarBench deposits (ground state 2022-02-11, 7277cf5; all 48 sectors PR #10, 4aa5e29, 2024-07-29)."
+    ],
+    "reported_as": "FIG. 2. Energy spectrum of the J1-J2 model on the triangular lattice for N = 36 ... and for N = 48 at J2/J1 = 0.125 in panel (b) [axis (E - E0)/J1]; FIG. 3. Overlaps of low-energy levels of the J1-J2 model with various ansatz wave functions",
+    "location": "journal PDF p. 4 (Fig. 2) and p. 6 (Fig. 3); arXiv v2 same numbering",
+    "version_read": "arXiv:2303.01585v2 TeX-source figure files (vbs_V_-1p0.pdf md5 fc32c298, j1j2_spectra.png md5 c671dd6f; byte-identical to v1) and the journal PDF, Phys. Rev. X 14, 021010 (2024); text read in v1, v2 (PDF and HTML) and the journal PDF",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "Fig. 3 is the overlap figure, not the spectrum, and the paper prints no absolute sector energy; the compute pass of 2026-09-16 named them as the energies' source. The deposits are in VarBench's history (7277cf5 and 4aa5e29, both A. Wietek). Wording only; no number changes. The same block sits on every sector minimum of the instance.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#9 (qmbl-verify 2026-09-29; skeptic upheld), carried to the sector minima that share its block (handoff 2026-10-02)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization M.D2.B2 -1",
+      "energy": -95.3191248118
+    },
+    "field": "compute.note",
+    "edit": [
+      "Sector energies themselves are from the paper's spectrum data (Fig. 3 / appendix), fetched/2303.01585.txt.",
+      "The paper plots only (E - E0)/J1 (Fig. 2(b), Fig. 5(a), Fig. 6(b)); the absolute sector energies are the first author's VarBench deposits (ground state 2022-02-11, 7277cf5; all 48 sectors PR #10, 4aa5e29, 2024-07-29)."
+    ],
+    "reported_as": "FIG. 2. Energy spectrum of the J1-J2 model on the triangular lattice for N = 36 ... and for N = 48 at J2/J1 = 0.125 in panel (b) [axis (E - E0)/J1]; FIG. 3. Overlaps of low-energy levels of the J1-J2 model with various ansatz wave functions",
+    "location": "journal PDF p. 4 (Fig. 2) and p. 6 (Fig. 3); arXiv v2 same numbering",
+    "version_read": "arXiv:2303.01585v2 TeX-source figure files (vbs_V_-1p0.pdf md5 fc32c298, j1j2_spectra.png md5 c671dd6f; byte-identical to v1) and the journal PDF, Phys. Rev. X 14, 021010 (2024); text read in v1, v2 (PDF and HTML) and the journal PDF",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "Fig. 3 is the overlap figure, not the spectrum, and the paper prints no absolute sector energy; the compute pass of 2026-09-16 named them as the energies' source. The deposits are in VarBench's history (7277cf5 and 4aa5e29, both A. Wietek). Wording only; no number changes. The same block sits on every sector minimum of the instance.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#9 (qmbl-verify 2026-09-29; skeptic upheld), carried to the sector minima that share its block (handoff 2026-10-02)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization M.D2.A2 1",
+      "energy": -95.1104612519
+    },
+    "field": "compute.note",
+    "edit": [
+      "Sector energies themselves are from the paper's spectrum data (Fig. 3 / appendix), fetched/2303.01585.txt.",
+      "The paper plots only (E - E0)/J1 (Fig. 2(b), Fig. 5(a), Fig. 6(b)); the absolute sector energies are the first author's VarBench deposits (ground state 2022-02-11, 7277cf5; all 48 sectors PR #10, 4aa5e29, 2024-07-29)."
+    ],
+    "reported_as": "FIG. 2. Energy spectrum of the J1-J2 model on the triangular lattice for N = 36 ... and for N = 48 at J2/J1 = 0.125 in panel (b) [axis (E - E0)/J1]; FIG. 3. Overlaps of low-energy levels of the J1-J2 model with various ansatz wave functions",
+    "location": "journal PDF p. 4 (Fig. 2) and p. 6 (Fig. 3); arXiv v2 same numbering",
+    "version_read": "arXiv:2303.01585v2 TeX-source figure files (vbs_V_-1p0.pdf md5 fc32c298, j1j2_spectra.png md5 c671dd6f; byte-identical to v1) and the journal PDF, Phys. Rev. X 14, 021010 (2024); text read in v1, v2 (PDF and HTML) and the journal PDF",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "Fig. 3 is the overlap figure, not the spectrum, and the paper prints no absolute sector energy; the compute pass of 2026-09-16 named them as the energies' source. The deposits are in VarBench's history (7277cf5 and 4aa5e29, both A. Wietek). Wording only; no number changes. The same block sits on every sector minimum of the instance.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#9 (qmbl-verify 2026-09-29; skeptic upheld), carried to the sector minima that share its block (handoff 2026-10-02)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization K.D3.A2 1",
+      "energy": -95.006305924
+    },
+    "field": "compute.note",
+    "edit": [
+      "Sector energies themselves are from the paper's spectrum data (Fig. 3 / appendix), fetched/2303.01585.txt.",
+      "The paper plots only (E - E0)/J1 (Fig. 2(b), Fig. 5(a), Fig. 6(b)); the absolute sector energies are the first author's VarBench deposits (ground state 2022-02-11, 7277cf5; all 48 sectors PR #10, 4aa5e29, 2024-07-29)."
+    ],
+    "reported_as": "FIG. 2. Energy spectrum of the J1-J2 model on the triangular lattice for N = 36 ... and for N = 48 at J2/J1 = 0.125 in panel (b) [axis (E - E0)/J1]; FIG. 3. Overlaps of low-energy levels of the J1-J2 model with various ansatz wave functions",
+    "location": "journal PDF p. 4 (Fig. 2) and p. 6 (Fig. 3); arXiv v2 same numbering",
+    "version_read": "arXiv:2303.01585v2 TeX-source figure files (vbs_V_-1p0.pdf md5 fc32c298, j1j2_spectra.png md5 c671dd6f; byte-identical to v1) and the journal PDF, Phys. Rev. X 14, 021010 (2024); text read in v1, v2 (PDF and HTML) and the journal PDF",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "Fig. 3 is the overlap figure, not the spectrum, and the paper prints no absolute sector energy; the compute pass of 2026-09-16 named them as the energies' source. The deposits are in VarBench's history (7277cf5 and 4aa5e29, both A. Wietek). Wording only; no number changes. The same block sits on every sector minimum of the instance.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#9 (qmbl-verify 2026-09-29; skeptic upheld), carried to the sector minima that share its block (handoff 2026-10-02)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization K.D3.A2 -1",
+      "energy": -95.0029307855
+    },
+    "field": "compute.note",
+    "edit": [
+      "Sector energies themselves are from the paper's spectrum data (Fig. 3 / appendix), fetched/2303.01585.txt.",
+      "The paper plots only (E - E0)/J1 (Fig. 2(b), Fig. 5(a), Fig. 6(b)); the absolute sector energies are the first author's VarBench deposits (ground state 2022-02-11, 7277cf5; all 48 sectors PR #10, 4aa5e29, 2024-07-29)."
+    ],
+    "reported_as": "FIG. 2. Energy spectrum of the J1-J2 model on the triangular lattice for N = 36 ... and for N = 48 at J2/J1 = 0.125 in panel (b) [axis (E - E0)/J1]; FIG. 3. Overlaps of low-energy levels of the J1-J2 model with various ansatz wave functions",
+    "location": "journal PDF p. 4 (Fig. 2) and p. 6 (Fig. 3); arXiv v2 same numbering",
+    "version_read": "arXiv:2303.01585v2 TeX-source figure files (vbs_V_-1p0.pdf md5 fc32c298, j1j2_spectra.png md5 c671dd6f; byte-identical to v1) and the journal PDF, Phys. Rev. X 14, 021010 (2024); text read in v1, v2 (PDF and HTML) and the journal PDF",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "Fig. 3 is the overlap figure, not the spectrum, and the paper prints no absolute sector energy; the compute pass of 2026-09-16 named them as the energies' source. The deposits are in VarBench's history (7277cf5 and 4aa5e29, both A. Wietek). Wording only; no number changes. The same block sits on every sector minimum of the instance.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#9 (qmbl-verify 2026-09-29; skeptic upheld), carried to the sector minima that share its block (handoff 2026-10-02)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Gamma.D6.B2 -1",
+      "energy": -94.823165815
+    },
+    "field": "compute.note",
+    "edit": [
+      "Sector energies themselves are from the paper's spectrum data (Fig. 3 / appendix), fetched/2303.01585.txt.",
+      "The paper plots only (E - E0)/J1 (Fig. 2(b), Fig. 5(a), Fig. 6(b)); the absolute sector energies are the first author's VarBench deposits (ground state 2022-02-11, 7277cf5; all 48 sectors PR #10, 4aa5e29, 2024-07-29)."
+    ],
+    "reported_as": "FIG. 2. Energy spectrum of the J1-J2 model on the triangular lattice for N = 36 ... and for N = 48 at J2/J1 = 0.125 in panel (b) [axis (E - E0)/J1]; FIG. 3. Overlaps of low-energy levels of the J1-J2 model with various ansatz wave functions",
+    "location": "journal PDF p. 4 (Fig. 2) and p. 6 (Fig. 3); arXiv v2 same numbering",
+    "version_read": "arXiv:2303.01585v2 TeX-source figure files (vbs_V_-1p0.pdf md5 fc32c298, j1j2_spectra.png md5 c671dd6f; byte-identical to v1) and the journal PDF, Phys. Rev. X 14, 021010 (2024); text read in v1, v2 (PDF and HTML) and the journal PDF",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "Fig. 3 is the overlap figure, not the spectrum, and the paper prints no absolute sector energy; the compute pass of 2026-09-16 named them as the energies' source. The deposits are in VarBench's history (7277cf5 and 4aa5e29, both A. Wietek). Wording only; no number changes. The same block sits on every sector minimum of the instance.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#9 (qmbl-verify 2026-09-29; skeptic upheld), carried to the sector minima that share its block (handoff 2026-10-02)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization M.D2.B1 -1",
+      "energy": -94.7108761422
+    },
+    "field": "compute.note",
+    "edit": [
+      "Sector energies themselves are from the paper's spectrum data (Fig. 3 / appendix), fetched/2303.01585.txt.",
+      "The paper plots only (E - E0)/J1 (Fig. 2(b), Fig. 5(a), Fig. 6(b)); the absolute sector energies are the first author's VarBench deposits (ground state 2022-02-11, 7277cf5; all 48 sectors PR #10, 4aa5e29, 2024-07-29)."
+    ],
+    "reported_as": "FIG. 2. Energy spectrum of the J1-J2 model on the triangular lattice for N = 36 ... and for N = 48 at J2/J1 = 0.125 in panel (b) [axis (E - E0)/J1]; FIG. 3. Overlaps of low-energy levels of the J1-J2 model with various ansatz wave functions",
+    "location": "journal PDF p. 4 (Fig. 2) and p. 6 (Fig. 3); arXiv v2 same numbering",
+    "version_read": "arXiv:2303.01585v2 TeX-source figure files (vbs_V_-1p0.pdf md5 fc32c298, j1j2_spectra.png md5 c671dd6f; byte-identical to v1) and the journal PDF, Phys. Rev. X 14, 021010 (2024); text read in v1, v2 (PDF and HTML) and the journal PDF",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "Fig. 3 is the overlap figure, not the spectrum, and the paper prints no absolute sector energy; the compute pass of 2026-09-16 named them as the energies' source. The deposits are in VarBench's history (7277cf5 and 4aa5e29, both A. Wietek). Wording only; no number changes. The same block sits on every sector minimum of the instance.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#9 (qmbl-verify 2026-09-29; skeptic upheld), carried to the sector minima that share its block (handoff 2026-10-02)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Gamma.D6.E2 -1",
+      "energy": -94.6108993244
+    },
+    "field": "compute.note",
+    "edit": [
+      "Sector energies themselves are from the paper's spectrum data (Fig. 3 / appendix), fetched/2303.01585.txt.",
+      "The paper plots only (E - E0)/J1 (Fig. 2(b), Fig. 5(a), Fig. 6(b)); the absolute sector energies are the first author's VarBench deposits (ground state 2022-02-11, 7277cf5; all 48 sectors PR #10, 4aa5e29, 2024-07-29)."
+    ],
+    "reported_as": "FIG. 2. Energy spectrum of the J1-J2 model on the triangular lattice for N = 36 ... and for N = 48 at J2/J1 = 0.125 in panel (b) [axis (E - E0)/J1]; FIG. 3. Overlaps of low-energy levels of the J1-J2 model with various ansatz wave functions",
+    "location": "journal PDF p. 4 (Fig. 2) and p. 6 (Fig. 3); arXiv v2 same numbering",
+    "version_read": "arXiv:2303.01585v2 TeX-source figure files (vbs_V_-1p0.pdf md5 fc32c298, j1j2_spectra.png md5 c671dd6f; byte-identical to v1) and the journal PDF, Phys. Rev. X 14, 021010 (2024); text read in v1, v2 (PDF and HTML) and the journal PDF",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "Fig. 3 is the overlap figure, not the spectrum, and the paper prints no absolute sector energy; the compute pass of 2026-09-16 named them as the energies' source. The deposits are in VarBench's history (7277cf5 and 4aa5e29, both A. Wietek). Wording only; no number changes. The same block sits on every sector minimum of the instance.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#9 (qmbl-verify 2026-09-29; skeptic upheld), carried to the sector minima that share its block (handoff 2026-10-02)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Gamma.D6.A1 -1",
+      "energy": -94.6001195408
+    },
+    "field": "compute.note",
+    "edit": [
+      "Sector energies themselves are from the paper's spectrum data (Fig. 3 / appendix), fetched/2303.01585.txt.",
+      "The paper plots only (E - E0)/J1 (Fig. 2(b), Fig. 5(a), Fig. 6(b)); the absolute sector energies are the first author's VarBench deposits (ground state 2022-02-11, 7277cf5; all 48 sectors PR #10, 4aa5e29, 2024-07-29)."
+    ],
+    "reported_as": "FIG. 2. Energy spectrum of the J1-J2 model on the triangular lattice for N = 36 ... and for N = 48 at J2/J1 = 0.125 in panel (b) [axis (E - E0)/J1]; FIG. 3. Overlaps of low-energy levels of the J1-J2 model with various ansatz wave functions",
+    "location": "journal PDF p. 4 (Fig. 2) and p. 6 (Fig. 3); arXiv v2 same numbering",
+    "version_read": "arXiv:2303.01585v2 TeX-source figure files (vbs_V_-1p0.pdf md5 fc32c298, j1j2_spectra.png md5 c671dd6f; byte-identical to v1) and the journal PDF, Phys. Rev. X 14, 021010 (2024); text read in v1, v2 (PDF and HTML) and the journal PDF",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "Fig. 3 is the overlap figure, not the spectrum, and the paper prints no absolute sector energy; the compute pass of 2026-09-16 named them as the energies' source. The deposits are in VarBench's history (7277cf5 and 4aa5e29, both A. Wietek). Wording only; no number changes. The same block sits on every sector minimum of the instance.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#9 (qmbl-verify 2026-09-29; skeptic upheld), carried to the sector minima that share its block (handoff 2026-10-02)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Gamma.D6.B1 1",
+      "energy": -94.3993360171
+    },
+    "field": "compute.note",
+    "edit": [
+      "Sector energies themselves are from the paper's spectrum data (Fig. 3 / appendix), fetched/2303.01585.txt.",
+      "The paper plots only (E - E0)/J1 (Fig. 2(b), Fig. 5(a), Fig. 6(b)); the absolute sector energies are the first author's VarBench deposits (ground state 2022-02-11, 7277cf5; all 48 sectors PR #10, 4aa5e29, 2024-07-29)."
+    ],
+    "reported_as": "FIG. 2. Energy spectrum of the J1-J2 model on the triangular lattice for N = 36 ... and for N = 48 at J2/J1 = 0.125 in panel (b) [axis (E - E0)/J1]; FIG. 3. Overlaps of low-energy levels of the J1-J2 model with various ansatz wave functions",
+    "location": "journal PDF p. 4 (Fig. 2) and p. 6 (Fig. 3); arXiv v2 same numbering",
+    "version_read": "arXiv:2303.01585v2 TeX-source figure files (vbs_V_-1p0.pdf md5 fc32c298, j1j2_spectra.png md5 c671dd6f; byte-identical to v1) and the journal PDF, Phys. Rev. X 14, 021010 (2024); text read in v1, v2 (PDF and HTML) and the journal PDF",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "Fig. 3 is the overlap figure, not the spectrum, and the paper prints no absolute sector energy; the compute pass of 2026-09-16 named them as the energies' source. The deposits are in VarBench's history (7277cf5 and 4aa5e29, both A. Wietek). Wording only; no number changes. The same block sits on every sector minimum of the instance.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#9 (qmbl-verify 2026-09-29; skeptic upheld), carried to the sector minima that share its block (handoff 2026-10-02)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Gamma.D6.B2 1",
+      "energy": -94.1370349394
+    },
+    "field": "compute.note",
+    "edit": [
+      "Sector energies themselves are from the paper's spectrum data (Fig. 3 / appendix), fetched/2303.01585.txt.",
+      "The paper plots only (E - E0)/J1 (Fig. 2(b), Fig. 5(a), Fig. 6(b)); the absolute sector energies are the first author's VarBench deposits (ground state 2022-02-11, 7277cf5; all 48 sectors PR #10, 4aa5e29, 2024-07-29)."
+    ],
+    "reported_as": "FIG. 2. Energy spectrum of the J1-J2 model on the triangular lattice for N = 36 ... and for N = 48 at J2/J1 = 0.125 in panel (b) [axis (E - E0)/J1]; FIG. 3. Overlaps of low-energy levels of the J1-J2 model with various ansatz wave functions",
+    "location": "journal PDF p. 4 (Fig. 2) and p. 6 (Fig. 3); arXiv v2 same numbering",
+    "version_read": "arXiv:2303.01585v2 TeX-source figure files (vbs_V_-1p0.pdf md5 fc32c298, j1j2_spectra.png md5 c671dd6f; byte-identical to v1) and the journal PDF, Phys. Rev. X 14, 021010 (2024); text read in v1, v2 (PDF and HTML) and the journal PDF",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "Fig. 3 is the overlap figure, not the spectrum, and the paper prints no absolute sector energy; the compute pass of 2026-09-16 named them as the energies' source. The deposits are in VarBench's history (7277cf5 and 4aa5e29, both A. Wietek). Wording only; no number changes. The same block sits on every sector minimum of the instance.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#9 (qmbl-verify 2026-09-29; skeptic upheld), carried to the sector minima that share its block (handoff 2026-10-02)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Gamma.D6.E1 1",
+      "energy": -94.1191636896
+    },
+    "field": "compute.note",
+    "edit": [
+      "Sector energies themselves are from the paper's spectrum data (Fig. 3 / appendix), fetched/2303.01585.txt.",
+      "The paper plots only (E - E0)/J1 (Fig. 2(b), Fig. 5(a), Fig. 6(b)); the absolute sector energies are the first author's VarBench deposits (ground state 2022-02-11, 7277cf5; all 48 sectors PR #10, 4aa5e29, 2024-07-29)."
+    ],
+    "reported_as": "FIG. 2. Energy spectrum of the J1-J2 model on the triangular lattice for N = 36 ... and for N = 48 at J2/J1 = 0.125 in panel (b) [axis (E - E0)/J1]; FIG. 3. Overlaps of low-energy levels of the J1-J2 model with various ansatz wave functions",
+    "location": "journal PDF p. 4 (Fig. 2) and p. 6 (Fig. 3); arXiv v2 same numbering",
+    "version_read": "arXiv:2303.01585v2 TeX-source figure files (vbs_V_-1p0.pdf md5 fc32c298, j1j2_spectra.png md5 c671dd6f; byte-identical to v1) and the journal PDF, Phys. Rev. X 14, 021010 (2024); text read in v1, v2 (PDF and HTML) and the journal PDF",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "Fig. 3 is the overlap figure, not the spectrum, and the paper prints no absolute sector energy; the compute pass of 2026-09-16 named them as the energies' source. The deposits are in VarBench's history (7277cf5 and 4aa5e29, both A. Wietek). Wording only; no number changes. The same block sits on every sector minimum of the instance.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#9 (qmbl-verify 2026-09-29; skeptic upheld), carried to the sector minima that share its block (handoff 2026-10-02)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Gamma.D6.A2 -1",
+      "energy": -93.9964710035
+    },
+    "field": "compute.note",
+    "edit": [
+      "Sector energies themselves are from the paper's spectrum data (Fig. 3 / appendix), fetched/2303.01585.txt.",
+      "The paper plots only (E - E0)/J1 (Fig. 2(b), Fig. 5(a), Fig. 6(b)); the absolute sector energies are the first author's VarBench deposits (ground state 2022-02-11, 7277cf5; all 48 sectors PR #10, 4aa5e29, 2024-07-29)."
+    ],
+    "reported_as": "FIG. 2. Energy spectrum of the J1-J2 model on the triangular lattice for N = 36 ... and for N = 48 at J2/J1 = 0.125 in panel (b) [axis (E - E0)/J1]; FIG. 3. Overlaps of low-energy levels of the J1-J2 model with various ansatz wave functions",
+    "location": "journal PDF p. 4 (Fig. 2) and p. 6 (Fig. 3); arXiv v2 same numbering",
+    "version_read": "arXiv:2303.01585v2 TeX-source figure files (vbs_V_-1p0.pdf md5 fc32c298, j1j2_spectra.png md5 c671dd6f; byte-identical to v1) and the journal PDF, Phys. Rev. X 14, 021010 (2024); text read in v1, v2 (PDF and HTML) and the journal PDF",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "Fig. 3 is the overlap figure, not the spectrum, and the paper prints no absolute sector energy; the compute pass of 2026-09-16 named them as the energies' source. The deposits are in VarBench's history (7277cf5 and 4aa5e29, both A. Wietek). Wording only; no number changes. The same block sits on every sector minimum of the instance.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#9 (qmbl-verify 2026-09-29; skeptic upheld), carried to the sector minima that share its block (handoff 2026-10-02)"
+  },
+  // VP4-arxiv-1311-5962 (8): the DMRG truncation-error extrapolations at L = 6 and 8 state no fit
+  // points; commit B corrected the published string, and the compute note said the same thing.
+  {
+    "match": {
+      "instance": "J1J2/square_36_P_0.4",
+      "method": "DMRG, extrapolated in the truncation error (4096-8192 SU(2) states)",
+      "energy": -76.283568
+    },
+    "field": "compute.note",
+    "edit": [
+      "Extrapolated (M -> infinity) from the 4096/6144/8192 SU(2)-state runs (about 16000/24000/32000 U(1) states) by a straight-line fit in truncation error; no single bond dimension applies.",
+      "Extrapolated (M -> infinity) by a straight-line fit in truncation error of runs up to 8192 SU(2) states (about 32000 U(1) states); the fit points are stated only for L = 10 (4096/6144/8192), and Fig. 16(a) plots M = 1024-8192 at L = 8; no single bond dimension applies."
+    ],
+    "reported_as": "-0.529747(1) under 'DMRG (∞)'; caption: 'DMRG (∞) is obtained from the straight line energy extrapolation with DMRG truncation error as illustrated in Fig. 16. ... The extrapolated results for L = 10 are obtained from the linear fitting of the data by keeping 4096, 6144 and 8192 SU(2) states.'",
+    "location": "Table I (Supplementary Information, arXiv v3 PDF p. 11; main.tex line 491), block J2 = 0.40, row L = 6, column DMRG (∞); pypdf layout v3 line 644, v1 line 586; Table I caption; Fig. 16 caption and figure file",
+    "version_read": "arXiv:1311.5962v3 (e-print main.tex of 2014-07-12, PDF identical in text to v2); v1 compared; PRL 113, 027201 (2014) Supplemental Material not accessible (APS 403)",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "The paper states the fit points (4096, 6144 and 8192 SU(2) states) only for L = 10, in a sentence added in v2; for L = 6 and 8 it says only 'straight line ... as illustrated in Fig. 16', and Fig. 16(a) plots M = 1024-8192 at L = 8. The published string was corrected to the printed label in commit B; the compute note said the same and follows it.",
+    "source_entry": "VP4-arxiv-1311-5962#19 (qmbl-verify 2026-09-29; skeptic upheld; its compute-rows-2026-09-16.json line edit)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_36_P_0.45",
+      "method": "DMRG, extrapolated in the truncation error (4096-8192 SU(2) states)",
+      "energy": -74.25504
+    },
+    "field": "compute.note",
+    "edit": [
+      "Extrapolated (M -> infinity) from the 4096/6144/8192 SU(2)-state runs (about 16000/24000/32000 U(1) states) by a straight-line fit in truncation error; no single bond dimension applies.",
+      "Extrapolated (M -> infinity) by a straight-line fit in truncation error of runs up to 8192 SU(2) states (about 32000 U(1) states); the fit points are stated only for L = 10 (4096/6144/8192), and Fig. 16(a) plots M = 1024-8192 at L = 8; no single bond dimension applies."
+    ],
+    "reported_as": "-0.515660(1) under 'DMRG (∞)'; caption: 'DMRG (∞) is obtained from the straight line energy extrapolation with DMRG truncation error as illustrated in Fig. 16. ... The extrapolated results for L = 10 are obtained from the linear fitting of the data by keeping 4096, 6144 and 8192 SU(2) states.'",
+    "location": "Table I (Supplementary Information, arXiv v3 PDF p. 11; main.tex line 500), block J2 = 0.45, row L = 6, column DMRG (∞); pypdf layout v3 line 648, v1 line 590; Table I caption; Fig. 16 caption and figure file",
+    "version_read": "arXiv:1311.5962v3 (e-print main.tex of 2014-07-12, PDF identical in text to v2); v1 compared; PRL 113, 027201 (2014) Supplemental Material not accessible (APS 403)",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "The paper states the fit points (4096, 6144 and 8192 SU(2) states) only for L = 10, in a sentence added in v2; for L = 6 and 8 it says only 'straight line ... as illustrated in Fig. 16', and Fig. 16(a) plots M = 1024-8192 at L = 8. The published string was corrected to the printed label in commit B; the compute note said the same and follows it.",
+    "source_entry": "VP4-arxiv-1311-5962#23 (qmbl-verify 2026-09-29; skeptic upheld; its compute-rows-2026-09-16.json line edit)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_36_P_0.5",
+      "method": "DMRG, extrapolated in the truncation error (4096-8192 SU(2) states)",
+      "energy": -72.548352
+    },
+    "field": "compute.note",
+    "edit": [
+      "Extrapolated (M -> infinity) from the 4096/6144/8192 SU(2)-state runs (about 16000/24000/32000 U(1) states) by a straight-line fit in truncation error; no single bond dimension applies.",
+      "Extrapolated (M -> infinity) by a straight-line fit in truncation error of runs up to 8192 SU(2) states (about 32000 U(1) states); the fit points are stated only for L = 10 (4096/6144/8192), and Fig. 16(a) plots M = 1024-8192 at L = 8; no single bond dimension applies."
+    ],
+    "reported_as": "-0.503808(1) under 'DMRG (∞)'; caption: 'DMRG (∞) is obtained from the straight line energy extrapolation with DMRG truncation error as illustrated in Fig. 16. ... The extrapolated results for L = 10 are obtained from the linear fitting of the data by keeping 4096, 6144 and 8192 SU(2) states.'",
+    "location": "Table I (Supplementary Information, arXiv v3 PDF p. 11; main.tex line 509), block J2 = 0.50, row L = 6, column DMRG (∞); pypdf layout v3 line 652, v1 line 594; Table I caption; Fig. 16 caption and figure file",
+    "version_read": "arXiv:1311.5962v3 (e-print main.tex of 2014-07-12, PDF identical in text to v2); v1 compared; PRL 113, 027201 (2014) Supplemental Material not accessible (APS 403)",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "The paper states the fit points (4096, 6144 and 8192 SU(2) states) only for L = 10, in a sentence added in v2; for L = 6 and 8 it says only 'straight line ... as illustrated in Fig. 16', and Fig. 16(a) plots M = 1024-8192 at L = 8. The published string was corrected to the printed label in commit B; the compute note said the same and follows it.",
+    "source_entry": "VP4-arxiv-1311-5962#27 (qmbl-verify 2026-09-29; skeptic upheld; its compute-rows-2026-09-16.json line edit)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_36_P_0.55",
+      "method": "DMRG, extrapolated in the truncation error (4096-8192 SU(2) states)",
+      "energy": -71.306784
+    },
+    "field": "compute.note",
+    "edit": [
+      "Extrapolated (M -> infinity) from the 4096/6144/8192 SU(2)-state runs (about 16000/24000/32000 U(1) states) by a straight-line fit in truncation error; no single bond dimension applies.",
+      "Extrapolated (M -> infinity) by a straight-line fit in truncation error of runs up to 8192 SU(2) states (about 32000 U(1) states); the fit points are stated only for L = 10 (4096/6144/8192), and Fig. 16(a) plots M = 1024-8192 at L = 8; no single bond dimension applies."
+    ],
+    "reported_as": "-0.495186(1) under 'DMRG (∞)'; caption: 'DMRG (∞) is obtained from the straight line energy extrapolation with DMRG truncation error as illustrated in Fig. 16. ... The extrapolated results for L = 10 are obtained from the linear fitting of the data by keeping 4096, 6144 and 8192 SU(2) states.'",
+    "location": "Table I (Supplementary Information, arXiv v3 PDF p. 11; main.tex line 518), block J2 = 0.55, row L = 6, column DMRG (∞); pypdf layout v3 line 656, v1 line 598; Table I caption; Fig. 16 caption and figure file",
+    "version_read": "arXiv:1311.5962v3 (e-print main.tex of 2014-07-12, PDF identical in text to v2); v1 compared; PRL 113, 027201 (2014) Supplemental Material not accessible (APS 403)",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "The paper states the fit points (4096, 6144 and 8192 SU(2) states) only for L = 10, in a sentence added in v2; for L = 6 and 8 it says only 'straight line ... as illustrated in Fig. 16', and Fig. 16(a) plots M = 1024-8192 at L = 8. The published string was corrected to the printed label in commit B; the compute note said the same and follows it.",
+    "source_entry": "VP4-arxiv-1311-5962#31 (qmbl-verify 2026-09-29; skeptic upheld; its compute-rows-2026-09-16.json line edit)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_64_P_0.4",
+      "method": "DMRG, extrapolated in the truncation error (4096-8192 SU(2) states)",
+      "energy": -134.7072
+    },
+    "field": "compute.note",
+    "edit": [
+      "Extrapolated (M -> infinity) from the 4096/6144/8192 SU(2)-state runs (about 16000/24000/32000 U(1) states) by a straight-line fit in truncation error; no single bond dimension applies.",
+      "Extrapolated (M -> infinity) by a straight-line fit in truncation error of runs up to 8192 SU(2) states (about 32000 U(1) states); the fit points are stated only for L = 10 (4096/6144/8192), and Fig. 16(a) plots M = 1024-8192 at L = 8; no single bond dimension applies."
+    ],
+    "reported_as": "-0.5262(1) under 'DMRG (∞)'; caption: 'DMRG (∞) is obtained from the straight line energy extrapolation with DMRG truncation error as illustrated in Fig. 16. ... The extrapolated results for L = 10 are obtained from the linear fitting of the data by keeping 4096, 6144 and 8192 SU(2) states.'",
+    "location": "Table I (Supplementary Information, arXiv v3 PDF p. 11; main.tex line 493), block J2 = 0.40, row L = 8, column DMRG (∞); pypdf layout v3 line 645, v1 line 587; Table I caption; Fig. 16 caption and figure file",
+    "version_read": "arXiv:1311.5962v3 (e-print main.tex of 2014-07-12, PDF identical in text to v2); v1 compared; PRL 113, 027201 (2014) Supplemental Material not accessible (APS 403)",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "The paper states the fit points (4096, 6144 and 8192 SU(2) states) only for L = 10, in a sentence added in v2; for L = 6 and 8 it says only 'straight line ... as illustrated in Fig. 16', and Fig. 16(a) plots M = 1024-8192 at L = 8. The published string was corrected to the printed label in commit B; the compute note said the same and follows it.",
+    "source_entry": "VP4-arxiv-1311-5962#36 (qmbl-verify 2026-09-29; skeptic upheld; its compute-rows-2026-09-16.json line edit)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_64_P_0.45",
+      "method": "DMRG, extrapolated in the truncation error (4096-8192 SU(2) states)",
+      "energy": -130.9696
+    },
+    "field": "compute.note",
+    "edit": [
+      "Extrapolated (M -> infinity) from the 4096/6144/8192 SU(2)-state runs (about 16000/24000/32000 U(1) states) by a straight-line fit in truncation error; no single bond dimension applies.",
+      "Extrapolated (M -> infinity) by a straight-line fit in truncation error of runs up to 8192 SU(2) states (about 32000 U(1) states); the fit points are stated only for L = 10 (4096/6144/8192), and Fig. 16(a) plots M = 1024-8192 at L = 8; no single bond dimension applies."
+    ],
+    "reported_as": "-0.5116(1) under 'DMRG (∞)'; caption: 'DMRG (∞) is obtained from the straight line energy extrapolation with DMRG truncation error as illustrated in Fig. 16. ... The extrapolated results for L = 10 are obtained from the linear fitting of the data by keeping 4096, 6144 and 8192 SU(2) states.'",
+    "location": "Table I (Supplementary Information, arXiv v3 PDF p. 11; main.tex line 502), block J2 = 0.45, row L = 8, column DMRG (∞); pypdf layout v3 line 649, v1 line 591; Table I caption; Fig. 16 caption and figure file",
+    "version_read": "arXiv:1311.5962v3 (e-print main.tex of 2014-07-12, PDF identical in text to v2); v1 compared; PRL 113, 027201 (2014) Supplemental Material not accessible (APS 403)",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "The paper states the fit points (4096, 6144 and 8192 SU(2) states) only for L = 10, in a sentence added in v2; for L = 6 and 8 it says only 'straight line ... as illustrated in Fig. 16', and Fig. 16(a) plots M = 1024-8192 at L = 8. The published string was corrected to the printed label in commit B; the compute note said the same and follows it.",
+    "source_entry": "VP4-arxiv-1311-5962#40 (qmbl-verify 2026-09-29; skeptic upheld; its compute-rows-2026-09-16.json line edit)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_64_P_0.5",
+      "method": "DMRG, extrapolated in the truncation error (4096-8192 SU(2) states)",
+      "energy": -127.7952
+    },
+    "field": "compute.note",
+    "edit": [
+      "Extrapolated (M -> infinity) from the 4096/6144/8192 SU(2)-state runs (about 16000/24000/32000 U(1) states) by a straight-line fit in truncation error; no single bond dimension applies.",
+      "Extrapolated (M -> infinity) by a straight-line fit in truncation error of runs up to 8192 SU(2) states (about 32000 U(1) states); the fit points are stated only for L = 10 (4096/6144/8192), and Fig. 16(a) plots M = 1024-8192 at L = 8; no single bond dimension applies."
+    ],
+    "reported_as": "-0.4992(1) under 'DMRG (∞)'; caption: 'DMRG (∞) is obtained from the straight line energy extrapolation with DMRG truncation error as illustrated in Fig. 16. ... The extrapolated results for L = 10 are obtained from the linear fitting of the data by keeping 4096, 6144 and 8192 SU(2) states.'",
+    "location": "Table I (Supplementary Information, arXiv v3 PDF p. 11; main.tex line 511), block J2 = 0.50, row L = 8, column DMRG (∞); pypdf layout v3 line 653, v1 line 595; Table I caption; Fig. 16 caption and figure file",
+    "version_read": "arXiv:1311.5962v3 (e-print main.tex of 2014-07-12, PDF identical in text to v2); v1 compared; PRL 113, 027201 (2014) Supplemental Material not accessible (APS 403)",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "The paper states the fit points (4096, 6144 and 8192 SU(2) states) only for L = 10, in a sentence added in v2; for L = 6 and 8 it says only 'straight line ... as illustrated in Fig. 16', and Fig. 16(a) plots M = 1024-8192 at L = 8. The published string was corrected to the printed label in commit B; the compute note said the same and follows it.",
+    "source_entry": "VP4-arxiv-1311-5962#44 (qmbl-verify 2026-09-29; skeptic upheld; its compute-rows-2026-09-16.json line edit)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_64_P_0.55",
+      "method": "DMRG, extrapolated in the truncation error (4096-8192 SU(2) states)",
+      "energy": -125.2096
+    },
+    "field": "compute.note",
+    "edit": [
+      "Extrapolated (M -> infinity) from the 4096/6144/8192 SU(2)-state runs (about 16000/24000/32000 U(1) states) by a straight-line fit in truncation error; no single bond dimension applies.",
+      "Extrapolated (M -> infinity) by a straight-line fit in truncation error of runs up to 8192 SU(2) states (about 32000 U(1) states); the fit points are stated only for L = 10 (4096/6144/8192), and Fig. 16(a) plots M = 1024-8192 at L = 8; no single bond dimension applies."
+    ],
+    "reported_as": "-0.4891(1) under 'DMRG (∞)'; caption: 'DMRG (∞) is obtained from the straight line energy extrapolation with DMRG truncation error as illustrated in Fig. 16. ... The extrapolated results for L = 10 are obtained from the linear fitting of the data by keeping 4096, 6144 and 8192 SU(2) states.'",
+    "location": "Table I (Supplementary Information, arXiv v3 PDF p. 11; main.tex line 520), block J2 = 0.55, row L = 8, column DMRG (∞); pypdf layout v3 line 657, v1 line 599; Table I caption; Fig. 16 caption and figure file",
+    "version_read": "arXiv:1311.5962v3 (e-print main.tex of 2014-07-12, PDF identical in text to v2); v1 compared; PRL 113, 027201 (2014) Supplemental Material not accessible (APS 403)",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "The paper states the fit points (4096, 6144 and 8192 SU(2) states) only for L = 10, in a sentence added in v2; for L = 6 and 8 it says only 'straight line ... as illustrated in Fig. 16', and Fig. 16(a) plots M = 1024-8192 at L = 8. The published string was corrected to the printed label in commit B; the compute note said the same and follows it.",
+    "source_entry": "VP4-arxiv-1311-5962#48 (qmbl-verify 2026-09-29; skeptic upheld; its compute-rows-2026-09-16.json line edit)"
+  },
+  // VA5-hubbard-heisenberg-tfising-j1j2#61, #63 and the handoff's second task: Nomura's RBM rows
+  // (J. Phys.: Condens. Matter 33, 174003 = arXiv:2009.14777) are the M = 144 and M = 192 states, as their
+  // detail has said since commit B (VA5#60, #62), so the parameter count follows: N_var = 3M(N_site + 1)/2,
+  // evaluated from the printed formula (medium). Identification re-checked 2026-10-02: VA5's decode of the
+  // Fig. 3 form stream (/Im3, page 6 of v3, md5 700fbd0b, re-extracted with pypdf) rerun.
+  {
+    "match": {
+      "instance": "J1J2/square_36_P_0.5",
+      "method": "RBM with momentum (K=0), spin-parity (even S), and point-group (A1) projections, 72 hidden units",
+      "energy": -72.5414
+    },
+    "field": "compute.parameters",
+    "from": 3996,
+    "to": 7992,
+    "reported_as": "Sec. 2.2.5: 'the total number of the variational parameters amounts to 3M(Nsite + 1)/2'; Fig. 3 caption: 'The data points from right to left correspond to M = 18, 36, 72, 144 (M/Nsite = 0.5, 1, 2, 4) for the 6x6 lattice'",
+    "location": "arXiv:2009.14777v3 Sec. 2.2.5 (p. 5), Fig. 3 (p. 6); Sec. 4 prints 3996 for the M = 72 state of Fig. 2",
+    "version_read": "arXiv:2009.14777v3 PDF, pypdf plain text (run source cache); Fig. 3 decoded from the form stream /Im3 on page 6 (byte-identical in v2) with VA5's decode_fig3.mjs, rerun 2026-10-02",
+    "conversion": "3 x 144 x (36 + 1) / 2 = 7992 (stored 3996 = 3 x 72 x 37 / 2)",
+    "checked_on": "2026-10-02",
+    "reason": "The row is the M = 144 state: its energy and variance, E/N = -0.5037597 and var/E^2 = 0.1905/72.5414^2 = 3.620e-5, are Fig. 3's M = 144 point (-0.5037571, 3.607e-5), not the M = 72 one (-0.5036905, 7.99e-5). The paper gives half of the M hidden units complex and half real parameters ('we take them complex numbers for 1 <= k <= M/2, and the rest [...] are taken to be real', Sec. 2.2.5; Fig. 7 labels a network by the two counts), so the upload's '72 hidden units' counts one half, as the row's detail has said since commit B. The compute pass took M = 72 from the method string.",
+    "source_entry": "VA5-hubbard-heisenberg-tfising-j1j2#61 (qmbl-verify 2026-09-29; skeptic upheld); identification re-checked by the handoff of 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_36_P_0.5",
+      "method": "RBM with momentum (K=0), spin-parity (even S), and point-group (A1) projections, 72 hidden units",
+      "energy": -72.5414
+    },
+    "field": "compute.confidence",
+    "from": "high",
+    "to": "medium",
+    "reported_as": "Sec. 2.2.5: 'the total number of the variational parameters amounts to 3M(Nsite + 1)/2'",
+    "location": "arXiv:2009.14777v3 Sec. 2.2.5",
+    "version_read": "arXiv:2009.14777v3 PDF, pypdf plain text (run source cache); Fig. 3 decoded from the form stream /Im3 on page 6 (byte-identical in v2) with VA5's decode_fig3.mjs, rerun 2026-10-02",
+    "conversion": "none",
+    "checked_on": "2026-10-02",
+    "reason": "7992 is evaluated from the formula the paper prints, which DATA.md rates medium; the paper prints a count, 3996, only for the M = 72 state.",
+    "source_entry": "handoff 2026-10-02 (engineer), with VA5-hubbard-heisenberg-tfising-j1j2#61"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_36_P_0.5",
+      "method": "RBM with momentum (K=0), spin-parity (even S), and point-group (A1) projections, 72 hidden units",
+      "energy": -72.5414
+    },
+    "field": "compute.note",
+    "edit": [
+      "parameters = 3996 is printed explicitly for the M = 72, 6 x 6, fully projected wave function.",
+      "parameters = 7992 is the paper's N_var = 3M(N_site + 1)/2 at M = 144, N_site = 36: 72 hidden units with complex and 72 with real parameters, the halves Fig. 7 counts, of which the upload's '72 hidden units' names one; the row's energy and variance are Fig. 3's M = 144 point, not the M = 72 one, whose 3996 parameters the paper prints (Sec. 4)."
+    ],
+    "reported_as": "Sec. 4: 'The number of variational parameters Nvar (= 3M(Nsite + 1)/2, see Sec. 2.2.5) in the wave function [...] with M = 72 for the 6 x 6 lattice used in Fig. 2 is 3996.'",
+    "location": "arXiv:2009.14777v3 Sec. 4, Sec. 2.2.5, Figs. 3 and 7",
+    "version_read": "arXiv:2009.14777v3 PDF, pypdf plain text (run source cache); Fig. 3 decoded from the form stream /Im3 on page 6 (byte-identical in v2) with VA5's decode_fig3.mjs, rerun 2026-10-02",
+    "conversion": "none (text field)",
+    "checked_on": "2026-10-02",
+    "reason": "The note described the M = 72 state; the row is the M = 144 one (see the parameters entry). Wording only, besides the count.",
+    "source_entry": "handoff 2026-10-02 (engineer), with VA5-hubbard-heisenberg-tfising-j1j2#61"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_36_P_0.5",
+      "method": "RBM with momentum (K=0), spin-parity (even S), and point-group (A1) projections, 72 hidden units",
+      "energy": -72.5414
+    },
+    "field": "compute.note",
+    "edit": [
+      "not for this M = 72 fully projected (N_proj = 16 N_site) run",
+      "not for this M = 144 fully projected (N_proj = 16 N_site) run"
+    ],
+    "reported_as": "Sec. 4: 'The number of variational parameters Nvar (= 3M(Nsite + 1)/2, see Sec. 2.2.5) in the wave function [...] with M = 72 for the 6 x 6 lattice used in Fig. 2 is 3996.'",
+    "location": "arXiv:2009.14777v3 Sec. 4, Sec. 2.2.5, Figs. 3 and 7",
+    "version_read": "arXiv:2009.14777v3 PDF, pypdf plain text (run source cache); Fig. 3 decoded from the form stream /Im3 on page 6 (byte-identical in v2) with VA5's decode_fig3.mjs, rerun 2026-10-02",
+    "conversion": "none (text field)",
+    "checked_on": "2026-10-02",
+    "reason": "The note described the M = 72 state; the row is the M = 144 one (see the parameters entry). Wording only, besides the count.",
+    "source_entry": "handoff 2026-10-02 (engineer), with VA5-hubbard-heisenberg-tfising-j1j2#61"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_64_P_0.5",
+      "method": "RBM with momentum (K=0), spin-parity (even S), and point-group (A1) projections, 96 hidden units",
+      "energy": -127.65838
+    },
+    "field": "compute.parameters",
+    "from": 9360,
+    "to": 18720,
+    "reported_as": "Sec. 2.2.5: 'the total number of the variational parameters amounts to 3M(Nsite + 1)/2'; Fig. 3 caption: 'M = 32, 64, 96, 128, 192 (M/Nsite = 0.5, 1, 1.5, 2, 3) for the 8 x 8 lattice'",
+    "location": "arXiv:2009.14777v3 Sec. 2.2.5 (p. 5), Fig. 3 (p. 6)",
+    "version_read": "arXiv:2009.14777v3 PDF, pypdf plain text (run source cache); Fig. 3 decoded from the form stream /Im3 on page 6 (byte-identical in v2) with VA5's decode_fig3.mjs, rerun 2026-10-02",
+    "conversion": "3 x 192 x (64 + 1) / 2 = 18720 (stored 9360 = 3 x 96 x 65 / 2)",
+    "checked_on": "2026-10-02",
+    "reason": "The row is the M = 192 state: its energy and variance, E/N = -0.4986655 and var/E^2 = 1.85/127.65838^2 = 1.135e-4, are Fig. 3's M = 192 point (-0.4986667, 1.137e-4), not the M = 96 one (-0.4982813, 2.337e-4). The paper gives half of the M hidden units complex and half real parameters ('we take them complex numbers for 1 <= k <= M/2, and the rest [...] are taken to be real', Sec. 2.2.5; Fig. 7 labels a network by the two counts), so the upload's '96 hidden units' counts one half, as the row's detail has said since commit B. The compute pass took M = 96 from the method string.",
+    "source_entry": "VA5-hubbard-heisenberg-tfising-j1j2#63 (qmbl-verify 2026-09-29; skeptic upheld); identification re-checked by the handoff of 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_64_P_0.5",
+      "method": "RBM with momentum (K=0), spin-parity (even S), and point-group (A1) projections, 96 hidden units",
+      "energy": -127.65838
+    },
+    "field": "compute.note",
+    "edit": [
+      "parameters = 9360 is the paper's own formula N_var = 3M(N_site + 1)/2 evaluated at the stated M = 96, N_site = 64",
+      "parameters = 18720 is the paper's own formula N_var = 3M(N_site + 1)/2 evaluated at M = 192, N_site = 64: 96 hidden units with complex and 96 with real parameters, the halves Fig. 7 counts, of which the upload's '96 hidden units' names one; the row's energy and variance are Fig. 3's M = 192 point, not the M = 96 one"
+    ],
+    "reported_as": "Sec. 2.2.5: 'the total number of the variational parameters amounts to 3M(Nsite + 1)/2'",
+    "location": "arXiv:2009.14777v3 Sec. 2.2.5, Figs. 3 and 7",
+    "version_read": "arXiv:2009.14777v3 PDF, pypdf plain text (run source cache); Fig. 3 decoded from the form stream /Im3 on page 6 (byte-identical in v2) with VA5's decode_fig3.mjs, rerun 2026-10-02",
+    "conversion": "none (text field)",
+    "checked_on": "2026-10-02",
+    "reason": "The note described the M = 96 state; the row is the M = 192 one (see the parameters entry). Wording only, besides the count.",
+    "source_entry": "handoff 2026-10-02 (engineer), with VA5-hubbard-heisenberg-tfising-j1j2#63"
+  },
+  // VP14-hubbard-j1j2-heisenberg-tfising#21/#22 and #26/#27: the ResNet2 parameter counts, from the
+  // authors' code and figure data (github.com/ChenAo-Phys/MinSR at 6b6493f), which the published strings could
+  // not carry (commit B kept no parameter count in method_names.mjs).
+  {
+    "match": {
+      "instance": "J1J2/square_100_P_0.5",
+      "method": "ResNet2 (64 conv layers, >1e6 params), MinSR",
+      "energy": -199.07684
+    },
+    "field": "compute.parameters",
+    "from": null,
+    "to": 1071488,
+    "version_read": "local clone of github.com/ChenAo-Phys/MinSR at 6b6493f (qmbl-runs/checkpoint-measure/repos/MinSR), read 2026-10-02; arXiv:2302.01941v3",
+    "checked_on": "2026-09-29",
+    "source_entry": "VP14-hubbard-j1j2-heisenberg-tfising#21 and #22 (qmbl-verify 2026-09-29; skeptic upheld)",
+    "reported_as": "github.com/ChenAo-Phys/MinSR @ 6b6493f, examples/measure.py: '3: 30 layers, 64 channels every layer, 3x3 kernels, 1071488 parameters in total [...] The variational energies of these networks correspond to the results of ResNet2(MinSR) in Fig. 2b' || data/Fig2b.csv, under ResNet2: '1071488, -0.4976921'",
+    "location": "github.com/ChenAo-Phys/MinSR @ 6b6493f, examples/measure.py (docstring) and data/Fig2b.csv",
+    "conversion": "-0.4976921 x 400 = -199.07684, the row's energy",
+    "reason": "The published text says 'more than one million parameters in ResNet2', and its Extended Data Table 1 is an image. The authors' code names the network behind Fig. 2b's ResNet2 (MinSR) points, 30 layers of 64 channels with 1071488 parameters, and their Fig. 2b data pair that count with this energy."
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_100_P_0.5",
+      "method": "ResNet2 (64 conv layers, >1e6 params), MinSR",
+      "energy": -199.07684
+    },
+    "field": "compute.note",
+    "edit": [
+      "Parameter count is stated only as 'more than one million parameters in ResNet2' / 'N_p ~ 10^6' (no exact number in the published text; Extended Data Table 1 is an image and could not be read), so parameters is left null.",
+      "parameters = 1071488 is the authors' count for this network, 30 conv layers of 64 channels: their code's examples/measure.py names it, and their Fig. 2b data pair it with this energy (github.com/ChenAo-Phys/MinSR @ 6b6493f); the published text says only 'more than one million parameters in ResNet2' / 'N_p ~ 10^6'."
+    ],
+    "version_read": "local clone of github.com/ChenAo-Phys/MinSR at 6b6493f (qmbl-runs/checkpoint-measure/repos/MinSR), read 2026-10-02; arXiv:2302.01941v3",
+    "checked_on": "2026-09-29",
+    "source_entry": "VP14-hubbard-j1j2-heisenberg-tfising#21 and #22 (qmbl-verify 2026-09-29; skeptic upheld)",
+    "reported_as": "github.com/ChenAo-Phys/MinSR @ 6b6493f, examples/measure.py: '3: 30 layers, 64 channels every layer, 3x3 kernels, 1071488 parameters in total [...] The variational energies of these networks correspond to the results of ResNet2(MinSR) in Fig. 2b' || data/Fig2b.csv, under ResNet2: '1071488, -0.4976921'",
+    "location": "github.com/ChenAo-Phys/MinSR @ 6b6493f, examples/measure.py and data/Fig2b.csv",
+    "conversion": "none (text field)",
+    "reason": "The note said the count was not stated; it follows the parameters entry."
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_100_P_0.5",
+      "method": "ResNet2 (64 conv layers, >1e6 params), MinSR",
+      "energy": -199.07684
+    },
+    "field": "compute.reported_as",
+    "edit": [
+      "comparing different optimizers.",
+      "comparing different optimizers. || github.com/ChenAo-Phys/MinSR @ 6b6493f, examples/measure.py: '3: 30 layers, 64 channels every layer, 3x3 kernels, 1071488 parameters in total [...] The variational energies of these networks correspond to the results of ResNet2(MinSR) in Fig. 2b' || data/Fig2b.csv, under ResNet2: '1071488, -0.4976921'"
+    ],
+    "version_read": "local clone of github.com/ChenAo-Phys/MinSR at 6b6493f (qmbl-runs/checkpoint-measure/repos/MinSR), read 2026-10-02; arXiv:2302.01941v3",
+    "checked_on": "2026-09-29",
+    "source_entry": "VP14-hubbard-j1j2-heisenberg-tfising#21 and #22 (qmbl-verify 2026-09-29; skeptic upheld)",
+    "reported_as": "github.com/ChenAo-Phys/MinSR @ 6b6493f, examples/measure.py: '3: 30 layers, 64 channels every layer, 3x3 kernels, 1071488 parameters in total [...] The variational energies of these networks correspond to the results of ResNet2(MinSR) in Fig. 2b' || data/Fig2b.csv, under ResNet2: '1071488, -0.4976921'",
+    "location": "github.com/ChenAo-Phys/MinSR @ 6b6493f, examples/measure.py and data/Fig2b.csv",
+    "conversion": "none (text field)",
+    "reason": "The words the parameter count is read from (DATA.md: reported_as carries them)."
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_100_P_0.5",
+      "method": "ResNet2 (64 conv layers, >1e6 params), MinSR",
+      "energy": -199.07684
+    },
+    "field": "compute.source",
+    "edit": [
+      "Methods (ResNet1/ResNet2), arXiv:2302.01941 (compute pass 2026-09-16)",
+      "Methods (ResNet1/ResNet2), arXiv:2302.01941 (compute pass 2026-09-16); examples/measure.py and data/Fig2b.csv of the authors' code, github.com/ChenAo-Phys/MinSR @ 6b6493f (qmbl-verify 2026-09-29)"
+    ],
+    "version_read": "local clone of github.com/ChenAo-Phys/MinSR at 6b6493f (qmbl-runs/checkpoint-measure/repos/MinSR), read 2026-10-02; arXiv:2302.01941v3",
+    "checked_on": "2026-09-29",
+    "source_entry": "VP14-hubbard-j1j2-heisenberg-tfising#21 and #22 (qmbl-verify 2026-09-29; skeptic upheld)",
+    "reported_as": "github.com/ChenAo-Phys/MinSR @ 6b6493f, examples/measure.py: '3: 30 layers, 64 channels every layer, 3x3 kernels, 1071488 parameters in total [...] The variational energies of these networks correspond to the results of ResNet2(MinSR) in Fig. 2b' || data/Fig2b.csv, under ResNet2: '1071488, -0.4976921'",
+    "location": "github.com/ChenAo-Phys/MinSR @ 6b6493f",
+    "conversion": "none (text field)",
+    "reason": "Where the parameter count is read from."
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_256_P_0.5",
+      "method": "ResNet2 (64 conv layers), MinSR",
+      "energy": -508.6374912
+    },
+    "field": "compute.parameters",
+    "from": null,
+    "to": 34944,
+    "version_read": "local clone of github.com/ChenAo-Phys/MinSR at 6b6493f (qmbl-runs/checkpoint-measure/repos/MinSR), read 2026-10-02; arXiv:2302.01941v3",
+    "checked_on": "2026-09-29",
+    "source_entry": "VP14-hubbard-j1j2-heisenberg-tfising#26 and #27 (qmbl-verify 2026-09-29; skeptic upheld)",
+    "reported_as": "github.com/ChenAo-Phys/MinSR @ 6b6493f, data/Fig2c.csv, under ResNet2: '34944, -0.4967164' || examples/measure.py: '1: 16 layers, 16 channels every layer, 3x3 kernels 34944 parameters in total'",
+    "location": "github.com/ChenAo-Phys/MinSR @ 6b6493f, data/Fig2c.csv and examples/measure.py (docstring); arXiv:2302.01941v3 p. 4 prints -0.4967163(8)",
+    "conversion": "-0.4967163 x 1024 = -508.6374912, the row's energy; the figure data's -0.4967164 is it to 1e-7",
+    "reason": "The text attaches no network to the printed 16x16 value. Of the authors' Fig. 2c data only the 34944-parameter ResNet2, 16 layers of 16 channels, gives it; the 139008-parameter network gives -0.4967935, and -0.496883 with a Lanczos step. This settles the question the compute note left open."
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_256_P_0.5",
+      "method": "ResNet2 (64 conv layers), MinSR",
+      "energy": -508.6374912
+    },
+    "field": "compute.note",
+    "edit": [
+      "No parameter count is attached to the 16x16 value in the text; Fig. 2c plots the 16x16 ResNet2 energies against N_p up to ~1.5 x 10^5, and Extended Data Fig. 3 states that L = 10, 12, 16, 20 extrapolations used ResNet2 with 34944 and 139008 parameters plus a Lanczos step on the larger one, but whether -0.4967163(8) is the 139008-parameter network with or without the Lanczos step is not stated.",
+      "parameters = 34944: the text attaches no network to the 16x16 value, and the authors' Fig. 2c data (github.com/ChenAo-Phys/MinSR @ 6b6493f, data/Fig2c.csv) give it to the 34944-parameter ResNet2, 16 conv layers of 16 channels (examples/measure.py); their 139008-parameter network reaches -0.4967935, and -0.496883 with a Lanczos step, neither printed in the text."
+    ],
+    "version_read": "local clone of github.com/ChenAo-Phys/MinSR at 6b6493f (qmbl-runs/checkpoint-measure/repos/MinSR), read 2026-10-02; arXiv:2302.01941v3",
+    "checked_on": "2026-09-29",
+    "source_entry": "VP14-hubbard-j1j2-heisenberg-tfising#26 and #27 (qmbl-verify 2026-09-29; skeptic upheld)",
+    "reported_as": "github.com/ChenAo-Phys/MinSR @ 6b6493f, data/Fig2c.csv, under ResNet2: '34944, -0.4967164' || examples/measure.py: '1: 16 layers, 16 channels every layer, 3x3 kernels 34944 parameters in total'",
+    "location": "github.com/ChenAo-Phys/MinSR @ 6b6493f, data/Fig2c.csv and examples/measure.py",
+    "conversion": "none (text field)",
+    "reason": "The note left open which network the value is; it follows the parameters entry."
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_256_P_0.5",
+      "method": "ResNet2 (64 conv layers), MinSR",
+      "energy": -508.6374912
+    },
+    "field": "compute.reported_as",
+    "edit": [
+      "the slopes on L = 10, 12, 16",
+      "the slopes on L = 10, 12, 16 || github.com/ChenAo-Phys/MinSR @ 6b6493f, data/Fig2c.csv, under ResNet2: '34944, -0.4967164' || examples/measure.py: '1: 16 layers, 16 channels every layer, 3x3 kernels 34944 parameters in total'"
+    ],
+    "version_read": "local clone of github.com/ChenAo-Phys/MinSR at 6b6493f (qmbl-runs/checkpoint-measure/repos/MinSR), read 2026-10-02; arXiv:2302.01941v3",
+    "checked_on": "2026-09-29",
+    "source_entry": "VP14-hubbard-j1j2-heisenberg-tfising#26 and #27 (qmbl-verify 2026-09-29; skeptic upheld)",
+    "reported_as": "github.com/ChenAo-Phys/MinSR @ 6b6493f, data/Fig2c.csv, under ResNet2: '34944, -0.4967164' || examples/measure.py: '1: 16 layers, 16 channels every layer, 3x3 kernels 34944 parameters in total'",
+    "location": "github.com/ChenAo-Phys/MinSR @ 6b6493f, data/Fig2c.csv and examples/measure.py",
+    "conversion": "none (text field)",
+    "reason": "The words the parameter count is read from (DATA.md: reported_as carries them)."
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_256_P_0.5",
+      "method": "ResNet2 (64 conv layers), MinSR",
+      "energy": -508.6374912
+    },
+    "field": "compute.source",
+    "edit": [
+      "Methods (ResNet1/ResNet2), arXiv:2302.01941 (compute pass 2026-09-16)",
+      "Methods (ResNet1/ResNet2), arXiv:2302.01941 (compute pass 2026-09-16); data/Fig2c.csv and examples/measure.py of the authors' code, github.com/ChenAo-Phys/MinSR @ 6b6493f (qmbl-verify 2026-09-29)"
+    ],
+    "version_read": "local clone of github.com/ChenAo-Phys/MinSR at 6b6493f (qmbl-runs/checkpoint-measure/repos/MinSR), read 2026-10-02; arXiv:2302.01941v3",
+    "checked_on": "2026-09-29",
+    "source_entry": "VP14-hubbard-j1j2-heisenberg-tfising#26 and #27 (qmbl-verify 2026-09-29; skeptic upheld)",
+    "reported_as": "github.com/ChenAo-Phys/MinSR @ 6b6493f, data/Fig2c.csv, under ResNet2: '34944, -0.4967164' || examples/measure.py: '1: 16 layers, 16 channels every layer, 3x3 kernels 34944 parameters in total'",
+    "location": "github.com/ChenAo-Phys/MinSR @ 6b6493f",
+    "conversion": "none (text field)",
+    "reason": "Where the parameter count is read from."
+  },
+  // VP5-arxiv-2606-04558#11: the CNN1 row at J2 = 0.6 is Table 1 of the published article (Mach. Learn.:
+  // Sci. Technol. 4, 015035), which the compute pass could not fetch; its block called the source match
+  // unverified. Commits A and B corrected the row's provenance and method from the same reading.
+  {
+    "match": {
+      "instance": "J1J2/square_100_P_0.6",
+      "method": "previous work [47] (Liang et al.)",
+      "energy": -191.356
+    },
+    "field": "compute.parameters",
+    "from": null,
+    "to": 106529,
+    "reported_as": "Table 1 caption: 'Energy values for various [J2] values and lattice sizes, achieved by CNN1 with 106 529 parameters. The values are obtained by the Lanczos step with p = 1.' (row 10 x 10, column 0.60: '-0.478 39')",
+    "location": "Liang et al., Mach. Learn.: Sci. Technol. 4, 015035 (2023), Table 1 and its caption",
+    "version_read": "journal version, IOPscience article HTML (open access), saved by qmbl-verify 2026-09-29 (VP5, VP16) and parsed locally (run source cache vp16_mlst_acc56a.fromhtml.txt, whose text drops the inline math, here [J2])",
+    "checked_on": "2026-09-29",
+    "source_entry": "VP5-arxiv-2606-04558#11 (qmbl-verify 2026-09-29; skeptic upheld), the count it reads; handoff 2026-10-02 (engineer)",
+    "conversion": "none; -0.47839 x 400 = -191.356 is the row's energy",
+    "reason": "The compute pass left the count null because it could not read the published article and the preprint prints J2 = 0.5 only. The article's Table 1 prints this number and gives every value of the table to CNN1 with 106 529 parameters, the count the J2 = 0.5 row's block already holds for the same network."
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_100_P_0.6",
+      "method": "previous work [47] (Liang et al.)",
+      "energy": -191.356
+    },
+    "field": "compute.scope",
+    "from": "paper",
+    "to": "ansatz",
+    "reported_as": "Table 1 caption: 'Energy values for various [J2] values and lattice sizes, achieved by CNN1 with 106 529 parameters. The values are obtained by the Lanczos step with p = 1.' (row 10 x 10, column 0.60: '-0.478 39')",
+    "location": "Liang et al., Mach. Learn.: Sci. Technol. 4, 015035 (2023), Table 1 and its caption",
+    "version_read": "journal version, IOPscience article HTML (open access), saved by qmbl-verify 2026-09-29 (VP5, VP16) and parsed locally (run source cache vp16_mlst_acc56a.fromhtml.txt, whose text drops the inline math, here [J2])",
+    "checked_on": "2026-09-29",
+    "source_entry": "VP5-arxiv-2606-04558#11 (qmbl-verify 2026-09-29; skeptic upheld), the count it reads; handoff 2026-10-02 (engineer)",
+    "conversion": "none",
+    "reason": "The caption covers every value of Table 1, CNN1 across lattice sizes and J2, as on the J2 = 0.5 row's block."
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_100_P_0.6",
+      "method": "previous work [47] (Liang et al.)",
+      "energy": -191.356
+    },
+    "field": "compute.confidence",
+    "from": "low",
+    "to": "medium",
+    "reported_as": "Table 1 caption: 'Energy values for various [J2] values and lattice sizes, achieved by CNN1 with 106 529 parameters. The values are obtained by the Lanczos step with p = 1.' (row 10 x 10, column 0.60: '-0.478 39')",
+    "location": "Liang et al., Mach. Learn.: Sci. Technol. 4, 015035 (2023), Table 1 and its caption",
+    "version_read": "journal version, IOPscience article HTML (open access), saved by qmbl-verify 2026-09-29 (VP5, VP16) and parsed locally (run source cache vp16_mlst_acc56a.fromhtml.txt, whose text drops the inline math, here [J2])",
+    "checked_on": "2026-09-29",
+    "source_entry": "VP5-arxiv-2606-04558#11 (qmbl-verify 2026-09-29; skeptic upheld), the count it reads; handoff 2026-10-02 (engineer)",
+    "conversion": "none",
+    "reason": "Low stood for the unverified source match, which the published table settles; the J2 = 0.5 row's block, the same network and statements, is medium."
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_100_P_0.6",
+      "method": "previous work [47] (Liang et al.)",
+      "energy": -191.356
+    },
+    "field": "compute.reported_as",
+    "edit": [
+      "[arXiv:2204.07816v1, the preprint that Semantic Scholar/DBLP map to the MLST article; the published version could not be read:]",
+      "Mach. Learn.: Sci. Technol. 4, 015035 (2023), Table 1 caption: 'Energy values for various [J2] values and lattice sizes, achieved by CNN1 with 106 529 parameters. The values are obtained by the Lanczos step with p = 1.' (row 10 x 10, column 0.60: '-0.478 39') || [arXiv:2204.07816v1, the preprint of that article:]"
+    ],
+    "reported_as": "Table 1 caption: 'Energy values for various [J2] values and lattice sizes, achieved by CNN1 with 106 529 parameters. The values are obtained by the Lanczos step with p = 1.' (row 10 x 10, column 0.60: '-0.478 39')",
+    "location": "Liang et al., Mach. Learn.: Sci. Technol. 4, 015035 (2023), Table 1 and its caption",
+    "version_read": "journal version, IOPscience article HTML (open access), saved by qmbl-verify 2026-09-29 (VP5, VP16) and parsed locally (run source cache vp16_mlst_acc56a.fromhtml.txt, whose text drops the inline math, here [J2])",
+    "checked_on": "2026-09-29",
+    "source_entry": "VP5-arxiv-2606-04558#11 (qmbl-verify 2026-09-29; skeptic upheld), the count it reads; handoff 2026-10-02 (engineer)",
+    "conversion": "none (text field)",
+    "reason": "The words the parameter count is read from; the published version has been read."
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_100_P_0.6",
+      "method": "previous work [47] (Liang et al.)",
+      "energy": -191.356
+    },
+    "field": "compute.source",
+    "edit": [
+      "arXiv:2204.07816v1 ('2^1296",
+      "Mach. Learn.: Sci. Technol. 4, 015035 (2023), Table 1 and its caption (journal HTML, qmbl-verify 2026-09-29); arXiv:2204.07816v1 ('2^1296"
+    ],
+    "reported_as": "Table 1 caption: 'Energy values for various [J2] values and lattice sizes, achieved by CNN1 with 106 529 parameters. The values are obtained by the Lanczos step with p = 1.' (row 10 x 10, column 0.60: '-0.478 39')",
+    "location": "Liang et al., Mach. Learn.: Sci. Technol. 4, 015035 (2023), Table 1 and its caption",
+    "version_read": "journal version, IOPscience article HTML (open access), saved by qmbl-verify 2026-09-29 (VP5, VP16) and parsed locally (run source cache vp16_mlst_acc56a.fromhtml.txt, whose text drops the inline math, here [J2])",
+    "checked_on": "2026-09-29",
+    "source_entry": "VP5-arxiv-2606-04558#11 (qmbl-verify 2026-09-29; skeptic upheld), the count it reads; handoff 2026-10-02 (engineer)",
+    "conversion": "none (text field)",
+    "reason": "Where the parameter count is read from."
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_100_P_0.6",
+      "method": "previous work [47] (Liang et al.)",
+      "energy": -191.356
+    },
+    "field": "compute.note",
+    "from": "UNVERIFIED SOURCE MATCH: the worklist energy (-0.47839 per site for 10x10, J2/J1 = 0.6, quoted by arXiv:2606.04558 as ref. [47]) does not appear in arXiv:2204.07816v1, which reports only J2/J1 = 0.5 results (10x10: -0.497468 with a 106529-parameter CNN). The published MLST article (10.1088/2632-2153/acc56a, CC-BY) is behind an IOP bot-manager captcha and could not be fetched; no separate arXiv version exists (arXiv title/author searches return only 2204.07816 and 1806.03761). Numeric fields are therefore left null; the preprint's hardware (Sunway supercomputer, sw26010pro), network sizes (16443 / 106529 / 421953 parameters) and scaling-test settings (~6 million Markov chains, up to ~40 million cores) are quoted for context only. Listed under 'unresolved' as well.",
+    "to": "The number is the published article's: Mach. Learn.: Sci. Technol. 4, 015035 (2023), Table 1, row 10 x 10, column J2 = 0.60 (-0.478 39), whose caption gives every value of the table to CNN1 with 106 529 parameters after one Lanczos step (p = 1); the preprint arXiv:2204.07816v1 prints J2 = 0.5 only. The preprint's hardware (Sunway supercomputer, sw26010pro), network sizes (16443 / 106529 / 421953 parameters) and scaling-test settings (~6 million Markov chains, up to ~40 million cores) are quoted for context, not as this run's cost.",
+    "reported_as": "Table 1 caption: 'Energy values for various [J2] values and lattice sizes, achieved by CNN1 with 106 529 parameters. The values are obtained by the Lanczos step with p = 1.' (row 10 x 10, column 0.60: '-0.478 39')",
+    "location": "Liang et al., Mach. Learn.: Sci. Technol. 4, 015035 (2023), Table 1 and its caption",
+    "version_read": "journal version, IOPscience article HTML (open access), saved by qmbl-verify 2026-09-29 (VP5, VP16) and parsed locally (run source cache vp16_mlst_acc56a.fromhtml.txt, whose text drops the inline math, here [J2])",
+    "checked_on": "2026-09-29",
+    "source_entry": "VP5-arxiv-2606-04558#11 (qmbl-verify 2026-09-29; skeptic upheld), the count it reads; handoff 2026-10-02 (engineer)",
+    "conversion": "none (text field)",
+    "reason": "The note said the source match was unverified and the article unreadable; the article has been read (VP5) and settles both."
+  },
+  // VP16-heisenberg-hubbard-j1j2-tfising#38: the loader's verification note named the wrong kernel.
+  {
+    "match": {
+      "instance": "Heisenberg/triangular_36_P",
+      "method": "Lattice Convolutional Network",
+      "energy": -80.6544
+    },
+    "field": "verified.note",
+    "edit": [
+      "arXiv:2206.07370, results table: \"Triangular 36 0 - -0.55889 -0.5601(4) -0.5603734\" - the special-kernel LCN energy at J2 = 0 on the 36-site triangular lattice.",
+      "arXiv:2206.07370v1, Table 1: \"Triangular 36 0 - -0.55889 -0.5601(4) -0.5603734\" - the LCN energy at J2 = 0 on the 36-site triangular lattice, with the regular kernel (Table 3 prints -0.5601(4) for the regular and -0.5501(6) for the special kernel)."
+    ],
+    "reported_as": "Table 3: 'Triangular 36 0 -0.5601(4) -0.5501(6)' under 'Regular Kernel', 'Special Kernel'; Table 1: 'Triangular 36 0 - -0.55889 -0.5601(4) -0.5603734' under GNN, GNN-2, LCN (ours), Reference Energy",
+    "location": "arXiv:2206.07370v1 Table 1 (p. 8) and Table 3 (p. 9)",
+    "version_read": "arXiv:2206.07370v1 PDF, pypdf layout text (run source cache vp16_2206.07370v1.layout.txt, where Tables 2 and 3 share their lines)",
+    "conversion": "none (text field)",
+    "checked_on": "2026-09-29",
+    "reason": "The note called the number the special-kernel energy; Table 3 prints -0.5601(4) in the Regular Kernel column and -0.5501(6) in the Special Kernel column, and the row's compute note already says regular kernel. Text only, no number changes.",
+    "source_entry": "VP16-heisenberg-hubbard-j1j2-tfising#38 (qmbl-verify 2026-09-29; skeptic upheld)"
+  },
+  // VB2-varbench-code-hubbard#103, #105: the t12 instances state their couplings (RULES.md 2), in the
+  // form of Eq. (S6) of VarBench's supplement; the density terms as the program behind the row, mVMC, defines
+  // them.
+  {
+    "match": {
+      "instance": "Hubbard/square_256_PA_107_8_t12"
+    },
+    "field": "params",
+    "from": {
+      "Nf": 107,
+      "U": 8
+    },
+    "to": {
+      "Nf": 107,
+      "U": 8,
+      "t1": 1,
+      "t2": -0.25
+    },
+    "reported_as": "'t1 = 1.0', 't2 = -0.25', 'U = 8', 'boundary condition: AP' (VarBench notes, section '16x16 cases (t1 and t2)'); 'We use t1 = 1, t2 = -0.25, V1 = 1, V2 = 0.5.' (arXiv:2302.04919v2, below Eq. (S6)); run input: 't1 1.0', 't2 -0.25', 'U 8.0'",
+    "location": "vendor/varbench/Hubbard/supplements/Imada_group_overview.md, section '16x16 cases (t1 and t2)'; arXiv:2302.04919v2 Supplementary S1 B, Eq. (S6); varbench/methods scripts/Hubbard/square_256_PA_107_8_t12/mVMC/dat_input_makedef.txt",
+    "version_read": "varbench/varbench at 390a21e (vendored); arXiv:2302.04919v2 PDF, pypdf text; varbench/methods at ed31bb0 (run inputs, mVMC_makedef, mVMC_RBM src/mVMC/calham_real.c)",
+    "conversion": "Sign as in Eq. (S6), H = -t1 sum_<ij>,s (c+_is c_js + h.c.) - t2 sum_<<ij>>,s (c+_is c_js + h.c.) + U sum_i n_i,up n_i,dn: t2 = -0.25 puts +0.25 on the next-nearest bonds, as the run's mVMC input does (trans.def carries t2 = -0.25 on them, and mVMC subtracts each transfer amplitude, calham_real.c 'myEnergy -= creal(ParaTransfer[idx]) * ...')",
+    "checked_on": "2026-09-29",
+    "reason": "RULES.md 2: an instance is a fully specified Hamiltonian. The next-nearest hopping existed only in the '_t12' of the id (metric flag M9, coupling only in the id), and the instance page called its value undocumented upstream, though VarBench's notes on these runs and its supplement print it.",
+    "source_entry": "VB2-varbench-code-hubbard#103 (qmbl-verify 2026-09-29; skeptic upheld)"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_256_PA_107_8_t12_UV1V2"
+    },
+    "field": "params",
+    "from": {
+      "Nf": 107,
+      "U": 8
+    },
+    "to": {
+      "Nf": 107,
+      "U": 8,
+      "t1": 1,
+      "t2": -0.25,
+      "V1": 1,
+      "V2": 0.5
+    },
+    "reported_as": "'t1 = 1.0', 't2 = -0.25', 'U = 8', 'V1 = 1.0', 'V2 = 0.5', 'boundary condition: AP' (VarBench notes, section '16x16 cases (t1,t2,V1,V2)'); 'We use t1 = 1, t2 = -0.25, V1 = 1, V2 = 0.5.' (arXiv:2302.04919v2, below Eq. (S6)); run input: 'V1 1.0', 'V2 0.5'",
+    "location": "vendor/varbench/Hubbard/supplements/Imada_group_overview.md, section '16x16 cases (t1,t2,V1,V2)'; arXiv:2302.04919v2 Supplementary S1 B, Eq. (S6); varbench/methods scripts/Hubbard/square_256_PA_107_8_t12_UV1V2/mVMC/dat_input_makedef.txt",
+    "version_read": "varbench/varbench at 390a21e (vendored); arXiv:2302.04919v2 PDF, pypdf text; varbench/methods at ed31bb0 (run inputs, mVMC_makedef, mVMC_RBM src/mVMC/calham_real.c)",
+    "conversion": "Sign as in Eq. (S6), H = -t1 sum_<ij>,s (c+_is c_js + h.c.) - t2 sum_<<ij>>,s (c+_is c_js + h.c.) + U sum_i n_i,up n_i,dn: t2 = -0.25 puts +0.25 on the next-nearest bonds, as the run's mVMC input does (trans.def carries t2 = -0.25 on them, and mVMC subtracts each transfer amplitude, calham_real.c 'myEnergy -= creal(ParaTransfer[idx]) * ...'). V1 and V2 couple total densities, V1 sum_<ij> n_i n_j + V2 sum_<<ij>> n_i n_j with n_i = n_i,up + n_i,dn, each bond once: mVMC's CoulombInter term is 'ParaCoulombInter[idx] * (n0[ri]+n1[ri]) * (n0[rj]+n1[rj])' (calham_real.c), and mVMC_makedef/sub_coulombinter.py lists each bond once. Eq. (S6) as printed sums n_i,s n_j,s over equal spins only.",
+    "checked_on": "2026-09-29",
+    "reason": "RULES.md 2: t2, V1 and V2 existed only in the '_t12_UV1V2' of the id (metric flag M9), so the stored params described the plain Hubbard model, against which the row's +322.35 means nothing. The density terms are written as the program behind the row defines them (conversion).",
+    "source_entry": "VB2-varbench-code-hubbard#105 (qmbl-verify 2026-09-29; skeptic upheld)"
   },
 ];

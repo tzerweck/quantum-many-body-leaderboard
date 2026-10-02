@@ -6,16 +6,20 @@
 // never the cluster.
 import fs from "node:fs";
 import path from "node:path";
+import { RELABELS } from "./relabels.mjs";
 
 const DIR = "checks/cost/ed/results";
 const files = fs.existsSync(DIR) ? fs.readdirSync(DIR).filter(f => f.endsWith(".json")).sort() : [];
 const isED = r => r.bound_type === "exact" && /diagonal|\bED\b|Lanczos/i.test(`${r.method || ""} ${r.method_as_published || ""}`);
+// A results file names the instance as it was when the run was made; one that relabels.mjs has
+// since moved whole (nothing stayed behind) is under its new name.
+const MOVED = new Map(RELABELS.filter(L => !L.keep.length).map(L => [L.from, L.to]));
 let attached = 0;
 const refused = [];
 
 for (const f of files) {
   const res = JSON.parse(fs.readFileSync(path.join(DIR, f), "utf8"));
-  const p = `data/${res.instance_id}.json`;
+  const p = `data/${MOVED.get(res.instance_id) ?? res.instance_id}.json`;
   if (!fs.existsSync(p)) { refused.push(`${f}: no instance ${res.instance_id}`); continue; }
   const inst = JSON.parse(fs.readFileSync(p, "utf8"));
   if (!res.reproduces_stored) { refused.push(`${res.instance_id}: E = ${res.energy} against stored ${res.stored_exact} (rel ${res.relative_difference.toExponential(1)})`); continue; }

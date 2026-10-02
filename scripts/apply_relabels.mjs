@@ -1,5 +1,5 @@
-// Apply scripts/relabels.mjs: move each listed instance to its corrected name and parameters,
-// leaving behind, on an instance of their own, the rows computed at the old coupling.
+// Apply scripts/relabels.mjs: move each listed instance to its corrected name, parameters and
+// size, leaving behind, on an instance of their own, the rows computed at the old coupling.
 //
 // Runs after every script that attaches rows, compute or coverage by instance id (they were
 // written against VarBench's names) and before the defects, removals and corrections, which
@@ -21,7 +21,7 @@ for (const L of RELABELS) {
   if (stay.length !== L.keep.length) { console.log(`MISS ${L.from}: ${stay.length} of ${L.keep.length} rows to keep matched`); fail++; continue; }
 
   const target = fs.existsSync(`data/${L.to}.json`) ? read(L.to)
-    : { ...inst, params: { ...inst.params, ...L.params }, instance_id: L.to, rows: [], coverage: undefined };
+    : { ...inst, ...(L.n_sites != null ? { n_sites: L.n_sites } : {}), params: { ...inst.params, ...L.params }, instance_id: L.to, rows: [], coverage: undefined };
   const einf = expectedEinf(target);
   for (const r of go) {
     // einf follows the coupling (DATA.md); the V-score is derived from it, never supplied
@@ -30,7 +30,7 @@ for (const L of RELABELS) {
   }
   target.rows.push(...go);
   if (inst.coverage) target.coverage = [...(target.coverage || []), ...inst.coverage];
-  target.relabelled = { from: L.from, checked_on: L.checked_on, reason: L.reason, evidence: "checks/hubbard-u-labels/" };
+  target.relabelled = { from: L.from, checked_on: L.checked_on, reason: L.reason, evidence: L.evidence };
   write(target);
   moved += go.length;
 
@@ -51,7 +51,7 @@ for (const L of RELABELS) {
   delete inst.coverage;
   inst.split = { to: L.to, checked_on: L.checked_on,
     reason: `Holds the rows run at U = ${inst.params.U}, the coupling in VarBench's name, after the instance moved to U = ${L.params.U}. ${L.reason}`,
-    evidence: "checks/hubbard-u-labels/" };
+    evidence: L.evidence };
   write(inst);
   kept += stay.length;
 }

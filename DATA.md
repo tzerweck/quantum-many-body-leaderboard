@@ -171,6 +171,12 @@ Where it found a stored number to be a different quantity (a final evaluation's 
 stored as the per-step count), the later block holds the per-step number and its note the old
 one. A VQE shot count per estimated quantity is not a per-step sample count and stays in the note. The fourth (2026-09-27, Tristan) followed a verification of every family against its papers and code (`qmbl-runs/cost-routes-2026-09-24/verify/`): 235 blocks gained what the run states about how it evaluated its state, in three objects that, like `sweep_schedule`, are statements and never costs. `evaluation` holds the training stages, the network evaluations per amplitude (a symmetry sum, several determinants), the sampler proposals per kept sample, whether the local energy skips vanishing terms, complex parameters, a dense read-out head and the optimiser's solve; `vmc_schedule` (kind `mvmc`) the def-file settings of an mVMC run; `circuit_schedule` a VQE script's gates and runs. The next section says how each enters the estimate.
 
+A statement a later reading finds wrong is corrected like any stored value, in
+[`scripts/corrections.mjs`](scripts/corrections.mjs) (`compute.parameters`, `compute.note`,
+...), with the old value kept on the row in `corrections`. The entry states the value or the
+passage it replaces, so a pass that rewrites the block stops the build instead of being
+overwritten unseen. A statement nobody recorded is a new pass's to add, not a correction.
+
 Three rules, and they are the whole design:
 
 - **No normalisation.** GPU-hours are stored raw, next to the device model. There is no
@@ -558,6 +564,14 @@ loader, never by hand.
 count for **spinless** t-V. `einf` is `0` for traceless spin Hamiltonians and
 `U * N_up * N_dn / n_sites` for the plain Hubbard model.
 
+Two Hubbard instances carry further couplings, which VarBench names by suffix and `params`
+states in the form of VarBench's Eq. (S6). `_t12` adds a next-nearest-neighbour hopping,
+`-t2 Σ⟨⟨ij⟩⟩σ (c†iσ cjσ + h.c.)` beside `-t1 Σ⟨ij⟩σ (...)`, with t1 = 1 and t2 = -0.25;
+`_t12_UV1V2` also `V1 Σ⟨ij⟩ ni nj + V2 Σ⟨⟨ij⟩⟩ ni nj`, V1 = 1, V2 = 0.5, each bond once,
+between total densities ni = ni↑ + ni↓, as mVMC, the program behind its row, defines them
+(Eq. (S6) prints these terms between equal spins). The density terms are not traceless, so
+that instance's `einf` is not checked.
+
 Getting these wrong is the single most likely source of a false record, which is why
 they are stated once and reused rather than inlined per script.
 
@@ -652,14 +666,18 @@ flag withholds the record and nothing else; [§10](RULES.md#10-pending-confirmed
 or upholding it. A value the maintainers corrected is listed in `corrections` on the row,
 each entry with the value it replaced (`from`), where the new one was read, and why, on
 imported rows and, since 2026-09-30, on rows QMBL added itself alike
-([`scripts/corrections.mjs`](scripts/corrections.mjs)). An exact row whose printed value is
+([`scripts/corrections.mjs`](scripts/corrections.mjs)). A field of the row's `compute` block or
+of its verification note is corrected the same way (`compute.parameters`, `verified.note`), and
+so are an instance's `params`, whose old value stays in the instance's own `corrections`. An exact row whose printed value is
 QMBL's recomputed energy rounded or truncated carries QMBL's digits, the printed value in
 `corrections` ([RULES.md §11](RULES.md#11-corrections)). `verified` records a check that
 found nothing wrong, and an independent re-read of a row QMBL added itself is
 `verified.second_read`. An instance renamed because its upstream name
-carries the wrong coupling has `relabelled` (the old id and the reason); the old id, where
-rows were computed at that coupling, stays with `split` and an exact row QMBL computed
-([`checks/hubbard-u-labels/`](checks/hubbard-u-labels/)). One worked case is in [`checks/`](checks/): three TFIsing `RBM (alpha = 1)` energies
+carries the wrong coupling or size has `relabelled` (the old id, the reason and the evidence);
+the old id, where rows were computed at that coupling, stays with `split` and an exact row QMBL
+computed ([`checks/hubbard-u-labels/`](checks/hubbard-u-labels/)). The size case is an impurity
+model's bath: `Impurity/SB-DMFT-MI-HF_10` was VarBench's `SB-DMFT-MI-HF_9`, whose rows were run
+with ten bath sites per spin-orbital. One worked case is in [`checks/`](checks/): three TFIsing `RBM (alpha = 1)` energies
 sit up to 10 sigma below an exact solution; the program the rows link, rerun as pinned,
 gives energies above it, and the stored numbers were uploaded in 2023 without code or log,
 so the flag stays and the mechanism is recorded as unknown. A `defect` carries `flag`,

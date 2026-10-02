@@ -1,5 +1,6 @@
-// Instances whose name carries a different coupling from the one their rows were computed at
-// (RULES.md 11; ruling 2026-09-16, extended 2026-09-17, Tristan).
+// Instances whose name carries a different coupling or size from the one their rows were computed
+// at (RULES.md 11; ruling 2026-09-16, extended 2026-09-17, Tristan; the impurity bath size below,
+// qmbl-verify 2026-09-29).
 //
 // VarBench's Hubbard couplings between 1 and 10 are the grid 10^(k/9). The 14-site chain
 // instances carry the grid value to eight decimals; five 4x4 instance names carry a rounded
@@ -14,14 +15,23 @@
 // instance of their own, with the ground state at that U as its exact row (`keep`, `exact`).
 // Where the two ground states differ by less than any row could resolve, nothing stays behind.
 //
+// VarBench's impurity names end in the number of bath sites per spin-orbital (its Impurity/README.md,
+// "Naming"), which QMBL reads as n_sites. SB-DMFT-MI-HF_9 has ten: at U = 8 and half filling its run
+// script discretises the bath with Nbath + 1 sites, the Hamiltonian file holds ten per spin, and QMBL's
+// exact diagonalization reproduces both rows on eleven orbitals per spin (impurity and bath).
+//
 // from, to:  instance ids; `to` takes every row not listed in `keep`, and the coverage
 // params:    the instance parameters that change
+// n_sites:   the size, where that is what the name has wrong
 // keep:      rows that stay on `from`: published method string and energy, and why
 // exact:     the ground state at the named U, from the two codes (the first is stored)
 // reason:    what was wrong with the name, for the instance page
+// evidence:  where the reader checks it (default checks/hubbard-u-labels/); checked_on, codes:
+//            the date and the codes of the check (default the U relabels' own)
 
 const CHECKED = "2026-09-16";
 const CODES = "Lanczos ED over the full fixed-(N_up, N_dn) space, no symmetry, t = 1: numpy/scipy (checks/hubbard-u-labels/ed_check.py) and node (ed_lib.mjs, run_fermions.mjs)";
+const EVIDENCE = "checks/hubbard-u-labels/";
 
 export const RELABELS = [
   {
@@ -67,4 +77,12 @@ export const RELABELS = [
     reason: "The name's 4.64158882 misrounds the coupling of this Hamiltonian, 4.6415888336 (10^(6/9)). The exact diagonalization, -10.896957984833337, is the ground state at U = 4.64158883 and 3.03e-9 above the ground state at 4.64158882.",
     keep: [], exact: null,
   },
-].map(r => ({ ...r, checked_on: CHECKED, codes: CODES }));
+  {
+    // qmbl-verify 2026-09-29, VA2-10-1103-physrevx-7-031013#2 and #5 (skeptic upheld). Nothing was
+    // computed at nine bath sites, so both rows move and nothing stays behind.
+    from: "Impurity/SB-DMFT-MI-HF_9", to: "Impurity/SB-DMFT-MI-HF_10", params: {}, n_sites: 10,
+    reason: "The name's 9 is the run script's Nbath (varbench/methods scripts/Impurity/SB-DMFT-MI-HF_9.py, line 17); at U = 8 and half filling the script discretises the bath with Nb = Nbath + 1 = 10 sites per spin-orbital (lines 41-44), and the Hamiltonian file it was run on (HamParams/SB-DMFT-MI_9.h5) holds ten. Both rows were computed there: QMBL's exact diagonalization on eleven orbitals per spin (the impurity and ten bath sites; N_up = 6, N_dn = 5, dimension 213444) reproduces both to 1e-13, and the stored E_inf follows only from the ten-site bath.",
+    keep: [], exact: null,
+    checked_on: "2026-09-29", evidence: "checks/cost/ed/results/Impurity--SB-DMFT-MI-HF_9.json",
+  },
+].map(r => ({ checked_on: CHECKED, codes: CODES, evidence: EVIDENCE, ...r }));
