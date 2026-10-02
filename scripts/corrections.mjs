@@ -12,7 +12,10 @@
 // match: instance as it stands after relabels.mjs, the published method string, and the
 //        energy within 1e-9, all against the values BEFORE any correction applies.
 // field: energy | sigma | energy_variance | dof | einf | method | bound_type | reference |
-//        peer_reviewed | provenance | baseline | defect (defect only to null)
+//        peer_reviewed | provenance | baseline | sampled | defect (defect only to null)
+//        `method` is the published string (the short name and detail follow in method_names.mjs);
+//        `sampled` (true or false) states whether the energy is a Monte Carlo estimate, read from the
+//        source (RULES.md 6), and its `from` is the verdict the method string gave the row.
 // to:    the corrected value in the STORED convention (RULES.md 5); `conversion` shows the arithmetic.
 // source_entry: the verification proposal and ruling behind the entry.
 export const CORRECTIONS = [
@@ -352,8 +355,8 @@ export const CORRECTIONS = [
   // numbers (ruling 3), peer_reviewed for privately provided numbers printed in refereed papers
   // and for ML proceedings (ruling 4), and QMBL's digits on exact rows whose printed value
   // rounds or truncates QMBL's recompute. Rows QMBL added itself are corrected here too (see the
-  // header). Method names are not here. source_entry names the proposal(s), the skeptic's
-  // verdict and the ruling that decided it.
+  // header). Method strings and `sampled` are in the next block (commit B). source_entry names the
+  // proposal(s), the skeptic's verdict and the ruling that decided it.
   // VA1-10-1103-physrevx-14-021010 (48)
   {
     "match": {
@@ -9573,5 +9576,1793 @@ export const CORRECTIONS = [
     "checked_on": "2026-10-02",
     "reason": "Printed bar (1) = 1e-4 per site, with the printed energy (ruling A4, Tristan 2026-10-02). The stored 0.003 is the author's upload (2e-5 per site), finer than anything the paper prints for this energy. energy_variance 4.36 is printed in neither version (author upload 662be3e, 2022-02-24) and stays as uploaded.",
     "source_entry": "VA5-hubbard-heisenberg-tfising-j1j2#2 (qmbl-verify 2026-09-29; verification, skeptic refuted: the stored digits match no number of the author's), VJ2-journal-other#11 (its figure-decoded -66.0807 is not used); ruling A4, Tristan 2026-10-02"
+  },
+  // ---------------------------------------------------------------------------------------
+  // qmbl-verify 2026-09-29, apply step (commit B, 2026-09-30): sampled vs deterministic, and the
+  // published method strings.
+  //
+  // `sampled` (ruling 2, Tristan 2026-09-30): whether the energy is a Monte Carlo estimate is a
+  // per-row statement read from the source, not a keyword match. It decides isSampled in
+  // units.mjs, and `from` keeps the verdict the method string gave. false: VQE rows whose program
+  // prints the exact statevector energy (the "2^14 samples/grad" rows sample only the gradient);
+  // true: rows whose string matches a deterministic marker although their source samples the
+  // energy. Where a skeptic never looked (verified entries), source_entry says so.
+  //
+  // `method`: published strings the readers found mis-transcribed (a citation marker, the quoting
+  // paper's label, another network's name), replaced by what the producing source prints; the
+  // name and detail each maps to are in method_names.mjs. The new string quotes a label the
+  // source prints, verbatim, and whatever explains it is the detail (ruling B4, Tristan
+  // 2026-10-02); where the label printed is the string the row already had (aCNN on the 6x6
+  // J1-J2 torus), there is no entry, only the detail.
+  // sampled: false. The J1-J2 4x4 VQE rows whose run used 2^14 shots per gradient (VB1, skeptic
+  // upheld): the program prints the exact statevector energy.
+  {
+    "match": {
+      "instance": "J1J2/square_16_P_0.05",
+      "method": "VQE + symm. circuit (64 pars., 2^14 samples/grad)",
+      "energy": -43.5506897
+    },
+    "field": "sampled",
+    "to": false,
+    "reported_as": "observables.py L196-199: 'state = self.circuit(noisy=False)' 'state_proj = self.projector(state)' 'norm = np.vdot(state, state_proj)' 'energy = (np.vdot(state, self.hamiltonian(state_proj)) / norm).real - self.hamiltonian.energy_renorm'; printed by L237-238 '{:.7f}'; the shot-sampled circuit.energy (circuits.py L398) only enters the gradient and a local list in optimizers.py L281 that is never printed or returned. Script: 'python3 code/main.py --j2=0.05 --lattice=square4x4 --symmetry=0 --log2samples=14 && python3 code/main.py --j2=0.05 --lattice=square4x4 --symmetry=1 --log2samples=14'",
+    "location": "programs/VQE/code/observables.py L196-200, L237-238; circuits.py L339-400; optimizers.py L270-300",
+    "version_read": "varbench/methods@ed31bb0",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "Whether an energy was sampled is read from the source, per row (ruling 2, Tristan 2026-09-30). The number the program prints is the exact statevector expectation of the circuit state, <psi|H P|psi>/<psi|P|psi> (observables.py L196-200, '{:.7f}'); the 2^14 shots per parameter estimate only the gradient and the metric (the shot-sampled circuit.energy of circuits.py L398 enters only the gradient and a local list in optimizers.py L281). The VarBench SM agrees (arXiv:2302.04919v2 Sec. S3 D: the shots measure the gradient and metric matrix elements), and so does the uploader's label on the 4 x 6 twin, 'Ns = 2^14 per par, statevector'. A deterministic energy needs no sigma (RULES.md 6); the method string's fallback read '2^14 samples' as a sampled energy. Caveat: the committed program is a 2024 reconstruction of the 2022 runs' code. This row is above the exact-gradient row (-43.556203), so no record changes here.",
+    "source_entry": "VB1-varbench-code-j1j2#36 (qmbl-verify 2026-09-29; skeptic upheld); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_16_P_0.1",
+      "method": "VQE + symm. circuit (64 pars., 2^14 samples/grad)",
+      "energy": -42.2249398
+    },
+    "field": "sampled",
+    "to": false,
+    "reported_as": "observables.py L196-199: 'state = self.circuit(noisy=False)' 'state_proj = self.projector(state)' 'norm = np.vdot(state, state_proj)' 'energy = (np.vdot(state, self.hamiltonian(state_proj)) / norm).real - self.hamiltonian.energy_renorm'; printed by L237-238 '{:.7f}'; the shot-sampled circuit.energy (circuits.py L398) only enters the gradient and a local list in optimizers.py L281 that is never printed or returned. Script: 'python3 code/main.py --log2samples=14 --j2=0.1 --lattice=square4x4 --symmetry=0 && python3 code/main.py --j2=0.1 --lattice=square4x4 --symmetry=1 --log2samples=14'",
+    "location": "programs/VQE/code/observables.py L196-200, L237-238; circuits.py L339-400; optimizers.py L270-300",
+    "version_read": "varbench/methods@ed31bb0",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "Whether an energy was sampled is read from the source, per row (ruling 2, Tristan 2026-09-30). The number the program prints is the exact statevector expectation of the circuit state, <psi|H P|psi>/<psi|P|psi> (observables.py L196-200, '{:.7f}'); the 2^14 shots per parameter estimate only the gradient and the metric (the shot-sampled circuit.energy of circuits.py L398 enters only the gradient and a local list in optimizers.py L281). The VarBench SM agrees (arXiv:2302.04919v2 Sec. S3 D: the shots measure the gradient and metric matrix elements), and so does the uploader's label on the 4 x 6 twin, 'Ns = 2^14 per par, statevector'. A deterministic energy needs no sigma (RULES.md 6); the method string's fallback read '2^14 samples' as a sampled energy. Caveat: the committed program is a 2024 reconstruction of the 2022 runs' code. This row is above the exact-gradient row (-42.2261272), so no record changes here.",
+    "source_entry": "VB1-varbench-code-j1j2#39 (qmbl-verify 2026-09-29; skeptic upheld); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_16_P_0.15",
+      "method": "VQE + symm. circuit (64 pars., 2^14 samples/grad)",
+      "energy": -40.9286848
+    },
+    "field": "sampled",
+    "to": false,
+    "reported_as": "observables.py L196-199: 'state = self.circuit(noisy=False)' 'state_proj = self.projector(state)' 'norm = np.vdot(state, state_proj)' 'energy = (np.vdot(state, self.hamiltonian(state_proj)) / norm).real - self.hamiltonian.energy_renorm'; printed by L237-238 '{:.7f}'; the shot-sampled circuit.energy (circuits.py L398) only enters the gradient and a local list in optimizers.py L281 that is never printed or returned. Script: 'python3 code/main.py --log2samples=14 --j2=0.15 --lattice=square4x4 --symmetry=0 && python3 code/main.py --j2=0.15 --lattice=square4x4 --symmetry=1 --log2samples=14'",
+    "location": "programs/VQE/code/observables.py L196-200, L237-238; circuits.py L339-400; optimizers.py L270-300",
+    "version_read": "varbench/methods@ed31bb0",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "Whether an energy was sampled is read from the source, per row (ruling 2, Tristan 2026-09-30). The number the program prints is the exact statevector expectation of the circuit state, <psi|H P|psi>/<psi|P|psi> (observables.py L196-200, '{:.7f}'); the 2^14 shots per parameter estimate only the gradient and the metric (the shot-sampled circuit.energy of circuits.py L398 enters only the gradient and a local list in optimizers.py L281). The VarBench SM agrees (arXiv:2302.04919v2 Sec. S3 D: the shots measure the gradient and metric matrix elements), and so does the uploader's label on the 4 x 6 twin, 'Ns = 2^14 per par, statevector'. A deterministic energy needs no sigma (RULES.md 6); the method string's fallback read '2^14 samples' as a sampled energy. Caveat: the committed program is a 2024 reconstruction of the 2022 runs' code. This row (-40.9286848) is lower than the exact-gradient row (-40.9284231) on this instance, so the best variational bound moves to it.",
+    "source_entry": "VB1-varbench-code-j1j2#42 (qmbl-verify 2026-09-29; skeptic upheld); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_16_P_0.2",
+      "method": "VQE + symm. circuit (64 pars., 2^14 samples/grad)",
+      "energy": -39.6673167
+    },
+    "field": "sampled",
+    "to": false,
+    "reported_as": "observables.py L196-199: 'state = self.circuit(noisy=False)' 'state_proj = self.projector(state)' 'norm = np.vdot(state, state_proj)' 'energy = (np.vdot(state, self.hamiltonian(state_proj)) / norm).real - self.hamiltonian.energy_renorm'; printed by L237-238 '{:.7f}'; the shot-sampled circuit.energy (circuits.py L398) only enters the gradient and a local list in optimizers.py L281 that is never printed or returned. Script: 'python3 code/main.py --log2samples=14 --j2=0.2 --lattice=square4x4 --symmetry=0 && python3 code/main.py --j2=0.2 --lattice=square4x4 --symmetry=1 --log2samples=14'",
+    "location": "programs/VQE/code/observables.py L196-200, L237-238; circuits.py L339-400; optimizers.py L270-300",
+    "version_read": "varbench/methods@ed31bb0",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "Whether an energy was sampled is read from the source, per row (ruling 2, Tristan 2026-09-30). The number the program prints is the exact statevector expectation of the circuit state, <psi|H P|psi>/<psi|P|psi> (observables.py L196-200, '{:.7f}'); the 2^14 shots per parameter estimate only the gradient and the metric (the shot-sampled circuit.energy of circuits.py L398 enters only the gradient and a local list in optimizers.py L281). The VarBench SM agrees (arXiv:2302.04919v2 Sec. S3 D: the shots measure the gradient and metric matrix elements), and so does the uploader's label on the 4 x 6 twin, 'Ns = 2^14 per par, statevector'. A deterministic energy needs no sigma (RULES.md 6); the method string's fallback read '2^14 samples' as a sampled energy. Caveat: the committed program is a 2024 reconstruction of the 2022 runs' code. This row is above the exact-gradient row (-39.6712875), so no record changes here.",
+    "source_entry": "VB1-varbench-code-j1j2#45 (qmbl-verify 2026-09-29; skeptic upheld); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_16_P_0.25",
+      "method": "VQE + symm. circuit (64 pars., 2^14 samples/grad)",
+      "energy": -38.4587938
+    },
+    "field": "sampled",
+    "to": false,
+    "reported_as": "observables.py L196-199: 'state = self.circuit(noisy=False)' 'state_proj = self.projector(state)' 'norm = np.vdot(state, state_proj)' 'energy = (np.vdot(state, self.hamiltonian(state_proj)) / norm).real - self.hamiltonian.energy_renorm'; printed by L237-238 '{:.7f}'; the shot-sampled circuit.energy (circuits.py L398) only enters the gradient and a local list in optimizers.py L281 that is never printed or returned. Script: 'python3 code/main.py --log2samples=14 --j2=0.25 --lattice=square4x4 --symmetry=0 && python3 code/main.py --j2=0.25 --lattice=square4x4 --symmetry=1 --log2samples=14'",
+    "location": "programs/VQE/code/observables.py L196-200, L237-238; circuits.py L339-400; optimizers.py L270-300",
+    "version_read": "varbench/methods@ed31bb0",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "Whether an energy was sampled is read from the source, per row (ruling 2, Tristan 2026-09-30). The number the program prints is the exact statevector expectation of the circuit state, <psi|H P|psi>/<psi|P|psi> (observables.py L196-200, '{:.7f}'); the 2^14 shots per parameter estimate only the gradient and the metric (the shot-sampled circuit.energy of circuits.py L398 enters only the gradient and a local list in optimizers.py L281). The VarBench SM agrees (arXiv:2302.04919v2 Sec. S3 D: the shots measure the gradient and metric matrix elements), and so does the uploader's label on the 4 x 6 twin, 'Ns = 2^14 per par, statevector'. A deterministic energy needs no sigma (RULES.md 6); the method string's fallback read '2^14 samples' as a sampled energy. Caveat: the committed program is a 2024 reconstruction of the 2022 runs' code. This row is above the exact-gradient row (-38.4597245), so no record changes here.",
+    "source_entry": "VB1-varbench-code-j1j2#48 (qmbl-verify 2026-09-29; skeptic upheld); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_16_P_0.3",
+      "method": "VQE + symm. circuit (64 pars., 2^14 samples/grad)",
+      "energy": -37.308939
+    },
+    "field": "sampled",
+    "to": false,
+    "reported_as": "observables.py L196-199: 'state = self.circuit(noisy=False)' 'state_proj = self.projector(state)' 'norm = np.vdot(state, state_proj)' 'energy = (np.vdot(state, self.hamiltonian(state_proj)) / norm).real - self.hamiltonian.energy_renorm'; printed by L237-238 '{:.7f}'; the shot-sampled circuit.energy (circuits.py L398) only enters the gradient and a local list in optimizers.py L281 that is never printed or returned. Script: 'python3 code/main.py --log2samples=14 --j2=0.3 --lattice=square4x4 --symmetry=0 && python3 code/main.py --j2=0.3 --lattice=square4x4 --symmetry=1 --log2samples=14'",
+    "location": "programs/VQE/code/observables.py L196-200, L237-238; circuits.py L339-400; optimizers.py L270-300",
+    "version_read": "varbench/methods@ed31bb0",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "Whether an energy was sampled is read from the source, per row (ruling 2, Tristan 2026-09-30). The number the program prints is the exact statevector expectation of the circuit state, <psi|H P|psi>/<psi|P|psi> (observables.py L196-200, '{:.7f}'); the 2^14 shots per parameter estimate only the gradient and the metric (the shot-sampled circuit.energy of circuits.py L398 enters only the gradient and a local list in optimizers.py L281). The VarBench SM agrees (arXiv:2302.04919v2 Sec. S3 D: the shots measure the gradient and metric matrix elements), and so does the uploader's label on the 4 x 6 twin, 'Ns = 2^14 per par, statevector'. A deterministic energy needs no sigma (RULES.md 6); the method string's fallback read '2^14 samples' as a sampled energy. Caveat: the committed program is a 2024 reconstruction of the 2022 runs' code. This row (-37.308939) is lower than the exact-gradient row (-37.3082879) on this instance, so the best variational bound moves to it.",
+    "source_entry": "VB1-varbench-code-j1j2#51 (qmbl-verify 2026-09-29; skeptic upheld); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_16_P_0.35",
+      "method": "VQE + symm. circuit (64 pars., 2^14 samples/grad)",
+      "energy": -36.2374318
+    },
+    "field": "sampled",
+    "to": false,
+    "reported_as": "observables.py L196-199: 'state = self.circuit(noisy=False)' 'state_proj = self.projector(state)' 'norm = np.vdot(state, state_proj)' 'energy = (np.vdot(state, self.hamiltonian(state_proj)) / norm).real - self.hamiltonian.energy_renorm'; printed by L237-238 '{:.7f}'; the shot-sampled circuit.energy (circuits.py L398) only enters the gradient and a local list in optimizers.py L281 that is never printed or returned. Script: 'python3 code/main.py --log2samples=14 --j2=0.35 --lattice=square4x4 --symmetry=0 && python3 code/main.py --j2=0.35 --lattice=square4x4 --symmetry=1 --log2samples=14 '",
+    "location": "programs/VQE/code/observables.py L196-200, L237-238; circuits.py L339-400; optimizers.py L270-300",
+    "version_read": "varbench/methods@ed31bb0",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "Whether an energy was sampled is read from the source, per row (ruling 2, Tristan 2026-09-30). The number the program prints is the exact statevector expectation of the circuit state, <psi|H P|psi>/<psi|P|psi> (observables.py L196-200, '{:.7f}'); the 2^14 shots per parameter estimate only the gradient and the metric (the shot-sampled circuit.energy of circuits.py L398 enters only the gradient and a local list in optimizers.py L281). The VarBench SM agrees (arXiv:2302.04919v2 Sec. S3 D: the shots measure the gradient and metric matrix elements), and so does the uploader's label on the 4 x 6 twin, 'Ns = 2^14 per par, statevector'. A deterministic energy needs no sigma (RULES.md 6); the method string's fallback read '2^14 samples' as a sampled energy. Caveat: the committed program is a 2024 reconstruction of the 2022 runs' code. This row is above the exact-gradient row (-36.2386253), so no record changes here.",
+    "source_entry": "VB1-varbench-code-j1j2#54 (qmbl-verify 2026-09-29; skeptic upheld); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_16_P_0.4",
+      "method": "VQE + symm. circuit (64 pars., 2^14 samples/grad)",
+      "energy": -35.2712652
+    },
+    "field": "sampled",
+    "to": false,
+    "reported_as": "observables.py L196-199: 'state = self.circuit(noisy=False)' 'state_proj = self.projector(state)' 'norm = np.vdot(state, state_proj)' 'energy = (np.vdot(state, self.hamiltonian(state_proj)) / norm).real - self.hamiltonian.energy_renorm'; printed by L237-238 '{:.7f}'; the shot-sampled circuit.energy (circuits.py L398) only enters the gradient and a local list in optimizers.py L281 that is never printed or returned. Script: 'python3 code/main.py --log2samples=14 --j2=0.4 --lattice=square4x4 --symmetry=0 && python3 code/main.py --j2=0.4 --lattice=square4x4 --symmetry=1 --log2samples=14'",
+    "location": "programs/VQE/code/observables.py L196-200, L237-238; circuits.py L339-400; optimizers.py L270-300",
+    "version_read": "varbench/methods@ed31bb0",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "Whether an energy was sampled is read from the source, per row (ruling 2, Tristan 2026-09-30). The number the program prints is the exact statevector expectation of the circuit state, <psi|H P|psi>/<psi|P|psi> (observables.py L196-200, '{:.7f}'); the 2^14 shots per parameter estimate only the gradient and the metric (the shot-sampled circuit.energy of circuits.py L398 enters only the gradient and a local list in optimizers.py L281). The VarBench SM agrees (arXiv:2302.04919v2 Sec. S3 D: the shots measure the gradient and metric matrix elements), and so does the uploader's label on the 4 x 6 twin, 'Ns = 2^14 per par, statevector'. A deterministic energy needs no sigma (RULES.md 6); the method string's fallback read '2^14 samples' as a sampled energy. Caveat: the committed program is a 2024 reconstruction of the 2022 runs' code. This row (-35.2712652) is lower than the exact-gradient row (-35.2706122) on this instance, so the best variational bound moves to it.",
+    "source_entry": "VB1-varbench-code-j1j2#57 (qmbl-verify 2026-09-29; skeptic upheld); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_16_P_0.45",
+      "method": "VQE + symm. circuit (64 pars., 2^14 samples/grad)",
+      "energy": -34.4495635
+    },
+    "field": "sampled",
+    "to": false,
+    "reported_as": "observables.py L196-199: 'state = self.circuit(noisy=False)' 'state_proj = self.projector(state)' 'norm = np.vdot(state, state_proj)' 'energy = (np.vdot(state, self.hamiltonian(state_proj)) / norm).real - self.hamiltonian.energy_renorm'; printed by L237-238 '{:.7f}'; the shot-sampled circuit.energy (circuits.py L398) only enters the gradient and a local list in optimizers.py L281 that is never printed or returned. Script: 'python3 code/main.py --log2samples=14 --j2=0.45 --lattice=square4x4 --symmetry=0 && python3 code/main.py --j2=0.45 --lattice=square4x4 --symmetry=1 --log2samples=14'",
+    "location": "programs/VQE/code/observables.py L196-200, L237-238; circuits.py L339-400; optimizers.py L270-300",
+    "version_read": "varbench/methods@ed31bb0",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "Whether an energy was sampled is read from the source, per row (ruling 2, Tristan 2026-09-30). The number the program prints is the exact statevector expectation of the circuit state, <psi|H P|psi>/<psi|P|psi> (observables.py L196-200, '{:.7f}'); the 2^14 shots per parameter estimate only the gradient and the metric (the shot-sampled circuit.energy of circuits.py L398 enters only the gradient and a local list in optimizers.py L281). The VarBench SM agrees (arXiv:2302.04919v2 Sec. S3 D: the shots measure the gradient and metric matrix elements), and so does the uploader's label on the 4 x 6 twin, 'Ns = 2^14 per par, statevector'. A deterministic energy needs no sigma (RULES.md 6); the method string's fallback read '2^14 samples' as a sampled energy. Caveat: the committed program is a 2024 reconstruction of the 2022 runs' code. This row is above the exact-gradient row (-34.4497048), so no record changes here.",
+    "source_entry": "VB1-varbench-code-j1j2#60 (qmbl-verify 2026-09-29; skeptic upheld); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_16_P_0.6",
+      "method": "VQE + symm. circuit (64 pars., 2^14 samples/grad)",
+      "energy": -33.6506415
+    },
+    "field": "sampled",
+    "to": false,
+    "reported_as": "observables.py L196-199: 'state = self.circuit(noisy=False)' 'state_proj = self.projector(state)' 'norm = np.vdot(state, state_proj)' 'energy = (np.vdot(state, self.hamiltonian(state_proj)) / norm).real - self.hamiltonian.energy_renorm'; printed by L237-238 '{:.7f}'; the shot-sampled circuit.energy (circuits.py L398) only enters the gradient and a local list in optimizers.py L281 that is never printed or returned. Script: 'python3 code/main.py --log2samples=14 --j2=0.6 --lattice=square4x4 --symmetry=0 && python3 code/main.py --j2=0.6 --lattice=square4x4 --symmetry=1 --log2samples=14'",
+    "location": "programs/VQE/code/observables.py L196-200, L237-238; circuits.py L339-400; optimizers.py L270-300",
+    "version_read": "varbench/methods@ed31bb0",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "Whether an energy was sampled is read from the source, per row (ruling 2, Tristan 2026-09-30). The number the program prints is the exact statevector expectation of the circuit state, <psi|H P|psi>/<psi|P|psi> (observables.py L196-200, '{:.7f}'); the 2^14 shots per parameter estimate only the gradient and the metric (the shot-sampled circuit.energy of circuits.py L398 enters only the gradient and a local list in optimizers.py L281). The VarBench SM agrees (arXiv:2302.04919v2 Sec. S3 D: the shots measure the gradient and metric matrix elements), and so does the uploader's label on the 4 x 6 twin, 'Ns = 2^14 per par, statevector'. A deterministic energy needs no sigma (RULES.md 6); the method string's fallback read '2^14 samples' as a sampled energy. Caveat: the committed program is a 2024 reconstruction of the 2022 runs' code. This row is above the exact-gradient row (-33.6522114), so no record changes here.",
+    "source_entry": "VB1-varbench-code-j1j2#68 (qmbl-verify 2026-09-29; skeptic upheld); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_16_P_0.65",
+      "method": "VQE + symm. circuit (64 pars., 2^14 samples/grad)",
+      "energy": -34.5012835
+    },
+    "field": "sampled",
+    "to": false,
+    "reported_as": "observables.py L196-199: 'state = self.circuit(noisy=False)' 'state_proj = self.projector(state)' 'norm = np.vdot(state, state_proj)' 'energy = (np.vdot(state, self.hamiltonian(state_proj)) / norm).real - self.hamiltonian.energy_renorm'; printed by L237-238 '{:.7f}'; the shot-sampled circuit.energy (circuits.py L398) only enters the gradient and a local list in optimizers.py L281 that is never printed or returned. Script: 'python3 code/main.py --log2samples=14 --j2=0.65 --lattice=square4x4 --symmetry=0 && python3 code/main.py --j2=0.65 --lattice=square4x4 --symmetry=1 --log2samples=14'",
+    "location": "programs/VQE/code/observables.py L196-200, L237-238; circuits.py L339-400; optimizers.py L270-300",
+    "version_read": "varbench/methods@ed31bb0",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "Whether an energy was sampled is read from the source, per row (ruling 2, Tristan 2026-09-30). The number the program prints is the exact statevector expectation of the circuit state, <psi|H P|psi>/<psi|P|psi> (observables.py L196-200, '{:.7f}'); the 2^14 shots per parameter estimate only the gradient and the metric (the shot-sampled circuit.energy of circuits.py L398 enters only the gradient and a local list in optimizers.py L281). The VarBench SM agrees (arXiv:2302.04919v2 Sec. S3 D: the shots measure the gradient and metric matrix elements), and so does the uploader's label on the 4 x 6 twin, 'Ns = 2^14 per par, statevector'. A deterministic energy needs no sigma (RULES.md 6); the method string's fallback read '2^14 samples' as a sampled energy. Caveat: the committed program is a 2024 reconstruction of the 2022 runs' code. This row is above the exact-gradient row (-34.518044), so no record changes here.",
+    "source_entry": "VB1-varbench-code-j1j2#71 (qmbl-verify 2026-09-29; skeptic upheld); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_16_P_0.7",
+      "method": "VQE + symm. circuit (64 pars., 2^14 samples/grad)",
+      "energy": -36.0813809
+    },
+    "field": "sampled",
+    "to": false,
+    "reported_as": "observables.py L196-199: 'state = self.circuit(noisy=False)' 'state_proj = self.projector(state)' 'norm = np.vdot(state, state_proj)' 'energy = (np.vdot(state, self.hamiltonian(state_proj)) / norm).real - self.hamiltonian.energy_renorm'; printed by L237-238 '{:.7f}'; the shot-sampled circuit.energy (circuits.py L398) only enters the gradient and a local list in optimizers.py L281 that is never printed or returned. Script: 'python3 code/main.py --log2samples=14 --j2=0.7 --lattice=square4x4 --symmetry=0 && python3 code/main.py --j2=0.7 --lattice=square4x4 --symmetry=1 --log2samples=14 '",
+    "location": "programs/VQE/code/observables.py L196-200, L237-238; circuits.py L339-400; optimizers.py L270-300",
+    "version_read": "varbench/methods@ed31bb0",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "Whether an energy was sampled is read from the source, per row (ruling 2, Tristan 2026-09-30). The number the program prints is the exact statevector expectation of the circuit state, <psi|H P|psi>/<psi|P|psi> (observables.py L196-200, '{:.7f}'); the 2^14 shots per parameter estimate only the gradient and the metric (the shot-sampled circuit.energy of circuits.py L398 enters only the gradient and a local list in optimizers.py L281). The VarBench SM agrees (arXiv:2302.04919v2 Sec. S3 D: the shots measure the gradient and metric matrix elements), and so does the uploader's label on the 4 x 6 twin, 'Ns = 2^14 per par, statevector'. A deterministic energy needs no sigma (RULES.md 6); the method string's fallback read '2^14 samples' as a sampled energy. Caveat: the committed program is a 2024 reconstruction of the 2022 runs' code. This row (-36.0813809) is lower than the exact-gradient row (-36.0809175) on this instance, so the best variational bound moves to it.",
+    "source_entry": "VB1-varbench-code-j1j2#74 (qmbl-verify 2026-09-29; skeptic upheld); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_16_P_0.75",
+      "method": "VQE + symm. circuit (64 pars., 2^14 samples/grad)",
+      "energy": -38.0279754
+    },
+    "field": "sampled",
+    "to": false,
+    "reported_as": "observables.py L196-199: 'state = self.circuit(noisy=False)' 'state_proj = self.projector(state)' 'norm = np.vdot(state, state_proj)' 'energy = (np.vdot(state, self.hamiltonian(state_proj)) / norm).real - self.hamiltonian.energy_renorm'; printed by L237-238 '{:.7f}'; the shot-sampled circuit.energy (circuits.py L398) only enters the gradient and a local list in optimizers.py L281 that is never printed or returned. Script: 'python3 code/main.py --log2samples=14 --j2=0.75 --lattice=square4x4 --symmetry=0 && python3 code/main.py --j2=0.75 --lattice=square4x4 --symmetry=1 --log2samples=14'",
+    "location": "programs/VQE/code/observables.py L196-200, L237-238; circuits.py L339-400; optimizers.py L270-300",
+    "version_read": "varbench/methods@ed31bb0",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "Whether an energy was sampled is read from the source, per row (ruling 2, Tristan 2026-09-30). The number the program prints is the exact statevector expectation of the circuit state, <psi|H P|psi>/<psi|P|psi> (observables.py L196-200, '{:.7f}'); the 2^14 shots per parameter estimate only the gradient and the metric (the shot-sampled circuit.energy of circuits.py L398 enters only the gradient and a local list in optimizers.py L281). The VarBench SM agrees (arXiv:2302.04919v2 Sec. S3 D: the shots measure the gradient and metric matrix elements), and so does the uploader's label on the 4 x 6 twin, 'Ns = 2^14 per par, statevector'. A deterministic energy needs no sigma (RULES.md 6); the method string's fallback read '2^14 samples' as a sampled energy. Caveat: the committed program is a 2024 reconstruction of the 2022 runs' code. This row is above the exact-gradient row (-38.0297699), so no record changes here.",
+    "source_entry": "VB1-varbench-code-j1j2#77 (qmbl-verify 2026-09-29; skeptic upheld); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_16_P_0.8",
+      "method": "VQE + symm. circuit (64 pars., 2^14 samples/grad)",
+      "energy": -40.1417778
+    },
+    "field": "sampled",
+    "to": false,
+    "reported_as": "observables.py L196-199: 'state = self.circuit(noisy=False)' 'state_proj = self.projector(state)' 'norm = np.vdot(state, state_proj)' 'energy = (np.vdot(state, self.hamiltonian(state_proj)) / norm).real - self.hamiltonian.energy_renorm'; printed by L237-238 '{:.7f}'; the shot-sampled circuit.energy (circuits.py L398) only enters the gradient and a local list in optimizers.py L281 that is never printed or returned. Script: 'python3 code/main.py --log2samples=14 --j2=0.8 --lattice=square4x4 --symmetry=0 && python3 code/main.py --j2=0.8 --lattice=square4x4 --symmetry=1 --log2samples=14'",
+    "location": "programs/VQE/code/observables.py L196-200, L237-238; circuits.py L339-400; optimizers.py L270-300",
+    "version_read": "varbench/methods@ed31bb0",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "Whether an energy was sampled is read from the source, per row (ruling 2, Tristan 2026-09-30). The number the program prints is the exact statevector expectation of the circuit state, <psi|H P|psi>/<psi|P|psi> (observables.py L196-200, '{:.7f}'); the 2^14 shots per parameter estimate only the gradient and the metric (the shot-sampled circuit.energy of circuits.py L398 enters only the gradient and a local list in optimizers.py L281). The VarBench SM agrees (arXiv:2302.04919v2 Sec. S3 D: the shots measure the gradient and metric matrix elements), and so does the uploader's label on the 4 x 6 twin, 'Ns = 2^14 per par, statevector'. A deterministic energy needs no sigma (RULES.md 6); the method string's fallback read '2^14 samples' as a sampled energy. Caveat: the committed program is a 2024 reconstruction of the 2022 runs' code. This row is above the exact-gradient row (-40.1480758), so no record changes here.",
+    "source_entry": "VB1-varbench-code-j1j2#80 (qmbl-verify 2026-09-29; skeptic upheld); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_16_P_0.85",
+      "method": "VQE + symm. circuit (64 pars., 2^14 samples/grad)",
+      "energy": -42.3390363
+    },
+    "field": "sampled",
+    "to": false,
+    "reported_as": "observables.py L196-199: 'state = self.circuit(noisy=False)' 'state_proj = self.projector(state)' 'norm = np.vdot(state, state_proj)' 'energy = (np.vdot(state, self.hamiltonian(state_proj)) / norm).real - self.hamiltonian.energy_renorm'; printed by L237-238 '{:.7f}'; the shot-sampled circuit.energy (circuits.py L398) only enters the gradient and a local list in optimizers.py L281 that is never printed or returned. Script: 'python3 code/main.py --log2samples=14 --j2=0.85 --lattice=square4x4 --symmetry=0 && python3 code/main.py --j2=0.85 --lattice=square4x4 --symmetry=1 --log2samples=14'",
+    "location": "programs/VQE/code/observables.py L196-200, L237-238; circuits.py L339-400; optimizers.py L270-300",
+    "version_read": "varbench/methods@ed31bb0",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "Whether an energy was sampled is read from the source, per row (ruling 2, Tristan 2026-09-30). The number the program prints is the exact statevector expectation of the circuit state, <psi|H P|psi>/<psi|P|psi> (observables.py L196-200, '{:.7f}'); the 2^14 shots per parameter estimate only the gradient and the metric (the shot-sampled circuit.energy of circuits.py L398 enters only the gradient and a local list in optimizers.py L281). The VarBench SM agrees (arXiv:2302.04919v2 Sec. S3 D: the shots measure the gradient and metric matrix elements), and so does the uploader's label on the 4 x 6 twin, 'Ns = 2^14 per par, statevector'. A deterministic energy needs no sigma (RULES.md 6); the method string's fallback read '2^14 samples' as a sampled energy. Caveat: the committed program is a 2024 reconstruction of the 2022 runs' code. This row is above the exact-gradient row (-42.3492393), so no record changes here.",
+    "source_entry": "VB1-varbench-code-j1j2#83 (qmbl-verify 2026-09-29; skeptic upheld); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_16_P_0.9",
+      "method": "VQE + symm. circuit (64 pars., 2^14 samples/grad)",
+      "energy": -44.5896339
+    },
+    "field": "sampled",
+    "to": false,
+    "reported_as": "observables.py L196-199: 'state = self.circuit(noisy=False)' 'state_proj = self.projector(state)' 'norm = np.vdot(state, state_proj)' 'energy = (np.vdot(state, self.hamiltonian(state_proj)) / norm).real - self.hamiltonian.energy_renorm'; printed by L237-238 '{:.7f}'; the shot-sampled circuit.energy (circuits.py L398) only enters the gradient and a local list in optimizers.py L281 that is never printed or returned. Script: 'python3 code/main.py --log2samples=14 --j2=0.9 --lattice=square4x4 --symmetry=0 && python3 code/main.py --j2=0.9 --lattice=square4x4 --symmetry=1 --log2samples=14'",
+    "location": "programs/VQE/code/observables.py L196-200, L237-238; circuits.py L339-400; optimizers.py L270-300",
+    "version_read": "varbench/methods@ed31bb0",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "Whether an energy was sampled is read from the source, per row (ruling 2, Tristan 2026-09-30). The number the program prints is the exact statevector expectation of the circuit state, <psi|H P|psi>/<psi|P|psi> (observables.py L196-200, '{:.7f}'); the 2^14 shots per parameter estimate only the gradient and the metric (the shot-sampled circuit.energy of circuits.py L398 enters only the gradient and a local list in optimizers.py L281). The VarBench SM agrees (arXiv:2302.04919v2 Sec. S3 D: the shots measure the gradient and metric matrix elements), and so does the uploader's label on the 4 x 6 twin, 'Ns = 2^14 per par, statevector'. A deterministic energy needs no sigma (RULES.md 6); the method string's fallback read '2^14 samples' as a sampled energy. Caveat: the committed program is a 2024 reconstruction of the 2022 runs' code. This row is above the exact-gradient row (-44.5949902), so no record changes here.",
+    "source_entry": "VB1-varbench-code-j1j2#86 (qmbl-verify 2026-09-29; skeptic upheld); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_16_P_0.95",
+      "method": "VQE + symm. circuit (64 pars., 2^14 samples/grad)",
+      "energy": -46.8750185
+    },
+    "field": "sampled",
+    "to": false,
+    "reported_as": "observables.py L196-199: 'state = self.circuit(noisy=False)' 'state_proj = self.projector(state)' 'norm = np.vdot(state, state_proj)' 'energy = (np.vdot(state, self.hamiltonian(state_proj)) / norm).real - self.hamiltonian.energy_renorm'; printed by L237-238 '{:.7f}'; the shot-sampled circuit.energy (circuits.py L398) only enters the gradient and a local list in optimizers.py L281 that is never printed or returned. Script: 'python3 code/main.py --log2samples=14 --j2=0.95 --lattice=square4x4 --symmetry=0 && python3 code/main.py --j2=0.95 --lattice=square4x4 --symmetry=1 --log2samples=14'",
+    "location": "programs/VQE/code/observables.py L196-200, L237-238; circuits.py L339-400; optimizers.py L270-300",
+    "version_read": "varbench/methods@ed31bb0",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "Whether an energy was sampled is read from the source, per row (ruling 2, Tristan 2026-09-30). The number the program prints is the exact statevector expectation of the circuit state, <psi|H P|psi>/<psi|P|psi> (observables.py L196-200, '{:.7f}'); the 2^14 shots per parameter estimate only the gradient and the metric (the shot-sampled circuit.energy of circuits.py L398 enters only the gradient and a local list in optimizers.py L281). The VarBench SM agrees (arXiv:2302.04919v2 Sec. S3 D: the shots measure the gradient and metric matrix elements), and so does the uploader's label on the 4 x 6 twin, 'Ns = 2^14 per par, statevector'. A deterministic energy needs no sigma (RULES.md 6); the method string's fallback read '2^14 samples' as a sampled energy. Caveat: the committed program is a 2024 reconstruction of the 2022 runs' code. This row is above the exact-gradient row (-46.878747), so no record changes here.",
+    "source_entry": "VB1-varbench-code-j1j2#89 (qmbl-verify 2026-09-29; skeptic upheld); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_16_P_1.0",
+      "method": "VQE + symm. circuit (64 pars., 2^14 samples/grad)",
+      "energy": -49.1750881
+    },
+    "field": "sampled",
+    "to": false,
+    "reported_as": "observables.py L196-199: 'state = self.circuit(noisy=False)' 'state_proj = self.projector(state)' 'norm = np.vdot(state, state_proj)' 'energy = (np.vdot(state, self.hamiltonian(state_proj)) / norm).real - self.hamiltonian.energy_renorm'; printed by L237-238 '{:.7f}'; the shot-sampled circuit.energy (circuits.py L398) only enters the gradient and a local list in optimizers.py L281 that is never printed or returned. Script: 'python3 code/main.py --log2samples=14 --j2=1.0 --lattice=square4x4 --symmetry=0 && python3 code/main.py --j2=1.0 --lattice=square4x4 --symmetry=1 --log2samples=14'",
+    "location": "programs/VQE/code/observables.py L196-200, L237-238; circuits.py L339-400; optimizers.py L270-300",
+    "version_read": "varbench/methods@ed31bb0",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "Whether an energy was sampled is read from the source, per row (ruling 2, Tristan 2026-09-30). The number the program prints is the exact statevector expectation of the circuit state, <psi|H P|psi>/<psi|P|psi> (observables.py L196-200, '{:.7f}'); the 2^14 shots per parameter estimate only the gradient and the metric (the shot-sampled circuit.energy of circuits.py L398 enters only the gradient and a local list in optimizers.py L281). The VarBench SM agrees (arXiv:2302.04919v2 Sec. S3 D: the shots measure the gradient and metric matrix elements), and so does the uploader's label on the 4 x 6 twin, 'Ns = 2^14 per par, statevector'. A deterministic energy needs no sigma (RULES.md 6); the method string's fallback read '2^14 samples' as a sampled energy. Caveat: the committed program is a 2024 reconstruction of the 2022 runs' code. This row is above the exact-gradient row (-49.1808042), so no record changes here.",
+    "source_entry": "VB1-varbench-code-j1j2#92 (qmbl-verify 2026-09-29; skeptic upheld); ruling 2, Tristan 2026-09-30"
+  },
+  // sampled: false. The other VQE rows whose program a reader ran or read (VB3, VB4): verified
+  // entries, outside the skeptics' scope (they challenged corrections, defects and record rows
+  // only).
+  {
+    "match": {
+      "instance": "Heisenberg/square_16_P",
+      "method": "VQE + symm. circuit (64 pars., 2^14 samples/grad)",
+      "energy": -44.9104126
+    },
+    "field": "sampled",
+    "to": false,
+    "reported_as": "observables.py write_logs: 'state = self.circuit(noisy=False)', 'energy = (np.vdot(state, self.hamiltonian(state_proj)) / norm).real - self.hamiltonian.energy_renorm' (lines 196-199), written with '{:.7f}' each iteration (line 237); config.N_samples = 2 ** args.log2samples (config.py line 169) is used only in get_natural_gradients / compute_energy_sample (optimizers.py lines 55-58, 281)",
+    "location": "varbench/methods programs/VQE/code/observables.py L196-199, L237; config.py L169; optimizers.py L55-58, L281; scripts/Heisenberg/square_16_P/vqe_noisy.sh",
+    "version_read": "VarBench snapshot 390a21e (vendor/varbench) and full upstream history (varbench-history, git log --follow on the file, every version); varbench/methods ed31bb0 run script and program read as text; no output log or result file exists in the methods repo for any Heisenberg row",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "The same program as the J1-J2 4x4 rows above and the same reading (ruling 2, Tristan 2026-09-30): the logged energy is the exact statevector expectation of the projected state, and the 2^14 shots enter only the gradient and metric estimates, so the energy carries no statistical error and needs no sigma (RULES.md 6). The reader asked for exactly this ruling (VB3#41). 0.00126 above the exact-gradient row, so nothing changes on this instance.",
+    "source_entry": "VB3-varbench-code-heisenberg#40, VB3-varbench-code-heisenberg#41 (qmbl-verify 2026-09-29; reader's reading; no skeptic checked it); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "Heisenberg/kagome-2x3_18_P",
+      "method": "VQE (SR + symm. + 108 variational pars)",
+      "energy": -32.1645862
+    },
+    "field": "sampled",
+    "to": false,
+    "reported_as": "observables.py lines 196-199, 237: the logged energy is the exact statevector expectation of the projected state ('{:.7f}')",
+    "location": "varbench/methods programs/VQE/code/observables.py L196-199, L237; config.py L108 (Kagome18); scripts/Heisenberg/kagome-2x3_18_P/vqe.sh",
+    "version_read": "VarBench snapshot 390a21e (vendor/varbench) and full upstream history (varbench-history, git log --follow on the file, every version); varbench/methods ed31bb0 run script and program read as text; no output log or result file exists in the methods repo for any Heisenberg row",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "Same program as the 4x4 VQE rows (ruling 2, Tristan 2026-09-30): the energy is the exact statevector expectation of the symmetry-projected circuit state, deterministic, so no sigma is needed (RULES.md 6); the string names no deterministic marker, so the fallback counted it sampled. (The script as committed passes --lattice=kagome3x2, which the parser rejects; with the parser's own spelling the only kagome branch builds this Hamiltonian, and the value is unaffected.) 0.0285 above the exact energy; not the best bound on the instance.",
+    "source_entry": "VB3-varbench-code-heisenberg#20 (qmbl-verify 2026-09-29; reader's reading; no skeptic checked it); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "Heisenberg/triangular_16_P",
+      "method": "VQE (SR + symm. + 64 par)",
+      "energy": -34.1780764
+    },
+    "field": "sampled",
+    "to": false,
+    "reported_as": "observables.py lines 196-199: the logged energy is the exact statevector expectation of the projected state; VarBench stores sigma 0 for this row",
+    "location": "varbench/methods programs/VQE/code/observables.py L196-199; config.py L106, L117; hamiltonians.py L267-283; scripts/Heisenberg/triangular_16_P/vqe.sh",
+    "version_read": "varbench/methods@ed31bb0 run script and program read as text; VarBench snapshot 390a21e and history (26f221f, 5285adc)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "Same program as the 4x4 VQE rows (ruling 2, Tristan 2026-09-30): the energy is the exact statevector expectation, and the stored sigma 0 is the uploader's statement that it has no statistical error. The fallback counted the string sampled, which made a sigma of 0 look like a sampled bar of zero (metric flag M6). Separate and still open: the linked script passes --j2=0.0, which builds the square lattice, so the link does not reproduce this triangular value (VB3#67, ambiguous). Not a record (ED and DMRG lie lower).",
+    "source_entry": "VB3-varbench-code-heisenberg#67 (qmbl-verify 2026-09-29; reader's reading; no skeptic checked it); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "TFIsing/chain_10_O_1",
+      "method": "VQE HV (d = 24)",
+      "energy": -12.38133801299217
+    },
+    "field": "sampled",
+    "to": false,
+    "reported_as": "VarBench TFIsing/chain_10_O_1.md: Energy -12.38133801299217 | Sigma (empty) | Energy Variance 0.0007985776929899657 | DOF 10 | Einf 0 | Method \"VQE HV (d = 24)\"",
+    "location": "pqc_HamVar.py lines 20-24 (n = 10, gamma = -1, J = -1, open), 31-77 (H = J sum Z_i Z_i+1 + gamma sum X_i), 124-154 (|+>^10, 24 x [exp(i theta ZZ) block, RX block]), 168 (n_blocks = 24), 176-186 (thetas)",
+    "version_read": "varbench/methods ed31bb0 programs/pqc_ising_1d/pqc_HamVar.py (G. Mazzola; qutip 4.7): the hard-coded 48 parameters evaluated here in a 10-qubit statevector with qutip's gate conventions (work/tfising_checks.mjs; no optimisation, no diagonalisation)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "The committed program, pqc_HamVar.py (24 blocks, 48 parameters), evaluated in a 10-qubit statevector with its hard-coded parameters, reproduces the stored energy and variance: a deterministic statevector expectation with no statistical error (ruling 2, Tristan 2026-09-30; RULES.md 6). The string names no deterministic marker, so the fallback counted it sampled. The instance is solved and the row is not the best bound, so nothing changes here.",
+    "source_entry": "VB4-tfising-tv#12 (qmbl-verify 2026-09-29; reader's reading; no skeptic checked it); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "TFIsing/chain_10_O_1",
+      "method": "VQE R-CX (d = 10)",
+      "energy": -12.380038028233812
+    },
+    "field": "sampled",
+    "to": false,
+    "reported_as": "VarBench TFIsing/chain_10_O_1.md: Energy -12.380038028233812 | Sigma (empty) | Energy Variance 0.007944439359960143 | DOF 10 | Einf 0 | Method \"VQE R-CX (d = 10)\"",
+    "location": "pqc_RYCNOT.py lines 19-23 (n = 10, gamma = -1, J = -1, open), 81-87 (|1>^10), 124-166 (10 x [RY layer, CNOT(0,1)...CNOT(8,9)] + final RY layer), 180 (n_blocks = 10), 189-216 (thetas)",
+    "version_read": "varbench/methods ed31bb0 programs/pqc_ising_1d/pqc_RYCNOT.py (G. Mazzola; qutip 4.7): the hard-coded 110 parameters evaluated here in a 10-qubit statevector (work/tfising_checks.mjs)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "The committed program, pqc_RYCNOT.py (10 blocks, 110 parameters), evaluated in a 10-qubit statevector with its hard-coded parameters, reproduces the stored energy and variance: a deterministic statevector expectation with no statistical error (ruling 2, Tristan 2026-09-30; RULES.md 6). The string names no deterministic marker, so the fallback counted it sampled. The instance is solved and the row is not the best bound, so nothing changes here.",
+    "source_entry": "VB4-tfising-tv#13 (qmbl-verify 2026-09-29; reader's reading; no skeptic checked it); ruling 2, Tristan 2026-09-30"
+  },
+  // sampled: true. The rows whose method string matches a deterministic marker but whose source
+  // samples the energy. MPS-RNN and tensor-RNN (PRR 5, L032001).
+  {
+    "match": {
+      "instance": "Heisenberg/square_100_O",
+      "method": "1D MPS-RNN (bond dimension = 40)",
+      "energy": -250.346
+    },
+    "field": "sampled",
+    "to": true,
+    "reported_as": "'After the training, each reported variational energy is estimated from 10^6 samples' (Supplemental Material S7, 'Details of numerical experiments')",
+    "location": "arXiv:2206.12363v2 Supplemental Material S7",
+    "version_read": "arXiv:2206.12363v2 (8 Mar 2023) and v1 PDFs, pypdf plain + layout (VA5); Phys. Rev. Research 5, L032001 (2023) published PDF (VJ2)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "MPS-RNN and tensor-RNN are autoregressive networks: the energy is a Monte Carlo estimate over 10^6 exact samples, and the stored sigma is that estimate's error (the upload's Var/sigma^2 = 10^6). The method string's fallback reads 'MPS' and 'bond dimension' as deterministic markers. Ruling 2 (Tristan, 2026-09-30): MPS-RNN and tensor-RNN rows are marked sampled. No eligibility change: sigma is stored.",
+    "source_entry": "VA5-hubbard-heisenberg-tfising-j1j2#23, VJ2-journal-other#0 (qmbl-verify 2026-09-29; reader's reading; no skeptic checked it); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "Heisenberg/square_100_O",
+      "method": "2D MPS-RNN (bond dimension = 40)",
+      "energy": -251.0788
+    },
+    "field": "sampled",
+    "to": true,
+    "reported_as": "'After the training, each reported variational energy is estimated from 10^6 samples' (Supplemental Material S7, 'Details of numerical experiments')",
+    "location": "arXiv:2206.12363v2 Supplemental Material S7",
+    "version_read": "arXiv:2206.12363v2 (8 Mar 2023) and v1 PDFs, pypdf plain + layout (VA5); Phys. Rev. Research 5, L032001 (2023) published PDF (VJ2)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "MPS-RNN and tensor-RNN are autoregressive networks: the energy is a Monte Carlo estimate over 10^6 exact samples, and the stored sigma is that estimate's error (the upload's Var/sigma^2 = 10^6). The method string's fallback reads 'MPS' and 'bond dimension' as deterministic markers. Ruling 2 (Tristan, 2026-09-30): MPS-RNN and tensor-RNN rows are marked sampled. No eligibility change: sigma is stored.",
+    "source_entry": "VA5-hubbard-heisenberg-tfising-j1j2#24, VJ2-journal-other#1 (qmbl-verify 2026-09-29; reader's reading; no skeptic checked it); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "Heisenberg/square_100_O",
+      "method": "Tensor-RNN (bond dimension = 40)",
+      "energy": -251.4112
+    },
+    "field": "sampled",
+    "to": true,
+    "reported_as": "'After the training, each reported variational energy is estimated from 10^6 samples' (Supplemental Material S7, 'Details of numerical experiments')",
+    "location": "arXiv:2206.12363v2 Supplemental Material S7",
+    "version_read": "arXiv:2206.12363v2 (8 Mar 2023) and v1 PDFs, pypdf plain + layout (VA5); Phys. Rev. Research 5, L032001 (2023) published PDF (VJ2)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "MPS-RNN and tensor-RNN are autoregressive networks: the energy is a Monte Carlo estimate over 10^6 exact samples, and the stored sigma is that estimate's error (the upload's Var/sigma^2 = 10^6). The method string's fallback reads 'MPS' and 'bond dimension' as deterministic markers. Ruling 2 (Tristan, 2026-09-30): MPS-RNN and tensor-RNN rows are marked sampled. No eligibility change: sigma is stored.",
+    "source_entry": "VA5-hubbard-heisenberg-tfising-j1j2#28, VJ2-journal-other#2 (qmbl-verify 2026-09-29; skeptic upheld; reader's reading; no skeptic checked it); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "Heisenberg/triangular_100_O",
+      "method": "1D MPS-RNN (bond dimension = 40)",
+      "energy": -195.8572
+    },
+    "field": "sampled",
+    "to": true,
+    "reported_as": "'After the training, each reported variational energy is estimated from 10^6 samples' (Supplemental Material S7, 'Details of numerical experiments')",
+    "location": "arXiv:2206.12363v2 Supplemental Material S7",
+    "version_read": "arXiv:2206.12363v2 (8 Mar 2023) and v1 PDFs, pypdf plain + layout (VA5); Phys. Rev. Research 5, L032001 (2023) published PDF (VJ2)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "MPS-RNN and tensor-RNN are autoregressive networks: the energy is a Monte Carlo estimate over 10^6 exact samples, and the stored sigma is that estimate's error (the upload's Var/sigma^2 = 10^6). The method string's fallback reads 'MPS' and 'bond dimension' as deterministic markers. Ruling 2 (Tristan, 2026-09-30): MPS-RNN and tensor-RNN rows are marked sampled. No eligibility change: sigma is stored.",
+    "source_entry": "VA5-hubbard-heisenberg-tfising-j1j2#25, VJ2-journal-other#3 (qmbl-verify 2026-09-29; reader's reading; no skeptic checked it); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "Heisenberg/triangular_100_O",
+      "method": "2D MPS-RNN (bond dimension = 40)",
+      "energy": -203.2108
+    },
+    "field": "sampled",
+    "to": true,
+    "reported_as": "'After the training, each reported variational energy is estimated from 10^6 samples' (Supplemental Material S7, 'Details of numerical experiments')",
+    "location": "arXiv:2206.12363v2 Supplemental Material S7",
+    "version_read": "arXiv:2206.12363v2 (8 Mar 2023) and v1 PDFs, pypdf plain + layout (VA5); Phys. Rev. Research 5, L032001 (2023) published PDF (VJ2)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "MPS-RNN and tensor-RNN are autoregressive networks: the energy is a Monte Carlo estimate over 10^6 exact samples, and the stored sigma is that estimate's error (the upload's Var/sigma^2 = 10^6). The method string's fallback reads 'MPS' and 'bond dimension' as deterministic markers. Ruling 2 (Tristan, 2026-09-30): MPS-RNN and tensor-RNN rows are marked sampled. No eligibility change: sigma is stored.",
+    "source_entry": "VA5-hubbard-heisenberg-tfising-j1j2#26, VJ2-journal-other#4 (qmbl-verify 2026-09-29; reader's reading; no skeptic checked it); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "Heisenberg/triangular_100_O",
+      "method": "Tensor-RNN (bond dimension = 40)",
+      "energy": -205.5452
+    },
+    "field": "sampled",
+    "to": true,
+    "reported_as": "'After the training, each reported variational energy is estimated from 10^6 samples' (Supplemental Material S7, 'Details of numerical experiments')",
+    "location": "arXiv:2206.12363v2 Supplemental Material S7",
+    "version_read": "arXiv:2206.12363v2 (8 Mar 2023) and v1 PDFs, pypdf plain + layout (VA5); Phys. Rev. Research 5, L032001 (2023) published PDF (VJ2)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "MPS-RNN and tensor-RNN are autoregressive networks: the energy is a Monte Carlo estimate over 10^6 exact samples, and the stored sigma is that estimate's error (the upload's Var/sigma^2 = 10^6). The method string's fallback reads 'MPS' and 'bond dimension' as deterministic markers. Ruling 2 (Tristan, 2026-09-30): MPS-RNN and tensor-RNN rows are marked sampled. No eligibility change: sigma is stored.",
+    "source_entry": "VA5-hubbard-heisenberg-tfising-j1j2#27, VJ2-journal-other#5 (qmbl-verify 2026-09-29; reader's reading; no skeptic checked it); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "TFIsing/square_400_O_3",
+      "method": "1D MPS-RNN (bond dimension = 64)",
+      "energy": -1269.6048
+    },
+    "field": "sampled",
+    "to": true,
+    "reported_as": "'After the training, each reported variational energy is estimated from 10^6 samples' (Supplemental Material S7, 'Details of numerical experiments')",
+    "location": "arXiv:2206.12363v2 Supplemental Material S7",
+    "version_read": "arXiv:2206.12363v2 (8 Mar 2023) and v1 PDFs, pypdf plain + layout (VA5); Phys. Rev. Research 5, L032001 (2023) published PDF (VJ2)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "MPS-RNN and tensor-RNN are autoregressive networks: the energy is a Monte Carlo estimate over 10^6 exact samples, and the stored sigma is that estimate's error (the upload's Var/sigma^2 = 10^6). The method string's fallback reads 'MPS' and 'bond dimension' as deterministic markers. Ruling 2 (Tristan, 2026-09-30): MPS-RNN and tensor-RNN rows are marked sampled. No eligibility change: sigma is stored. These 20 x 20 TFIsing numbers are the authors' VarBench uploads and are not printed in the paper (VA5 and VJ2: not found); same networks and evaluation, and the upload states a Monte Carlo sigma.",
+    "source_entry": "VA5-hubbard-heisenberg-tfising-j1j2#29, VJ2-journal-other#6 (qmbl-verify 2026-09-29; reader's reading; no skeptic checked it); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "TFIsing/square_400_O_3",
+      "method": "2D MPS-RNN (bond dimension = 64)",
+      "energy": -1272.7488
+    },
+    "field": "sampled",
+    "to": true,
+    "reported_as": "'After the training, each reported variational energy is estimated from 10^6 samples' (Supplemental Material S7, 'Details of numerical experiments')",
+    "location": "arXiv:2206.12363v2 Supplemental Material S7",
+    "version_read": "arXiv:2206.12363v2 (8 Mar 2023) and v1 PDFs, pypdf plain + layout (VA5); Phys. Rev. Research 5, L032001 (2023) published PDF (VJ2)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "MPS-RNN and tensor-RNN are autoregressive networks: the energy is a Monte Carlo estimate over 10^6 exact samples, and the stored sigma is that estimate's error (the upload's Var/sigma^2 = 10^6). The method string's fallback reads 'MPS' and 'bond dimension' as deterministic markers. Ruling 2 (Tristan, 2026-09-30): MPS-RNN and tensor-RNN rows are marked sampled. No eligibility change: sigma is stored. These 20 x 20 TFIsing numbers are the authors' VarBench uploads and are not printed in the paper (VA5 and VJ2: not found); same networks and evaluation, and the upload states a Monte Carlo sigma.",
+    "source_entry": "VA5-hubbard-heisenberg-tfising-j1j2#30, VJ2-journal-other#7 (qmbl-verify 2026-09-29; reader's reading; no skeptic checked it); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "TFIsing/square_400_O_3",
+      "method": "Tensor-RNN (bond dimension = 64)",
+      "energy": -1272.7616
+    },
+    "field": "sampled",
+    "to": true,
+    "reported_as": "'After the training, each reported variational energy is estimated from 10^6 samples' (Supplemental Material S7, 'Details of numerical experiments')",
+    "location": "arXiv:2206.12363v2 Supplemental Material S7",
+    "version_read": "arXiv:2206.12363v2 (8 Mar 2023) and v1 PDFs, pypdf plain + layout (VA5); Phys. Rev. Research 5, L032001 (2023) published PDF (VJ2)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "MPS-RNN and tensor-RNN are autoregressive networks: the energy is a Monte Carlo estimate over 10^6 exact samples, and the stored sigma is that estimate's error (the upload's Var/sigma^2 = 10^6). The method string's fallback reads 'MPS' and 'bond dimension' as deterministic markers. Ruling 2 (Tristan, 2026-09-30): MPS-RNN and tensor-RNN rows are marked sampled. No eligibility change: sigma is stored. These 20 x 20 TFIsing numbers are the authors' VarBench uploads and are not printed in the paper (VA5 and VJ2: not found); same networks and evaluation, and the upload states a Monte Carlo sigma.",
+    "source_entry": "VA5-hubbard-heisenberg-tfising-j1j2#31, VJ2-journal-other#8 (qmbl-verify 2026-09-29; reader's reading; no skeptic checked it); ruling 2, Tristan 2026-09-30"
+  },
+  // Finite PEPS with Monte Carlo evaluation (PRB 95, 195154).
+  {
+    "match": {
+      "instance": "Heisenberg/square_100_O",
+      "method": "Finite PEPS, gradient optimization",
+      "energy": -251.4404
+    },
+    "field": "sampled",
+    "to": true,
+    "reported_as": "'Monte Carlo sampling techniques have been introduced by several groups in which the contraction over physical indices is replaced by the MC sampling over the \"spin configurations\". In this algorithm, the energy is reexpressed as E = (1/Z) sum_S W^2(S) E(S)' (Eq. 2); 'a boundary-MPS method is used to approximately contract the single-layer tensor network'; Fig. 5 caption: 'The MC sampling error is order of 10^-6.'",
+    "location": "Sec. II, Eq. (2) and Fig. 1(d); Fig. 5 caption (p. 7)",
+    "version_read": "arXiv:1611.09467v3 PDF (= Phys. Rev. B 95, 195154 (2017)), pypdf layout + plain and pdftotext (VP9, VP15)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "The energy of these finite PEPS is not a tensor contraction but a Monte Carlo average over spin configurations weighted by W^2(S), each W(S) contracted approximately by boundary MPS; the printed bar is the MC sampling error. The method string's fallback reads 'PEPS' as a deterministic marker. Ruling 2 (Tristan, 2026-09-30): finite PEPS with Monte Carlo gradients are marked sampled. No eligibility change: sigma is stored.",
+    "source_entry": "VP15-hubbard-j1j2-heisenberg#55, VP15-hubbard-j1j2-heisenberg#57 (qmbl-verify 2026-09-29; reader's reading; no skeptic checked it); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "Heisenberg/square_256_O",
+      "method": "Finite PEPS, gradient optimization",
+      "energy": -658.832384
+    },
+    "field": "sampled",
+    "to": true,
+    "reported_as": "'Monte Carlo sampling techniques have been introduced by several groups in which the contraction over physical indices is replaced by the MC sampling over the \"spin configurations\". In this algorithm, the energy is reexpressed as E = (1/Z) sum_S W^2(S) E(S)' (Eq. 2); 'a boundary-MPS method is used to approximately contract the single-layer tensor network'; Fig. 5 caption: 'The MC sampling error is order of 10^-6.'",
+    "location": "Sec. II, Eq. (2) and Fig. 1(d); Fig. 5 caption (p. 7)",
+    "version_read": "arXiv:1611.09467v3 PDF (= Phys. Rev. B 95, 195154 (2017)), pypdf layout + plain and pdftotext (VP9, VP15)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "The energy of these finite PEPS is not a tensor contraction but a Monte Carlo average over spin configurations weighted by W^2(S), each W(S) contracted approximately by boundary MPS; the printed bar is the MC sampling error. The method string's fallback reads 'PEPS' as a deterministic marker. Ruling 2 (Tristan, 2026-09-30): finite PEPS with Monte Carlo gradients are marked sampled. No eligibility change: sigma is stored.",
+    "source_entry": "VP15-hubbard-j1j2-heisenberg#58, VP15-hubbard-j1j2-heisenberg#60 (qmbl-verify 2026-09-29; reader's reading; no skeptic checked it); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "Heisenberg/square_100_O",
+      "method": "PEPS, gradient optimization (GO) after SU initialization, D=8, Dc=16 (finite, open-boundary 10x10 cluster)",
+      "energy": -251.4028
+    },
+    "field": "sampled",
+    "to": true,
+    "reported_as": "'Monte Carlo sampling techniques have been introduced by several groups in which the contraction over physical indices is replaced by the MC sampling over the \"spin configurations\". In this algorithm, the energy is reexpressed as E = (1/Z) sum_S W^2(S) E(S)' (Eq. 2); 'a boundary-MPS method is used to approximately contract the single-layer tensor network'; Fig. 5 caption: 'The MC sampling error is order of 10^-6.'",
+    "location": "Sec. II, Eq. (2) and Fig. 1(d); Fig. 5 caption (p. 7)",
+    "version_read": "arXiv:1611.09467v3 PDF (= Phys. Rev. B 95, 195154 (2017)), pypdf layout + plain and pdftotext (VP9, VP15)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "The energy of these finite PEPS is not a tensor contraction but a Monte Carlo average over spin configurations weighted by W^2(S), each W(S) contracted approximately by boundary MPS; the printed bar is the MC sampling error. The method string's fallback reads 'PEPS' as a deterministic marker. Ruling 2 (Tristan, 2026-09-30): finite PEPS with Monte Carlo gradients are marked sampled. No eligibility change: sigma is stored.",
+    "source_entry": "VP9-tv-hubbard-heisenberg#58 (qmbl-verify 2026-09-29; reader's reading; no skeptic checked it); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "Heisenberg/square_100_O",
+      "method": "PEPS, simple-update (SU) imaginary-time evolution, D=10, Dc=20 (finite, open-boundary 10x10 cluster)",
+      "energy": -250.444
+    },
+    "field": "sampled",
+    "to": true,
+    "reported_as": "'Monte Carlo sampling techniques have been introduced by several groups in which the contraction over physical indices is replaced by the MC sampling over the \"spin configurations\". In this algorithm, the energy is reexpressed as E = (1/Z) sum_S W^2(S) E(S)' (Eq. 2); 'a boundary-MPS method is used to approximately contract the single-layer tensor network'; Fig. 5 caption: 'The MC sampling error is order of 10^-6.'",
+    "location": "Sec. II, Eq. (2) and Fig. 1(d); Fig. 5 caption (p. 7)",
+    "version_read": "arXiv:1611.09467v3 PDF (= Phys. Rev. B 95, 195154 (2017)), pypdf layout + plain and pdftotext (VP9, VP15)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "The energy of these finite PEPS is not a tensor contraction but a Monte Carlo average over spin configurations weighted by W^2(S), each W(S) contracted approximately by boundary MPS; the printed bar is the MC sampling error. The method string's fallback reads 'PEPS' as a deterministic marker. Ruling 2 (Tristan, 2026-09-30): finite PEPS with Monte Carlo gradients are marked sampled. No eligibility change: sigma is stored. The simple-update state of the same table is evaluated the same way and printed with the same kind of bar.",
+    "source_entry": "VP9-tv-hubbard-heisenberg#59 (qmbl-verify 2026-09-29; reader's reading; no skeptic checked it); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "Heisenberg/square_36_O",
+      "method": "PEPS, gradient optimization (GO) after SU initialization, D=8, Dc=16 (finite, open-boundary 6x6 cluster)",
+      "energy": -86.907312
+    },
+    "field": "sampled",
+    "to": true,
+    "reported_as": "'Monte Carlo sampling techniques have been introduced by several groups in which the contraction over physical indices is replaced by the MC sampling over the \"spin configurations\". In this algorithm, the energy is reexpressed as E = (1/Z) sum_S W^2(S) E(S)' (Eq. 2); 'a boundary-MPS method is used to approximately contract the single-layer tensor network'; Fig. 5 caption: 'The MC sampling error is order of 10^-6.'",
+    "location": "Sec. II, Eq. (2) and Fig. 1(d); Fig. 5 caption (p. 7)",
+    "version_read": "arXiv:1611.09467v3 PDF (= Phys. Rev. B 95, 195154 (2017)), pypdf layout + plain and pdftotext (VP9, VP15)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "The energy of these finite PEPS is not a tensor contraction but a Monte Carlo average over spin configurations weighted by W^2(S), each W(S) contracted approximately by boundary MPS; the printed bar is the MC sampling error. The method string's fallback reads 'PEPS' as a deterministic marker. Ruling 2 (Tristan, 2026-09-30): finite PEPS with Monte Carlo gradients are marked sampled. No eligibility change: sigma is stored. The row stays flagged (below the exact energy).",
+    "source_entry": "VP9-tv-hubbard-heisenberg#60 (qmbl-verify 2026-09-29; skeptic upheld); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "Heisenberg/square_36_O",
+      "method": "PEPS, gradient optimization (GO) after SU initialization, D=10, Dc=20 (finite, open-boundary 6x6 cluster)",
+      "energy": -86.90904
+    },
+    "field": "sampled",
+    "to": true,
+    "reported_as": "'Monte Carlo sampling techniques have been introduced by several groups in which the contraction over physical indices is replaced by the MC sampling over the \"spin configurations\". In this algorithm, the energy is reexpressed as E = (1/Z) sum_S W^2(S) E(S)' (Eq. 2); 'a boundary-MPS method is used to approximately contract the single-layer tensor network'; Fig. 5 caption: 'The MC sampling error is order of 10^-6.'",
+    "location": "Sec. II, Eq. (2) and Fig. 1(d); Fig. 5 caption (p. 7)",
+    "version_read": "arXiv:1611.09467v3 PDF (= Phys. Rev. B 95, 195154 (2017)), pypdf layout + plain and pdftotext (VP9, VP15)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "The energy of these finite PEPS is not a tensor contraction but a Monte Carlo average over spin configurations weighted by W^2(S), each W(S) contracted approximately by boundary MPS; the printed bar is the MC sampling error. The method string's fallback reads 'PEPS' as a deterministic marker. Ruling 2 (Tristan, 2026-09-30): finite PEPS with Monte Carlo gradients are marked sampled. No eligibility change: sigma is stored. The row stays flagged (below the exact energy).",
+    "source_entry": "VP9-tv-hubbard-heisenberg#61 (qmbl-verify 2026-09-29; skeptic upheld); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "Heisenberg/square_64_O",
+      "method": "PEPS, GO method, D=8, Dc=16",
+      "energy": -158.467328
+    },
+    "field": "sampled",
+    "to": true,
+    "reported_as": "'Monte Carlo sampling techniques have been introduced by several groups in which the contraction over physical indices is replaced by the MC sampling over the \"spin configurations\". In this algorithm, the energy is reexpressed as E = (1/Z) sum_S W^2(S) E(S)' (Eq. 2); 'a boundary-MPS method is used to approximately contract the single-layer tensor network'; Fig. 5 caption: 'The MC sampling error is order of 10^-6.'",
+    "location": "Sec. II, Eq. (2) and Fig. 1(d); Fig. 5 caption (p. 7)",
+    "version_read": "arXiv:1611.09467v3 PDF (= Phys. Rev. B 95, 195154 (2017)), pypdf layout + plain and pdftotext (VP9, VP15)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "The energy of these finite PEPS is not a tensor contraction but a Monte Carlo average over spin configurations weighted by W^2(S), each W(S) contracted approximately by boundary MPS; the printed bar is the MC sampling error. The method string's fallback reads 'PEPS' as a deterministic marker. Ruling 2 (Tristan, 2026-09-30): finite PEPS with Monte Carlo gradients are marked sampled. No eligibility change: sigma is stored.",
+    "source_entry": "VP9-tv-hubbard-heisenberg#62 (qmbl-verify 2026-09-29; reader's reading; no skeptic checked it); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "Heisenberg/square_64_O",
+      "method": "PEPS, GO method, D=10, Dc=20",
+      "energy": -158.472448
+    },
+    "field": "sampled",
+    "to": true,
+    "reported_as": "'Monte Carlo sampling techniques have been introduced by several groups in which the contraction over physical indices is replaced by the MC sampling over the \"spin configurations\". In this algorithm, the energy is reexpressed as E = (1/Z) sum_S W^2(S) E(S)' (Eq. 2); 'a boundary-MPS method is used to approximately contract the single-layer tensor network'; Fig. 5 caption: 'The MC sampling error is order of 10^-6.'",
+    "location": "Sec. II, Eq. (2) and Fig. 1(d); Fig. 5 caption (p. 7)",
+    "version_read": "arXiv:1611.09467v3 PDF (= Phys. Rev. B 95, 195154 (2017)), pypdf layout + plain and pdftotext (VP9, VP15)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "The energy of these finite PEPS is not a tensor contraction but a Monte Carlo average over spin configurations weighted by W^2(S), each W(S) contracted approximately by boundary MPS; the printed bar is the MC sampling error. The method string's fallback reads 'PEPS' as a deterministic marker. Ruling 2 (Tristan, 2026-09-30): finite PEPS with Monte Carlo gradients are marked sampled. No eligibility change: sigma is stored.",
+    "source_entry": "VP9-tv-hubbard-heisenberg#63 (qmbl-verify 2026-09-29; reader's reading; no skeptic checked it); ruling 2, Tristan 2026-09-30"
+  },
+  // PEPS + CNN (arXiv:2009.14370).
+  {
+    "match": {
+      "instance": "J1J2/square_100_P_0.5",
+      "method": "PEPS+S. CNN",
+      "energy": -196.934
+    },
+    "field": "sampled",
+    "to": true,
+    "reported_as": "'The sample number for each SR step is 16000 without rotational symmetry and 100000 with rotational symmetry. The energy expectation is averaged over the last ten SR steps'",
+    "location": "Sec. III (p. 4 of v2); Table I",
+    "version_read": "arXiv:2009.14370v2 (13 Jan 2021) PDF, pypdf layout (VP15)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "A PEPS + CNN state optimised by stochastic reconfiguration: the energy is a Monte Carlo estimate averaged over the last ten SR steps, not a PEPS contraction, and the paper prints no error bar. The method string's fallback reads 'PEPS' as a deterministic marker, which made the row record-eligible without sigma. Ruling 2 (Tristan, 2026-09-30): PEPS + CNN rows are marked sampled, so the row is listed and eligible for nothing until an error bar is found (RULES.md 6). Not the best bound on the instance (CNN-MPS -0.4976939(2) and others lie lower), so no record moves.",
+    "source_entry": "VP15-hubbard-j1j2-heisenberg#43, VP15-hubbard-j1j2-heisenberg#45 (qmbl-verify 2026-09-29; reader's reading; no skeptic checked it); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_100_P_0.5",
+      "method": "PEPS+D. CNN",
+      "energy": -198.2008
+    },
+    "field": "sampled",
+    "to": true,
+    "reported_as": "'The sample number for each SR step is 16000 without rotational symmetry and 100000 with rotational symmetry. The energy expectation is averaged over the last ten SR steps'",
+    "location": "Sec. III (p. 4 of v2); Table I",
+    "version_read": "arXiv:2009.14370v2 (13 Jan 2021) PDF, pypdf layout (VP15)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "A PEPS + CNN state optimised by stochastic reconfiguration: the energy is a Monte Carlo estimate averaged over the last ten SR steps, not a PEPS contraction, and the paper prints no error bar. The method string's fallback reads 'PEPS' as a deterministic marker, which made the row record-eligible without sigma. Ruling 2 (Tristan, 2026-09-30): PEPS + CNN rows are marked sampled, so the row is listed and eligible for nothing until an error bar is found (RULES.md 6). Not the best bound on the instance (CNN-MPS -0.4976939(2) and others lie lower), so no record moves.",
+    "source_entry": "VP15-hubbard-j1j2-heisenberg#44, VP15-hubbard-j1j2-heisenberg#46 (qmbl-verify 2026-09-29; reader's reading; no skeptic checked it); ruling 2, Tristan 2026-09-30"
+  },
+  // Hierarchical backflow at K = 0 (arXiv:2606.00924).
+  {
+    "match": {
+      "instance": "Hubbard/rectangular-4x16_64_P_28_8",
+      "method": "Hierarchical Backflow (HB) VMC, path depth K=0 (Hartree-Fock)",
+      "energy": -38.624
+    },
+    "field": "sampled",
+    "to": true,
+    "reported_as": "'All calculations are performed using variational Monte Carlo with gradient-based optimization'; Supplemental Material Tables II and IV captions: 'The energy sampling errors are around 0.0003'",
+    "location": "Methods; Supplemental Material Tables II and IV captions",
+    "version_read": "arXiv:2606.00924v1 (only version) PDF, pypdf layout; arXiv HTML v1 tables and TeX source (VP6)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "The K = 0 (Hartree-Fock) state is sampled like every other depth. The caption's table-wide 'around 0.0003' is not a per-row sigma (Tristan, 2026-09-17), so the row is listed and eligible for nothing (RULES.md 6). The method string's fallback read 'Hartree' as deterministic, which made the row record-eligible without sigma; the string itself is corrected to the paper's label 'HB K = 0 (HF)' in this block too. Ruling 2 (Tristan, 2026-09-30): HB K = 0 rows are marked sampled. Not the best bound on the instance, so no record moves.",
+    "source_entry": "VP6-arxiv-2606-00924#0 (qmbl-verify 2026-09-29; skeptic upheld); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/rectangular-4x8_32_P_14_8",
+      "method": "Hierarchical Backflow (HB) VMC, path depth K=0 (Hartree-Fock)",
+      "energy": -19.6672
+    },
+    "field": "sampled",
+    "to": true,
+    "reported_as": "'All calculations are performed using variational Monte Carlo with gradient-based optimization'; Supplemental Material Tables II and IV captions: 'The energy sampling errors are around 0.0003'",
+    "location": "Methods; Supplemental Material Tables II and IV captions",
+    "version_read": "arXiv:2606.00924v1 (only version) PDF, pypdf layout; arXiv HTML v1 tables and TeX source (VP6)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "The K = 0 (Hartree-Fock) state is sampled like every other depth. The caption's table-wide 'around 0.0003' is not a per-row sigma (Tristan, 2026-09-17), so the row is listed and eligible for nothing (RULES.md 6). The method string's fallback read 'Hartree' as deterministic, which made the row record-eligible without sigma; the string itself is corrected to the paper's label 'HB K = 0 (HF)' in this block too. Ruling 2 (Tristan, 2026-09-30): HB K = 0 rows are marked sampled. Not the best bound on the instance, so no record moves.",
+    "source_entry": "VP6-arxiv-2606-00924#12 (qmbl-verify 2026-09-29; skeptic upheld); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_64_P_32_8",
+      "method": "Hartree-Fock (K=0 hierarchical-backflow baseline, single Slater determinant)",
+      "energy": -30.3552
+    },
+    "field": "sampled",
+    "to": true,
+    "reported_as": "'All calculations are performed using variational Monte Carlo with gradient-based optimization'; Supplemental Material Tables II and IV captions: 'The energy sampling errors are around 0.0003'",
+    "location": "Methods; Supplemental Material Tables II and IV captions",
+    "version_read": "arXiv:2606.00924v1 (only version) PDF, pypdf layout; arXiv HTML v1 tables and TeX source (VP6)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "The K = 0 (Hartree-Fock) state is sampled like every other depth. The caption's table-wide 'around 0.0003' is not a per-row sigma (Tristan, 2026-09-17), so the row is listed and eligible for nothing (RULES.md 6). The method string's fallback read 'Hartree' as deterministic, which made the row record-eligible without sigma; the string itself is corrected to the paper's label 'HB K = 0 (HF)' in this block too. Ruling 2 (Tristan, 2026-09-30): HB K = 0 rows are marked sampled. Not the best bound on the instance, so no record moves.",
+    "source_entry": "VP6-arxiv-2606-00924#44 (qmbl-verify 2026-09-29; skeptic upheld); ruling 2, Tristan 2026-09-30"
+  },
+  // mVMC spinon mean field + RBM (Nomura's number in PRB 108, 054410).
+  {
+    "match": {
+      "instance": "J1J2/square_256_P_0.5",
+      "method": "many-variable Gutzwiller-projected spinon-mean-field + RBM (mVMC, Ref. [7])",
+      "energy": -508.122112
+    },
+    "field": "sampled",
+    "to": true,
+    "reported_as": "'the best ones currently available in the literature [7], generated by VMC on an ansatz combining many-variable Gutzwiller-projected spinon-mean-field wave functions [58] and restricted Boltzmann machines (RBMs)' (p. 4); Table I, 16 x 16, column 'Ref. [7]': -0.496213(3)",
+    "location": "arXiv:2211.07749v2 p. 4 and Table I (J2/J1 = 0.5, 16 x 16, column 'Ref. [7]')",
+    "version_read": "arXiv:2211.07749v2 (May 2023) PDF; the skeptic re-extracted it with pypdf layout and plain (VP10)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "A variational Monte Carlo energy printed with its statistical bar; the method string's fallback reads 'mean-field' as a deterministic marker. The skeptic refuted only the reader's replacement string (the stored one is built from the printed words, and 'mVMC + RBM (as quoted)' is printed nowhere), not the diagnosis, so the string stays and the row carries the statement instead. Ruling 2 (Tristan, 2026-09-30): mVMC spinon mean field + RBM is marked sampled. No eligibility change: sigma is stored.",
+    "source_entry": "VP10-heisenberg-j1j2#36 (qmbl-verify 2026-09-29; skeptic refuted); ruling 2, Tristan 2026-09-30"
+  },
+  // CNN-MPS and T-MPS (arXiv:2603.14425).
+  {
+    "match": {
+      "instance": "J1J2/square_100_P_0.5",
+      "method": "CNN-MPS (h,D,l)=(32,20,20), Marshall sign transformation",
+      "energy": -199.07756
+    },
+    "field": "sampled",
+    "to": true,
+    "reported_as": "Supplemental Material S3 D, 'Monte Carlo samplings': 'In the Monte Carlo sampling procedure, we generate Markov-chain updates by randomly selecting a bond and proposing a spin exchange ... The move is accepted or rejected according to the Metropolis criterion'; Table S1 (batch 4096)",
+    "location": "Supplemental Material S3 D and Table S1",
+    "version_read": "arXiv:2603.14425v1 (only version) PDF, pypdf layout; arXiv HTML Table 1 parsed with node (VP14)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "CNN-MPS and T-MPS are neural-network-dressed MPS optimised and evaluated by variational Monte Carlo (Metropolis Markov chain), so the energy is a sampled estimate and the printed bar a Monte Carlo error. The method string's fallback reads 'MPS' as a deterministic marker. Not named in the ruling's list, but the same case: ruling 2 (Tristan, 2026-09-30) makes sampled vs deterministic a per-row statement from the source. No eligibility change: sigma is stored.",
+    "source_entry": "VP14-hubbard-j1j2-heisenberg-tfising#0 (qmbl-verify 2026-09-29; skeptic upheld); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_100_P_0.5",
+      "method": "T-MPS",
+      "energy": -199.07692
+    },
+    "field": "sampled",
+    "to": true,
+    "reported_as": "Supplemental Material S3 D, 'Monte Carlo samplings': 'In the Monte Carlo sampling procedure, we generate Markov-chain updates by randomly selecting a bond and proposing a spin exchange ... The move is accepted or rejected according to the Metropolis criterion'; Table S1 (batch 4096)",
+    "location": "Supplemental Material S3 D and Table S1",
+    "version_read": "arXiv:2603.14425v1 (only version) PDF, pypdf layout; arXiv HTML Table 1 parsed with node (VP14)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "CNN-MPS and T-MPS are neural-network-dressed MPS optimised and evaluated by variational Monte Carlo (Metropolis Markov chain), so the energy is a sampled estimate and the printed bar a Monte Carlo error. The method string's fallback reads 'MPS' as a deterministic marker. Not named in the ruling's list, but the same case: ruling 2 (Tristan, 2026-09-30) makes sampled vs deterministic a per-row statement from the source. No eligibility change: sigma is stored.",
+    "source_entry": "VP14-hubbard-j1j2-heisenberg-tfising#1 (qmbl-verify 2026-09-29; reader's reading; no skeptic checked it); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_256_P_0.5",
+      "method": "CNN-MPS",
+      "energy": -508.839936
+    },
+    "field": "sampled",
+    "to": true,
+    "reported_as": "Supplemental Material S3 D, 'Monte Carlo samplings': 'In the Monte Carlo sampling procedure, we generate Markov-chain updates by randomly selecting a bond and proposing a spin exchange ... The move is accepted or rejected according to the Metropolis criterion'; Table S1 (batch 4096)",
+    "location": "Supplemental Material S3 D and Table S1",
+    "version_read": "arXiv:2603.14425v1 (only version) PDF, pypdf layout; arXiv HTML Table 1 parsed with node (VP14)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "CNN-MPS and T-MPS are neural-network-dressed MPS optimised and evaluated by variational Monte Carlo (Metropolis Markov chain), so the energy is a sampled estimate and the printed bar a Monte Carlo error. The method string's fallback reads 'MPS' as a deterministic marker. Not named in the ruling's list, but the same case: ruling 2 (Tristan, 2026-09-30) makes sampled vs deterministic a per-row statement from the source. No eligibility change: sigma is stored.",
+    "source_entry": "VP14-hubbard-j1j2-heisenberg-tfising#2 (qmbl-verify 2026-09-29; skeptic upheld); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_256_P_0.5",
+      "method": "T-MPS",
+      "energy": -508.708864
+    },
+    "field": "sampled",
+    "to": true,
+    "reported_as": "Supplemental Material S3 D, 'Monte Carlo samplings': 'In the Monte Carlo sampling procedure, we generate Markov-chain updates by randomly selecting a bond and proposing a spin exchange ... The move is accepted or rejected according to the Metropolis criterion'; Table S1 (batch 4096)",
+    "location": "Supplemental Material S3 D and Table S1",
+    "version_read": "arXiv:2603.14425v1 (only version) PDF, pypdf layout; arXiv HTML Table 1 parsed with node (VP14)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "CNN-MPS and T-MPS are neural-network-dressed MPS optimised and evaluated by variational Monte Carlo (Metropolis Markov chain), so the energy is a sampled estimate and the printed bar a Monte Carlo error. The method string's fallback reads 'MPS' as a deterministic marker. Not named in the ruling's list, but the same case: ruling 2 (Tristan, 2026-09-30) makes sampled vs deterministic a per-row statement from the source. No eligibility change: sigma is stored.",
+    "source_entry": "VP14-hubbard-j1j2-heisenberg-tfising#3 (qmbl-verify 2026-09-29; reader's reading; no skeptic checked it); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_400_P_0.5",
+      "method": "CNN-MPS (h,D,l)=(32,15,20)",
+      "energy": -794.87792
+    },
+    "field": "sampled",
+    "to": true,
+    "reported_as": "Supplemental Material S3 D, 'Monte Carlo samplings': 'In the Monte Carlo sampling procedure, we generate Markov-chain updates by randomly selecting a bond and proposing a spin exchange ... The move is accepted or rejected according to the Metropolis criterion'; Table S1 (batch 4096)",
+    "location": "Supplemental Material S3 D and Table S1",
+    "version_read": "arXiv:2603.14425v1 (only version) PDF, pypdf layout; arXiv HTML Table 1 parsed with node (VP14)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "CNN-MPS and T-MPS are neural-network-dressed MPS optimised and evaluated by variational Monte Carlo (Metropolis Markov chain), so the energy is a sampled estimate and the printed bar a Monte Carlo error. The method string's fallback reads 'MPS' as a deterministic marker. Not named in the ruling's list, but the same case: ruling 2 (Tristan, 2026-09-30) makes sampled vs deterministic a per-row statement from the source. No eligibility change: sigma is stored.",
+    "source_entry": "VP14-hubbard-j1j2-heisenberg-tfising#4 (qmbl-verify 2026-09-29; skeptic upheld); ruling 2, Tristan 2026-09-30"
+  },
+  // Hidden-fermion determinant states (PNAS 119, e2122059119).
+  {
+    "match": {
+      "instance": "Hubbard/rectangular-4x16_64_PO_28_8",
+      "method": "VMC Hidden Fermion Determinant State Ansatz (N_hidden = 16. Single hidden layer fully connected net with alpha = 6). Soft mean-field constraint for lambda = 8 stripe order.",
+      "energy": -47.782
+    },
+    "field": "sampled",
+    "to": true,
+    "reported_as": "'General expectation values and gradients of the objective function are computed using Markov chain Monte Carlo sampling' (Sec. 2 C, p. 5)",
+    "location": "PNAS 119, e2122059119 (2022), Sec. 2 C (p. 5)",
+    "version_read": "PNAS article PDF and SI Appendix (PMC9371695), pypdf layout; arXiv:2111.10420v2 (VA3)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "A variational Monte Carlo energy whose stored sigma is the uploader's Monte Carlo error; the method string's fallback reads 'mean-field' in the upload's 'Soft mean-field constraint' as a deterministic marker. Not named in the ruling's list, but the same case: ruling 2 (Tristan, 2026-09-30) makes sampled vs deterministic a per-row statement from the source. No eligibility change: sigma is stored.",
+    "source_entry": "VA3-10-1073-pnas-2122059119#14 (qmbl-verify 2026-09-29; reader's reading; no skeptic checked it); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/rectangular-4x16_64_P_28_8",
+      "method": "VMC Hidden Fermion Determinant State Ansatz (N_hidden = 16. Single hidden layer fully connected net with alpha = 6). Soft mean-field constraint for lambda = 8 stripe order.",
+      "energy": -48.192
+    },
+    "field": "sampled",
+    "to": true,
+    "reported_as": "'General expectation values and gradients of the objective function are computed using Markov chain Monte Carlo sampling' (Sec. 2 C, p. 5)",
+    "location": "PNAS 119, e2122059119 (2022), Sec. 2 C (p. 5)",
+    "version_read": "PNAS article PDF and SI Appendix (PMC9371695), pypdf layout; arXiv:2111.10420v2 (VA3)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "A variational Monte Carlo energy whose stored sigma is the uploader's Monte Carlo error; the method string's fallback reads 'mean-field' in the upload's 'Soft mean-field constraint' as a deterministic marker. Not named in the ruling's list, but the same case: ruling 2 (Tristan, 2026-09-30) makes sampled vs deterministic a per-row statement from the source. No eligibility change: sigma is stored.",
+    "source_entry": "VA3-10-1073-pnas-2122059119#16 (qmbl-verify 2026-09-29; reader's reading; no skeptic checked it); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/rectangular-4x8_32_PO_14_8",
+      "method": "VMC Hidden Fermion Determinant State Ansatz (N_hidden = 16. Single hidden layer fully connected net with alpha = 14). Soft mean-field constraint for lambda = 8 stripe order.",
+      "energy": -23.52
+    },
+    "field": "sampled",
+    "to": true,
+    "reported_as": "'General expectation values and gradients of the objective function are computed using Markov chain Monte Carlo sampling' (Sec. 2 C, p. 5)",
+    "location": "PNAS 119, e2122059119 (2022), Sec. 2 C (p. 5)",
+    "version_read": "PNAS article PDF and SI Appendix (PMC9371695), pypdf layout; arXiv:2111.10420v2 (VA3)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "A variational Monte Carlo energy whose stored sigma is the uploader's Monte Carlo error; the method string's fallback reads 'mean-field' in the upload's 'Soft mean-field constraint' as a deterministic marker. Not named in the ruling's list, but the same case: ruling 2 (Tristan, 2026-09-30) makes sampled vs deterministic a per-row statement from the source. No eligibility change: sigma is stored.",
+    "source_entry": "VA3-10-1073-pnas-2122059119#18 (qmbl-verify 2026-09-29; reader's reading; no skeptic checked it); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/rectangular-4x8_32_P_14_8",
+      "method": "VMC Hidden Fermion Determinant State Ansatz (N_hidden = 16. Single hidden layer fully connected net with alpha = 14). Soft mean-field constraint for lambda = 8 stripe order.",
+      "energy": -24.426
+    },
+    "field": "sampled",
+    "to": true,
+    "reported_as": "'General expectation values and gradients of the objective function are computed using Markov chain Monte Carlo sampling' (Sec. 2 C, p. 5)",
+    "location": "PNAS 119, e2122059119 (2022), Sec. 2 C (p. 5)",
+    "version_read": "PNAS article PDF and SI Appendix (PMC9371695), pypdf layout; arXiv:2111.10420v2 (VA3)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "A variational Monte Carlo energy whose stored sigma is the uploader's Monte Carlo error; the method string's fallback reads 'mean-field' in the upload's 'Soft mean-field constraint' as a deterministic marker. Not named in the ruling's list, but the same case: ruling 2 (Tristan, 2026-09-30) makes sampled vs deterministic a per-row statement from the source. No eligibility change: sigma is stored.",
+    "source_entry": "VA3-10-1073-pnas-2122059119#20 (qmbl-verify 2026-09-29; reader's reading; no skeptic checked it); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_36_PA_18_2",
+      "method": "VMC Hidden Fermion Determinant State Ansatz (N_hidden = 16. Single hidden layer fully connected net with alpha = 1). Soft mean-field constraint for Neel order.",
+      "energy": -76.162
+    },
+    "field": "sampled",
+    "to": true,
+    "reported_as": "'General expectation values and gradients of the objective function are computed using Markov chain Monte Carlo sampling' (Sec. 2 C, p. 5)",
+    "location": "PNAS 119, e2122059119 (2022), Sec. 2 C (p. 5)",
+    "version_read": "PNAS article PDF and SI Appendix (PMC9371695), pypdf layout; arXiv:2111.10420v2 (VA3)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "A variational Monte Carlo energy whose stored sigma is the uploader's Monte Carlo error; the method string's fallback reads 'mean-field' in the upload's 'Soft mean-field constraint' as a deterministic marker. Not named in the ruling's list, but the same case: ruling 2 (Tristan, 2026-09-30) makes sampled vs deterministic a per-row statement from the source. No eligibility change: sigma is stored. The row stays flagged: its number is the 8 x 8 U = 2 upload copied onto the 6 x 6 file; the statement is about the kind of number, which the copy shares.",
+    "source_entry": "VA3-10-1073-pnas-2122059119#28 (qmbl-verify 2026-09-29; skeptic upheld); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_36_PA_18_4",
+      "method": "VMC Hidden Fermion Determinant State Ansatz (N_hidden = 16. Single hidden layer fully connected net with alpha = 1). Soft mean-field constraint for Neel order.",
+      "energy": -31.3822
+    },
+    "field": "sampled",
+    "to": true,
+    "reported_as": "'General expectation values and gradients of the objective function are computed using Markov chain Monte Carlo sampling' (Sec. 2 C, p. 5)",
+    "location": "PNAS 119, e2122059119 (2022), Sec. 2 C (p. 5)",
+    "version_read": "PNAS article PDF and SI Appendix (PMC9371695), pypdf layout; arXiv:2111.10420v2 (VA3)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "A variational Monte Carlo energy whose stored sigma is the uploader's Monte Carlo error; the method string's fallback reads 'mean-field' in the upload's 'Soft mean-field constraint' as a deterministic marker. Not named in the ruling's list, but the same case: ruling 2 (Tristan, 2026-09-30) makes sampled vs deterministic a per-row statement from the source. No eligibility change: sigma is stored. The published string is corrected in this block too (the 6 x 6 state is the 8-hidden-fermion one); the new string has no marker, and this statement keeps the row independent of it.",
+    "source_entry": "VA3-10-1073-pnas-2122059119#22 (qmbl-verify 2026-09-29; skeptic upheld); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_36_PA_18_6",
+      "method": "VMC Hidden Fermion Determinant State Ansatz (N_hidden = 16. Single hidden layer fully connected net with alpha = 1). Soft mean-field constraint for Neel order.",
+      "energy": -23.794
+    },
+    "field": "sampled",
+    "to": true,
+    "reported_as": "'General expectation values and gradients of the objective function are computed using Markov chain Monte Carlo sampling' (Sec. 2 C, p. 5)",
+    "location": "PNAS 119, e2122059119 (2022), Sec. 2 C (p. 5)",
+    "version_read": "PNAS article PDF and SI Appendix (PMC9371695), pypdf layout; arXiv:2111.10420v2 (VA3)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "A variational Monte Carlo energy whose stored sigma is the uploader's Monte Carlo error; the method string's fallback reads 'mean-field' in the upload's 'Soft mean-field constraint' as a deterministic marker. Not named in the ruling's list, but the same case: ruling 2 (Tristan, 2026-09-30) makes sampled vs deterministic a per-row statement from the source. No eligibility change: sigma is stored. The published string is corrected in this block too (the 6 x 6 state is the 8-hidden-fermion one); the new string has no marker, and this statement keeps the row independent of it.",
+    "source_entry": "VA3-10-1073-pnas-2122059119#24 (qmbl-verify 2026-09-29; skeptic upheld); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_36_PA_18_8",
+      "method": "VMC Hidden Fermion Determinant State Ansatz (N_hidden = 16. Single hidden layer fully connected net with alpha = 1). Soft mean-field constraint for Neel order.",
+      "energy": -18.9738
+    },
+    "field": "sampled",
+    "to": true,
+    "reported_as": "'General expectation values and gradients of the objective function are computed using Markov chain Monte Carlo sampling' (Sec. 2 C, p. 5)",
+    "location": "PNAS 119, e2122059119 (2022), Sec. 2 C (p. 5)",
+    "version_read": "PNAS article PDF and SI Appendix (PMC9371695), pypdf layout; arXiv:2111.10420v2 (VA3)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "A variational Monte Carlo energy whose stored sigma is the uploader's Monte Carlo error; the method string's fallback reads 'mean-field' in the upload's 'Soft mean-field constraint' as a deterministic marker. Not named in the ruling's list, but the same case: ruling 2 (Tristan, 2026-09-30) makes sampled vs deterministic a per-row statement from the source. No eligibility change: sigma is stored. The published string is corrected in this block too (the 6 x 6 state is the 8-hidden-fermion one); the new string has no marker, and this statement keeps the row independent of it.",
+    "source_entry": "VA3-10-1073-pnas-2122059119#26 (qmbl-verify 2026-09-29; skeptic upheld); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_64_PA_32_2",
+      "method": "VMC Hidden Fermion Determinant State Ansatz (N_hidden = 16. Single hidden layer fully connected net with alpha = 1). Soft mean-field constraint for Neel order.",
+      "energy": -76.162
+    },
+    "field": "sampled",
+    "to": true,
+    "reported_as": "'General expectation values and gradients of the objective function are computed using Markov chain Monte Carlo sampling' (Sec. 2 C, p. 5)",
+    "location": "PNAS 119, e2122059119 (2022), Sec. 2 C (p. 5)",
+    "version_read": "PNAS article PDF and SI Appendix (PMC9371695), pypdf layout; arXiv:2111.10420v2 (VA3)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "A variational Monte Carlo energy whose stored sigma is the uploader's Monte Carlo error; the method string's fallback reads 'mean-field' in the upload's 'Soft mean-field constraint' as a deterministic marker. Not named in the ruling's list, but the same case: ruling 2 (Tristan, 2026-09-30) makes sampled vs deterministic a per-row statement from the source. No eligibility change: sigma is stored.",
+    "source_entry": "VA3-10-1073-pnas-2122059119#29 (qmbl-verify 2026-09-29; skeptic upheld); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_64_PA_32_4",
+      "method": "VMC Hidden Fermion Determinant State Ansatz (N_hidden = 16. Single hidden layer fully connected net with alpha = 1). Soft mean-field constraint for Neel order.",
+      "energy": -55.18
+    },
+    "field": "sampled",
+    "to": true,
+    "reported_as": "'General expectation values and gradients of the objective function are computed using Markov chain Monte Carlo sampling' (Sec. 2 C, p. 5)",
+    "location": "PNAS 119, e2122059119 (2022), Sec. 2 C (p. 5)",
+    "version_read": "PNAS article PDF and SI Appendix (PMC9371695), pypdf layout; arXiv:2111.10420v2 (VA3)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "A variational Monte Carlo energy whose stored sigma is the uploader's Monte Carlo error; the method string's fallback reads 'mean-field' in the upload's 'Soft mean-field constraint' as a deterministic marker. Not named in the ruling's list, but the same case: ruling 2 (Tristan, 2026-09-30) makes sampled vs deterministic a per-row statement from the source. No eligibility change: sigma is stored.",
+    "source_entry": "VA3-10-1073-pnas-2122059119#31 (qmbl-verify 2026-09-29; skeptic upheld); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_64_PA_32_8",
+      "method": "VMC Hidden Fermion Determinant State Ansatz (N_hidden = 16. Single hidden layer fully connected net with alpha = 1). Soft mean-field constraint for Neel order.",
+      "energy": -33.57
+    },
+    "field": "sampled",
+    "to": true,
+    "reported_as": "'General expectation values and gradients of the objective function are computed using Markov chain Monte Carlo sampling' (Sec. 2 C, p. 5)",
+    "location": "PNAS 119, e2122059119 (2022), Sec. 2 C (p. 5)",
+    "version_read": "PNAS article PDF and SI Appendix (PMC9371695), pypdf layout; arXiv:2111.10420v2 (VA3)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "A variational Monte Carlo energy whose stored sigma is the uploader's Monte Carlo error; the method string's fallback reads 'mean-field' in the upload's 'Soft mean-field constraint' as a deterministic marker. Not named in the ruling's list, but the same case: ruling 2 (Tristan, 2026-09-30) makes sampled vs deterministic a per-row statement from the source. No eligibility change: sigma is stored.",
+    "source_entry": "VA3-10-1073-pnas-2122059119#35 (qmbl-verify 2026-09-29; skeptic upheld); ruling 2, Tristan 2026-09-30"
+  },
+  // Gutzwiller-projected mean-field VMC (Ferrari & Becca in PRB 100, 125124).
+  {
+    "match": {
+      "instance": "J1J2/square_100_P_0.6",
+      "method": "Gutzwiller-projected mean field fermionic VMC",
+      "energy": -189.036
+    },
+    "field": "sampled",
+    "to": true,
+    "reported_as": "'traditional variational Monte Carlo (VMC) based on Gutzwiller-projected mean field Fermionic ...' (Sec. I); Appendix Table I, 10 x 10, row 'VMC', each value with its bar (1); Acknowledgements: 'providing VMC energies'",
+    "location": "arXiv:1903.06713 Sec. I; Appendix Table I (10 x 10 block, row 'VMC'); Acknowledgements",
+    "version_read": "arXiv:1903.06713v1 PDF (= Phys. Rev. B 100, 125124 (2019)), pypdf layout and plain (VP15)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "Variational Monte Carlo energies with a statistical bar (1); the method string's fallback reads 'mean field' as a deterministic marker. Not named in the ruling's list, but the same case: ruling 2 (Tristan, 2026-09-30) makes sampled vs deterministic a per-row statement from the source. No eligibility change: sigma is stored.",
+    "source_entry": "VP15-hubbard-j1j2-heisenberg#10 (qmbl-verify 2026-09-29; reader's reading; no skeptic checked it); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_100_P_0.8",
+      "method": "Gutzwiller-projected mean field fermionic VMC",
+      "energy": -227.596
+    },
+    "field": "sampled",
+    "to": true,
+    "reported_as": "'traditional variational Monte Carlo (VMC) based on Gutzwiller-projected mean field Fermionic ...' (Sec. I); Appendix Table I, 10 x 10, row 'VMC', each value with its bar (1); Acknowledgements: 'providing VMC energies'",
+    "location": "arXiv:1903.06713 Sec. I; Appendix Table I (10 x 10 block, row 'VMC'); Acknowledgements",
+    "version_read": "arXiv:1903.06713v1 PDF (= Phys. Rev. B 100, 125124 (2019)), pypdf layout and plain (VP15)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "Variational Monte Carlo energies with a statistical bar (1); the method string's fallback reads 'mean field' as a deterministic marker. Not named in the ruling's list, but the same case: ruling 2 (Tristan, 2026-09-30) makes sampled vs deterministic a per-row statement from the source. No eligibility change: sigma is stored.",
+    "source_entry": "VP15-hubbard-j1j2-heisenberg#12 (qmbl-verify 2026-09-29; reader's reading; no skeptic checked it); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_100_P_1",
+      "method": "Gutzwiller-projected mean field fermionic VMC",
+      "energy": -276.492
+    },
+    "field": "sampled",
+    "to": true,
+    "reported_as": "'traditional variational Monte Carlo (VMC) based on Gutzwiller-projected mean field Fermionic ...' (Sec. I); Appendix Table I, 10 x 10, row 'VMC', each value with its bar (1); Acknowledgements: 'providing VMC energies'",
+    "location": "arXiv:1903.06713 Sec. I; Appendix Table I (10 x 10 block, row 'VMC'); Acknowledgements",
+    "version_read": "arXiv:1903.06713v1 PDF (= Phys. Rev. B 100, 125124 (2019)), pypdf layout and plain (VP15)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "Variational Monte Carlo energies with a statistical bar (1); the method string's fallback reads 'mean field' as a deterministic marker. Not named in the ruling's list, but the same case: ruling 2 (Tristan, 2026-09-30) makes sampled vs deterministic a per-row statement from the source. No eligibility change: sigma is stored.",
+    "source_entry": "VP15-hubbard-j1j2-heisenberg#14 (qmbl-verify 2026-09-29; reader's reading; no skeptic checked it); ruling 2, Tristan 2026-09-30"
+  },
+  // Projected mean-field states on the 36-site triangular cluster.
+  {
+    "match": {
+      "instance": "Heisenberg/triangular_36_P",
+      "method": "Projected mean field",
+      "energy": -78.192
+    },
+    "field": "sampled",
+    "to": true,
+    "reported_as": "'the function (5) can now be evaluated numerically using a Monte Carlo procedure with Pfaffian updates' (Sec. II); Table I, 36 sites: 'our best wf -0.543(1)'",
+    "location": "arXiv:cond-mat/0509520v2 Sec. II (p. 2) and Table I (p. 5)",
+    "version_read": "arXiv:cond-mat/0509520v2 PDF (= Phys. Rev. B 73, 014519 (2006)), pypdf plain (VP11)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "A Gutzwiller-projected (Pfaffian) wave function evaluated by Monte Carlo and printed with its statistical bar; the method string's fallback reads 'mean field' as a deterministic marker. The string is corrected to the paper's label in this block too. Not named in the ruling's list, but the same case (ruling 2, Tristan 2026-09-30). No eligibility change: sigma is stored.",
+    "source_entry": "VP11-heisenberg-hubbard-j1j2#58 (qmbl-verify 2026-09-29; skeptic upheld); ruling 2, Tristan 2026-09-30"
+  },
+  {
+    "match": {
+      "instance": "Heisenberg/triangular_36_P",
+      "method": "Projected mean field ansatz",
+      "energy": -79.41312
+    },
+    "field": "sampled",
+    "to": true,
+    "reported_as": "'Before considering our variational Monte Carlo calculations, ...' (p. 012404-1); the value is quoted as -0.55148(5) in Iqbal et al., PRB 93, 144411, Table I",
+    "location": "Heidarian, Sorella & Becca, Phys. Rev. B 80, 012404 (2009), p. 012404-1 and Fig. 2",
+    "version_read": "Phys. Rev. B 80, 012404 (2009) published PDF, pypdf plain + layout (VJ2)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "A variational Monte Carlo energy (the bar (5) is its statistical error); the method string's fallback reads 'mean field' as a deterministic marker. Not named in the ruling's list, but the same case (ruling 2, Tristan 2026-09-30). No eligibility change: sigma is stored.",
+    "source_entry": "VJ2-journal-other#49, VP11-heisenberg-hubbard-j1j2#62 (qmbl-verify 2026-09-29; reader's reading; no skeptic checked it; skeptic upheld); ruling 2, Tristan 2026-09-30"
+  },
+  // method: published strings corrected to what the producing source prints.
+  // VA3-10-1073-pnas-2122059119
+  {
+    "match": {
+      "instance": "Hubbard/square_36_PA_18_4",
+      "method": "VMC Hidden Fermion Determinant State Ansatz (N_hidden = 16. Single hidden layer fully connected net with alpha = 1). Soft mean-field constraint for Neel order.",
+      "energy": -31.3822
+    },
+    "field": "method",
+    "to": "hidden fermion determinant state with a fully parametrized hidden sub-matrix",
+    "reported_as": "'The trial state is the hidden fermion determinant state with a fully parametrized hidden sub-matrix' (SI Table 5 caption, p. 9); 'The number of hidden fermions and hidden unit densities are ˜N ={8, 8, 16}and α={96, 78, 1}for the 4×4, 6×6 and 8×8 lattices respectively.' (SI Sec. 6, p. 7; arXiv v2 Appendix F, same sentence)",
+    "location": "PNAS SI Table 5 caption (p. 9) and Sec. 6 (p. 7); arXiv:2111.10420v2 Appendix F (p. 17)",
+    "version_read": "PNAS 119(32), e2122059119 (2022), SI Appendix PDF (PMC9371695; sources/pnas.2122059119.sapp.PMC9371695.pdf, sha256 c6e62d9c...), pypdf layout mode, re-extracted 2026-09-29 (byte-identical to the earlier extraction); article PDF (sources/pnas.2122059119.PMC9371695.pdf) for Eq. 1, Sec. 2 C and Sec. 3; arXiv:2111.10420v2 (18 Jun 2022) Appendix H (sources/2111.10420v2.pdf, pypdf layout) for version differences (131 parenthesised table numbers in each, exactly two cells differ); arXiv v1 (19 Nov 2021) has no numeric tables and no L x L runs",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "The published string (VarBench's, hence method_as_published and the derived method_detail '16 hidden fermions, 1-layer FFN with α = 1, Néel mean-field constraint') is the 8 x 8 one. The first author uploaded the four 6 x 6 files (VarBench 21f00e5, 2022-07-16 17:57 PDT, 'upload square_6_AP_18_18') 67 minutes after the four 8 x 8 files (c810bdc) with the 8 x 8 method line verbatim, and the U = 2 file as a byte copy (blob ccb41cd in both). The paper gives N~ = 8 and alpha = 78 for 6 x 6, and describes the L x L trial state as 'the hidden fermion determinant state with a fully parametrized hidden sub-matrix'. The proposed string is the one the sweep-worklist row of the same paper on square_36_PA_18_2 carries; method_names.mjs line 358 already maps it to HFDS / '8 hidden fermions, full hidden sub-matrix, α = 78', so no new mapping is needed. The Néel soft constraint is attested only by the copied 8 x 8 line (the paper states no constraint for any L x L run), so the proposal drops it; keep it only if the upload line is read as the author's word for 6 x 6 too. Side effect: the new string has no 'mean-field', so units.mjs counts the row sampled, which it is (settles M6/M8). Field is `method` because apply_corrections.mjs runs before apply_method_names.mjs, when `method` still holds the published string. Ruling B4 (Tristan, 2026-10-02): a corrected published string quotes a label the source prints, verbatim, and what explains it is the row's method_detail (method_names.mjs). The label is the SI Table 5 caption's name for the trial state; N~ = 8 hidden fermions and alpha = 78 (SI Sec. 6) are the detail.",
+    "source_entry": "VA3-10-1073-pnas-2122059119#22 (qmbl-verify 2026-09-29; skeptic upheld)"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_36_PA_18_6",
+      "method": "VMC Hidden Fermion Determinant State Ansatz (N_hidden = 16. Single hidden layer fully connected net with alpha = 1). Soft mean-field constraint for Neel order.",
+      "energy": -23.794
+    },
+    "field": "method",
+    "to": "hidden fermion determinant state with a fully parametrized hidden sub-matrix",
+    "reported_as": "'The trial state is the hidden fermion determinant state with a fully parametrized hidden sub-matrix' (SI Table 5 caption, p. 9); 'The number of hidden fermions and hidden unit densities are ˜N ={8, 8, 16}and α={96, 78, 1}for the 4×4, 6×6 and 8×8 lattices respectively.' (SI Sec. 6, p. 7; arXiv v2 Appendix F, same sentence)",
+    "location": "PNAS SI Table 5 caption (p. 9) and Sec. 6 (p. 7); arXiv:2111.10420v2 Appendix F (p. 17)",
+    "version_read": "PNAS 119(32), e2122059119 (2022), SI Appendix PDF (PMC9371695; sources/pnas.2122059119.sapp.PMC9371695.pdf, sha256 c6e62d9c...), pypdf layout mode, re-extracted 2026-09-29 (byte-identical to the earlier extraction); article PDF (sources/pnas.2122059119.PMC9371695.pdf) for Eq. 1, Sec. 2 C and Sec. 3; arXiv:2111.10420v2 (18 Jun 2022) Appendix H (sources/2111.10420v2.pdf, pypdf layout) for version differences (131 parenthesised table numbers in each, exactly two cells differ); arXiv v1 (19 Nov 2021) has no numeric tables and no L x L runs",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "The published string (VarBench's, hence method_as_published and the derived method_detail '16 hidden fermions, 1-layer FFN with α = 1, Néel mean-field constraint') is the 8 x 8 one. The first author uploaded the four 6 x 6 files (VarBench 21f00e5, 2022-07-16 17:57 PDT, 'upload square_6_AP_18_18') 67 minutes after the four 8 x 8 files (c810bdc) with the 8 x 8 method line verbatim, and the U = 2 file as a byte copy (blob ccb41cd in both). The paper gives N~ = 8 and alpha = 78 for 6 x 6, and describes the L x L trial state as 'the hidden fermion determinant state with a fully parametrized hidden sub-matrix'. The proposed string is the one the sweep-worklist row of the same paper on square_36_PA_18_2 carries; method_names.mjs line 358 already maps it to HFDS / '8 hidden fermions, full hidden sub-matrix, α = 78', so no new mapping is needed. The Néel soft constraint is attested only by the copied 8 x 8 line (the paper states no constraint for any L x L run), so the proposal drops it; keep it only if the upload line is read as the author's word for 6 x 6 too. Side effect: the new string has no 'mean-field', so units.mjs counts the row sampled, which it is (settles M6/M8). Field is `method` because apply_corrections.mjs runs before apply_method_names.mjs, when `method` still holds the published string. Ruling B4 (Tristan, 2026-10-02): a corrected published string quotes a label the source prints, verbatim, and what explains it is the row's method_detail (method_names.mjs). The label is the SI Table 5 caption's name for the trial state; N~ = 8 hidden fermions and alpha = 78 (SI Sec. 6) are the detail.",
+    "source_entry": "VA3-10-1073-pnas-2122059119#24 (qmbl-verify 2026-09-29; skeptic upheld)"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_36_PA_18_8",
+      "method": "VMC Hidden Fermion Determinant State Ansatz (N_hidden = 16. Single hidden layer fully connected net with alpha = 1). Soft mean-field constraint for Neel order.",
+      "energy": -18.9738
+    },
+    "field": "method",
+    "to": "hidden fermion determinant state with a fully parametrized hidden sub-matrix",
+    "reported_as": "'The trial state is the hidden fermion determinant state with a fully parametrized hidden sub-matrix' (SI Table 5 caption, p. 9); 'The number of hidden fermions and hidden unit densities are ˜N ={8, 8, 16}and α={96, 78, 1}for the 4×4, 6×6 and 8×8 lattices respectively.' (SI Sec. 6, p. 7; arXiv v2 Appendix F, same sentence)",
+    "location": "PNAS SI Table 5 caption (p. 9) and Sec. 6 (p. 7); arXiv:2111.10420v2 Appendix F (p. 17)",
+    "version_read": "PNAS 119(32), e2122059119 (2022), SI Appendix PDF (PMC9371695; sources/pnas.2122059119.sapp.PMC9371695.pdf, sha256 c6e62d9c...), pypdf layout mode, re-extracted 2026-09-29 (byte-identical to the earlier extraction); article PDF (sources/pnas.2122059119.PMC9371695.pdf) for Eq. 1, Sec. 2 C and Sec. 3; arXiv:2111.10420v2 (18 Jun 2022) Appendix H (sources/2111.10420v2.pdf, pypdf layout) for version differences (131 parenthesised table numbers in each, exactly two cells differ); arXiv v1 (19 Nov 2021) has no numeric tables and no L x L runs",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "The published string (VarBench's, hence method_as_published and the derived method_detail '16 hidden fermions, 1-layer FFN with α = 1, Néel mean-field constraint') is the 8 x 8 one. The first author uploaded the four 6 x 6 files (VarBench 21f00e5, 2022-07-16 17:57 PDT, 'upload square_6_AP_18_18') 67 minutes after the four 8 x 8 files (c810bdc) with the 8 x 8 method line verbatim, and the U = 2 file as a byte copy (blob ccb41cd in both). The paper gives N~ = 8 and alpha = 78 for 6 x 6, and describes the L x L trial state as 'the hidden fermion determinant state with a fully parametrized hidden sub-matrix'. The proposed string is the one the sweep-worklist row of the same paper on square_36_PA_18_2 carries; method_names.mjs line 358 already maps it to HFDS / '8 hidden fermions, full hidden sub-matrix, α = 78', so no new mapping is needed. The Néel soft constraint is attested only by the copied 8 x 8 line (the paper states no constraint for any L x L run), so the proposal drops it; keep it only if the upload line is read as the author's word for 6 x 6 too. Side effect: the new string has no 'mean-field', so units.mjs counts the row sampled, which it is (settles M6/M8). Field is `method` because apply_corrections.mjs runs before apply_method_names.mjs, when `method` still holds the published string. Ruling B4 (Tristan, 2026-10-02): a corrected published string quotes a label the source prints, verbatim, and what explains it is the row's method_detail (method_names.mjs). The label is the SI Table 5 caption's name for the trial state; N~ = 8 hidden fermions and alpha = 78 (SI Sec. 6) are the detail.",
+    "source_entry": "VA3-10-1073-pnas-2122059119#26 (qmbl-verify 2026-09-29; skeptic upheld)"
+  },
+  // VP11-heisenberg-hubbard-j1j2
+  {
+    "match": {
+      "instance": "J1J2/square_100_P_0.5",
+      "method": "aCNN",
+      "energy": -198.2508
+    },
+    "field": "method",
+    "to": "aCNN(C4v)",
+    "reported_as": "Table 3 row label 'aCNN(C4v)'",
+    "location": "arXiv:2308.09664v2 Table 3",
+    "version_read": "arXiv:2308.09664v2",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "The producing paper prints two aCNN rows (C4v, C4); at J2 = 0.5 only C4v exists. Matches the sibling rows at 0.4/0.45/0.55; scripts/method_names.mjs already maps 'aCNN(C4v)' to ['aCNN', 'symmetric: C4v'], so method_detail follows.",
+    "source_entry": "VP11-heisenberg-hubbard-j1j2#44 (qmbl-verify 2026-09-29; skeptic upheld)"
+  },
+  {
+    "match": {
+      "instance": "Heisenberg/triangular_36_P",
+      "method": "Projected mean field",
+      "energy": -78.192
+    },
+    "field": "method",
+    "to": "AF + d+ + SFL/J/1Ls",
+    "reported_as": "'The energy and the sublattice magnetization are measured for our best wave-function (AF + d+ + SFL/J/1Ls) at half-filling.'",
+    "location": "arXiv:cond-mat/0509520v2 Table I caption (p. 5); notation 'MF / J / nLs' defined in Sec. II ('n Ls denotes the presence and the number of Lanczos steps'), |1Ls> = (1 + lambda H_t-J)|psi_var> Eq. (10)",
+    "version_read": "arXiv:cond-mat/0509520v2",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "method_as_published should be the string the producing paper prints; 'Projected mean field' is Moss et al.'s label and hides the Lanczos step. Class stays variational (p-step Lanczos is variational, RULES 4). method stays 'VMC'; scripts/method_names.mjs needs a new entry for the string, e.g. ['VMC', 'Gutzwiller-projected AF + d+id + staggered-flux mean field, spin Jastrow, 1 Lanczos step'] (stored method_detail 'projected mean field'). Applied as the paper prints the label, 'AF + d+ + SFL/J/1Ls' (Table I caption 'our best wave-function (AF + d+ + SFL/J/1Ls)'; Fig. 3 legend): method_as_published is the string exactly as printed (RULES.md 3), so the proposal's explanation of the notation is the row's method_detail in method_names.mjs.",
+    "source_entry": "VP11-heisenberg-hubbard-j1j2#61 (qmbl-verify 2026-09-29; skeptic upheld)"
+  },
+  // VP12-heisenberg-j1j2-hubbard
+  {
+    "match": {
+      "instance": "Heisenberg/square_36_P",
+      "method": "EPS (entangled-plaquette states) VMC, as cited by this source",
+      "energy": -97.704
+    },
+    "field": "method",
+    "to": "EPS",
+    "reported_as": "-0.6785(2) per site (units of J1, S.S)",
+    "location": "arXiv:0905.3898v4 Table II (Heisenberg, L x L PBC), row L = 6, column 'This work'; same value in Table IV (J1-J2, 36 sites, PBC), row J2/J1 = 0.0; quoted as 'VMC method [60] gives -0.6785(2)' in arXiv:2510.02051v1 Sec. V",
+    "version_read": "arXiv:0905.3898v4 (26 Aug 2009; New J. Phys. 11, 083026 (2009) per the abs page), PDF pypdf layout (sources/vp12_0905.3898v4.layout.txt); quoting source arXiv:2510.02051v1 PDF layout",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "method_as_published: 'as cited by this source' is the quoting paper's label/provenance, not the producer's; the primary prints the energy as 'This work' of an entangled-plaquette-state VMC. One string for both EPS rows (display unchanged: method_names.mjs maps both to EPS). Needs the new key in scripts/method_names.mjs (lines 296-297) in the same change. Ruling B4 (Tristan, 2026-10-02): a corrected published string quotes a label the source prints, verbatim, and what explains it is the row's method_detail (method_names.mjs). The paper names its method 'Entangled-Plaquette States (EPS)' and calls it EPS throughout (its tables head the column 'This work'); 'entangled-plaquette states, VMC' is the detail.",
+    "source_entry": "VP12-heisenberg-j1j2-hubbard#61 (qmbl-verify 2026-09-29; skeptic upheld)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_36_P_0.5",
+      "method": "VMC2 (entangled-plaquette states VMC)",
+      "energy": -71.784
+    },
+    "field": "method",
+    "to": "EPS",
+    "reported_as": "-0.4985(2) per site (units of J1, S.S)",
+    "location": "arXiv:0905.3898v4 Table IV (J1-J2, 36 sites, PBC), row J2/J1 = 0.5, column 'This work' (Exact column -0.5038); quoted as 'VMC2 [60] reached -0.4985(2)' in arXiv:2510.02051v1 Sec. V",
+    "version_read": "arXiv:0905.3898v4 (26 Aug 2009; New J. Phys. 11, 083026 (2009) per the abs page), PDF pypdf layout (sources/vp12_0905.3898v4.layout.txt); quoting source arXiv:2510.02051v1 PDF layout",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "method_as_published: 'VMC2' is the quoting paper's label/provenance, not the producer's; the primary prints the energy as 'This work' of an entangled-plaquette-state VMC. One string for both EPS rows (display unchanged: method_names.mjs maps both to EPS). Needs the new key in scripts/method_names.mjs (lines 296-297) in the same change. Ruling B4 (Tristan, 2026-10-02): a corrected published string quotes a label the source prints, verbatim, and what explains it is the row's method_detail (method_names.mjs). The paper names its method 'Entangled-Plaquette States (EPS)' and calls it EPS throughout (its tables head the column 'This work'); 'entangled-plaquette states, VMC' is the detail.",
+    "source_entry": "VP12-heisenberg-j1j2-hubbard#65 (qmbl-verify 2026-09-29; skeptic upheld)"
+  },
+  // VP13-hubbard-j1j2-heisenberg
+  {
+    "match": {
+      "instance": "J1J2/square_100_P_0.5",
+      "method": "fViT (vision transformer, 2.7e5 params)",
+      "energy": -199.0536
+    },
+    "field": "method",
+    "to": "Deep ViT",
+    "reported_as": "-0.497634(1) Deep ViT 267720 No Present work 2023",
+    "location": "Table I, last row (v1 and v2); Sec. II 'Numerical calculations'",
+    "version_read": "arXiv:2310.05715v2 PDF (2 Aug 2024, the version of Commun. Phys. 7, 260 (2024); sha256 3b4d809d..., identical to qmbl/sources/2310.05715.pdf) and v1 PDF (sha256 42e13cf0...), pypdf plain + layout text extracted locally (_r5/txt/2310.05715v{1,2}.*); journal typeset version not compared (nature.com not fetched)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "method_as_published is the string the producing source prints. 'fViT [16]' is how arXiv:2505.03466 (Table 1) quotes this result, where the row was first found; Rende et al. call their state 'Deep ViT' throughout (Table I, Sec. II, Fig. 3 caption). The parenthesis '2.7e5 params' paraphrases the printed 267720, which already lives in compute.parameters. add_compute.mjs matches compute blocks by energy and reference, so the compute-rows-2026-09-16.json record (line 9442, informational method field) stays attached.",
+    "source_entry": "VP13-hubbard-j1j2-heisenberg#46 (qmbl-verify 2026-09-29; skeptic upheld)"
+  },
+  // VP14-hubbard-j1j2-heisenberg-tfising
+  {
+    "match": {
+      "instance": "Heisenberg/square_100_P",
+      "method": "CNN + MinSR",
+      "energy": -268.62104
+    },
+    "field": "method",
+    "to": "ResNet1 (MinSR)",
+    "reported_as": "Fig. 2a legend (10x10 Heisenberg): 'ResNet1 (MinSR)' (the only MinSR network in panel a; v2 legend 'CNN (MinSR)'); v2 Table II '146320 | 64 | 16 | 3x3 | Fig.2, Fig.3, Fig.4, Table I'; data/Fig2a.csv '146320, -0.671552603'",
+    "location": "arXiv:2302.01941v3 Fig. 2a legend; v2 Table II; MinSR data/Fig2a.csv",
+    "version_read": "arXiv:2302.01941 v2, v3; MinSR repo @ 6b6493f",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "Once the row cites the primary (provenance correction above), the published method string is the primary's: the only MinSR network in the 10x10 Heisenberg panel is 'ResNet1 (MinSR)' (v3 Fig. 2a legend; v1/v2 'CNN (MinSR)'), 64 layers x 16 channels = 146,320 parameters (v2 Table II; v3 Extended Data Fig. 2 caption 'ResNet1 with 64 layers and 146320 parameters'; authors' data/Fig2a.csv '146320, -0.671552603'). QMBL files the paper's J1-J2 rows under 'ResNet'. If provenance stays secondary, Moss et al.'s label 'CNN+MinSR' may stay instead.",
+    "source_entry": "VP14-hubbard-j1j2-heisenberg-tfising#19 (qmbl-verify 2026-09-29; skeptic upheld)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_100_P_0.5",
+      "method": "ResNet2 (64 conv layers, >1e6 params), MinSR",
+      "energy": -199.07684
+    },
+    "field": "method",
+    "to": "ResNet2 (MinSR)",
+    "reported_as": "We finally trained unprecedentedly large networks with 64 convolutional layers in ResNet1 and more than one million parameters in ResNet2, to attain the best variational energy E/N = -0.4976921(4) (p. 3); Fig. 2b legend 'ResNet2 (MinSR)'",
+    "location": "arXiv:2302.01941v3 p. 3; MinSR examples/measure.py docstring '3: 30 layers, 64 channels every layer, 3x3 kernels, 1071488 parameters in total ... correspond to the results of ResNet2(MinSR) in Fig. 2b'; data/Fig2b.csv 'ResNet2 ... 1071488, -0.4976921'",
+    "version_read": "arXiv:2302.01941v3 (= Nat. Phys.); MinSR repo @ 6b6493f",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "The method string fuses the two networks of one sentence: '64 convolutional layers' is ResNet1, 'more than one million parameters' is ResNet2. The number is the 1,071,488-parameter ResNet2, which has 30 conv layers of 64 channels (MinSR examples/measure.py docstring '3: 30 layers, 64 channels every layer, 3x3 kernels, 1071488 parameters in total ... correspond to the results of ResNet2(MinSR) in Fig. 2b'; data/Fig2b.csv 'ResNet2 ... 1071488, -0.4976921'; Chen, Naik & Heyl Zenodo 10x10_J1J2.csv 'Best previous (CNN large), 1071488, -0.4976921(3), 1.80(4)e-4'). A visual look at v3 Extended Data Table 1, an image with no text layer (page 15), shows the row 'ResNet(MinSR) | 1071488 real | This work | -0.4976921(4) | 1.80(4) x 10^-4' (visual reading, used only to confirm the identity; the numbers above come from parsed text and CSV). Energy, sigma, variance (0.288 = 1.80e-4 x 100 x 16), instance, PBC, J2 = 0.5 and bound_type variational are verified; no duplicate on the instance. The label keeps 'more than one million parameters' so that its method_names key differs from the 16x16 row's 'ResNet2 (MinSR)', a different network. Ruling B4 (Tristan, 2026-10-02): a corrected published string quotes a label the source prints, verbatim, and what explains it is the row's method_detail (method_names.mjs). The label is the Fig. 2b legend's; 'more than one million parameters' (p. 3) and the network the authors' code describes (30 conv layers, 64 channels) are the detail. Fig. 2c gives the same label to the 16 x 16 network, so method_names.mjs gives this instance its own detail.",
+    "source_entry": "VP14-hubbard-j1j2-heisenberg-tfising#21 (qmbl-verify 2026-09-29; skeptic upheld)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_256_P_0.5",
+      "method": "ResNet2 (64 conv layers), MinSR",
+      "energy": -508.6374912
+    },
+    "field": "method",
+    "to": "ResNet2 (MinSR)",
+    "reported_as": "our approach yields the best variational energy E/N = -0.4967163(8) for the frustrated J1-J2 model on such a large lattice",
+    "location": "arXiv:2302.01941v3 p. 4 (16x16 paragraph); Fig. 2c legend 'ResNet2 (MinSR)'; Extended Data Fig. 3 caption 'two different sizes of real-valued ResNet2 with 34944 and 139008 parameters'; MinSR data/Fig2c.csv 'ResNet2 34944, -0.4967164' (ResNet1 146320 is -0.496683, ResNet2 139008 -0.4967935, +LS -0.496883)",
+    "version_read": "arXiv:2302.01941v3 (= Nat. Phys.); v1/v2 print instead 'CNN(MinSR) This work -0.496683(2)' (Table I); MinSR repo @ 6b6493f",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "Nothing in the paper gives the 16x16 network 64 layers: the printed value is the smallest real-valued ResNet2 (34,944 parameters = 16 layers x 16 channels per measure.py), as its match to the authors' Fig. 2c data shows. Energy, sigma, 16x16 PBC, J2 = 0.5, S.S convention and bound_type variational verified; Nat. Phys., peer_reviewed true correct; no duplicate. Note that the same figure data hold lower bounds from this paper (unlisted numbers).",
+    "source_entry": "VP14-hubbard-j1j2-heisenberg-tfising#26 (qmbl-verify 2026-09-29; skeptic upheld)"
+  },
+  {
+    "match": {
+      "instance": "Heisenberg/square_100_O",
+      "method": "2D minGRU (3 layers, c4v symmetry, parallel scan)",
+      "energy": -251.4548
+    },
+    "field": "method",
+    "to": "2D minGRU (ours)",
+    "reported_as": "Table II, row 10x10, column '2D minGRU (ours)': -0.628637(4); caption: 'this 2D minGRU model has 6 layers and a hidden dimension d_h = 512 with around 7.1 million variational parameters'",
+    "location": "Table II column '2D minGRU (ours)' and caption; Sec. III.C; Table IV (hyperparameters for 2D minGRU runs with cold starts: 6 layers, d_h = 512, patch (2,2), c4v, 200 samples, 150000 iterations)",
+    "version_read": "arXiv:2605.13807v1 (only version)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "The published label is '2D minGRU (ours)'; the stored string invents '3 layers', which belongs to the iterative-retraining PSR-NQS of Table VI (a different network, stored as its own row). The Table II network is the 6-layer, d_h = 512, ~7.1M-parameter cold-start model, as method_names.mjs line 144 already says in the detail, so the row currently names 3 layers and 6 layers at once. Energy -0.628637(4) per site, sigma, instance and bound_type verified. Open 10x10 / 16x16 square, J = 1, S.S per-site convention (the table's own QMC column equals Sandvik's stored exact rows), bound_type variational (final VMC energy, no extrapolation), one-standard-error bar. Own computation, arXiv preprint (May 2026), peer_reviewed false correct. No other row on the instance carries this number (no duplicate).",
+    "source_entry": "VP14-hubbard-j1j2-heisenberg-tfising#40 (qmbl-verify 2026-09-29; skeptic upheld)"
+  },
+  {
+    "match": {
+      "instance": "Heisenberg/square_256_O",
+      "method": "2D minGRU (3 layers, c4v symmetry, parallel scan)",
+      "energy": -658.948096
+    },
+    "field": "method",
+    "to": "2D minGRU (ours)",
+    "reported_as": "Table II, row 16x16, column '2D minGRU (ours)': -0.643504(3); caption: '16x16 calculation was conducted in a time frame of 29 GPU days using a single L40S 48GB GPU. For reference, this 2D minGRU model has 6 layers and a hidden dimension d_h = 512'",
+    "location": "Table II column '2D minGRU (ours)' and caption; Sec. III.C; Table IV (hyperparameters for 2D minGRU runs with cold starts: 6 layers, d_h = 512, patch (2,2), c4v, 200 samples, 150000 iterations)",
+    "version_read": "arXiv:2605.13807v1 (only version)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "The published label is '2D minGRU (ours)'; the stored string invents '3 layers', which belongs to the iterative-retraining PSR-NQS of Table VI (a different network, stored as its own row). The Table II network is the 6-layer, d_h = 512, ~7.1M-parameter cold-start model, as method_names.mjs line 144 already says in the detail, so the row currently names 3 layers and 6 layers at once. Energy -0.643504(3) per site, sigma, instance and bound_type verified. Open 10x10 / 16x16 square, J = 1, S.S per-site convention (the table's own QMC column equals Sandvik's stored exact rows), bound_type variational (final VMC energy, no extrapolation), one-standard-error bar. Own computation, arXiv preprint (May 2026), peer_reviewed false correct. No other row on the instance carries this number (no duplicate).",
+    "source_entry": "VP14-hubbard-j1j2-heisenberg-tfising#44 (qmbl-verify 2026-09-29; skeptic upheld)"
+  },
+  {
+    "match": {
+      "instance": "Heisenberg/triangular_108_P",
+      "method": "Graph neural network",
+      "energy": -238.4208
+    },
+    "field": "method",
+    "to": "GNN-2",
+    "reported_as": "Triangular, J2 0, N 108: <E>/N GNN -0.5508(8), GNN-2 -0.5519(4), ResNet -0.5451(2)",
+    "location": "arXiv:2110.06390v1 App. A8 Table IV, 'Triangular J2 = 0 N = 108' block, GNN-2 column; quoted as 'Graph NN [64] -0.5519(4)' in arXiv:2211.07749v2 Table III",
+    "version_read": "arXiv:2110.06390v1; arXiv:2211.07749v2",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "The stored number is Kochkov's GNN-2 energy; the GNN proper printed beside it is -0.5508(8). The row name says GNN, which is the other network. Energy, sigma, periodic 108-site triangular cluster (periodic vectors (9, 3 sqrt3) and (9, -3 sqrt3), Kochkov Table I), J2 = 0, S.S per-spin convention and bound_type variational verified; 2 x 10^5 MCMC samples. No duplicate on the instance. The new_line also sets `direct: true` and `pr: false`, which the loader changes of the next two entries read (without them those edits change nothing). method_names.mjs already maps 'GNN-2' (line 380). (Prior finding of 2026-09-15 that never reached the data.)",
+    "source_entry": "VP14-hubbard-j1j2-heisenberg-tfising#60 (qmbl-verify 2026-09-29; skeptic upheld)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_108_P_0.125",
+      "method": "Graph neural network",
+      "energy": -218.9808
+    },
+    "field": "method",
+    "to": "GNN-2",
+    "reported_as": "Triangular, J2 0.125 (x6), N 36 108 36 108 36 108: <E>/N -0.512(2) -0.500(9) -0.5131(8) -0.5069(8) -0.5007(5) -0.488(9) (GNN 36, GNN 108, GNN-2 36, GNN-2 108, ResNet 36, ResNet 108)",
+    "location": "arXiv:2110.06390v1 App. A8 Table IV, 'Triangular J2 = 0.125' block, GNN-2 N = 108 cell; quoted as 'Graph NN [64] -0.5069(8)' in arXiv:2211.07749v2 Table III",
+    "version_read": "arXiv:2110.06390v1; arXiv:2211.07749v2",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "Same as the J2 = 0 row: the number is GNN-2; GNN at N = 108 is -0.500(9). Everything else verified; no duplicate on the instance. The new_line sets `direct: true` and `pr: false` for the loader changes of the next two entries.",
+    "source_entry": "VP14-hubbard-j1j2-heisenberg-tfising#63 (qmbl-verify 2026-09-29; skeptic upheld)"
+  },
+  // VP16-heisenberg-hubbard-j1j2-tfising
+  {
+    "match": {
+      "instance": "J1J2/square_100_P_0.5",
+      "method": "CNN, REMD [73]",
+      "energy": -189.44
+    },
+    "field": "method",
+    "to": "CQNS",
+    "reported_as": "TABLE I: ... calculated by CQNS. M denotes the convolution filter number and K denotes the side length of the convolution filters.",
+    "location": "arXiv:1807.09422v2 Table I caption; Sec. III",
+    "version_read": "arXiv:1807.09422v2",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "method_as_published should be the producing paper's name for the method; the stored string carries the quoting paper's citation marker '[73]'. method stays 'CNN'; method_detail 'REMD' could read 'M = 128, K = 9, replica-exchange MD'. Ruling B4 (Tristan, 2026-10-02): a corrected published string quotes a label the source prints, verbatim, and what explains it is the row's method_detail (method_names.mjs). The label is the Table I caption's ('calculated by CQNS'); M = 128 and K = 9 (the table's column and row) and the replica-exchange molecular dynamics optimization (Sec. III) are the detail.",
+    "source_entry": "VP16-heisenberg-hubbard-j1j2-tfising#19 (qmbl-verify 2026-09-29; skeptic upheld)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_100_P_0.5",
+      "method": "Deep CNN",
+      "energy": -198.9872
+    },
+    "field": "method",
+    "to": "CNN1",
+    "reported_as": "arXiv v1 Sec. 7.4: 'When L=10 the energy in this work is -0.497468, which is 3.2 x 10^-4 higher than the -0.497629 reported in [33]'; published Sec. 3.2.1: 'the variational energies on the 10 x 10 lattice for p = 0 and p = 1 are -0.497 168 and -0.497 468 respectively'",
+    "location": "arXiv:2204.07816v1 Sec. 7.4 (p. 10); Mach. Learn.: Sci. Technol. 4, 015035 Sec. 3.2.1 (Fig. 6(a) text) and Sec. 3.2.2 (Fig. 7, Table 1: -0.497 47 at 10 x 10, J2 = 0.50)",
+    "version_read": "arXiv:2204.07816v1; Mach. Learn.: Sci. Technol. 4, 015035 (2023), IOPscience full-text HTML (shared cache liang2023-mlst-acc56a.html, parsed locally with node: sources/vp16_mlst_acc56a.fromhtml.txt); arXiv:2310.05715v1, v2 (quote)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "The number is the one-Lanczos-step (p = 1) energy of CNN1, not a plain deep-CNN energy: the published version prints p = 0 = -0.497 168 and p = 1 = -0.497 468 on 10 x 10 at J2 = 0.5 and says every CNN1 value of Fig. 7 and Table 1 is 'obtained by the Lanczos step with p = 1'. 'Deep CNN' and '421953' are Rende et al.'s labels (their Table I); the producing paper names CNN1 with 106529 parameters for this lattice (the row's compute.parameters already says 106529). bound_type stays variational (p-step Lanczos on a variational state, RULES 4); the row's method_detail should carry the step count the way the Hu et al. 'VMC + 1 Lanczos step' rows do. Duplicate check (live data/J1J2/square_100_P_0.5.json): no other row carries -0.497468; the nearest same-group row, 'Deep CNN' -198.868 (-0.49717, Li et al. TPDS 2022, arXiv:2108.13830), is the p = 0 level of the same CNN1 family (the published text prints p = 0 as -0.497 168), a different number and a different paper, so no duplicate. Written as the J2 = 0.6 row of the same paper's Table 1 is (VP5-arxiv-2606-04558#11), so the paper's CNN1 after one Lanczos step carries one published string; the parameter count it states goes to compute (method_names.mjs). Ruling B4 (Tristan, 2026-10-02): a corrected published string quotes a label the source prints, verbatim, and what explains it is the row's method_detail (method_names.mjs). The label is the Table 1 caption's ('achieved by CNN1 with 106 529 parameters. The values are obtained by the Lanczos step with p = 1.'); the Lanczos step is the detail, and the parameter count is a compute number, not part of the string.",
+    "source_entry": "VP16-heisenberg-hubbard-j1j2-tfising#20 (qmbl-verify 2026-09-29; skeptic upheld)"
+  },
+  {
+    "match": {
+      "instance": "Heisenberg/square_100_O",
+      "method": "PixelCNN (deep autoregressive)",
+      "energy": -251.4508
+    },
+    "field": "method",
+    "to": "NAQS",
+    "reported_as": "Lattice PEPS NAQS QMC",
+    "location": "arXiv:1902.04057v3 Table II header",
+    "version_read": "arXiv:1902.04057v3",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "method_as_published should be the producing paper's name; 'PixelCNN' is the quoting paper's column label. The 16x16 row of the same table is stored as 'NAQS' (row #11); method_names.mjs already maps both strings to NAQS.",
+    "source_entry": "VP16-heisenberg-hubbard-j1j2-tfising#27 (qmbl-verify 2026-09-29; skeptic upheld)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_144_P_0.125",
+      "method": "Gutzwiller-projected fermionic state + Lanczos step",
+      "energy": -294.081408
+    },
+    "field": "method",
+    "to": "DSL",
+    "reported_as": "12 -0.501828(1) -0.508438(3) -0.510558(5) -0.497619(1) -0.504574(2) -0.506895(4) -0.51213(10) -0.50841(11) 0.53(2) (columns: DSL 0-LS 1-LS 2-LS | S = 2 state 0-LS 1-LS 2-LS | Ground state | S = 2 state | S = 2 gap), J2/J1 = 1/8, energy per site in units of J1",
+    "location": "arXiv:1601.06018v4 Table III, row Size 12, column 2-LS (DSL, S = 0; third energy column)",
+    "version_read": "arXiv:1601.06018v4 (11 Apr 2016; jref Phys. Rev. B 93, 144411 (2016), doi 10.1103/PhysRevB.93.144411)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "The number is the p = 2 value: Table III prints -0.501828(1) (p = 0), -0.508438(3) (p = 1) and -0.510558(5) (p = 2) for L = 12, so 'Lanczos step' / '1 Lanczos step' misstates the method. The quote's column label 'Gutzwiller+LS' does not say how many steps; the primary does. Energy, sigma, 12 x 12 periodic spin Hamiltonian, J2/J1 = 1/8, S.S per site, S = 0, variational all check. The instance's 'GCNN + Lanczos step' rows are Roth et al.'s own and are not affected. Ruling B4 (Tristan, 2026-10-02): a corrected published string quotes a label the source prints, verbatim, and what explains it is the row's method_detail (method_names.mjs). The label is the Table III column group's, 'DSL' (the Dirac spin liquid); the 2-LS column (two Lanczos steps) and the Gutzwiller-projected fermionic construction are the detail.",
+    "source_entry": "VP16-heisenberg-hubbard-j1j2-tfising#51 (qmbl-verify 2026-09-29; skeptic upheld)"
+  },
+  // VP4-arxiv-1311-5962
+  {
+    "match": {
+      "instance": "J1J2/square_36_P_0.4",
+      "method": "DMRG, extrapolated in the truncation error (4096-8192 SU(2) states)",
+      "energy": -76.283568
+    },
+    "field": "method",
+    "to": "DMRG (∞)",
+    "reported_as": "-0.529747(1) under 'DMRG (∞)'; caption: 'DMRG (∞) is obtained from the straight line energy extrapolation with DMRG truncation error as illustrated in Fig. 16. ... The extrapolated results for L = 10 are obtained from the linear fitting of the data by keeping 4096, 6144 and 8192 SU(2) states.'",
+    "location": "Table I (Supplementary Information, arXiv v3 PDF p. 11; main.tex line 491), block J2 = 0.40, row L = 6, column DMRG (∞); pypdf layout v3 line 644, v1 line 586; Table I caption; Fig. 16 caption and figure file",
+    "version_read": "arXiv:1311.5962v3 (e-print main.tex of 2014-07-12, PDF identical in text to v2); v1 compared; PRL 113, 027201 (2014) Supplemental Material not accessible (APS 403)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "The stored method string and its detail ('SU(2), truncation error → 0 from 4096 to 8192 states', method_names.mjs line 52) and the compute note say this L = 6 extrapolation was fitted to the 4096/6144/8192 runs. The paper states those fit points only for L = 10 (a sentence added in v2 together with the removal of the L = 10 error bars); for L = 6 and 8 it says only 'straight line ... as illustrated in Fig. 16'. At L = 6 there is no figure and no statement of the fit points. 'Up to 8192' states what the source supports. Value, sigma (sigma = the printed extrapolation bar (1 in the last digit, per site), how estimated not stated), instance, J2 and bound_type extrapolated are verified. Against the exact ground state E0/N = -0.529745006 (VarBench ED -76.283280827996 on J1J2/square_36_P_0.4 (Schulz, Ziman & Poilblanc 1996 Table II 36(A1): -0.529745)) the extrapolation sits below by 1.99e-6 per site = -1.99 printed bars. Instance: L x L torus = square_36_P, J2 = 0.40 (printed), J1 = 1, spin-1/2 S.S Hamiltonian with every NN and NNN bond once (Eq. 1); stored total = 4 N e. v1 and v3 print the same cell. Primary: the authors' own SU(2) DMRG; peer_reviewed true (PRL 113, 027201). No other row on the instance carries this number (checked every row of data/J1J2/square_36_P_0.4.json; the 48 VMC cells of the same table are the Hu et al. rows). Ruling B4 (Tristan, 2026-10-02): a corrected published string quotes a label the source prints, verbatim, and what explains it is the row's method_detail (method_names.mjs). The label is Table I's column, 'DMRG (∞)'; the straight-line extrapolation in the truncation error, SU(2) symmetry and up to 8192 kept SU(2) states are the detail.",
+    "source_entry": "VP4-arxiv-1311-5962#19 (qmbl-verify 2026-09-29; skeptic upheld)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_36_P_0.45",
+      "method": "DMRG, extrapolated in the truncation error (4096-8192 SU(2) states)",
+      "energy": -74.25504
+    },
+    "field": "method",
+    "to": "DMRG (∞)",
+    "reported_as": "-0.515660(1) under 'DMRG (∞)'; caption: 'DMRG (∞) is obtained from the straight line energy extrapolation with DMRG truncation error as illustrated in Fig. 16. ... The extrapolated results for L = 10 are obtained from the linear fitting of the data by keeping 4096, 6144 and 8192 SU(2) states.'",
+    "location": "Table I (Supplementary Information, arXiv v3 PDF p. 11; main.tex line 500), block J2 = 0.45, row L = 6, column DMRG (∞); pypdf layout v3 line 648, v1 line 590; Table I caption; Fig. 16 caption and figure file",
+    "version_read": "arXiv:1311.5962v3 (e-print main.tex of 2014-07-12, PDF identical in text to v2); v1 compared; PRL 113, 027201 (2014) Supplemental Material not accessible (APS 403)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "The stored method string and its detail ('SU(2), truncation error → 0 from 4096 to 8192 states', method_names.mjs line 52) and the compute note say this L = 6 extrapolation was fitted to the 4096/6144/8192 runs. The paper states those fit points only for L = 10 (a sentence added in v2 together with the removal of the L = 10 error bars); for L = 6 and 8 it says only 'straight line ... as illustrated in Fig. 16'. At L = 6 there is no figure and no statement of the fit points. 'Up to 8192' states what the source supports. Value, sigma (sigma = the printed extrapolation bar (1 in the last digit, per site), how estimated not stated), instance, J2 and bound_type extrapolated are verified. Against the exact ground state E0/N = -0.515657392 (QMBL Lanczos, qmbl-runs/qmbl-ed-2026-09-28 (k = 0 A1, E = -74.254664434186, E/144 = -0.515657392; not yet a row, SWEEP.md 'Open (Tristan)')) the extrapolation sits below by 2.61e-6 per site = -2.61 printed bars. Instance: L x L torus = square_36_P, J2 = 0.45 (printed), J1 = 1, spin-1/2 S.S Hamiltonian with every NN and NNN bond once (Eq. 1); stored total = 4 N e. v1 and v3 print the same cell. Primary: the authors' own SU(2) DMRG; peer_reviewed true (PRL 113, 027201). Duplicate check (settles M13): one other row on the instance stores the same total, -74.25504, Hu, Becca, Parola & Sorella 'VMC + Lanczos steps, extrapolated in the variance' (arXiv:1304.2630, primary). That is Hu et al.'s own variance extrapolation, printed -0.51566(1) in their Table IV (L = 6, S = 0) and quoted in Gong et al.'s Table I column VMC (p = ∞); this row is Gong et al.'s own DMRG extrapolation -0.515660(1) in the neighbouring column. Two methods from two papers coincide at the printed digits: not a duplicate, both rows stay. Ruling B4 (Tristan, 2026-10-02): a corrected published string quotes a label the source prints, verbatim, and what explains it is the row's method_detail (method_names.mjs). The label is Table I's column, 'DMRG (∞)'; the straight-line extrapolation in the truncation error, SU(2) symmetry and up to 8192 kept SU(2) states are the detail.",
+    "source_entry": "VP4-arxiv-1311-5962#23 (qmbl-verify 2026-09-29; skeptic upheld)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_36_P_0.5",
+      "method": "DMRG, extrapolated in the truncation error (4096-8192 SU(2) states)",
+      "energy": -72.548352
+    },
+    "field": "method",
+    "to": "DMRG (∞)",
+    "reported_as": "-0.503808(1) under 'DMRG (∞)'; caption: 'DMRG (∞) is obtained from the straight line energy extrapolation with DMRG truncation error as illustrated in Fig. 16. ... The extrapolated results for L = 10 are obtained from the linear fitting of the data by keeping 4096, 6144 and 8192 SU(2) states.'",
+    "location": "Table I (Supplementary Information, arXiv v3 PDF p. 11; main.tex line 509), block J2 = 0.50, row L = 6, column DMRG (∞); pypdf layout v3 line 652, v1 line 594; Table I caption; Fig. 16 caption and figure file",
+    "version_read": "arXiv:1311.5962v3 (e-print main.tex of 2014-07-12, PDF identical in text to v2); v1 compared; PRL 113, 027201 (2014) Supplemental Material not accessible (APS 403)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "The stored method string and its detail ('SU(2), truncation error → 0 from 4096 to 8192 states', method_names.mjs line 52) and the compute note say this L = 6 extrapolation was fitted to the 4096/6144/8192 runs. The paper states those fit points only for L = 10 (a sentence added in v2 together with the removal of the L = 10 error bars); for L = 6 and 8 it says only 'straight line ... as illustrated in Fig. 16'. At L = 6 there is no figure and no statement of the fit points. 'Up to 8192' states what the source supports. Value, sigma (sigma = the printed extrapolation bar (1 in the last digit, per site), how estimated not stated), instance, J2 and bound_type extrapolated are verified. Against the exact ground state E0/N = -0.503809654 (VarBench ED -72.548590160286 on J1J2/square_36_P_0.5 (reproduced to 12 digits by QMBL Lanczos 2026-09-28; Schulz Table II -0.503810)) the extrapolation sits above by 1.65e-6 per site = 1.65 printed bars. Instance: L x L torus = square_36_P, J2 = 0.50 (printed), J1 = 1, spin-1/2 S.S Hamiltonian with every NN and NNN bond once (Eq. 1); stored total = 4 N e. v1 and v3 print the same cell. Primary: the authors' own SU(2) DMRG; peer_reviewed true (PRL 113, 027201). No other row on the instance carries this number (checked every row of data/J1J2/square_36_P_0.5.json; the 48 VMC cells of the same table are the Hu et al. rows). Ruling B4 (Tristan, 2026-10-02): a corrected published string quotes a label the source prints, verbatim, and what explains it is the row's method_detail (method_names.mjs). The label is Table I's column, 'DMRG (∞)'; the straight-line extrapolation in the truncation error, SU(2) symmetry and up to 8192 kept SU(2) states are the detail.",
+    "source_entry": "VP4-arxiv-1311-5962#27 (qmbl-verify 2026-09-29; skeptic upheld)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_36_P_0.55",
+      "method": "DMRG, extrapolated in the truncation error (4096-8192 SU(2) states)",
+      "energy": -71.306784
+    },
+    "field": "method",
+    "to": "DMRG (∞)",
+    "reported_as": "-0.495186(1) under 'DMRG (∞)'; caption: 'DMRG (∞) is obtained from the straight line energy extrapolation with DMRG truncation error as illustrated in Fig. 16. ... The extrapolated results for L = 10 are obtained from the linear fitting of the data by keeping 4096, 6144 and 8192 SU(2) states.'",
+    "location": "Table I (Supplementary Information, arXiv v3 PDF p. 11; main.tex line 518), block J2 = 0.55, row L = 6, column DMRG (∞); pypdf layout v3 line 656, v1 line 598; Table I caption; Fig. 16 caption and figure file",
+    "version_read": "arXiv:1311.5962v3 (e-print main.tex of 2014-07-12, PDF identical in text to v2); v1 compared; PRL 113, 027201 (2014) Supplemental Material not accessible (APS 403)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "The stored method string and its detail ('SU(2), truncation error → 0 from 4096 to 8192 states', method_names.mjs line 52) and the compute note say this L = 6 extrapolation was fitted to the 4096/6144/8192 runs. The paper states those fit points only for L = 10 (a sentence added in v2 together with the removal of the L = 10 error bars); for L = 6 and 8 it says only 'straight line ... as illustrated in Fig. 16'. At L = 6 there is no figure and no statement of the fit points. 'Up to 8192' states what the source supports. Value, sigma (sigma = the printed extrapolation bar (1 in the last digit, per site), how estimated not stated), instance, J2 and bound_type extrapolated are verified. Against the exact ground state E0/N = -0.495177700 (QMBL Lanczos, qmbl-runs/qmbl-ed-2026-09-28 (k = 0 A1, E/144 = -0.495177700); stored exact row Schulz et al. -0.495178 (-71.305632)) the extrapolation sits below by 8.30e-6 per site = -8.30 printed bars. Instance: L x L torus = square_36_P, J2 = 0.55 (printed), J1 = 1, spin-1/2 S.S Hamiltonian with every NN and NNN bond once (Eq. 1); stored total = 4 N e. v1 and v3 print the same cell. Primary: the authors' own SU(2) DMRG; peer_reviewed true (PRL 113, 027201). No other row on the instance carries this number (checked every row of data/J1J2/square_36_P_0.55.json; the 48 VMC cells of the same table are the Hu et al. rows). Ruling B4 (Tristan, 2026-10-02): a corrected published string quotes a label the source prints, verbatim, and what explains it is the row's method_detail (method_names.mjs). The label is Table I's column, 'DMRG (∞)'; the straight-line extrapolation in the truncation error, SU(2) symmetry and up to 8192 kept SU(2) states are the detail.",
+    "source_entry": "VP4-arxiv-1311-5962#31 (qmbl-verify 2026-09-29; skeptic upheld)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_64_P_0.4",
+      "method": "DMRG, extrapolated in the truncation error (4096-8192 SU(2) states)",
+      "energy": -134.7072
+    },
+    "field": "method",
+    "to": "DMRG (∞)",
+    "reported_as": "-0.5262(1) under 'DMRG (∞)'; caption: 'DMRG (∞) is obtained from the straight line energy extrapolation with DMRG truncation error as illustrated in Fig. 16. ... The extrapolated results for L = 10 are obtained from the linear fitting of the data by keeping 4096, 6144 and 8192 SU(2) states.'",
+    "location": "Table I (Supplementary Information, arXiv v3 PDF p. 11; main.tex line 493), block J2 = 0.40, row L = 8, column DMRG (∞); pypdf layout v3 line 645, v1 line 587; Table I caption; Fig. 16 caption and figure file",
+    "version_read": "arXiv:1311.5962v3 (e-print main.tex of 2014-07-12, PDF identical in text to v2); v1 compared; PRL 113, 027201 (2014) Supplemental Material not accessible (APS 403)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "The stored method string and its detail ('SU(2), truncation error → 0 from 4096 to 8192 states', method_names.mjs line 52) and the compute note say this L = 8 extrapolation was fitted to the 4096/6144/8192 runs. The paper states those fit points only for L = 10 (a sentence added in v2 together with the removal of the L = 10 error bars); for L = 6 and 8 it says only 'straight line ... as illustrated in Fig. 16'. At L = 8 the paper's only illustration, Fig. 16(a) (J2 = 0.5, L = 8; vector file DMRG_e_8.pdf), labels five points M = 1024, 2048, 4096, 6144, 8192 under one fitted line; the drawn line (intercept -0.49920, slope 31.4) is closer to a least-squares line through all five (-0.49919, 31.3) than through the three largest (-0.49916, 30.5). 'Up to 8192' states what the source supports. Value, sigma (sigma = the printed extrapolation bar (1 in the last digit, per site), how estimated not stated), instance, J2 and bound_type extrapolated are verified. Instance: L x L torus = square_64_P, J2 = 0.40 (printed), J1 = 1, spin-1/2 S.S Hamiltonian with every NN and NNN bond once (Eq. 1); stored total = 4 N e. v1 and v3 print the same cell. Primary: the authors' own SU(2) DMRG; peer_reviewed true (PRL 113, 027201). No other row on the instance carries this number (checked every row of data/J1J2/square_64_P_0.4.json; the 48 VMC cells of the same table are the Hu et al. rows). Ruling B4 (Tristan, 2026-10-02): a corrected published string quotes a label the source prints, verbatim, and what explains it is the row's method_detail (method_names.mjs). The label is Table I's column, 'DMRG (∞)'; the straight-line extrapolation in the truncation error, SU(2) symmetry and up to 8192 kept SU(2) states are the detail.",
+    "source_entry": "VP4-arxiv-1311-5962#36 (qmbl-verify 2026-09-29; skeptic upheld)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_64_P_0.45",
+      "method": "DMRG, extrapolated in the truncation error (4096-8192 SU(2) states)",
+      "energy": -130.9696
+    },
+    "field": "method",
+    "to": "DMRG (∞)",
+    "reported_as": "-0.5116(1) under 'DMRG (∞)'; caption: 'DMRG (∞) is obtained from the straight line energy extrapolation with DMRG truncation error as illustrated in Fig. 16. ... The extrapolated results for L = 10 are obtained from the linear fitting of the data by keeping 4096, 6144 and 8192 SU(2) states.'",
+    "location": "Table I (Supplementary Information, arXiv v3 PDF p. 11; main.tex line 502), block J2 = 0.45, row L = 8, column DMRG (∞); pypdf layout v3 line 649, v1 line 591; Table I caption; Fig. 16 caption and figure file",
+    "version_read": "arXiv:1311.5962v3 (e-print main.tex of 2014-07-12, PDF identical in text to v2); v1 compared; PRL 113, 027201 (2014) Supplemental Material not accessible (APS 403)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "The stored method string and its detail ('SU(2), truncation error → 0 from 4096 to 8192 states', method_names.mjs line 52) and the compute note say this L = 8 extrapolation was fitted to the 4096/6144/8192 runs. The paper states those fit points only for L = 10 (a sentence added in v2 together with the removal of the L = 10 error bars); for L = 6 and 8 it says only 'straight line ... as illustrated in Fig. 16'. At L = 8 the paper's only illustration, Fig. 16(a) (J2 = 0.5, L = 8; vector file DMRG_e_8.pdf), labels five points M = 1024, 2048, 4096, 6144, 8192 under one fitted line; the drawn line (intercept -0.49920, slope 31.4) is closer to a least-squares line through all five (-0.49919, 31.3) than through the three largest (-0.49916, 30.5). 'Up to 8192' states what the source supports. Value, sigma (sigma = the printed extrapolation bar (1 in the last digit, per site), how estimated not stated), instance, J2 and bound_type extrapolated are verified. Instance: L x L torus = square_64_P, J2 = 0.45 (printed), J1 = 1, spin-1/2 S.S Hamiltonian with every NN and NNN bond once (Eq. 1); stored total = 4 N e. v1 and v3 print the same cell. Primary: the authors' own SU(2) DMRG; peer_reviewed true (PRL 113, 027201). No other row on the instance carries this number (checked every row of data/J1J2/square_64_P_0.45.json; the 48 VMC cells of the same table are the Hu et al. rows). Ruling B4 (Tristan, 2026-10-02): a corrected published string quotes a label the source prints, verbatim, and what explains it is the row's method_detail (method_names.mjs). The label is Table I's column, 'DMRG (∞)'; the straight-line extrapolation in the truncation error, SU(2) symmetry and up to 8192 kept SU(2) states are the detail.",
+    "source_entry": "VP4-arxiv-1311-5962#40 (qmbl-verify 2026-09-29; skeptic upheld)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_64_P_0.5",
+      "method": "DMRG, extrapolated in the truncation error (4096-8192 SU(2) states)",
+      "energy": -127.7952
+    },
+    "field": "method",
+    "to": "DMRG (∞)",
+    "reported_as": "-0.4992(1) under 'DMRG (∞)'; caption: 'DMRG (∞) is obtained from the straight line energy extrapolation with DMRG truncation error as illustrated in Fig. 16. ... The extrapolated results for L = 10 are obtained from the linear fitting of the data by keeping 4096, 6144 and 8192 SU(2) states.'",
+    "location": "Table I (Supplementary Information, arXiv v3 PDF p. 11; main.tex line 511), block J2 = 0.50, row L = 8, column DMRG (∞); pypdf layout v3 line 653, v1 line 595; Table I caption; Fig. 16 caption and figure file",
+    "version_read": "arXiv:1311.5962v3 (e-print main.tex of 2014-07-12, PDF identical in text to v2); v1 compared; PRL 113, 027201 (2014) Supplemental Material not accessible (APS 403)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "The stored method string and its detail ('SU(2), truncation error → 0 from 4096 to 8192 states', method_names.mjs line 52) and the compute note say this L = 8 extrapolation was fitted to the 4096/6144/8192 runs. The paper states those fit points only for L = 10 (a sentence added in v2 together with the removal of the L = 10 error bars); for L = 6 and 8 it says only 'straight line ... as illustrated in Fig. 16'. At L = 8 the paper's only illustration, Fig. 16(a) (J2 = 0.5, L = 8; vector file DMRG_e_8.pdf), labels five points M = 1024, 2048, 4096, 6144, 8192 under one fitted line; the drawn line (intercept -0.49920, slope 31.4) is closer to a least-squares line through all five (-0.49919, 31.3) than through the three largest (-0.49916, 30.5). 'Up to 8192' states what the source supports. Value, sigma (sigma = the printed extrapolation bar (1 in the last digit, per site), how estimated not stated), instance, J2 and bound_type extrapolated are verified. Instance: L x L torus = square_64_P, J2 = 0.50 (printed), J1 = 1, spin-1/2 S.S Hamiltonian with every NN and NNN bond once (Eq. 1); stored total = 4 N e. v1 and v3 print the same cell. Primary: the authors' own SU(2) DMRG; peer_reviewed true (PRL 113, 027201). No other row on the instance carries this number (checked every row of data/J1J2/square_64_P_0.5.json; the 48 VMC cells of the same table are the Hu et al. rows). Ruling B4 (Tristan, 2026-10-02): a corrected published string quotes a label the source prints, verbatim, and what explains it is the row's method_detail (method_names.mjs). The label is Table I's column, 'DMRG (∞)'; the straight-line extrapolation in the truncation error, SU(2) symmetry and up to 8192 kept SU(2) states are the detail.",
+    "source_entry": "VP4-arxiv-1311-5962#44 (qmbl-verify 2026-09-29; skeptic upheld)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_64_P_0.55",
+      "method": "DMRG, extrapolated in the truncation error (4096-8192 SU(2) states)",
+      "energy": -125.2096
+    },
+    "field": "method",
+    "to": "DMRG (∞)",
+    "reported_as": "-0.4891(1) under 'DMRG (∞)'; caption: 'DMRG (∞) is obtained from the straight line energy extrapolation with DMRG truncation error as illustrated in Fig. 16. ... The extrapolated results for L = 10 are obtained from the linear fitting of the data by keeping 4096, 6144 and 8192 SU(2) states.'",
+    "location": "Table I (Supplementary Information, arXiv v3 PDF p. 11; main.tex line 520), block J2 = 0.55, row L = 8, column DMRG (∞); pypdf layout v3 line 657, v1 line 599; Table I caption; Fig. 16 caption and figure file",
+    "version_read": "arXiv:1311.5962v3 (e-print main.tex of 2014-07-12, PDF identical in text to v2); v1 compared; PRL 113, 027201 (2014) Supplemental Material not accessible (APS 403)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "The stored method string and its detail ('SU(2), truncation error → 0 from 4096 to 8192 states', method_names.mjs line 52) and the compute note say this L = 8 extrapolation was fitted to the 4096/6144/8192 runs. The paper states those fit points only for L = 10 (a sentence added in v2 together with the removal of the L = 10 error bars); for L = 6 and 8 it says only 'straight line ... as illustrated in Fig. 16'. At L = 8 the paper's only illustration, Fig. 16(a) (J2 = 0.5, L = 8; vector file DMRG_e_8.pdf), labels five points M = 1024, 2048, 4096, 6144, 8192 under one fitted line; the drawn line (intercept -0.49920, slope 31.4) is closer to a least-squares line through all five (-0.49919, 31.3) than through the three largest (-0.49916, 30.5). 'Up to 8192' states what the source supports. Value, sigma (sigma = the printed extrapolation bar (1 in the last digit, per site), how estimated not stated), instance, J2 and bound_type extrapolated are verified. Instance: L x L torus = square_64_P, J2 = 0.55 (printed), J1 = 1, spin-1/2 S.S Hamiltonian with every NN and NNN bond once (Eq. 1); stored total = 4 N e. v1 and v3 print the same cell. Primary: the authors' own SU(2) DMRG; peer_reviewed true (PRL 113, 027201). No other row on the instance carries this number (checked every row of data/J1J2/square_64_P_0.55.json; the 48 VMC cells of the same table are the Hu et al. rows). Ruling B4 (Tristan, 2026-10-02): a corrected published string quotes a label the source prints, verbatim, and what explains it is the row's method_detail (method_names.mjs). The label is Table I's column, 'DMRG (∞)'; the straight-line extrapolation in the truncation error, SU(2) symmetry and up to 8192 kept SU(2) states are the detail.",
+    "source_entry": "VP4-arxiv-1311-5962#48 (qmbl-verify 2026-09-29; skeptic upheld)"
+  },
+  // VP5-arxiv-2606-04558
+  {
+    "match": {
+      "instance": "J1J2/square_100_P_0.6",
+      "method": "previous work [47] (Liang et al.)",
+      "energy": -191.356
+    },
+    "field": "method",
+    "to": "CNN1",
+    "reported_as": "-0.478 39 (Table 1, row 10 x 10, column 0.60; caption 'Energy values for various J2 values and lattice sizes, achieved by CNN1 with 106 529 parameters. The values are obtained by the Lanczos step with p = 1.'); quoted by arXiv:2606.04558 Table I as '-0.47839 [47]' (v1) / '[67]' (v2)",
+    "location": "Liang et al., Mach. Learn.: Sci. Technol. 4, 015035 (2023), Table 1, row 10 x 10, column J2 = 0.60",
+    "version_read": "journal version (IOPscience article HTML, open access, fetched 2026-09-29 through the automation browser because IOP answers a plain fetch with a bot captcha; saved as sources/liang2023-mlst-acc56a.html and parsed with node); arXiv:2204.07816v1, the only arXiv version (qmbl/sources/2204.07816.txt, layout text), does not contain the number: it states 'We set J1=1 and J2 = 0.5 throughout the investigations' and its 10 x 10 results are at J2 = 0.5 only (-0.497468; -0.4961 after 350 SR steps)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "'previous work [47] (Liang et al.)' is a citation marker, not a method. The producing table states that its values are CNN1 after one Lanczos step (p = 1); the row's short name 'CNN' with empty method_detail hides the Lanczos step (method_detail: '1 Lanczos step, 106 529 parameters'). bound_type stays variational (RULES.md 4: p-step Lanczos on a variational state). The pending 2026-09-16 proposal 'Deep CNN' (group N2) misses the Lanczos step. Ruling B4 (Tristan, 2026-10-02): a corrected published string quotes a label the source prints, verbatim, and what explains it is the row's method_detail (method_names.mjs). The label is the Table 1 caption's ('achieved by CNN1 with 106 529 parameters. The values are obtained by the Lanczos step with p = 1.'); the Lanczos step is the detail, and the parameter count is a compute number, not part of the string.",
+    "source_entry": "VP5-arxiv-2606-04558#11 (qmbl-verify 2026-09-29; skeptic upheld)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_64_P_0.4",
+      "method": "previous work [23] (Nomura & Imada neural-network solver)",
+      "energy": -134.525952
+    },
+    "field": "method",
+    "to": "RBM+PP",
+    "reported_as": "- 0. 525492(4) (arXiv:2005.14142v1 Table I 'Raw data of RBM+PP ground-state energy in Fig. 10', row 8 x 8, column J2 = 0. 40; per site, S.S units, J1 = 1); quoted by arXiv:2606.04558 Table I as -0.525492 [23] (v1) / [39] (v2)",
+    "location": "Nomura & Imada arXiv:2005.14142v1-v3 Table I, 8 x 8 row, J2 = 0.40 (v4-v6 = PRX Table I prints -0.525653(1) without sublattice structure instead)",
+    "version_read": "arXiv:2005.14142 v1 (28 May 2020), v2 (2 Jun 2020), v3 (29 Jan 2021), v4 (27 Apr 2021), v5 (13 Jun 2021), v6 (12 Jul 2021; = Phys. Rev. X 11, 031034 (2021), journal ref on the abs page): all six PDFs fetched 2026-09-29, pypdf layout and plain mode; the quoting paper arXiv:2606.04558 v1/v2 read as above",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "'previous work [23] (Nomura & Imada neural-network solver)' is the quoting paper's citation marker plus a paraphrase, not a method string any source printed (RULES.md 3). The primary names the state RBM+PP and states the 4 x 4 sublattice structure used for 8 x 8 ('As for the real variational parameters f_ij in the PP part for 8 x 8, 12 x 12, and 16 x 16 lattices, we impose 4 x 4 sublattice structure', v1 App. A) and the projections ('We always apply the spin-parity and momentum projections', 'The ground state energy in Fig. 10 is also produced with the simplified point-group projection'). The sublattice structure is what separates this number from the -0.525653(1) row already on the instance (method_detail: '4 x 4 sublattice structure, K = 0, even spin parity, simplified point-group projection'). Ruling B4 (Tristan, 2026-10-02): a corrected published string quotes a label the source prints, verbatim, and what explains it is the row's method_detail (method_names.mjs). The label is Table I's ('Raw data of RBM+PP ground-state energy in Fig. 10'); the 4 x 4 sublattice structure and the projections are the detail.",
+    "source_entry": "VP5-arxiv-2606-04558#38 (qmbl-verify 2026-09-29; skeptic upheld)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_64_P_0.45",
+      "method": "previous work [23] (Nomura & Imada neural-network solver)",
+      "energy": -130.845952
+    },
+    "field": "method",
+    "to": "RBM+PP",
+    "reported_as": "- 0. 511117(4) (arXiv:2005.14142v1 Table I 'Raw data of RBM+PP ground-state energy in Fig. 10', row 8 x 8, column J2 = 0. 45; per site, S.S units, J1 = 1); quoted by arXiv:2606.04558 Table I as -0.511117 [23] (v1) / [39] (v2)",
+    "location": "Nomura & Imada arXiv:2005.14142v1-v3 Table I, 8 x 8 row, J2 = 0.45 (v4-v6 = PRX Table I prints -0.511331(1) without sublattice structure instead)",
+    "version_read": "arXiv:2005.14142 v1 (28 May 2020), v2 (2 Jun 2020), v3 (29 Jan 2021), v4 (27 Apr 2021), v5 (13 Jun 2021), v6 (12 Jul 2021; = Phys. Rev. X 11, 031034 (2021), journal ref on the abs page): all six PDFs fetched 2026-09-29, pypdf layout and plain mode; the quoting paper arXiv:2606.04558 v1/v2 read as above",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "'previous work [23] (Nomura & Imada neural-network solver)' is the quoting paper's citation marker plus a paraphrase, not a method string any source printed (RULES.md 3). The primary names the state RBM+PP and states the 4 x 4 sublattice structure used for 8 x 8 ('As for the real variational parameters f_ij in the PP part for 8 x 8, 12 x 12, and 16 x 16 lattices, we impose 4 x 4 sublattice structure', v1 App. A) and the projections ('We always apply the spin-parity and momentum projections', 'The ground state energy in Fig. 10 is also produced with the simplified point-group projection'). The sublattice structure is what separates this number from the -0.511331(1) row already on the instance (method_detail: '4 x 4 sublattice structure, K = 0, even spin parity, simplified point-group projection'). Ruling B4 (Tristan, 2026-10-02): a corrected published string quotes a label the source prints, verbatim, and what explains it is the row's method_detail (method_names.mjs). The label is Table I's ('Raw data of RBM+PP ground-state energy in Fig. 10'); the 4 x 4 sublattice structure and the projections are the detail.",
+    "source_entry": "VP5-arxiv-2606-04558#45 (qmbl-verify 2026-09-29; skeptic upheld)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_64_P_0.5",
+      "method": "previous work [23] (Nomura & Imada neural-network solver)",
+      "energy": -127.60576
+    },
+    "field": "method",
+    "to": "RBM+PP",
+    "reported_as": "- 0. 498460(6) (arXiv:2005.14142v1 Table I 'Raw data of RBM+PP ground-state energy in Fig. 10', row 8 x 8, column J2 = 0. 50; per site, S.S units, J1 = 1); v6/PRX Appendix B: 'in the case of the 8 x 8 lattice at J2 = 0. 5, the ground-state energy with the 4 x 4 sublattice structure is -0. 498460(6), which is compared to -0. 498886(1) obtained without a sublattice structure'; quoted by arXiv:2606.04558 Table I as -0.498460 [23] (v1) / [39] (v2)",
+    "location": "Nomura & Imada arXiv:2005.14142v1-v3 Table I (8 x 8 row) and v4-v6 (= PRX 11, 031034) Appendix B text",
+    "version_read": "arXiv:2005.14142 v1 (28 May 2020), v2 (2 Jun 2020), v3 (29 Jan 2021), v4 (27 Apr 2021), v5 (13 Jun 2021), v6 (12 Jul 2021; = Phys. Rev. X 11, 031034 (2021), journal ref on the abs page): all six PDFs fetched 2026-09-29, pypdf layout and plain mode; the quoting paper arXiv:2606.04558 v1/v2 read as above",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "'previous work [23] (Nomura & Imada neural-network solver)' is the quoting paper's citation marker plus a paraphrase, not a method string any source printed (RULES.md 3). The primary names the state RBM+PP and states the 4 x 4 sublattice structure used for 8 x 8 ('As for the real variational parameters f_ij in the PP part for 8 x 8, 12 x 12, and 16 x 16 lattices, we impose 4 x 4 sublattice structure', v1 App. A) and the projections ('We always apply the spin-parity and momentum projections', 'The ground state energy in Fig. 10 is also produced with the simplified point-group projection'). The sublattice structure is what separates this number from the -0.498886(1) row already on the instance (method_detail: '4 x 4 sublattice structure, K = 0, even spin parity, simplified point-group projection'). The same quote is repeated in sweep-rows-2026-09-28.json lines 735-755, skipped at build as a duplicate: change it the same way or drop it. Ruling B4 (Tristan, 2026-10-02): a corrected published string quotes a label the source prints, verbatim, and what explains it is the row's method_detail (method_names.mjs). The label is Table I's ('Raw data of RBM+PP ground-state energy in Fig. 10'); the 4 x 4 sublattice structure and the projections are the detail.",
+    "source_entry": "VP5-arxiv-2606-04558#52 (qmbl-verify 2026-09-29; skeptic upheld)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_64_P_0.55",
+      "method": "previous work [23] (Nomura & Imada neural-network solver)",
+      "energy": -124.87936
+    },
+    "field": "method",
+    "to": "RBM+PP",
+    "reported_as": "- 0. 48781(1) (arXiv:2005.14142v1 Table I 'Raw data of RBM+PP ground-state energy in Fig. 10', row 8 x 8, column J2 = 0. 55; per site, S.S units, J1 = 1); quoted by arXiv:2606.04558 Table I as -0.48781 [23] (v1) / [39] (v2)",
+    "location": "Nomura & Imada arXiv:2005.14142v1-v3 Table I, 8 x 8 row, J2 = 0.55 (v4-v6 = PRX Table I prints -0.488820(2) without sublattice structure instead)",
+    "version_read": "arXiv:2005.14142 v1 (28 May 2020), v2 (2 Jun 2020), v3 (29 Jan 2021), v4 (27 Apr 2021), v5 (13 Jun 2021), v6 (12 Jul 2021; = Phys. Rev. X 11, 031034 (2021), journal ref on the abs page): all six PDFs fetched 2026-09-29, pypdf layout and plain mode; the quoting paper arXiv:2606.04558 v1/v2 read as above",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "'previous work [23] (Nomura & Imada neural-network solver)' is the quoting paper's citation marker plus a paraphrase, not a method string any source printed (RULES.md 3). The primary names the state RBM+PP and states the 4 x 4 sublattice structure used for 8 x 8 ('As for the real variational parameters f_ij in the PP part for 8 x 8, 12 x 12, and 16 x 16 lattices, we impose 4 x 4 sublattice structure', v1 App. A) and the projections ('We always apply the spin-parity and momentum projections', 'The ground state energy in Fig. 10 is also produced with the simplified point-group projection'). The sublattice structure is what separates this number from the -0.488820(2) row already on the instance (method_detail: '4 x 4 sublattice structure, K = 0, even spin parity, simplified point-group projection'). The same quote is repeated in sweep-rows-2026-09-28.json lines 845-865, skipped at build as a duplicate: change it the same way or drop it. Ruling B4 (Tristan, 2026-10-02): a corrected published string quotes a label the source prints, verbatim, and what explains it is the row's method_detail (method_names.mjs). The label is Table I's ('Raw data of RBM+PP ground-state energy in Fig. 10'); the 4 x 4 sublattice structure and the projections are the detail.",
+    "source_entry": "VP5-arxiv-2606-04558#58 (qmbl-verify 2026-09-29; skeptic upheld)"
+  },
+  // VP6-arxiv-2606-00924
+  {
+    "match": {
+      "instance": "Hubbard/rectangular-4x16_64_P_28_8",
+      "method": "Hierarchical Backflow (HB) VMC, path depth K=0 (Hartree-Fock)",
+      "energy": -38.624
+    },
+    "field": "method",
+    "to": "HB K = 0",
+    "reported_as": "column 'K = 0', cell −0.6035",
+    "location": "Supplemental Material Table IV ('Energies persite for the Hubbard model at nh = 0.125, U = 8 for different systems under periodic boundary conditions'), row '4 × 16', column 'K = 0'",
+    "version_read": "arXiv:2606.00924v1 (only version) PDF, pypdf layout mode (sources/2606.00924v1.layout.txt, identical to qmbl sources/2606.00924.txt); every cell re-read in the arXiv HTML v1 tables (parsed with node) and the TeX source main.tex",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "M8 flag settled from the source: the K = 0 (Hartree-Fock) energy is a VMC estimate like every other depth ('All calculations are performed using variational Monte Carlo ...'; the caption's 'sampling errors are around 0.0003' covers the K = 0 column). The stored published string contains 'Hartree', which units.mjs DETERMINISTIC treats as a deterministic energy, so the row counts as record-eligible without sigma (M8 record_eligible_without_sigma). The paper's own label is 'K = 0 (HF)' (Table II; Table IV prints 'K = 0'). units.mjs already reads that label as sampled (comment at units.mjs lines 14-17), and the paper's other three K = 0 rows (4 × 4, 6 × 6, 10 × 10, all Table II) carry it. The display name is unchanged: method_names.mjs line 274 maps 'HB K = 0 (HF)' to ['Hartree-Fock', ''] as it maps the old string. Value, instance, bound_type and reference are otherwise verified: −0.6035 (energy per site; caption: 'The energy sampling errors are around 0.0003') → -0.6035 × 64 = -38.624 (Hubbard stored as total = per site × N). M2 flag (far above the reference) is the HF error at U = 8, with no shift. sigma stays null: the caption's table-wide 'The energy sampling errors are around 0.0003' is not a per-row sigma (Tristan, 2026-09-17, Journal 2026-09-17 and hub). Ruling B4 (Tristan, 2026-10-02): a corrected published string quotes a label the source prints, verbatim, and what explains it is the row's method_detail (method_names.mjs). The paper's label for the depth-0 state is 'HB K = 0' (main text, e.g. '-0.5889 (HB K = 0)' on 16 x 16; the table columns read 'K = 0' in Table IV and 'K = 0 (HF)' in Table II); that it is the Hartree-Fock state is the row's method name.",
+    "source_entry": "VP6-arxiv-2606-00924#0 (qmbl-verify 2026-09-29; skeptic upheld)"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/rectangular-4x16_64_P_28_8",
+      "method": "Neural Network Backflow (NNB) VMC, quoted from ref [31]",
+      "energy": -47.744
+    },
+    "field": "method",
+    "to": "NNB",
+    "reported_as": "−0.746 ± 6 × 10^−5 (Table III, per site); '-47.745 (nh = 64)' (SM text, total)",
+    "location": "arXiv:1807.10770v2 SM Table III 'Finite size effect study of Neural Network Backflow' (TeX label tb:energy_fs), row '16 × 4, U/t=8, n=0.875', column 'NNB'; SM text 'Neural Network Backflow on various systems': 'we find the energy decreases from -46.211 (for the optimized Slater determinant) to -47.745 (nh = 64)'",
+    "version_read": "arXiv:1807.10770v2 (latest; = Phys. Rev. Lett. 122, 226401 (2019) per the arXiv DOI link; PRL page and supplement refused, HTTP 403): PDF pypdf layout + plain text and TeX source main.tex line 442; quoting source arXiv:2606.00924v1 SM Table IV",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "'quoted from ref [31]' is provenance, not a method, and goes stale once the row cites the primary. Both papers print the column as 'NNB'. What was run is Psi_SN, neural-network backflow on a Slater determinant ('To further test the ability of NNB, we have optimized Psi_SN in various systems: ... (ii) 8 × 4, 12 × 4, 16 × 4 Hubbard model'), with n_h = 64 hidden neurons for this 16 × 4 value. Proposed method_detail: 'Psi_SN (on a Slater determinant), n_h = 64'. scripts/method_names.mjs needs an entry \"NNB\": [\"NNBF\", ...] (currently line 327 maps the old string to [\"NNBF\", \"\"]).",
+    "source_entry": "VP6-arxiv-2606-00924#9 (qmbl-verify 2026-09-29; skeptic upheld)"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/rectangular-4x8_32_P_14_8",
+      "method": "Hierarchical Backflow (HB) VMC, path depth K=0 (Hartree-Fock)",
+      "energy": -19.6672
+    },
+    "field": "method",
+    "to": "HB K = 0",
+    "reported_as": "column 'K = 0', cell −0.6146",
+    "location": "Supplemental Material Table IV ('Energies persite for the Hubbard model at nh = 0.125, U = 8 for different systems under periodic boundary conditions'), row '4 × 8', column 'K = 0'",
+    "version_read": "arXiv:2606.00924v1 (only version) PDF, pypdf layout mode (sources/2606.00924v1.layout.txt, identical to qmbl sources/2606.00924.txt); every cell re-read in the arXiv HTML v1 tables (parsed with node) and the TeX source main.tex",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "M8 flag settled from the source: the K = 0 (Hartree-Fock) energy is a VMC estimate like every other depth ('All calculations are performed using variational Monte Carlo ...'; the caption's 'sampling errors are around 0.0003' covers the K = 0 column). The stored published string contains 'Hartree', which units.mjs DETERMINISTIC treats as a deterministic energy, so the row counts as record-eligible without sigma (M8 record_eligible_without_sigma). The paper's own label is 'K = 0 (HF)' (Table II; Table IV prints 'K = 0'). units.mjs already reads that label as sampled (comment at units.mjs lines 14-17), and the paper's other three K = 0 rows (4 × 4, 6 × 6, 10 × 10, all Table II) carry it. The display name is unchanged: method_names.mjs line 274 maps 'HB K = 0 (HF)' to ['Hartree-Fock', ''] as it maps the old string. Value, instance, bound_type and reference are otherwise verified: −0.6146 (energy per site; caption: 'The energy sampling errors are around 0.0003') → -0.6146 × 32 = -19.6672 (Hubbard stored as total = per site × N). M2 flag (far above the reference) is the HF error at U = 8, with no shift. sigma stays null: the caption's table-wide 'The energy sampling errors are around 0.0003' is not a per-row sigma (Tristan, 2026-09-17, Journal 2026-09-17 and hub). Ruling B4 (Tristan, 2026-10-02): a corrected published string quotes a label the source prints, verbatim, and what explains it is the row's method_detail (method_names.mjs). The paper's label for the depth-0 state is 'HB K = 0' (main text, e.g. '-0.5889 (HB K = 0)' on 16 x 16; the table columns read 'K = 0' in Table IV and 'K = 0 (HF)' in Table II); that it is the Hartree-Fock state is the row's method name.",
+    "source_entry": "VP6-arxiv-2606-00924#12 (qmbl-verify 2026-09-29; skeptic upheld)"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/rectangular-4x8_32_P_14_8",
+      "method": "Neural Network Backflow (NNB) VMC, quoted from ref [31]",
+      "energy": -24.16
+    },
+    "field": "method",
+    "to": "NNB",
+    "reported_as": "−0.755 ± 4 × 10^−5 (Table III, per site)",
+    "location": "arXiv:1807.10770v2 SM Table III 'Finite size effect study of Neural Network Backflow' (TeX label tb:energy_fs), row '8 × 4, U/t=8, n=0.875', column 'NNB'",
+    "version_read": "arXiv:1807.10770v2 (latest; = Phys. Rev. Lett. 122, 226401 (2019) per the arXiv DOI link; PRL page and supplement refused, HTTP 403): PDF pypdf layout + plain text and TeX source main.tex line 440; quoting source arXiv:2606.00924v1 SM Table IV",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "'quoted from ref [31]' is provenance, not a method, and goes stale once the row cites the primary. Both papers print the column as 'NNB'. What was run is Psi_SN, neural-network backflow on a Slater determinant ('To further test the ability of NNB, we have optimized Psi_SN in various systems: ... (ii) 8 × 4, 12 × 4, 16 × 4 Hubbard model'); n_h for 8 × 4 is not stated in the text. Proposed method_detail: 'Psi_SN (on a Slater determinant)'. scripts/method_names.mjs needs an entry \"NNB\": [\"NNBF\", ...] (currently line 327 maps the old string to [\"NNBF\", \"\"]).",
+    "source_entry": "VP6-arxiv-2606-00924#19 (qmbl-verify 2026-09-29; skeptic upheld)"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_64_P_32_8",
+      "method": "Hartree-Fock (K=0 hierarchical-backflow baseline, single Slater determinant)",
+      "energy": -30.3552
+    },
+    "field": "method",
+    "to": "HB K = 0",
+    "reported_as": "column 'K = 0 (HF)', cell −0.4743",
+    "location": "Supplemental Material Table II ('Energies per site for the Hubbard model at half-filling under periodic boundary conditions, for U = 2, 4, 6, and 8'), row '8 × 8', column 'U = 8', sub-column 'K = 0 (HF)'",
+    "version_read": "arXiv:2606.00924v1 (only version) PDF, pypdf layout mode (sources/2606.00924v1.layout.txt, identical to qmbl sources/2606.00924.txt); every cell re-read in the arXiv HTML v1 tables (parsed with node) and the TeX source main.tex",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "M8 flag settled from the source: the K = 0 (Hartree-Fock) energy is a VMC estimate like every other depth ('All calculations are performed using variational Monte Carlo ...'; the caption's 'sampling errors are around 0.0003' covers the K = 0 column). The stored published string contains 'Hartree', which units.mjs DETERMINISTIC treats as a deterministic energy, so the row counts as record-eligible without sigma (M8 record_eligible_without_sigma). The paper's own label is 'K = 0 (HF)' (Table II; Table IV prints 'K = 0'). units.mjs already reads that label as sampled (comment at units.mjs lines 14-17), and the paper's other three K = 0 rows (4 × 4, 6 × 6, 10 × 10, all Table II) carry it. The display name is unchanged: method_names.mjs line 274 maps 'HB K = 0 (HF)' to ['Hartree-Fock', ''] as it maps the old string. Value, instance, bound_type and reference are otherwise verified: −0.4743 (energy per site; caption: 'The energy sampling errors are around 0.0003') → -0.4743 × 64 = -30.3552 (Hubbard stored as total = per site × N). M2 flag (far above the reference) is the HF error at U = 8, with no shift. sigma stays null: the caption's table-wide 'The energy sampling errors are around 0.0003' is not a per-row sigma (Tristan, 2026-09-17, Journal 2026-09-17 and hub). Ruling B4 (Tristan, 2026-10-02): a corrected published string quotes a label the source prints, verbatim, and what explains it is the row's method_detail (method_names.mjs). The paper's label for the depth-0 state is 'HB K = 0' (main text, e.g. '-0.5889 (HB K = 0)' on 16 x 16; the table columns read 'K = 0' in Table IV and 'K = 0 (HF)' in Table II); that it is the Hartree-Fock state is the row's method name.",
+    "source_entry": "VP6-arxiv-2606-00924#44 (qmbl-verify 2026-09-29; skeptic upheld)"
+  },
+  // VP8-arxiv-2206-14307
+  {
+    "match": {
+      "instance": "Heisenberg/square_100_P",
+      "method": "RBM + Lanczos recursion",
+      "energy": -268.6076
+    },
+    "field": "method",
+    "to": "RBM wave function",
+    "reported_as": "Table 3 header \"System Size | Energy(QMC) | S(pi,pi)(QMC) | Energy(RBM) | S(pi,pi)(RBM)\", row \"10x10 0.671549(4) 5.3124(3) -0.671519(4) 5.38(6)\"; NeurIPS supplement Table 1: \"psi_KL SFS + TS + Lattice point symmetry -0.678868 -0.673482 -0.671519\"; Sec. 4.3: \"we choose 3 different values of J2/J1 using 6 x 6 and 10 x 10 lattices and perform a few Lanczos steps\"",
+    "location": "Table 3 (arXiv v1 and NeurIPS), Table 5 J2 = 0.0 column, NeurIPS Supplementary Material Table 1, Sec. 4.3",
+    "version_read": "arXiv:2206.14307v1 (the only arXiv version; PDF read with pypdf in layout and plain mode, arXiv HTML parsed with node, TeX source anc/*.tex) and the NeurIPS 2022 camera-ready (proceedings PDF 3173c427...-Paper-Conference.pdf and Supplemental PDF, pypdf layout mode); every energy cell of Tables 2-5 is identical in both",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "The number is the symmetrized RBM (psi_KL) energy with no Lanczos step: Table 3 has a single Energy(RBM) column with no p, the supplement lists the same three J2 = 0 values as the psi_KL variational energies, and Lanczos steps were run only at J2 = 0.45-0.6. The label 'RBM + Lanczos recursion' was taken from the citing paper arXiv:2502.17144 (Table 5, 'RBM+Lanczos [40]'), which named the method after the paper's title. The stored method_detail 'Lanczos steps' goes with it: 'RBM wave function' maps to '' today, or to 'symmetry-projected' with the method_names.mjs proposal on the other rows. The row's verified note also cites 'Table 4'; the cell is in Table 3.",
+    "source_entry": "VP8-arxiv-2206-14307#2 (qmbl-verify 2026-09-29; skeptic upheld)"
+  },
+  {
+    "match": {
+      "instance": "Heisenberg/square_36_P",
+      "method": "RBM + Lanczos recursion",
+      "energy": -97.756992
+    },
+    "field": "method",
+    "to": "RBM wave function",
+    "reported_as": "Table 3 header \"System Size | Energy(QMC) | S(pi,pi)(QMC) | Energy(RBM) | S(pi,pi)(RBM)\", row \"6x6 -0.678873(4) 2.51799(6) -0.678868(2) 2.51(2)\"; NeurIPS supplement Table 1: \"psi_KL SFS + TS + Lattice point symmetry -0.678868 -0.673482 -0.671519\"; Sec. 4.3: \"we choose 3 different values of J2/J1 using 6 x 6 and 10 x 10 lattices and perform a few Lanczos steps\"",
+    "location": "Table 3 (arXiv v1 and NeurIPS), Table 5 J2 = 0.0 column, NeurIPS Supplementary Material Table 1, Sec. 4.3",
+    "version_read": "arXiv:2206.14307v1 (the only arXiv version; PDF read with pypdf in layout and plain mode, arXiv HTML parsed with node, TeX source anc/*.tex) and the NeurIPS 2022 camera-ready (proceedings PDF 3173c427...-Paper-Conference.pdf and Supplemental PDF, pypdf layout mode); every energy cell of Tables 2-5 is identical in both",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "The number is the symmetrized RBM (psi_KL) energy with no Lanczos step: Table 3 has a single Energy(RBM) column with no p, the supplement lists the same three J2 = 0 values as the psi_KL variational energies, and Lanczos steps were run only at J2 = 0.45-0.6. The label 'RBM + Lanczos recursion' was taken from the citing paper arXiv:2502.17144 (Table 5, 'RBM+Lanczos [40]'), which named the method after the paper's title. The stored method_detail 'Lanczos steps' goes with it: 'RBM wave function' maps to '' today, or to 'symmetry-projected' with the method_names.mjs proposal on the other rows. The row's verified note also cites 'Table 4'; the cell is in Table 3.",
+    "source_entry": "VP8-arxiv-2206-14307#5 (qmbl-verify 2026-09-29; skeptic upheld)"
+  },
+  {
+    "match": {
+      "instance": "Heisenberg/square_64_P",
+      "method": "RBM",
+      "energy": -172.411392
+    },
+    "field": "method",
+    "to": "RBM wave function",
+    "reported_as": "\"For the neural network, we use psi_KL in all simulations\"; psi_KL = sum_{R,L} e^{-iK.R} chi(L) psi_s(T_R L sigma) (Eq. 6); \"the new states, by being linear combinations of RBMs, are no longer RBMs\"",
+    "location": "Sec. 3.1 Eq. (4)-(6), Sec. 3.4",
+    "version_read": "arXiv:2206.14307v1 (the only arXiv version; PDF read with pypdf in layout and plain mode, arXiv HTML parsed with node, TeX source anc/*.tex) and the NeurIPS 2022 camera-ready (proceedings PDF 3173c427...-Paper-Conference.pdf and Supplemental PDF, pypdf layout mode); every energy cell of Tables 2-5 is identical in both",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "Every energy of this paper comes from the momentum- and C4v-projected RBM psi_KL (8N RBM terms), not a plain RBM; method_detail is where a projection is recorded (DATA.md; cf. 'RBM with symmetry projections' -> 'symmetry-projected', 'aCNN(C4v)' -> 'C4v'). With an empty detail the site label reads 'RBM', the same as VarBench's plain 'RBM (alpha = 1)' baseline on the same instances. The published strings are used by this paper's rows only. Which hidden-unit ratio (M = 2N, 2.5N or 3N) produced each number is not stated, so no alpha can be added. The paper's own name for its state ('our RBM wave function', Sec. 4.2 on Table 3); the row was the only user of the generic string 'RBM' (reader's note), and its detail follows the other rows of the paper (method_names.mjs).",
+    "source_entry": "VP8-arxiv-2206-14307#8 (qmbl-verify 2026-09-29; skeptic upheld)"
+  },
+  // VP9-tv-hubbard-heisenberg
+  {
+    "match": {
+      "instance": "tV/square_36_P_13_0.01",
+      "method": "Hartree-Fock (mean-field baseline)",
+      "energy": -27.9333330012
+    },
+    "field": "method",
+    "to": "HF",
+    "reported_as": "HF -27.933333 (total, units of t)",
+    "location": "Table 3 (System L = 6, Np = 13), row 'HF', column 'V/t = 0.01', p. 32 of v4 (p. 28 of the SciPost PDF)",
+    "version_read": "arXiv:2210.05871v4; journal SciPost Phys. 14, 171 (2023) PDF, identical",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "RULES 3: method_as_published is the method string exactly as the source printed it. Table 3 labels this row 'HF' (text: 'Hartree-Fock (HF) approximation'); '(mean-field baseline)' is a reader's gloss that appears nowhere in the paper, and the paper's seven other HF rows already carry 'HF'. method_names.mjs maps both strings to 'Hartree-Fock', so the short name is unchanged; compute-rows keys by (instance, energy, reference), not by method. Everything else confirmed: V/t = 0.01, Np = 13, L = 6, PBC (Sec. 3, Eq. 58, table header) match the instance; own computation ('this work' / the paper's own HF); bound_type variational correct (HF determinant energy, the paper's 'expected upper bound'); peer_reviewed true (SciPost Phys. 14, 171 (2023)). Instance reference: ED -27.933405318. Independent convention check: uniform Hartree-Fock of Eq. (58) on the 6x6 PBC torus with Np = 13 gives E = -28 + 20V/3 (Hartree 72 (13/36)^2 V, Fock -72 (7/36)^2 V), reproducing -27.933333, -27.333333, -21.333333 at V/t = 0.01, 0.1, 1. No duplicate on the instance (no other HF/arSJVMC row, no quote of this number).",
+    "source_entry": "VP9-tv-hubbard-heisenberg#7 (qmbl-verify 2026-09-29; skeptic upheld)"
+  },
+  {
+    "match": {
+      "instance": "tV/square_36_P_13_1",
+      "method": "Hartree-Fock (mean-field baseline)",
+      "energy": -21.3333329988
+    },
+    "field": "method",
+    "to": "HF",
+    "reported_as": "HF -21.333333 (total, units of t)",
+    "location": "Table 3 (System L = 6, Np = 13), row 'HF', column 'V/t = 1', p. 32 of v4 (p. 28 of the SciPost PDF)",
+    "version_read": "arXiv:2210.05871v4; journal SciPost Phys. 14, 171 (2023) PDF, identical",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "RULES 3: method_as_published is the method string exactly as the source printed it. Table 3 labels this row 'HF' (text: 'Hartree-Fock (HF) approximation'); '(mean-field baseline)' is a reader's gloss that appears nowhere in the paper, and the paper's seven other HF rows already carry 'HF'. method_names.mjs maps both strings to 'Hartree-Fock', so the short name is unchanged; compute-rows keys by (instance, energy, reference), not by method. Everything else confirmed: V/t = 1, Np = 13, L = 6, PBC (Sec. 3, Eq. 58, table header) match the instance; own computation ('this work' / the paper's own HF); bound_type variational correct (HF determinant energy, the paper's 'expected upper bound'); peer_reviewed true (SciPost Phys. 14, 171 (2023)). Instance reference: ED -22.077372358. Independent convention check: uniform Hartree-Fock of Eq. (58) on the 6x6 PBC torus with Np = 13 gives E = -28 + 20V/3 (Hartree 72 (13/36)^2 V, Fock -72 (7/36)^2 V), reproducing -27.933333, -27.333333, -21.333333 at V/t = 0.01, 0.1, 1. No duplicate on the instance (no other HF/arSJVMC row, no quote of this number). Metric flag (M2: 3.37% above the instance's exact reference; no known constant shift explains it): settled from the source - the paper prints this HF energy beside its own exact reference in the same table; the gap is the Hartree-Fock error at this V/t (no constant shift: the uniform HF check fixes the convention), not a unit or convention slip.",
+    "source_entry": "VP9-tv-hubbard-heisenberg#10 (qmbl-verify 2026-09-29; skeptic upheld)"
   },
 ];

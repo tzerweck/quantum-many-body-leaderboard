@@ -7,9 +7,9 @@
 import fs from "node:fs";
 import { CORRECTIONS } from "./corrections.mjs";
 import { VERIFICATIONS } from "./verifications.mjs";
-import { vScore, publishedMethod } from "./units.mjs";
+import { vScore, publishedMethod, isSampled } from "./units.mjs";
 
-const FIELDS = new Set(["energy", "sigma", "energy_variance", "dof", "einf", "method", "bound_type", "reference", "peer_reviewed", "provenance", "baseline", "defect"]);
+const FIELDS = new Set(["energy", "sigma", "energy_variance", "dof", "einf", "method", "bound_type", "reference", "peer_reviewed", "provenance", "baseline", "sampled", "defect"]);
 const entries = [
   ...CORRECTIONS.map(e => ({ kind: "correction", ...e })),
   ...VERIFICATIONS.map(e => ({ kind: "verified", ...e })),
@@ -22,6 +22,9 @@ for (const e of entries) {
   // (RULES.md 10). Anything else about a defect belongs in defects.mjs.
   if (e.kind === "correction" && e.field === "defect" && e.to !== null)
     throw new Error(`defect may only be corrected to null (${e.match.instance})`);
+  // `sampled` states whether the energy is a Monte Carlo estimate (RULES.md 6): yes or no.
+  if (e.kind === "correction" && e.field === "sampled" && typeof e.to !== "boolean")
+    throw new Error(`sampled may only be corrected to true or false (${e.match.instance})`);
   if (!byInstance.has(e.match.instance)) byInstance.set(e.match.instance, []);
   byInstance.get(e.match.instance).push(e);
 }
@@ -34,12 +37,15 @@ for (const [id, list] of byInstance) {
   // resolve every match first, on the unmodified rows
   const resolved = list.map(e => [e, inst.rows.filter(r =>
     publishedMethod(r) === e.match.method && (e.match.energy == null || Math.abs(r.energy - e.match.energy) < 1e-9))]);
+  // A row has no `sampled` until an entry states it; what the entry replaces is the verdict
+  // the row had, i.e. its method string's, read before a `method` entry can change the string.
+  const sampledBefore = new Map(inst.rows.map(r => [r, isSampled(r)]));
   for (const [e, rows] of resolved) {
     if (rows.length !== 1) { console.log(`MISS ${rows.length} rows match ${id} "${e.match.method}" ${e.match.energy ?? ""}`); miss++; continue; }
     const [r] = rows;
     const { match, kind, ...rec } = e;
     if (kind === "correction") {
-      r.corrections = [...(r.corrections || []), { ...rec, from: r[e.field] }];
+      r.corrections = [...(r.corrections || []), { ...rec, from: e.field === "sampled" ? sampledBefore.get(r) : r[e.field] }];
       r[e.field] = e.to;
       if (e.field === "bound_type") r.bound_type_reason = `corrected: ${e.reason}`;
       corrected++;

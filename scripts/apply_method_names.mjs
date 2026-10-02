@@ -33,7 +33,7 @@ for (const p of files.sort()) {
     if (!entry) { unmapped.set(published, (unmapped.get(published) || 0) + 1); return r; }
     const [method, detail0, extra = {}] = entry;
     const split = extra.extrapolated && r.bound_type === "extrapolated";
-    const detail = split ? extra.extrapolated : detail0;
+    const detail = split ? extra.extrapolated : extra.instance_detail?.[inst.instance_id] ?? detail0;
     const numbers = split ? {} : Object.fromEntries(COMPUTE_KEYS.filter(k => extra[k] != null).map(k => [k, extra[k]]));
     const row = {};
     for (const [k, v] of Object.entries(r)) {

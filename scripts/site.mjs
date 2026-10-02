@@ -976,7 +976,7 @@ function rowTable(rows, inst) {
       r.provenance === "secondary" ? '<span class="badge">quoted from another paper</span>' : "",
       r.peer_reviewed === true ? '<span class="badge">peer reviewed</span>' : "",
       r.peer_reviewed === false ? '<span class="badge">preprint</span>' : "",
-      !r.defect && r.bound_type === "variational" && !recordEligible(r) && isSampled(publishedMethod(r)) && r.sigma == null
+      !r.defect && r.bound_type === "variational" && !recordEligible(r) && isSampled(r) && r.sigma == null
         ? '<span class="badge">ineligible: sampled, no error bar</span>' : "",
     ].filter(Boolean).join(" ");
     const { sigma } = perSite(r, inst);

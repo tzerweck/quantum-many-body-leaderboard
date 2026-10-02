@@ -22,6 +22,10 @@ for (const m of fs.readdirSync("data")) {
       // Symmetry and extrapolation in the detail are written in slots (method_names.mjs).
       const di = typeof r.method_detail === "string" ? detailIssue(r.method_detail) : null;
       if (di) issues.push(`DETAIL ${at}: ${di} in "${r.method_detail}"`);
+      // Whether the energy was sampled is read from the source (RULES.md 6): `sampled` is a
+      // boolean, stated by the corrections.mjs entry that carries the evidence.
+      if (r.sampled !== undefined && (typeof r.sampled !== "boolean" || !(r.corrections || []).some(c => c.field === "sampled" && c.to === r.sampled)))
+        issues.push(`SAMPLED ${at}: sampled ${JSON.stringify(r.sampled)} without the corrections entry that states it`);
       if (eD != null && r.dof != null) { checkedD++; if (r.dof !== eD) issues.push(`DOF   ${at}: stored ${r.dof}, expected ${eD}`); }
       if (eE != null && r.einf != null) { checkedE++; if (Math.abs(r.einf - eE) > 1e-9 * Math.max(1, Math.abs(eE))) issues.push(`EINF  ${at}: stored ${r.einf}, expected ${eE}`); }
       if (r.v_score != null) { checkedV++;

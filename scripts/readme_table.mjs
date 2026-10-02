@@ -9,7 +9,7 @@
 // compared the README against the front page.
 import fs from "node:fs";
 import path from "node:path";
-import { perSiteDivisor, perSiteLabel, isSampled, noErrorMetrics, publishedMethod, methodLabel } from "./units.mjs";
+import { perSiteDivisor, perSiteLabel, isSampled, noErrorMetrics, methodLabel } from "./units.mjs";
 import { collect, recordOf, summarize, noRecordKey } from "./summary.mjs";
 import { citeCell } from "./cite.mjs";
 import { sources } from "./enrich_sources.mjs";
@@ -45,7 +45,7 @@ export function shorten(method, max) {
 // sampled row with no variance has no sigma either.
 export function marks(r) {
   if (noErrorMetrics(r)) return " &#9675;";
-  if (isSampled(publishedMethod(r)) && r.sigma == null) return " &dagger;";
+  if (isSampled(r) && r.sigma == null) return " &dagger;";
   return "";
 }
 

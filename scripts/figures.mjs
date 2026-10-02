@@ -1,5 +1,5 @@
 // Generate figures/*.svg - the README numbers, drawn. The drawing kit is chart.mjs.
-import { isSampled, recordEligible, perSiteDivisor, perSiteLabel } from "./units.mjs";
+import { recordEligible, perSiteDivisor, perSiteLabel } from "./units.mjs";
 import { collect, recordOf } from "./summary.mjs";
 import { sources } from "./enrich_sources.mjs";
 import { citeRef, paperYear } from "./cite.mjs";

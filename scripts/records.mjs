@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import { perSiteDivisor, perSiteLabel, SPIN_MODELS, isSampled, recordEligible, noErrorMetrics, boundLabel, publishedMethod, methodLabel } from "./units.mjs";
+import { perSiteDivisor, perSiteLabel, SPIN_MODELS, isSampled, recordEligible, noErrorMetrics, boundLabel, methodLabel } from "./units.mjs";
 import { exactRecordOf } from "./summary.mjs";
 
 for (const id of process.argv.slice(2)) {
@@ -37,7 +37,7 @@ for (const id of process.argv.slice(2)) {
     if (b.bound_type !== "variational" || (best && b.energy >= best.energy)) continue;
     if (b.defect)
       console.log(`  !! excluded from the record: ${(b.energy / f).toFixed(7)} [${b.defect.flag}] ${methodLabel(b).slice(0, 42)}`);
-    else if (isSampled(publishedMethod(b)) && b.sigma == null)
+    else if (isSampled(b) && b.sigma == null)
       console.log(`  !! excluded from the record: ${(b.energy / f).toFixed(7)} [no-sigma, sampled energy] ${methodLabel(b).slice(0, 42)}`);
   }
   if (exact) console.log(`  --> RECORD (${boundLabel(exact)}, the instance is solved): ${(exact.energy / f).toFixed(7)}  ${methodLabel(exact).slice(0, 52)}`);

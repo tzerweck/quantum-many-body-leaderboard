@@ -31,10 +31,11 @@ different sector, the row moves rather than competes.
 | `bound_type` | yes | one of §4; never guessed |
 | `method` | yes | the method's name alone: `DMRG`, `HFPS`, `AFQMC` |
 | `method_detail` | yes, may be empty | what tells this row apart from other rows of that method: architecture size, projection, Lanczos steps, trial state, what an extrapolation sends to zero. Never the kind, the instance or the source |
-| `method_as_published` | yes | the method string exactly as the source printed it |
+| `method_as_published` | yes | the method string exactly as the source printed it; a corrected one quotes a label the source prints, word for word, and what explains it goes to `method_detail` (Tristan, 2026-10-02) |
 | `reference` | yes | §8 |
 | `dof`, `einf` | yes | checked against the instance (§9) |
 | `energy_variance` | no | renders `n/a`; enables the V-score |
+| `sampled` | no | whether the energy is a Monte Carlo estimate, stated where the source settles it; decides whether §6 asks for `sigma` |
 | compute | no, requested | GPU-hours x device, parameter count, samples, iterations, wall-clock; parameters, samples and iterations together let the site estimate a FLOP count ([DATA.md](DATA.md#how-a-flop-count-is-estimated)) |
 
 A missing field never excludes a row. Only §6 and §7 govern what can hold a record.
@@ -137,14 +138,26 @@ instance is solved, otherwise the **lowest eligible `variational` energy**. `pro
 - **A deterministic energy needs no `sigma`.** DMRG at a stated bond dimension, exact
   diagonalization, statevector circuits and tensor-network contractions carry no statistical
   error, so there is no error bar to withhold; their convergence control is the bond dimension
-  (`compute.bond_dimension`) or the truncation error (`method_detail`). 144 of the 399 variational rows are of this kind.
-  Requiring `sigma` of them would vacate more than half the table's records over a field that
-  cannot exist. `scripts/units.mjs` draws the line by explicit deterministic markers, and
-  anything not so marked counts as sampled.
-- Case: the 4x4 J1-J2 VQE rows. `exact grads & metric, statevector` and `2^14 samples/grad`
-  appear as separate rows on the same instance. The first is deterministic and eligible without
-  a `sigma`; the second is sampled, reports none, and is not. On four instances the sampled
-  variant sat lower and would have taken the record with no error bar to check it against.
+  (`compute.bond_dimension`) or the truncation error (`method_detail`). 231 of the 942
+  variational rows are of this kind (2026-10-02), and 26 of the 107 records held by a
+  variational bound belong to deterministic rows without `sigma`; requiring one of them would
+  vacate those records over a field that cannot exist.
+- **Sampled or deterministic is read from the source, per row** (Tristan, 2026-09-30). The
+  method's name does not settle it. A finite PEPS whose energy is a Monte Carlo average over
+  spin configurations, an MPS-RNN, a PEPS + CNN state or a Gutzwiller-projected mean-field
+  state is sampled although its string reads like a tensor network or a mean field; a circuit
+  whose shots estimate only the gradient reports an exact energy. Where a reader established
+  it, the row carries `sampled` (true or false), set in `scripts/corrections.mjs` with the
+  evidence, and that decides. Where the field is absent, `scripts/units.mjs` falls back on the
+  method string: explicit deterministic markers, and anything not so marked counts as sampled.
+- Case: the 4x4 J1-J2 VQE rows. `exact grad, statevector` and `2^14 samples/grad` appear as
+  separate rows on the same instance, and until 2026-09-30 this section read the second as a
+  sampled energy that reports no `sigma` and is eligible for nothing. The program behind both
+  (VarBench's `observables.py`) prints the exact statevector energy of the circuit state; the
+  2^14 shots estimate only the gradient and the metric, as the VarBench supplement says. Both
+  rows are deterministic, the shot rows carry `sampled: false`, and on the four instances where
+  that variant sits lower (J2 = 0.15, 0.3, 0.4, 0.7) it is now the best variational bound. The
+  string said what was sampled; only the program said which number.
 - A row without `energy_variance` is completely fine. The V-score renders `n/a` and nothing is
   inferred or reconstructed. Most of the literature stops at the energy, and a missing V-score
   is never held against a row; it only means the row cannot be compared across instances.

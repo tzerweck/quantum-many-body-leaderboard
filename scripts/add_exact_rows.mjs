@@ -96,7 +96,8 @@ console.log(`batch A: ${added} exact rows (${created} new instances)`);
 // Batch B: the square-lattice spin-1/2 Heisenberg antiferromagnet from Sandvik, "High-
 // precision ground state parameters of the two-dimensional spin-1/2 Heisenberg model on
 // the square lattice", arXiv:2601.20189 (2026), Tables 1-3. Stochastic series expansion
-// QMC on a bipartite lattice, sign-free, T -> 0 converged (beta/L = 32 and 64), relative
+// QMC on a bipartite lattice, sign-free, T -> 0 converged (periodic Table 1 at beta/L = 32 and
+// 64; the open and cylindrical Tables 2 and 3 at beta/L = 32 only, Sec. IV), relative
 // statistical errors below 1e-7. Read from the arXiv HTML, one value per table cell.
 //
 // Units: Table 1 gives e0 = E/N per spin in the S.S convention. Tables 2 and 3 give the
@@ -110,6 +111,11 @@ console.log(`batch A: ${added} exact rows (${created} new instances)`);
 // number twice.
 const SANDVIK = { ref: "Sandvik, High-precision ground state parameters of the two-dimensional spin-1/2 Heisenberg model on the square lattice, J. Stat. Mech. (2026) 043101, arXiv:2601.20189", pr: true };
 const SSE = "SSE QMC (stochastic series expansion), T -> 0 converged at beta/L = 32 and 64";
+// The string is these rows' identity (their published method, matched by every overlay), so the
+// open L x L and L x 2L rows carry what Sec. IV says they were run at: "Here some results for
+// open L x L systems and cylindrical L x 2L systems at beta/L = 32 will be presented" (qmbl-verify
+// 2026-09-29, VP2; until 2026-09-30 they carried Table 1's "32 and 64").
+const SSE_OPEN = "SSE QMC (stochastic series expansion), T -> 0 converged at beta/L = 32";
 const SSE_WHY = "sign-problem-free SSE QMC on a bipartite lattice, T -> 0 converged; numerically exact (RULES.md 4)";
 const SSE_READ = "arXiv HTML parsed locally, one value per table cell; no LLM transcription";
 
@@ -156,7 +162,7 @@ for (const [L, printed] of SANDVIK_TABLES.obc) {
   if (N === 100 || N === 256) continue;   // already carried, quoted from this paper via arXiv:2605.13807
   put(`Heisenberg/square_${N}_O`,
     { model: "Heisenberg", lattice: "square", n_sites: N, boundary: "O", params: {}, dof: N, einf: 0 },
-    { energy: +(-4 * Nb * v).toPrecision(12), sigma: +(4 * Nb * s).toPrecision(3), src: SANDVIK, method: SSE, why: SSE_WHY, read: SSE_READ,
+    { energy: +(-4 * Nb * v).toPrecision(12), sigma: +(4 * Nb * s).toPrecision(3), src: SANDVIK, method: SSE_OPEN, why: SSE_WHY, read: SSE_READ,
       reported: `E0/N_b = ${printed} (magnitude, per bond, N_b = ${Nb}), L = ${L}, open`,
       note: `Table 2, "SSE data for L x L systems with open boundary conditions. The ground state energy is normalized by the number of interaction bonds N_b = 2(L^2 - L)", row L = ${L}. Printed as a magnitude; E/N = -(E0/N_b) N_b / N = ${(-v * Nb / N).toFixed(8)} in S.S units, Pauli total = 4 N E/N. The L = 6 value agrees with the exact-diagonalization row on square_36_O to 3.3e-7 (2 sigma), and L = 10 and 16 reproduce the rows QMBL already quotes from this paper via arXiv:2605.13807.` });
 }
@@ -180,7 +186,7 @@ for (const [L, printed] of SANDVIK_TABLES.cyl) {
   });
   put(`Heisenberg/rectangular-${L}x${2 * L}_${N}_PO`,
     { model: "Heisenberg", lattice: `rectangular-${L}x${2 * L}`, n_sites: N, boundary: "PO", params: {}, dof: N, einf: 0 },
-    { energy, sigma, src: SANDVIK, method: SSE, why: SSE_WHY, read: SSE_READ,
+    { energy, sigma, src: SANDVIK, method: SSE_OPEN, why: SSE_WHY, read: SSE_READ,
       reported: `E0/N_b = ${printed} (magnitude, per bond, N_b = 4L^2 - L = ${Nb}; the caption prints 2L^2 - L), L x 2L = ${L} x ${2 * L}, cylinder`,
       note: `Table 3, "SSE data for L x 2L lattices with cylindrical boundary conditions (periodic in the shorter direction and open in the longer direction). The ground state energy is normalized by the number of interaction bonds N_b = 2 L^2 - L", row L = ${L}. The caption's N_b is a misprint: the cylinder has 4L^2 - L = ${Nb} bonds, and only that count sends E0/N_b to the infinite-size value the Fig. 8 fits share with Tables 1 and 2. Boundary PO (VarBench lattice.md): periodic along the ${L}-site direction, open along the ${2 * L}-site one. Printed as a magnitude; E/N = -(E0/N_b) N_b / N = ${(-v * Nb / N).toFixed(8)} in S.S units, Pauli total = 4 N E/N.`,
       corrections: [

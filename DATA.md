@@ -578,6 +578,19 @@ something specific here and withholds the record.
 If one of these is yours, see [Contributing](README.md#contributing): the error bar, the
 variance, or the checkpoint all resolve it.
 
+### Sampled or deterministic: `sampled`
+
+Whether a row's energy is a Monte Carlo estimate decides whether it needs a `sigma` to hold a
+record ([RULES.md §6](RULES.md#6-records-and-ties)). Where a reader established it from the
+source, the row says so: `sampled: true` or `false`, set in
+[`scripts/corrections.mjs`](scripts/corrections.mjs) with the evidence, and the verdict the
+method string gave stays in `corrections[].from`. Where the field is absent, the method string
+decides: explicit deterministic markers (DMRG, PEPS, MPS, statevector, exact diagonalization,
+mean field, ...) in [`scripts/units.mjs`](scripts/units.mjs), everything else sampled. The field
+exists because the string misleads both ways (Tristan, 2026-09-30): VarBench's
+"2^14 samples/grad" VQE rows print the exact statevector energy, and a finite PEPS evaluated by
+Monte Carlo, an MPS-RNN or a projected mean-field state is sampled.
+
 ### Where an added error bar or variance came from: the `error_metrics` block
 
 A row may carry a `sigma` or an `energy_variance` its paper does not print. The row's

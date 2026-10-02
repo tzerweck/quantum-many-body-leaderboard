@@ -8,9 +8,17 @@ export const SPIN_MODELS = new Set(["Heisenberg", "J1J2", "TFIsing"]);
 // RULES.md 6 requires a stated sigma before a row can hold a record, but that rule
 // only makes sense for a sampled energy. DMRG at a stated bond dimension, exact
 // diagonalization and statevector circuits carry no statistical error at all, and
-// 144 of the 399 variational rows are of that kind - requiring sigma of them would
-// vacate more than half the table's records over a field that cannot exist.
-// Deterministic is asserted by explicit markers; everything else counts as sampled.
+// requiring sigma of them would vacate their records over a field that cannot exist.
+//
+// Which kind a row is, is a statement read from its source, per row (Tristan, 2026-09-30,
+// qmbl-verify 2026-09-29 ruling 2). A row whose reader established it carries `sampled`,
+// true or false, set in corrections.mjs with the evidence, and that decides. The method
+// string is only the fallback where the field is absent, because a name is not the answer:
+// the VQE "2^14 samples/grad" rows print the exact statevector energy (the shots estimate
+// only the gradient), and a finite PEPS evaluated by Monte Carlo, an MPS-RNN or a projected
+// mean-field state is sampled although its string matches a deterministic marker.
+//
+// The fallback: deterministic is asserted by explicit markers; everything else counts as sampled.
 // A method string that is only "HF" is the Hartree-Fock energy a paper prints beside its
 // own (arXiv:2210.05871, Tables 1 and 2). "HB K = 0 (HF)" is not: the HB paper samples its
 // K = 0 state like every other depth (arXiv:2606.00924, Table II caption, "sampling errors
@@ -18,7 +26,13 @@ export const SPIN_MODELS = new Set(["Heisenberg", "J1J2", "TFIsing"]);
 // only at the start of the string ("ED", "ED (this work)"): "aCNN, sign structure fixed to
 // the exact (ED) one" is a sampled network that names ED as its reference.
 const DETERMINISTIC = /\bdmrg\b|\bmps\b|\bpeps\b|\bmera\b|tensor network|statevector|exact diagonaliz|exact solution|bethe ansatz|hartree|mean[- ]field|truncation error|bond dimension|\bfci\b|full configuration|^HF$|^ED\b/i;
-export const isSampled = method => !DETERMINISTIC.test(method || "");
+// Every caller asks about the row, never about a method string, so the row's own statement
+// wins wherever there is one. Until 2026-09-30 this took the string; a caller still passing
+// one would silently read "sampled", so that fails loudly instead.
+export function isSampled(r) {
+  if (r == null || typeof r !== "object") throw new TypeError("isSampled takes a row (its `sampled` field decides), not a method string");
+  return r.sampled ?? !DETERMINISTIC.test(publishedMethod(r) || "");
+}
 
 // Did WE find any error metric for this row? Neither a sigma nor an energy variance
 // turned up in the source that was read, so there is currently no way to judge how
@@ -46,7 +60,7 @@ export const boundLabel = r => stochasticExact(r) ? "exact (stochastic)" : (r.bo
 
 // The method string exactly as the source printed it. Rows carry a short `method` name and a
 // `method_detail` (scripts/method_names.mjs, 2026-09-17); the published string stays on the
-// row, and the rules written against it (isSampled, the row id) keep reading it.
+// row, and the rules written against it (the fallback of isSampled, the row id) keep reading it.
 export const publishedMethod = r => r.method_as_published ?? r.method;
 
 // A row's method as every surface prints it: the name, then what tells it apart from other
@@ -92,7 +106,7 @@ export const exactEligible = r => groundStateExact(r) && !r.defect;
 // exact row this decides the best variational bound, not the record.
 export function recordEligible(r) {
   if (r.bound_type !== "variational" || r.defect) return false;
-  return !isSampled(publishedMethod(r)) || r.sigma != null;
+  return !isSampled(r) || r.sigma != null;
 }
 
 // VarBench writes spin Hamiltonians with PAULI matrices (sigma.sigma) and stores

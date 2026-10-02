@@ -112,7 +112,7 @@ export function summarize(instances) {
     const rec = recordOf(inst);
     let blockedHere = 0;
     for (const r of inst.rows) {
-      if (r.bound_type !== "variational" || r.defect || !isSampled(publishedMethod(r)) || r.sigma != null) continue;
+      if (r.bound_type !== "variational" || r.defect || !isSampled(r) || r.sigma != null) continue;
       blockedHere++;
       if (!rec || r.energy < rec.energy) s.blocked_on_sigma.would_take_record++;
     }
@@ -138,7 +138,7 @@ export function summarize(instances) {
 // reasons under the table and the counts beneath it are one computation.
 export function noRecordKey(inst) {
   const v = inst.rows.filter(r => r.bound_type === "variational");
-  if (v.some(r => !r.defect && isSampled(publishedMethod(r)) && r.sigma == null)) return "no_sigma";
+  if (v.some(r => !r.defect && isSampled(r) && r.sigma == null)) return "no_sigma";
   if (v.some(r => r.defect)) return "flagged";
   if (inst.rows.some(r => r.bound_type === "exact")) return "sector_only";
   return "no_variational";
