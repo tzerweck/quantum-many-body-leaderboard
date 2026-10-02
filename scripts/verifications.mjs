@@ -55,12 +55,13 @@ export const VERIFICATIONS = [
     location: "checks/hubbard-u-labels/", reported_as: recomputed, conversion: "none",
     note: "Reproduced at the grid U the instance now carries, not at the U of VarBench's name (relabels.mjs).",
     source_entry: "B2-baseline-hubbard and E1-exact-recompute (qmbl-verify 2026-09-16)" })),
-  { match: { instance: "Hubbard/square_16_P_4_7.74263683", method: "DMRG (MaxBondDim ~3200)", energy: -16.5091541 },
+  // The row stays on the instance named for U = 7.74264 since 2026-10-02 (relabels.mjs; ruling E6).
+  { match: { instance: "Hubbard/square_16_P_4_7.74264", method: "DMRG (MaxBondDim ~3200)", energy: -16.5091541 },
     checked_on: "2026-09-16", scope: "config",
     method: "run script varbench/methods programs/dmrg_itensors_hubbard/square_16_P_4_7.74264.jl read in full",
     location: "line setting U", reported_as: "U = 10", conversion: "none",
-    note: "The linked script is a copy of the U = 10 file, so it did not produce this number. The energy sits 1.2e-7 above the ground state at U = 7.74264 and 7.3e-7 above the one at 7.74263683: a valid bound at either, and too close to both to say which it was run at, so it stays on this instance.",
-    source_entry: "B2-baseline-hubbard (qmbl-verify 2026-09-16)" },
+    note: "The linked script is a copy of the U = 10 file, so it did not produce this number. The energy sits 1.1e-7 above the ground state at U = 7.74264 and 7.3e-7 above the one at 7.74263683: a valid bound at either. The pass of 2026-09-16 kept it with the instance at 7.74263683; the pass of 2026-09-29 (VB2#46) placed it at 7.74264, where the sibling 5 + 5 script runs and where its variance-to-error ratio, 1.16, fits the 4 + 4 DMRG series (0.18 at 7.74263683), so it stays on the instance named for U = 7.74264 (ruling E6, Tristan 2026-10-02).",
+    source_entry: "B2-baseline-hubbard (qmbl-verify 2026-09-16); VB2-varbench-code-hubbard#46 (qmbl-verify 2026-09-29); ruling E6, Tristan 2026-10-02" },
   // qmbl-verify 2026-09-18 (RA1): the t-V rows whose committed LCT-INT output reproduces the stored
   // total through the code's V (n - 1/2)(n - 1/2) shift, and the square V = 2 row, whose committed
   // output is a sibling run 0.75 sigma away (ruling 3a, Tristan 2026-09-19: the table's value stays).
@@ -12203,5 +12204,22 @@ export const VERIFICATIONS = [
     "conversion": "energy stored as is (Pauli total, no conversion); sigma 0.004075625833015896 -> 0.0041 (two significant figures); v_score = 64 x 2.073887924512122 / (-127.34034907540095)^2 = 0.008185273300052306; gpu_hours = 13869.472464381717 / 3600 x 1 = 3.853",
     "note": "Energy, sigma, variance, V-score, dof 64, einf 0, label, method string, reference (run, no scheduler, commit), source day 2026-09-25 and the compute block (parameters, gpu_hours, wall_clock 03:51:09, device, samples 4096, iterations 2000, proposals_per_sample 320, complex false, sr cg, forward_flops) all match the results file and the loader. Parameters 155500 = 153900 + 25N real (vit.py: embedding, positions, 4 layers with N/4-entry attention tables per head, two log-cosh heads) at N = 64; forward-flops.json, which builds the network separately, counts the same. Gates: R-hat 1.0045 < 1.05 on the first evaluation attempt (64 discards), finite, not diverged, no recovery. Protocol fields as README v1.5 states them (2000 steps x 4096 samples, 1024 chains, 16 discarded, SR lr 0.01 after a 200-step linear warmup, diag_shift 1e-6 with relative 0.01, MetropolisExchange d_max 2 in S_z = 0, seed 20260921, chunk 1024); solver conjugate gradients as run_nqs.py's rule gives for 155500 real parameters (Cholesky where <= 4096). Commit 55af6b8 (2026-09-25T09:06:02+02:00) exists and precedes the run; run_nqs.py at 55af6b8 has no batched evaluation and the attempts carry no 'batches' field, as expected for a run before the 2026-09-29 amendment. The scripts changed after it only in the host-name scrub (dc612f3), no numerics. Trace: steps 0-1999 complete (2000 lines); the final evaluation sits -0.0036 from the mean of steps 1900-1999 (-127.3367, sd 0.0274; -0.13 sd); evaluation variance 2.074 against the same steps' mean variance 2.704. Single run of this configuration (best_of 1; runs/ holds exactly this run). No exact row on the instance; not the record (lowest record-eligible variational row -127.73465, RBM+PP with momentum (K=0), spin-parity (even S), and point-group (A1) projections, 16 hidden units). Duplicate check: no other row on the instance carries this number.",
     "source_entry": "RH1#35 (qmbl-verify 2026-09-29, handoff reader 2026-10-02: a cost-run row the pass never read); ruling R1, Tristan 2026-10-02"
+  },
+  // qmbl-verify 2026-09-29, handoff (2026-10-02), ruling E13 (Tristan): a likely dropped digit in an upload,
+  // kept as uploaded and noted.
+  {
+    "match": {
+      "instance": "Hubbard/rectangular-4x8_32_PO_14_8",
+      "method": "DMRG (MaxLinkDim = 12000, MaxTruncErr~6.6E-06, extrap energy -23.5658 +/- 0.0003)",
+      "energy": -23.5645
+    },
+    "checked_on": "2026-09-29",
+    "scope": "value",
+    "method": "VarBench history of Hubbard/rectangular_4x8_PO_14_14_8.md (git log, git show; varbench-history clone), read by VB2 on 2026-09-29; run script programs/dmrg_itensors_hubbard/rectangular-4x8_32_PO_14_8.jl (varbench/methods@ed31bb0)",
+    "location": "45703f4 (2022-04-01): '-23.5645 | | 0.0155 | DMRG(MaxLinkDim = 12000, MaxTruncErr~6.6E-06, extrap energy -23.5658 +/- 0.0003)'; 645dc9f (2022-03-31): '-94.257 | | 0.24766 | DMRG(MaxLinkDim = 10000, MaxTruncErr~2.62E-05, extrap energy -94.263 +/- 0.001'",
+    "reported_as": "-23.5645 (total)",
+    "conversion": "none",
+    "note": "The stored number is J. M. Silvester's upload of 2022-04-01, transcribed correctly, and the script's configuration matches the instance (U = 8, 8 x 4, periodic along the 4-site direction, 14 + 14). It may have lost a digit: the uploader's factor-4 entry of the day before was -94.257, and -94.257 / 4 = -23.56425, while the same day's division turned the variance (0.24766 -> 0.0155) and the extrapolated energy (-94.263 +/- 0.001 -> -23.5658 +/- 0.0003) exactly, as did his conversions of the same week on other instances (-192.213 -> -48.0533, -127.599 -> -31.8998). -23.5645 lies 2.5e-4 below -23.56425, outside the +/-1.25e-4 that the three decimals of -94.257 allow. Kept as uploaded (ruling E13, Tristan 2026-10-02); only the uploader can say which is right. The row holds the instance's variational record either way.",
+    "source_entry": "VB2-varbench-code-hubbard#28 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E13, Tristan 2026-10-02 (keep, note the discrepancy; ask J. M. Silvester)"
   },
 ];

@@ -13902,4 +13902,2542 @@ export const CORRECTIONS = [
     "conversion": "none (text field)",
     "reason": "The note called arXiv:2308.08594 the citing paper; it produced the number (reference entry). Wording only; no cost statement is added."
   },
+  // ---------------------------------------------------------------------------------------
+  // qmbl-verify 2026-09-29, handoff (2026-10-02): the E questions of the reader's triage as Tristan ruled
+  // them on 2026-10-02 (E2, E3, E4, E5, E6, E8, E9, E10, E12, E13; E7 keeps the current state, E1 waits for
+  // its compute run). E6 is relabels.mjs, E13 a verification note; the rest is here. source_entry names the
+  // triage entry (merged-with-skeptic.json) and the ruling.
+  // E2: the author's uploaded sigma stays where the printed bar is display rounding; the ClebschTree slip is corrected. (1)
+  {
+    "match": {
+      "instance": "J1J2/square_64_P_0.5",
+      "method": "ClebschTree",
+      "energy": -127.634
+    },
+    "field": "sigma",
+    "to": 0.0168,
+    "reported_as": "-31.90850 +- 0.00420 (total energy of the 8 x 8 cluster, S.S units, J1 = 1)",
+    "location": "Appendix A, Table I, row 'ClebschTree (Ours)', column J2/J1 = 0.5 (LaTeX line 264 of v2); the J2 = 0 cell of the same row is -43.09640 +- 0.00320",
+    "version_read": "arXiv:2104.14869v2 PDF and LaTeX source (v1 identical), pypdf layout",
+    "conversion": "0.00420 x 4 = 0.0168 (S.S total to Pauli total)",
+    "checked_on": "2026-09-29",
+    "reason": "The stored 0.0128 is 4 x 0.0032, the bar of the J2 = 0 cell of the same table row; the bar printed with this energy is 0.00420, so 0.0168 (VA6#10). Of the uploaded sigmas that differ from a printed bar, this is the one ruled a slip: the 2026-09-16 sigma ruling keeps the author's finer upload where the printed bar is display rounding (HFDS, Imada-group mVMC), and corrects real slips. The upload (Jannes Nys, VarBench 9e80241, 2022-10-24) is otherwise unchanged; the row holds no record either way.",
+    "source_entry": "VA6-j1j2-heisenberg-hubbard-tfising#10 (qmbl-verify 2026-09-29, ambiguous); ruling E2, Tristan 2026-10-02"
+  },
+  // E3: no sigma on deterministic rows (RULES.md 6); a printed bracket goes to method_detail (method_names.mjs). (2)
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Gamma.D6.A1 1",
+      "energy": -99.3243731393
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 203e37e and 4aa5e29: '| -99.3243731393 | 3.24e-13 | | 48 | 0 | Exact Diagonalization Gamma.D6.A1 1 |'",
+    "location": "VarBench history (203e37e, 2024-07-18, D. Wu; 4aa5e29, 2024-07-29, A. Wietek, PR #10); PRX 14, 021010 prints no error bar, residual or tolerance (v1, v2, journal)",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history); arXiv:2303.01585 v1, v2 and the journal PDF as read by VA1",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "RULES.md 6: a deterministic energy needs no sigma. The 3.24e-13 is the uploaded Sigma column of the 2024 deposit, defined nowhere and about 150 times smaller than the stored energy's own rounding (ten decimals, +/-5e-11); with it the README printed this exact record as -0.517314443433854(2), three digits beyond the deposit (VA1#11). Exact records are printed to the stored digits.",
+    "source_entry": "VA1-10-1103-physrevx-14-021010#11 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E3, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/rectangular-4x8_32_PO_14_8",
+      "method": "DMRG (8x4)",
+      "energy": -23.562528
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "DMRG (8×4) -0.736329(9) NA",
+    "location": "arXiv:2510.11710v2 Appendix E, Table I (p. 16); Fig. 2 caption: 'a DMRG simulation using a bond dimension of 8000 with maximum truncation error of ≃1×10−5'",
+    "version_read": "arXiv:2510.11710 v1 and v2 (= Phys. Rev. B 113, 245104)",
+    "conversion": "none (the bracket, 9e-6 x 32 = 0.000288, leaves sigma)",
+    "checked_on": "2026-09-29",
+    "reason": "RULES.md 6: a deterministic energy needs no sigma. The (9) on this DMRG energy at bond dimension 8000 is defined nowhere in the paper (VP13#37); it is kept in method_detail ('printed -0.736329(9) per site'), as the printed bracket of the TFIsing DMRG on TPUs is. No record depends on it: the instance's VarBench DMRG row is lower.",
+    "source_entry": "VP13-hubbard-j1j2-heisenberg#37 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E3, Tristan 2026-10-02"
+  },
+  // E4: follow the producing paper or its data: sigma null where it prints none; Rende et al.'s 'Deep CNN' is Chen & Heyl's ResNet2 of 34,944 parameters. (10)
+  {
+    "match": {
+      "instance": "J1J2/square_100_P_0.5",
+      "method": "MLP",
+      "energy": -195.764
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "MLP , ITE (ours) -0.4894 (arXiv:2307.15521v4 Table 2); Fig. 4(a) of SciPost Phys. 15, 229 plots -0.489407; no error bar for the 10 x 10 energy",
+    "location": "SciPost Phys. 15, 229 (2023), Table 2 and Fig. 4(a); arXiv:2307.15521 v1-v4; Table 1 'Number of samples for final energy estimation - 10^6'",
+    "version_read": "SciPost Phys. 15, 229 (2023), published PDF (VJ2); arXiv:2307.15521 v1-v4 (VP16)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "The bar (1) on -0.48941(1) is printed only in Rende et al.'s Table I quote (Commun. Phys. 7, 260); the producing paper prints -0.4894 and plots -0.489407 with no error bar for this energy (VP16#14, VJ2#58). Following the producing paper, sigma is null; the energy, which its figure carries to the stored digits, stays. The row is sampled without a sigma, eligible for nothing (RULES.md 6); it held no record (1.7% above the best bound).",
+    "source_entry": "VP16-heisenberg-hubbard-j1j2-tfising#14, VJ2-journal-other#58 (qmbl-verify 2026-09-29, ambiguous); ruling E4, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_100_P_0.5",
+      "method": "Deep CNN",
+      "energy": -198.9872
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "'the variational energies on the 10 x 10 lattice for p = 0 and p = 1 are -0.497 168 and -0.497 468 respectively' (published Sec. 3.2.1); Table 1: -0.497 47; arXiv v1 Sec. 7.4: -0.497468; no error bar",
+    "location": "Mach. Learn.: Sci. Technol. 4, 015035 (2023), Sec. 3.2.1, 3.2.2 and Table 1; arXiv:2204.07816v1 Sec. 7.4",
+    "version_read": "MLST 4, 015035, IOPscience full-text HTML (VP16); arXiv:2204.07816v1",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "The bar (1) on -0.497468(1) is printed only in Rende et al.'s Table I quote; neither version of the producing paper prints one for this energy (VP16#24). Following the producing paper, sigma is null; the row (CNN1, one Lanczos step, already primary) becomes sampled without a sigma, eligible for nothing (RULES.md 6). It held no record.",
+    "source_entry": "VP16-heisenberg-hubbard-j1j2-tfising#24 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E4, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_100_P_0.5",
+      "method": "Deep CNN",
+      "energy": -199.0508
+    },
+    "field": "method",
+    "to": "ResNet2",
+    "reported_as": "github.com/ChenAo-Phys/MinSR @ 6b6493f, data/Fig2b.csv, under ResNet2: '34944, -0.4976274' || examples/measure.py: '1: 16 layers, 16 channels every layer, 3x3 kernels 34944 parameters in total' || Chen, Naik & Heyl's data for arXiv:2503.10462 (Zenodo record 14035975), 10x10_J1J2.csv: 'Best previous (CNN small), 34944, -0.497627(4), 5.2(9)e-4'",
+    "location": "github.com/ChenAo-Phys/MinSR @ 6b6493f (data/Fig2b.csv, examples/measure.py); qmbl sources/2503.10462-zenodo-10x10_J1J2.csv (md5 98556b24d20bffeb69bb300bd696bda4)",
+    "version_read": "local clone of github.com/ChenAo-Phys/MinSR at 6b6493f (qmbl-runs/checkpoint-measure/repos/MinSR); the Zenodo CSV cached in qmbl sources/; arXiv:2310.05715 v1 and v2 (the quote); arXiv:2302.01941 v1-v3",
+    "checked_on": "2026-09-29",
+    "source_entry": "VP14-hubbard-j1j2-heisenberg-tfising#24 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E4, Tristan 2026-10-02",
+    "conversion": "none",
+    "reason": "Rende et al. (arXiv:2310.05715, Table I) quote -0.497627(1) as a 'Deep CNN' of 146,320 parameters, ref. [30]; the authors' own data give 146,320 parameters (ResNet1) -0.4976242, and -0.497627 to the 34,944-parameter ResNet2, 16 conv layers of 16 channels, with the error bar (4) and the variance 5.2(9)e-4 (sigma^2/N, S.S units) in Chen, Naik & Heyl's data (VP14#24). Ruling E4: follow the producing paper and its data. The label is the one the authors' figure data print for this network (RULES.md 3, ruling B4: a corrected published string quotes a printed label); method_names.mjs names it, and flops.mjs keeps costing it as the CNN it was (ruling B3)."
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_100_P_0.5",
+      "method": "Deep CNN",
+      "energy": -199.0508
+    },
+    "field": "sigma",
+    "to": 0.0016,
+    "reported_as": "github.com/ChenAo-Phys/MinSR @ 6b6493f, data/Fig2b.csv, under ResNet2: '34944, -0.4976274' || examples/measure.py: '1: 16 layers, 16 channels every layer, 3x3 kernels 34944 parameters in total' || Chen, Naik & Heyl's data for arXiv:2503.10462 (Zenodo record 14035975), 10x10_J1J2.csv: 'Best previous (CNN small), 34944, -0.497627(4), 5.2(9)e-4'",
+    "location": "github.com/ChenAo-Phys/MinSR @ 6b6493f (data/Fig2b.csv, examples/measure.py); qmbl sources/2503.10462-zenodo-10x10_J1J2.csv (md5 98556b24d20bffeb69bb300bd696bda4)",
+    "version_read": "local clone of github.com/ChenAo-Phys/MinSR at 6b6493f (qmbl-runs/checkpoint-measure/repos/MinSR); the Zenodo CSV cached in qmbl sources/; arXiv:2310.05715 v1 and v2 (the quote); arXiv:2302.01941 v1-v3",
+    "checked_on": "2026-09-29",
+    "source_entry": "VP14-hubbard-j1j2-heisenberg-tfising#24 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E4, Tristan 2026-10-02",
+    "conversion": "4e-6 x 4 x 100 = 0.0016 (per site, S.S, to the Pauli total)",
+    "reason": "Rende et al. (arXiv:2310.05715, Table I) quote -0.497627(1) as a 'Deep CNN' of 146,320 parameters, ref. [30]; the authors' own data give 146,320 parameters (ResNet1) -0.4976242, and -0.497627 to the 34,944-parameter ResNet2, 16 conv layers of 16 channels, with the error bar (4) and the variance 5.2(9)e-4 (sigma^2/N, S.S units) in Chen, Naik & Heyl's data (VP14#24). Ruling E4: follow the producing paper and its data. The bar is the authors' (4) on -0.497627, in place of the quote's (1)."
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_100_P_0.5",
+      "method": "Deep CNN",
+      "energy": -199.0508
+    },
+    "field": "energy_variance",
+    "to": 0.832,
+    "reported_as": "github.com/ChenAo-Phys/MinSR @ 6b6493f, data/Fig2b.csv, under ResNet2: '34944, -0.4976274' || examples/measure.py: '1: 16 layers, 16 channels every layer, 3x3 kernels 34944 parameters in total' || Chen, Naik & Heyl's data for arXiv:2503.10462 (Zenodo record 14035975), 10x10_J1J2.csv: 'Best previous (CNN small), 34944, -0.497627(4), 5.2(9)e-4'",
+    "location": "github.com/ChenAo-Phys/MinSR @ 6b6493f (data/Fig2b.csv, examples/measure.py); qmbl sources/2503.10462-zenodo-10x10_J1J2.csv (md5 98556b24d20bffeb69bb300bd696bda4)",
+    "version_read": "local clone of github.com/ChenAo-Phys/MinSR at 6b6493f (qmbl-runs/checkpoint-measure/repos/MinSR); the Zenodo CSV cached in qmbl sources/; arXiv:2310.05715 v1 and v2 (the quote); arXiv:2302.01941 v1-v3",
+    "checked_on": "2026-09-29",
+    "source_entry": "VP14-hubbard-j1j2-heisenberg-tfising#24 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E4, Tristan 2026-10-02",
+    "conversion": "5.2e-4 x 100 x 16 = 0.832 (sigma^2/N in S.S units to the Pauli total Var(H))",
+    "reason": "Rende et al. (arXiv:2310.05715, Table I) quote -0.497627(1) as a 'Deep CNN' of 146,320 parameters, ref. [30]; the authors' own data give 146,320 parameters (ResNet1) -0.4976242, and -0.497627 to the 34,944-parameter ResNet2, 16 conv layers of 16 channels, with the error bar (4) and the variance 5.2(9)e-4 (sigma^2/N, S.S units) in Chen, Naik & Heyl's data (VP14#24). Ruling E4: follow the producing paper and its data. The variance is the authors' 5.2(9)e-4, as the 1,071,488-parameter ResNet2 row takes its 1.80(4)e-4 from the same file."
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_100_P_0.5",
+      "method": "Deep CNN",
+      "energy": -199.0508
+    },
+    "field": "reference",
+    "to": "Chen & Heyl, Nat. Phys. 20, 1476 (2024), arXiv:2302.01941 (Fig. 2b: the ResNet2 of 34944 parameters, 16 conv layers of 16 channels; -0.4976274 in the authors' figure data, github.com/ChenAo-Phys/MinSR data/Fig2b.csv, and -0.497627(4) with the variance 5.2(9)e-4 in Chen, Naik & Heyl's data for arXiv:2503.10462, Zenodo record 14035975; quoted as -0.497627(1), a 'Deep CNN' of 146320 parameters, in Table I of arXiv:2310.05715)",
+    "reported_as": "github.com/ChenAo-Phys/MinSR @ 6b6493f, data/Fig2b.csv, under ResNet2: '34944, -0.4976274' || examples/measure.py: '1: 16 layers, 16 channels every layer, 3x3 kernels 34944 parameters in total' || Chen, Naik & Heyl's data for arXiv:2503.10462 (Zenodo record 14035975), 10x10_J1J2.csv: 'Best previous (CNN small), 34944, -0.497627(4), 5.2(9)e-4'",
+    "location": "github.com/ChenAo-Phys/MinSR @ 6b6493f (data/Fig2b.csv, examples/measure.py); qmbl sources/2503.10462-zenodo-10x10_J1J2.csv (md5 98556b24d20bffeb69bb300bd696bda4)",
+    "version_read": "local clone of github.com/ChenAo-Phys/MinSR at 6b6493f (qmbl-runs/checkpoint-measure/repos/MinSR); the Zenodo CSV cached in qmbl sources/; arXiv:2310.05715 v1 and v2 (the quote); arXiv:2302.01941 v1-v3",
+    "checked_on": "2026-09-29",
+    "source_entry": "VP14-hubbard-j1j2-heisenberg-tfising#24 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E4, Tristan 2026-10-02",
+    "conversion": "none (citation)",
+    "reason": "Rende et al. (arXiv:2310.05715, Table I) quote -0.497627(1) as a 'Deep CNN' of 146,320 parameters, ref. [30]; the authors' own data give 146,320 parameters (ResNet1) -0.4976242, and -0.497627 to the 34,944-parameter ResNet2, 16 conv layers of 16 channels, with the error bar (4) and the variance 5.2(9)e-4 (sigma^2/N, S.S units) in Chen, Naik & Heyl's data (VP14#24). Ruling E4: follow the producing paper and its data. The row cites the producing paper and the data that print the number, and names the quote it was read in."
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_100_P_0.5",
+      "method": "Deep CNN",
+      "energy": -199.0508
+    },
+    "field": "provenance",
+    "to": "primary",
+    "reported_as": "github.com/ChenAo-Phys/MinSR @ 6b6493f, data/Fig2b.csv, under ResNet2: '34944, -0.4976274' || examples/measure.py: '1: 16 layers, 16 channels every layer, 3x3 kernels 34944 parameters in total' || Chen, Naik & Heyl's data for arXiv:2503.10462 (Zenodo record 14035975), 10x10_J1J2.csv: 'Best previous (CNN small), 34944, -0.497627(4), 5.2(9)e-4'",
+    "location": "github.com/ChenAo-Phys/MinSR @ 6b6493f (data/Fig2b.csv, examples/measure.py); qmbl sources/2503.10462-zenodo-10x10_J1J2.csv (md5 98556b24d20bffeb69bb300bd696bda4)",
+    "version_read": "local clone of github.com/ChenAo-Phys/MinSR at 6b6493f (qmbl-runs/checkpoint-measure/repos/MinSR); the Zenodo CSV cached in qmbl sources/; arXiv:2310.05715 v1 and v2 (the quote); arXiv:2302.01941 v1-v3",
+    "checked_on": "2026-09-29",
+    "source_entry": "VP14-hubbard-j1j2-heisenberg-tfising#24 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E4, Tristan 2026-10-02",
+    "conversion": "none",
+    "reason": "Rende et al. (arXiv:2310.05715, Table I) quote -0.497627(1) as a 'Deep CNN' of 146,320 parameters, ref. [30]; the authors' own data give 146,320 parameters (ResNet1) -0.4976242, and -0.497627 to the 34,944-parameter ResNet2, 16 conv layers of 16 channels, with the error bar (4) and the variance 5.2(9)e-4 (sigma^2/N, S.S units) in Chen, Naik & Heyl's data (VP14#24). Ruling E4: follow the producing paper and its data. The number, its error bar and its variance are now the producing authors' own, not the quote's."
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_100_P_0.5",
+      "method": "Deep CNN",
+      "energy": -199.0508
+    },
+    "field": "compute.parameters",
+    "from": 146320,
+    "to": 34944,
+    "reported_as": "github.com/ChenAo-Phys/MinSR @ 6b6493f, data/Fig2b.csv, under ResNet2: '34944, -0.4976274' || examples/measure.py: '1: 16 layers, 16 channels every layer, 3x3 kernels 34944 parameters in total' || Chen, Naik & Heyl's data for arXiv:2503.10462 (Zenodo record 14035975), 10x10_J1J2.csv: 'Best previous (CNN small), 34944, -0.497627(4), 5.2(9)e-4'",
+    "location": "github.com/ChenAo-Phys/MinSR @ 6b6493f (data/Fig2b.csv, examples/measure.py); qmbl sources/2503.10462-zenodo-10x10_J1J2.csv (md5 98556b24d20bffeb69bb300bd696bda4)",
+    "version_read": "local clone of github.com/ChenAo-Phys/MinSR at 6b6493f (qmbl-runs/checkpoint-measure/repos/MinSR); the Zenodo CSV cached in qmbl sources/; arXiv:2310.05715 v1 and v2 (the quote); arXiv:2302.01941 v1-v3",
+    "checked_on": "2026-09-29",
+    "source_entry": "VP14-hubbard-j1j2-heisenberg-tfising#24 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E4, Tristan 2026-10-02",
+    "conversion": "none",
+    "reason": "Rende et al. (arXiv:2310.05715, Table I) quote -0.497627(1) as a 'Deep CNN' of 146,320 parameters, ref. [30]; the authors' own data give 146,320 parameters (ResNet1) -0.4976242, and -0.497627 to the 34,944-parameter ResNet2, 16 conv layers of 16 channels, with the error bar (4) and the variance 5.2(9)e-4 (sigma^2/N, S.S units) in Chen, Naik & Heyl's data (VP14#24). Ruling E4: follow the producing paper and its data. The 146,320 was the quote's count, which belongs to ResNet1."
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_100_P_0.5",
+      "method": "Deep CNN",
+      "energy": -199.0508
+    },
+    "field": "compute.note",
+    "edit": [
+      "This row (-0.497627 per site) is the arXiv-v1 10x10 J2 = 0.5 result of Chen & Heyl as tabulated by arXiv:2310.05715 (Table I, ref. [30]), which lists 146320 parameters; that matches the largest ResNet1 in v1 Table II (64 layers, 16 channels, 3x3).",
+      "This row (-0.497627 per site) is Chen & Heyl's 10x10 J2 = 0.5 ResNet2 of 34944 parameters, 16 conv layers of 16 channels (the authors' data/Fig2b.csv and examples/measure.py, github.com/ChenAo-Phys/MinSR @ 6b6493f); arXiv:2310.05715 (Table I, ref. [30]) quotes it with 146320 parameters, the largest ResNet1 of v1 Table II (64 layers, 16 channels, 3x3), whose energy is -0.4976242 (qmbl-verify 2026-09-29, VP14#24; ruling E4)."
+    ],
+    "reported_as": "github.com/ChenAo-Phys/MinSR @ 6b6493f, data/Fig2b.csv, under ResNet2: '34944, -0.4976274' || examples/measure.py: '1: 16 layers, 16 channels every layer, 3x3 kernels 34944 parameters in total' || Chen, Naik & Heyl's data for arXiv:2503.10462 (Zenodo record 14035975), 10x10_J1J2.csv: 'Best previous (CNN small), 34944, -0.497627(4), 5.2(9)e-4'",
+    "location": "github.com/ChenAo-Phys/MinSR @ 6b6493f (data/Fig2b.csv, examples/measure.py); qmbl sources/2503.10462-zenodo-10x10_J1J2.csv (md5 98556b24d20bffeb69bb300bd696bda4)",
+    "version_read": "local clone of github.com/ChenAo-Phys/MinSR at 6b6493f (qmbl-runs/checkpoint-measure/repos/MinSR); the Zenodo CSV cached in qmbl sources/; arXiv:2310.05715 v1 and v2 (the quote); arXiv:2302.01941 v1-v3",
+    "checked_on": "2026-09-29",
+    "source_entry": "VP14-hubbard-j1j2-heisenberg-tfising#24 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E4, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The note followed the quote's identification; it follows the parameters entry."
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_100_P_0.5",
+      "method": "Deep CNN",
+      "energy": -199.0508
+    },
+    "field": "compute.reported_as",
+    "edit": [
+      "arXiv:2310.05715 Table I (Ground-state energy on the 10x10 square lattice at J2/J1 = 0.5): -0.497627(1) | Deep CNN | # parameters 146320 | Marshall prior Yes | [30] | 2023",
+      "arXiv:2310.05715 Table I (Ground-state energy on the 10x10 square lattice at J2/J1 = 0.5): -0.497627(1) | Deep CNN | # parameters 146320 | Marshall prior Yes | [30] | 2023 || github.com/ChenAo-Phys/MinSR @ 6b6493f, data/Fig2b.csv, under ResNet2: '34944, -0.4976274' || examples/measure.py: '1: 16 layers, 16 channels every layer, 3x3 kernels 34944 parameters in total' || Chen, Naik & Heyl's data for arXiv:2503.10462 (Zenodo record 14035975), 10x10_J1J2.csv: 'Best previous (CNN small), 34944, -0.497627(4), 5.2(9)e-4'"
+    ],
+    "reported_as": "github.com/ChenAo-Phys/MinSR @ 6b6493f, data/Fig2b.csv, under ResNet2: '34944, -0.4976274' || examples/measure.py: '1: 16 layers, 16 channels every layer, 3x3 kernels 34944 parameters in total' || Chen, Naik & Heyl's data for arXiv:2503.10462 (Zenodo record 14035975), 10x10_J1J2.csv: 'Best previous (CNN small), 34944, -0.497627(4), 5.2(9)e-4'",
+    "location": "github.com/ChenAo-Phys/MinSR @ 6b6493f (data/Fig2b.csv, examples/measure.py); qmbl sources/2503.10462-zenodo-10x10_J1J2.csv (md5 98556b24d20bffeb69bb300bd696bda4)",
+    "version_read": "local clone of github.com/ChenAo-Phys/MinSR at 6b6493f (qmbl-runs/checkpoint-measure/repos/MinSR); the Zenodo CSV cached in qmbl sources/; arXiv:2310.05715 v1 and v2 (the quote); arXiv:2302.01941 v1-v3",
+    "checked_on": "2026-09-29",
+    "source_entry": "VP14-hubbard-j1j2-heisenberg-tfising#24 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E4, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The words the parameter count is read from (DATA.md: reported_as carries them)."
+  },
+  // E5: the 56 rows whose VarBench code link cannot produce their number. Exact rows cite the printing paper or QMBL's reproduction beside the link; variational rows cite the VarBench dataset with the uploader named (ruling 1), except the 2DRNN row, whose paper prints it; no flags. (56)
+  {
+    "match": {
+      "instance": "Impurity/SB-DMFT-MI-HF_10",
+      "method": "Exact diagonalization",
+      "energy": -34.58052046520682
+    },
+    "field": "reference",
+    "to": "[code](https://github.com/varbench/methods/blob/main/scripts/Impurity/SB-DMFT-MI-HF_9.py) (a forkTPS DMRG script; QMBL's exact diagonalization reproduces this number to 3.3e-15 relative, checks/cost/ed/results/Impurity--SB-DMFT-MI-HF_9.json)",
+    "reported_as": "checks/cost/ed/results/Impurity--SB-DMFT-MI-HF_9.json: energy -34.5805204652067, stored_exact -34.58052046520682, relative_difference 3.2875976472361663e-15, reproduces_stored true",
+    "location": "checks/cost/ed/results/Impurity--SB-DMFT-MI-HF_9.json (checks/cost/ed/run_ed.py at commit 716e043, measured 2026-09-24); the stored number is Xiaodong Cao's VarBench upload, 6dad457 (2022-12-09)",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02; checks/cost/ed/results/Impurity--SB-DMFT-MI-HF_9.json",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked SB-DMFT-MI-HF_9.py runs forkTPS DMRG (S.solve with DMRG parameters) and writes that run's energy; the reader found no exact-diagonalization driver in forkTPS or in varbench/methods (VA2). QMBL's exact diagonalization of the instance (213444 states) reproduces the stored number, so the row cites that reproduction beside the link; the number keeps its digits. The row is the instance's only exact reference. Ruling E5 (Tristan, 2026-10-02): an exact row cites the printing paper or QMBL's reproduction beside the link; the link stays and no row is flagged.",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#6 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "Impurity/SB-DMFT-MT-AHF_9",
+      "method": "Exact diagonalization",
+      "energy": -13.889324869492144
+    },
+    "field": "reference",
+    "to": "[code](https://github.com/varbench/methods/blob/main/scripts/Impurity/SB-DMFT-MT-AHF_9.py) (a forkTPS DMRG script; QMBL's exact diagonalization reproduces this number to 3.8e-15 relative, checks/cost/ed/results/Impurity--SB-DMFT-MT-AHF_9.json)",
+    "reported_as": "checks/cost/ed/results/Impurity--SB-DMFT-MT-AHF_9.json: energy -13.889324869492091, stored_exact -13.889324869492144, relative_difference 3.836810333312915e-15, reproduces_stored true",
+    "location": "checks/cost/ed/results/Impurity--SB-DMFT-MT-AHF_9.json (checks/cost/ed/run_ed.py at commit 716e043, measured 2026-09-24); the stored number is Xiaodong Cao's VarBench upload, 6dad457 (2022-12-09)",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02; checks/cost/ed/results/Impurity--SB-DMFT-MT-AHF_9.json",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked SB-DMFT-MT-AHF_9.py runs forkTPS DMRG (S.solve with DMRG parameters) and writes that run's energy; the reader found no exact-diagonalization driver in forkTPS or in varbench/methods (VA2). QMBL's exact diagonalization of the instance (44100 states) reproduces the stored number, so the row cites that reproduction beside the link; the number keeps its digits. The row is the instance's only exact reference. Ruling E5 (Tristan, 2026-10-02): an exact row cites the printing paper or QMBL's reproduction beside the link; the link stays and no row is flagged.",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#11 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "Impurity/SB-DMFT-MT-HF_9",
+      "method": "Exact diagonalization",
+      "energy": -23.300947155759474
+    },
+    "field": "reference",
+    "to": "[code](https://github.com/varbench/methods/blob/main/scripts/Impurity/SB-DMFT-MT-HF_9.py) (a forkTPS DMRG script; QMBL's exact diagonalization reproduces this number to 1.8e-15 relative, checks/cost/ed/results/Impurity--SB-DMFT-MT-HF_9.json)",
+    "reported_as": "checks/cost/ed/results/Impurity--SB-DMFT-MT-HF_9.json: energy -23.30094715575943, stored_exact -23.300947155759474, relative_difference 1.8296494069799302e-15, reproduces_stored true",
+    "location": "checks/cost/ed/results/Impurity--SB-DMFT-MT-HF_9.json (checks/cost/ed/run_ed.py at commit 716e043, measured 2026-09-24); the stored number is Xiaodong Cao's VarBench upload, 6dad457 (2022-12-09)",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02; checks/cost/ed/results/Impurity--SB-DMFT-MT-HF_9.json",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked SB-DMFT-MT-HF_9.py runs forkTPS DMRG (S.solve with DMRG parameters) and writes that run's energy; the reader found no exact-diagonalization driver in forkTPS or in varbench/methods (VA2). QMBL's exact diagonalization of the instance (63504 states) reproduces the stored number, so the row cites that reproduction beside the link; the number keeps its digits. The row is the instance's only exact reference. Ruling E5 (Tristan, 2026-10-02): an exact row cites the printing paper or QMBL's reproduction beside the link; the link stays and no row is flagged.",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#16 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "Impurity/SB-IMP_9",
+      "method": "Exact diagonalization",
+      "energy": -10.487128484702636
+    },
+    "field": "reference",
+    "to": "[code](https://github.com/varbench/methods/blob/main/scripts/Impurity/SB-IMP_9.py) (a forkTPS DMRG script; QMBL's exact diagonalization reproduces this number to 1.5e-15 relative, checks/cost/ed/results/Impurity--SB-IMP_9.json)",
+    "reported_as": "checks/cost/ed/results/Impurity--SB-IMP_9.json: energy -10.487128484702652, stored_exact -10.487128484702636, relative_difference 1.5244603494581457e-15, reproduces_stored true",
+    "location": "checks/cost/ed/results/Impurity--SB-IMP_9.json (checks/cost/ed/run_ed.py at commit 716e043, measured 2026-09-24); the stored number is Xiaodong Cao's VarBench upload, 6dad457 (2022-12-09)",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02; checks/cost/ed/results/Impurity--SB-IMP_9.json",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked SB-IMP_9.py runs forkTPS DMRG (S.solve with DMRG parameters) and writes that run's energy; the reader found no exact-diagonalization driver in forkTPS or in varbench/methods (VA2). QMBL's exact diagonalization of the instance (63504 states) reproduces the stored number, so the row cites that reproduction beside the link; the number keeps its digits. The row is the instance's only exact reference. Ruling E5 (Tristan, 2026-10-02): an exact row cites the printing paper or QMBL's reproduction beside the link; the link stays and no row is flagged.",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#21 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_36_P_0.7",
+      "method": "Exact diagonalization",
+      "energy": -76.320176597454
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1051/jp1:1996236) (Schulz, Ziman & Poilblanc, Magnetic order and disorder in the frustrated quantum Heisenberg antiferromagnet in two dimensions, J. Phys. I France 6, 675 (1996), arXiv:cond-mat/9402061, Table II, column 36(B1): -0.530001 per site; the stored digits are VarBench's own exact diagonalization, Dian Wu, 0148e1b (2022-10-17)) [code](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_36_P_0.7/ed_lattice_symmetries.sh)",
+    "reported_as": "Table II, row J2 = 0.70, columns 36(A1) and 36(B1): 36(B1) -0.530001",
+    "location": "cond-mat/9402061v2 (Schulz, Ziman & Poilblanc, J. Phys. I France 6, 675 (1996)) Table II; VarBench history 0148e1b (2022-10-17)",
+    "version_read": "cond-mat/9402061v2 PDF, pypdf layout (sources/cond-mat-9402061v2.vb1.layout.txt in the run), and its arXiv abstract page (journal DOI 10.1051/jp1:1996236); VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked ed_lattice_symmetries.sh computes the k = 0 A1 sector only ('# Assume symmetry sectors 0', nk2ls.py line 214), and at J2 = 0.7 the ground state is the B1 level; the stored -76.320176597454 (-0.530001226 per site) is that B1 ground state, which Schulz, Ziman & Poilblanc print to six decimals in their 36(B1) column and QMBL's symmetric-basis Lanczos reproduces (pass of 2026-09-17; VE-exact-recompute). The row cites the printing paper beside the link; the number keeps its digits (the general rule for recomputed exact rows: the paper's value is the stored one rounded). The row is the instance's only exact reference. Ruling E5 (Tristan, 2026-10-02): an exact row cites the printing paper or QMBL's reproduction beside the link; the link stays and no row is flagged.",
+    "source_entry": "VB1-varbench-code-j1j2#114 (qmbl-verify 2026-09-29, ambiguous); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_36_P_0.8",
+      "method": "Exact diagonalization",
+      "energy": -84.45407039473
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1051/jp1:1996236) (Schulz, Ziman & Poilblanc, Magnetic order and disorder in the frustrated quantum Heisenberg antiferromagnet in two dimensions, J. Phys. I France 6, 675 (1996), arXiv:cond-mat/9402061, Table II, column 36(B1): -0.586487 per site; the stored digits are VarBench's own exact diagonalization, Dian Wu, 1c99d74 (2022-10-18)) [code](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_36_P_0.8/ed_lattice_symmetries.sh)",
+    "reported_as": "Table II, row J2 = 0.80, columns 36(A1) and 36(B1): 36(B1) -0.586487",
+    "location": "cond-mat/9402061v2 (Schulz, Ziman & Poilblanc, J. Phys. I France 6, 675 (1996)) Table II; VarBench history 1c99d74 (2022-10-18)",
+    "version_read": "cond-mat/9402061v2 PDF, pypdf layout (sources/cond-mat-9402061v2.vb1.layout.txt in the run), and its arXiv abstract page (journal DOI 10.1051/jp1:1996236); VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked ed_lattice_symmetries.sh computes the k = 0 A1 sector only ('# Assume symmetry sectors 0', nk2ls.py line 214), and at J2 = 0.8 the ground state is the B1 level; the stored -84.45407039473 (-0.586486600 per site) is that B1 ground state, which Schulz, Ziman & Poilblanc print to six decimals in their 36(B1) column and QMBL's symmetric-basis Lanczos reproduces (pass of 2026-09-17; VE-exact-recompute). The row cites the printing paper beside the link; the number keeps its digits (the general rule for recomputed exact rows: the paper's value is the stored one rounded). The row is the instance's only exact reference. Ruling E5 (Tristan, 2026-10-02): an exact row cites the printing paper or QMBL's reproduction beside the link; the link stays and no row is flagged.",
+    "source_entry": "VB1-varbench-code-j1j2#118 (qmbl-verify 2026-09-29, ambiguous); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_36_P_0.9",
+      "method": "Exact diagonalization",
+      "energy": -93.463489624054
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1051/jp1:1996236) (Schulz, Ziman & Poilblanc, Magnetic order and disorder in the frustrated quantum Heisenberg antiferromagnet in two dimensions, J. Phys. I France 6, 675 (1996), arXiv:cond-mat/9402061, Table II, column 36(B1): -0.649052 per site; the stored digits are VarBench's own exact diagonalization, Dian Wu, 1c99d74 (2022-10-18)) [code](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_36_P_0.9/ed_lattice_symmetries.sh)",
+    "reported_as": "Table II, row J2 = 0.90, columns 36(A1) and 36(B1): 36(B1) -0.649052",
+    "location": "cond-mat/9402061v2 (Schulz, Ziman & Poilblanc, J. Phys. I France 6, 675 (1996)) Table II; VarBench history 1c99d74 (2022-10-18)",
+    "version_read": "cond-mat/9402061v2 PDF, pypdf layout (sources/cond-mat-9402061v2.vb1.layout.txt in the run), and its arXiv abstract page (journal DOI 10.1051/jp1:1996236); VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked ed_lattice_symmetries.sh computes the k = 0 A1 sector only ('# Assume symmetry sectors 0', nk2ls.py line 214), and at J2 = 0.9 the ground state is the B1 level; the stored -93.463489624054 (-0.649052011 per site) is that B1 ground state, which Schulz, Ziman & Poilblanc print to six decimals in their 36(B1) column and QMBL's symmetric-basis Lanczos reproduces (pass of 2026-09-17; VE-exact-recompute). The row cites the printing paper beside the link; the number keeps its digits (the general rule for recomputed exact rows: the paper's value is the stored one rounded). The row is the instance's only exact reference. Ruling E5 (Tristan, 2026-10-02): an exact row cites the printing paper or QMBL's reproduction beside the link; the link stays and no row is flagged.",
+    "source_entry": "VB1-varbench-code-j1j2#122 (qmbl-verify 2026-09-29, ambiguous); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_36_P_1",
+      "method": "Exact diagonalization",
+      "energy": -102.867902314985
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1051/jp1:1996236) (Schulz, Ziman & Poilblanc, Magnetic order and disorder in the frustrated quantum Heisenberg antiferromagnet in two dimensions, J. Phys. I France 6, 675 (1996), arXiv:cond-mat/9402061, Table II, column 36(B1): -0.714360 per site; the stored digits are VarBench's own exact diagonalization, Dian Wu, 0148e1b (2022-10-17)) [code](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_36_P_1/ed_lattice_symmetries.sh)",
+    "reported_as": "Table II, row J2 = 1.00, columns 36(A1) and 36(B1): 36(B1) -0.714360",
+    "location": "cond-mat/9402061v2 (Schulz, Ziman & Poilblanc, J. Phys. I France 6, 675 (1996)) Table II; VarBench history 0148e1b (2022-10-17)",
+    "version_read": "cond-mat/9402061v2 PDF, pypdf layout (sources/cond-mat-9402061v2.vb1.layout.txt in the run), and its arXiv abstract page (journal DOI 10.1051/jp1:1996236); VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked ed_lattice_symmetries.sh computes the k = 0 A1 sector only ('# Assume symmetry sectors 0', nk2ls.py line 214), and at J2 = 1 the ground state is the B1 level; the stored -102.867902314985 (-0.714360433 per site) is that B1 ground state, which Schulz, Ziman & Poilblanc print to six decimals in their 36(B1) column and QMBL's symmetric-basis Lanczos reproduces (pass of 2026-09-17; VE-exact-recompute). The row cites the printing paper beside the link; the number keeps its digits (the general rule for recomputed exact rows: the paper's value is the stored one rounded). The row is the instance's only exact reference. Ruling E5 (Tristan, 2026-10-02): an exact row cites the printing paper or QMBL's reproduction beside the link; the link stays and no row is flagged.",
+    "source_entry": "VB1-varbench-code-j1j2#126 (qmbl-verify 2026-09-29, ambiguous); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "tV/square_36_P_13_0.01",
+      "method": "Exact diagonalization",
+      "energy": -27.933405318364226
+    },
+    "field": "reference",
+    "to": "Autoregressive neural Slater-Jastrow ansatz for variational Monte Carlo simulation, SciPost Phys. 14, 171 (2023), arXiv:2210.05871 (Table 3, row 'Lancos ED (QuSpin)', V/t = 0.01: -27.93340531, the stored energy to eight decimals; the stored digits are Imelda Romero's QuSpin Lanczos, uploaded to VarBench by Dian Wu, 0cd8268, 2022-12-23) [code](https://github.com/varbench/methods/blob/main/scripts/tV/square_36_P_13_0.01/ed_lattice_symmetries.sh)",
+    "reported_as": "Table 3 (System: L = 6, Np = 13), row 'Lancos ED (QuSpin)': -27.93340531 -27.34054415 -22.07737235 -7.92802624 (V/t = 0.01, 0.1, 1, 10)",
+    "location": "arXiv:2210.05871v4 Table 3 (p. 32; new in v4, 2023-03-14), methods text 'The Lanczos exact diagonalization was carried out using the Quspin package [80, 81], restricting to the momentum sectors which contain the ground state'",
+    "version_read": "arXiv:2210.05871 v1, v3, v4 (pypdf layout, sources in the run); VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked ed_lattice_symmetries.sh restricts the basis to lattice-symmetries sector 0 for both translations, both mirrors and the transpose (nk2ls.py lines 214, 245-254), and the stored number predates the link: it came from a QuSpin Lanczos run whose script is not in varbench/methods (VB4). The same value is printed, truncated to eight decimals, in Table 3 of the SciPost paper, and QMBL's recompute confirms it (VE-exact-recompute). The row cites the printing paper beside the link; the number keeps its digits. The row is the instance's only exact reference. Ruling E5 (Tristan, 2026-10-02): an exact row cites the printing paper or QMBL's reproduction beside the link; the link stays and no row is flagged.",
+    "source_entry": "VB4-tfising-tv#41 (qmbl-verify 2026-09-29, ambiguous); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "tV/square_36_P_13_0.1",
+      "method": "Exact diagonalization",
+      "energy": -27.340544159534836
+    },
+    "field": "reference",
+    "to": "Autoregressive neural Slater-Jastrow ansatz for variational Monte Carlo simulation, SciPost Phys. 14, 171 (2023), arXiv:2210.05871 (Table 3, row 'Lancos ED (QuSpin)', V/t = 0.1: -27.34054415, the stored energy to eight decimals; the stored digits are Imelda Romero's QuSpin Lanczos, uploaded to VarBench by Dian Wu, 0cd8268, 2022-12-23) [code](https://github.com/varbench/methods/blob/main/scripts/tV/square_36_P_13_0.1/ed_lattice_symmetries.sh)",
+    "reported_as": "Table 3 (System: L = 6, Np = 13), row 'Lancos ED (QuSpin)': -27.93340531 -27.34054415 -22.07737235 -7.92802624 (V/t = 0.01, 0.1, 1, 10)",
+    "location": "arXiv:2210.05871v4 Table 3 (p. 32; new in v4, 2023-03-14), methods text 'The Lanczos exact diagonalization was carried out using the Quspin package [80, 81], restricting to the momentum sectors which contain the ground state'",
+    "version_read": "arXiv:2210.05871 v1, v3, v4 (pypdf layout, sources in the run); VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked ed_lattice_symmetries.sh restricts the basis to lattice-symmetries sector 0 for both translations, both mirrors and the transpose (nk2ls.py lines 214, 245-254), and the stored number predates the link: it came from a QuSpin Lanczos run whose script is not in varbench/methods (VB4). The same value is printed, truncated to eight decimals, in Table 3 of the SciPost paper, and QMBL's recompute confirms it (VE-exact-recompute). The row cites the printing paper beside the link; the number keeps its digits. The row is the instance's only exact reference. Ruling E5 (Tristan, 2026-10-02): an exact row cites the printing paper or QMBL's reproduction beside the link; the link stays and no row is flagged.",
+    "source_entry": "VB4-tfising-tv#43 (qmbl-verify 2026-09-29, ambiguous); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "tV/square_36_P_13_1",
+      "method": "Exact diagonalization",
+      "energy": -22.07737235783086
+    },
+    "field": "reference",
+    "to": "Autoregressive neural Slater-Jastrow ansatz for variational Monte Carlo simulation, SciPost Phys. 14, 171 (2023), arXiv:2210.05871 (Table 3, row 'Lancos ED (QuSpin)', V/t = 1: -22.07737235, the stored energy to eight decimals; the stored digits are Imelda Romero's QuSpin Lanczos, uploaded to VarBench by Dian Wu, 0cd8268, 2022-12-23) [code](https://github.com/varbench/methods/blob/main/scripts/tV/square_36_P_13_1/ed_lattice_symmetries.sh)",
+    "reported_as": "Table 3 (System: L = 6, Np = 13), row 'Lancos ED (QuSpin)': -27.93340531 -27.34054415 -22.07737235 -7.92802624 (V/t = 0.01, 0.1, 1, 10)",
+    "location": "arXiv:2210.05871v4 Table 3 (p. 32; new in v4, 2023-03-14), methods text 'The Lanczos exact diagonalization was carried out using the Quspin package [80, 81], restricting to the momentum sectors which contain the ground state'",
+    "version_read": "arXiv:2210.05871 v1, v3, v4 (pypdf layout, sources in the run); VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked ed_lattice_symmetries.sh restricts the basis to lattice-symmetries sector 0 for both translations, both mirrors and the transpose (nk2ls.py lines 214, 245-254), and the stored number predates the link: it came from a QuSpin Lanczos run whose script is not in varbench/methods (VB4). The same value is printed, truncated to eight decimals, in Table 3 of the SciPost paper, and QMBL's recompute confirms it (VE-exact-recompute). The row cites the printing paper beside the link; the number keeps its digits. The row is the instance's only exact reference. Ruling E5 (Tristan, 2026-10-02): an exact row cites the printing paper or QMBL's reproduction beside the link; the link stays and no row is flagged.",
+    "source_entry": "VB4-tfising-tv#45 (qmbl-verify 2026-09-29, ambiguous); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "tV/square_36_P_13_10",
+      "method": "Exact diagonalization",
+      "energy": -7.928026240978371
+    },
+    "field": "reference",
+    "to": "Autoregressive neural Slater-Jastrow ansatz for variational Monte Carlo simulation, SciPost Phys. 14, 171 (2023), arXiv:2210.05871 (Table 3, row 'Lancos ED (QuSpin)', V/t = 10: -7.92802624, the stored energy to eight decimals; the stored digits are Imelda Romero's QuSpin Lanczos, uploaded to VarBench by Dian Wu, 0cd8268, 2022-12-23) [code](https://github.com/varbench/methods/blob/main/scripts/tV/square_36_P_13_10/ed_lattice_symmetries.sh)",
+    "reported_as": "Table 3 (System: L = 6, Np = 13), row 'Lancos ED (QuSpin)': -27.93340531 -27.34054415 -22.07737235 -7.92802624 (V/t = 0.01, 0.1, 1, 10)",
+    "location": "arXiv:2210.05871v4 Table 3 (p. 32; new in v4, 2023-03-14), methods text 'The Lanczos exact diagonalization was carried out using the Quspin package [80, 81], restricting to the momentum sectors which contain the ground state'",
+    "version_read": "arXiv:2210.05871 v1, v3, v4 (pypdf layout, sources in the run); VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked ed_lattice_symmetries.sh restricts the basis to lattice-symmetries sector 0 for both translations, both mirrors and the transpose (nk2ls.py lines 214, 245-254), and the stored number predates the link: it came from a QuSpin Lanczos run whose script is not in varbench/methods (VB4). The same value is printed, truncated to eight decimals, in Table 3 of the SciPost paper, and QMBL's recompute confirms it (VE-exact-recompute; at V = 10 every sector was computed, the ground state is Gamma B1). The row cites the printing paper beside the link; the number keeps its digits. The row is the instance's only exact reference. Ruling E5 (Tristan, 2026-10-02): an exact row cites the printing paper or QMBL's reproduction beside the link; the link stays and no row is flagged.",
+    "source_entry": "VB4-tfising-tv#46 (qmbl-verify 2026-09-29, ambiguous); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "tV/chain_32_P_16_1",
+      "method": "Exact diagonalization",
+      "energy": -15.946847944277561
+    },
+    "field": "reference",
+    "to": "[code](https://github.com/varbench/methods/blob/main/scripts/tV/chain_32_P_16_1/ed_lattice_symmetries.sh) (QMBL's exact diagonalization of the full N_f = 16 space, 601080390 states, reproduces this number to 8.8e-14 relative: checks/exact-recompute-2026-09/results/tV__chain_32_P_16_1.json; the stored number is Dian Wu's VarBench upload of a QuSpin Lanczos run, b9c67ed, 2023-02-01)",
+    "reported_as": "checks/exact-recompute-2026-09/results/tV__chain_32_P_16_1.json: E -15.946847944278966, residual 9.45e-10, sector 'N_f = 16, no spatial symmetry'",
+    "location": "checks/exact-recompute-2026-09/results/tV__chain_32_P_16_1.json (ed_full.py, the qmbl-verify pass of 2026-09-17); VarBench history b9c67ed (2023-02-01, Dian Wu, 'Add ED for 1D t-V')",
+    "version_read": "checks/exact-recompute-2026-09/results/tV__chain_32_P_16_1.json; VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked ed_lattice_symmetries.sh fixes every lattice-symmetries sector to 0 (nk2ls.py line 214, translation and reflection in 1D), and the stored number predates the link (a QuSpin Lanczos run whose script is not in varbench/methods; VB4). No paper the reader found prints it. QMBL's exact diagonalization of the full space, no spatial symmetry, reproduces it (translation expectation ~0, the K = +-pi/2 doublet the reader expected); the files are copied into checks/exact-recompute-2026-09/ with this commit. The row cites that reproduction beside the link; the number keeps its digits. The row is the instance's only exact reference. Ruling E5 (Tristan, 2026-10-02): an exact row cites the printing paper or QMBL's reproduction beside the link; the link stays and no row is flagged.",
+    "source_entry": "VB4-tfising-tv#31 (qmbl-verify 2026-09-29, ambiguous); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "tV/chain_32_P_16_2",
+      "method": "Exact diagonalization",
+      "energy": -12.32869972364372
+    },
+    "field": "reference",
+    "to": "[code](https://github.com/varbench/methods/blob/main/scripts/tV/chain_32_P_16_2/ed_lattice_symmetries.sh) (QMBL's exact diagonalization of the full N_f = 16 space, 601080390 states, reproduces this number to 2.1e-13 relative: checks/exact-recompute-2026-09/results/tV__chain_32_P_16_2.json; the stored number is Dian Wu's VarBench upload of a QuSpin Lanczos run, b9c67ed, 2023-02-01)",
+    "reported_as": "checks/exact-recompute-2026-09/results/tV__chain_32_P_16_2.json: E -12.328699723641177, residual 1.87e-10, sector 'N_f = 16, no spatial symmetry'",
+    "location": "checks/exact-recompute-2026-09/results/tV__chain_32_P_16_2.json (ed_full.py, the qmbl-verify pass of 2026-09-17); VarBench history b9c67ed (2023-02-01, Dian Wu, 'Add ED for 1D t-V')",
+    "version_read": "checks/exact-recompute-2026-09/results/tV__chain_32_P_16_2.json; VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked ed_lattice_symmetries.sh fixes every lattice-symmetries sector to 0 (nk2ls.py line 214, translation and reflection in 1D), and the stored number predates the link (a QuSpin Lanczos run whose script is not in varbench/methods; VB4). No paper the reader found prints it. QMBL's exact diagonalization of the full space, no spatial symmetry, reproduces it (translation expectation ~0, the K = +-pi/2 doublet the reader expected); the files are copied into checks/exact-recompute-2026-09/ with this commit. The row cites that reproduction beside the link; the number keeps its digits. The row is the instance's only exact reference. Ruling E5 (Tristan, 2026-10-02): an exact row cites the printing paper or QMBL's reproduction beside the link; the link stays and no row is flagged.",
+    "source_entry": "VB4-tfising-tv#33 (qmbl-verify 2026-09-29, ambiguous); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "tV/chain_32_P_16_4",
+      "method": "Exact diagonalization",
+      "energy": -7.5021616707610725
+    },
+    "field": "reference",
+    "to": "[code](https://github.com/varbench/methods/blob/main/scripts/tV/chain_32_P_16_4/ed_lattice_symmetries.sh) (QMBL's exact diagonalization of the full N_f = 16 space, 601080390 states, reproduces this number to 1.2e-13 relative: checks/exact-recompute-2026-09/results/tV__chain_32_P_16_4.json; the stored number is Dian Wu's VarBench upload of a QuSpin Lanczos run, b9c67ed, 2023-02-01)",
+    "reported_as": "checks/exact-recompute-2026-09/results/tV__chain_32_P_16_4.json: E -7.502161670760199, residual 5.63e-10, sector 'N_f = 16, no spatial symmetry'",
+    "location": "checks/exact-recompute-2026-09/results/tV__chain_32_P_16_4.json (ed_full.py, the qmbl-verify pass of 2026-09-17); VarBench history b9c67ed (2023-02-01, Dian Wu, 'Add ED for 1D t-V')",
+    "version_read": "checks/exact-recompute-2026-09/results/tV__chain_32_P_16_4.json; VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked ed_lattice_symmetries.sh fixes every lattice-symmetries sector to 0 (nk2ls.py line 214, translation and reflection in 1D), and the stored number predates the link (a QuSpin Lanczos run whose script is not in varbench/methods; VB4). No paper the reader found prints it. QMBL's exact diagonalization of the full space, no spatial symmetry, reproduces it (translation expectation ~0, the K = +-pi/2 doublet the reader expected); the files are copied into checks/exact-recompute-2026-09/ with this commit. The row cites that reproduction beside the link; the number keeps its digits. The row is the instance's only exact reference. Ruling E5 (Tristan, 2026-10-02): an exact row cites the printing paper or QMBL's reproduction beside the link; the link stays and no row is flagged.",
+    "source_entry": "VB4-tfising-tv#35 (qmbl-verify 2026-09-29, ambiguous); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "TFIsing/square_144_O_3",
+      "method": "2D Recurrent Neural Network (2DRNN)",
+      "energy": -457.041866
+    },
+    "field": "reference",
+    "to": "[paper](https://journals.aps.org/prresearch/abstract/10.1103/PhysRevResearch.2.023358) (Hibat-Allah et al., Phys. Rev. Research 2, 023358 (2020), arXiv:2002.02973, Appendix F, Table II, h = 3, 2DRNN: -3.1739018(2); the stored digits are the authors' upload to the VarBench dataset, by Mohamed Hibat-Allah on 2021-12-13, commit 75dddcc, which linked their own code) [code](https://github.com/varbench/methods/blob/main/scripts/TFIsing/square_144_O_3/vmc_2DRNN.sh)",
+    "reported_as": "VarBench TfIsing/square_12_OO_3_1.md at 75dddcc: '| -457.041866 | 0.000027 | 0.001429 | 2D Recurrent Neural Network (2DRNN) | https://github.com/mhibatallah/RNNWavefunctions https://arxiv.org/pdf/2002.02973.pdf |'; Table II: -3.1739018(2)",
+    "location": "VarBench history: 75dddcc (2021-12-13, Mohamed Hibat-Allah, 'Update square_12_OO_3_1.md'); script link 7072e7b (2024-08-13, Dian Wu, 'Add links for RNN')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The number is printed in the paper (Table II, verified by VA6#4), so ruling 1 keeps the paper as its citation and the dataset upload is named beside it. The run script VarBench linked in 2024 sets num_units = 500 where the paper states 100 memory units (Sec. III C, Tables II and III); compute.parameters already follows the paper (VA6#5). The row holds the instance's variational record; only the citation text changes. Ruling E5 (Tristan, 2026-10-02): a variational row cites the VarBench dataset with the uploader named (ruling 1); the link stays and no row is flagged.",
+    "source_entry": "VA6-j1j2-heisenberg-hubbard-tfising#5 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_100_P_0.5",
+      "method": "RNN",
+      "energy": -198.157
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by Dian Wu on 2022-03-04, commit 5af37ba) [code](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_100_P_0.5/vmc_rnn.sh)",
+    "reported_as": "VarBench upload 5af37ba: -198.157",
+    "location": "VarBench history of J1J2/square_100_P_0.5.md (on 2022-03-04, commit 5af37ba)",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked vmc_rnn.sh builds the right Hamiltonian and network, but its final 2^20-sample estimate cannot give the stored sigma for the stored variance. The number was uploaded years before the script and is printed in no paper the reader found (VB1/VB3), so it is cited to the dataset with the uploader named. No record at stake. Ruling E5 (Tristan, 2026-10-02): a variational row cites the VarBench dataset with the uploader named (ruling 1); the link stays and no row is flagged.",
+    "source_entry": "VB1-varbench-code-j1j2#14 (qmbl-verify 2026-09-29, ambiguous); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "Heisenberg/chain_20_P",
+      "method": "RNN + translational symmetry",
+      "energy": -35.6175098
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by Dian Wu on 2021-10-18, commit 3b2e0c9) [code](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/chain_20_P/vmc_rnn.sh)",
+    "reported_as": "VarBench upload 3b2e0c9: -35.6175098",
+    "location": "VarBench history of Heisenberg/chain_20_P.md (on 2021-10-18, commit 3b2e0c9)",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked vmc_rnn.sh runs a plain FastLSTMNet, and vmc.py has no symmetrisation option, so the link does not implement the method named; VarBench first linked a vmc_rnn_sym.sh that is not in varbench/methods. The number was uploaded years before the script and is printed in no paper the reader found (VB1/VB3), so it is cited to the dataset with the uploader named. No record at stake. Ruling E5 (Tristan, 2026-10-02): a variational row cites the VarBench dataset with the uploader named (ruling 1); the link stays and no row is flagged.",
+    "source_entry": "VB3-varbench-code-heisenberg#14 (qmbl-verify 2026-09-29, ambiguous); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "Heisenberg/square_100_O",
+      "method": "RNN + translational symmetry",
+      "energy": -251.4595
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by Dian Wu on 2022-03-04 as 'RNN', commit 5af37ba, labelled 'RNN + translational symmetry' since 0ef1497 (2024-07-11)) [code](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/square_100_O/vmc_rnn.sh)",
+    "reported_as": "VarBench upload 5af37ba: -251.4595",
+    "location": "VarBench history of Heisenberg/square_100_O.md (on 2022-03-04 as 'RNN', commit 5af37ba, labelled 'RNN + translational symmetry' since 0ef1497 (2024-07-11))",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked vmc_rnn.sh runs a plain FastLSTMNet, and vmc.py has no symmetrisation option, so the link does not implement the method named; VarBench first linked a vmc_rnn_sym.sh that is not in varbench/methods. The number was uploaded years before the script and is printed in no paper the reader found (VB1/VB3), so it is cited to the dataset with the uploader named. No record at stake. Ruling E5 (Tristan, 2026-10-02): a variational row cites the VarBench dataset with the uploader named (ruling 1); the link stays and no row is flagged.",
+    "source_entry": "VB3-varbench-code-heisenberg#27 (qmbl-verify 2026-09-29, ambiguous); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "Heisenberg/square_100_P",
+      "method": "RNN + translational symmetry",
+      "energy": -268.56
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by Dian Wu on 2022-03-04, commit 5af37ba) [code](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/square_100_P/vmc_rnn.sh)",
+    "reported_as": "VarBench upload 5af37ba: -268.56",
+    "location": "VarBench history of Heisenberg/square_100_P.md (on 2022-03-04, commit 5af37ba)",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked vmc_rnn.sh runs a plain FastLSTMNet, and vmc.py has no symmetrisation option, so the link does not implement the method named; VarBench first linked a vmc_rnn_sym.sh that is not in varbench/methods. The number was uploaded years before the script and is printed in no paper the reader found (VB1/VB3), so it is cited to the dataset with the uploader named. No record at stake. Ruling E5 (Tristan, 2026-10-02): a variational row cites the VarBench dataset with the uploader named (ruling 1); the link stays and no row is flagged.",
+    "source_entry": "VB3-varbench-code-heisenberg#34 (qmbl-verify 2026-09-29, ambiguous); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "Heisenberg/triangular_16_P",
+      "method": "VQE (SR + symm. + 64 par)",
+      "energy": -34.1780764
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by Nikita Astrakhantsev on 2022-10-18, commit 26f221f, with the instance's exact diagonalization) [code](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/triangular_16_P/vqe.sh)",
+    "reported_as": "VarBench Heisenberg/triangle_4_PP_16.md at 26f221f: '| -34.1780764 | 0 | 0.424225 | 16 | VQE (SR + symm. + 64 par) |'",
+    "location": "VarBench history: 26f221f (2022-10-18, Nikita Astrakhantsev, 'Create triangle_4_PP_16.md'); script link 5285adc (2024-08-12)",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked vqe.sh passes --j2=0.0, with which HeisenbergTriangle builds the 4x4 square lattice, not the triangular one (the run needs --j2=1.0); everything else checks, and the logged energy is the exact statevector expectation (VB3#67). The number is the uploader's own, printed in no paper the reader found, so it is cited to the dataset with the uploader named. Not a record. Ruling E5 (Tristan, 2026-10-02): a variational row cites the VarBench dataset with the uploader named (ruling 1); the link stays and no row is flagged.",
+    "source_entry": "VB3-varbench-code-heisenberg#67 (qmbl-verify 2026-09-29, ambiguous); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "TFIsing/chain_32_P_0.5",
+      "method": "Symmetric FFN, Relu, 32 features per translation",
+      "energy": -34.03338
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by Giuseppe Carleo on 2021-07-22, commit 3142322) [code](https://github.com/varbench/methods/blob/main/scripts/TFIsing/chain_32_P_0.5/vmc_gcnn.sh)",
+    "reported_as": "VarBench TfIsing/chain_32_P_32_0.5_1.md at 3142322: '| -34.03338 | ... | Symmetric FFN, Relu, 32 features per translation | data/NQS/chain32P_32_0.5.mpack |'",
+    "location": "VarBench history: 3142322 (2021-07-22, Giuseppe Carleo, 'First commit on some Ising data'); script link 765c5d1 (2024-07-30)",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked vmc_gcnn.sh runs a two-layer GCNN over the ring's automorphism group, not the one-layer ReLU network symmetrised over translations that the method names; VarBench's own parameter file of the h = 1 state holds one real Dense layer (32 x 32 kernel and 32 biases), and the h = 0.5 file the row names was never committed (VB4). The number is the uploader's own, so it is cited to the dataset with the uploader named. Not a record. Ruling E5 (Tristan, 2026-10-02): a variational row cites the VarBench dataset with the uploader named (ruling 1); the link stays and no row is flagged.",
+    "source_entry": "VB4-tfising-tv#28 (qmbl-verify 2026-09-29, ambiguous); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "TFIsing/chain_32_P_1",
+      "method": "Symmetric FFN, Relu, 32 features per translation",
+      "energy": -40.760008
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by Giuseppe Carleo on 2021-07-22, commit 3142322) [code](https://github.com/varbench/methods/blob/main/scripts/TFIsing/chain_32_P_1/vmc_gcnn.sh)",
+    "reported_as": "VarBench TfIsing/chain_32_P_32_1_1.md at 3142322: '| -40.760008 | ... | Symmetric FFN, Relu, 32 features per translation | data/NQS/chain32P_32_1.mpack |'",
+    "location": "VarBench history: 3142322 (2021-07-22, Giuseppe Carleo, 'First commit on some Ising data'); script link 765c5d1 (2024-07-30)",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked vmc_gcnn.sh runs a two-layer GCNN over the ring's automorphism group, not the one-layer ReLU network symmetrised over translations that the method names; VarBench's own parameter file of the h = 1 state holds one real Dense layer (32 x 32 kernel and 32 biases) (VB4). The number is the uploader's own, so it is cited to the dataset with the uploader named. Not a record. Ruling E5 (Tristan, 2026-10-02): a variational row cites the VarBench dataset with the uploader named (ruling 1); the link stays and no row is flagged.",
+    "source_entry": "VB4-tfising-tv#29 (qmbl-verify 2026-09-29, ambiguous); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/rectangular-6x48_288_P_120_8",
+      "method": "VMC with uniform BCS pairing (+Jastrow and backflow)",
+      "energy": -235.898
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by Luca F. Tocchio on 2021-09-24, commit 88967c6, first per site, -0.81909, in 3705d2a (2021-09-16)) [code](https://github.com/varbench/methods/blob/main/scripts/Hubbard/rectangular-6x48_288_P_120_8/VMC-uniform/vmc_hubbard.sh)",
+    "reported_as": "VarBench upload 88967c6: -235.898 (first per site, -0.81909, in 3705d2a (2021-09-16))",
+    "location": "VarBench history of Hubbard/rectangular-6x48_288_P_120_8.md: 2021-09-24, commit 88967c6",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked script recompiles programs/vmc_hubbard, whose committed uniform program hard-codes its cluster (parameters nx, nh), so as committed it builds a 45 x 6 cluster, not this instance; the inputs otherwise match it (VB2). His published size-averaged 6 x 48 energies agree with this upload to 1e-4 (arXiv:1905.02658v2 Table 1; arXiv:2111.04623v4 Tables 1 and 2), but the reader found the stored digits only in the upload. So the number is cited to the dataset with the uploader named. Ruling E5 (Tristan, 2026-10-02): a variational row cites the VarBench dataset with the uploader named (ruling 1); the link stays and no row is flagged.",
+    "source_entry": "VB2-varbench-code-hubbard#65 (qmbl-verify 2026-09-29, ambiguous); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/rectangular-6x48_288_P_120_8",
+      "method": "FN on the state above",
+      "energy": -237.136
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by Luca F. Tocchio on 2021-09-24, commit 88967c6, first per site, -0.82339, in 3705d2a (2021-09-16)) [code](https://github.com/varbench/methods/blob/main/scripts/Hubbard/rectangular-6x48_288_P_120_8/FN-uniform/fn_hubbard.sh)",
+    "reported_as": "VarBench upload 88967c6: -237.136 (first per site, -0.82339, in 3705d2a (2021-09-16))",
+    "location": "VarBench history of Hubbard/rectangular-6x48_288_P_120_8.md: 2021-09-24, commit 88967c6",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked script recompiles programs/vmc_hubbard, whose committed uniform program hard-codes its cluster (parameters nx, nh), so as committed it builds a 45 x 6 cluster, not this instance; the inputs otherwise match it (VB2). The reader found the fixed-node energies only in the uploads. So the number is cited to the dataset with the uploader named. Ruling E5 (Tristan, 2026-10-02): a variational row cites the VarBench dataset with the uploader named (ruling 1); the link stays and no row is flagged.",
+    "source_entry": "VB2-varbench-code-hubbard#66 (qmbl-verify 2026-09-29, ambiguous); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/rectangular-6x48_288_P_126_12",
+      "method": "VMC with uniform BCS (+Jastrow and backflow)",
+      "energy": -179.212
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by Luca F. Tocchio on 2021-10-01, commit f9fadda) [code](https://github.com/varbench/methods/blob/main/scripts/Hubbard/rectangular-6x48_288_P_126_12/VMC-uniform/vmc_hubbard.sh)",
+    "reported_as": "VarBench upload f9fadda: -179.212",
+    "location": "VarBench history of Hubbard/rectangular-6x48_288_P_126_12.md: 2021-10-01, commit f9fadda",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked script recompiles programs/vmc_hubbard, whose committed uniform program hard-codes its cluster (parameters nx, nh), so as committed it builds a 45 x 6 cluster, not this instance; the inputs otherwise match it (VB2). His published size-averaged 6 x 48 energies agree with this upload to 1e-4 (arXiv:1905.02658v2 Table 1; arXiv:2111.04623v4 Tables 1 and 2), but the reader found the stored digits only in the upload. So the number is cited to the dataset with the uploader named. Ruling E5 (Tristan, 2026-10-02): a variational row cites the VarBench dataset with the uploader named (ruling 1); the link stays and no row is flagged.",
+    "source_entry": "VB2-varbench-code-hubbard#67 (qmbl-verify 2026-09-29, ambiguous); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/rectangular-6x48_288_P_126_12",
+      "method": "FN on the state above",
+      "energy": -181.338
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by Luca F. Tocchio on 2021-10-04, commit adc4c4a) [code](https://github.com/varbench/methods/blob/main/scripts/Hubbard/rectangular-6x48_288_P_126_12/FN-uniform/fn_hubbard.sh)",
+    "reported_as": "VarBench upload adc4c4a: -181.338",
+    "location": "VarBench history of Hubbard/rectangular-6x48_288_P_126_12.md: 2021-10-04, commit adc4c4a",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked script recompiles programs/vmc_hubbard, whose committed uniform program hard-codes its cluster (parameters nx, nh), so as committed it builds a 45 x 6 cluster, not this instance; the inputs otherwise match it (VB2). The reader found the fixed-node energies only in the uploads. So the number is cited to the dataset with the uploader named. Ruling E5 (Tristan, 2026-10-02): a variational row cites the VarBench dataset with the uploader named (ruling 1); the link stays and no row is flagged.",
+    "source_entry": "VB2-varbench-code-hubbard#68 (qmbl-verify 2026-09-29, ambiguous); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/rectangular-6x48_288_P_126_8",
+      "method": "VMC with uniform BCS pairing (+Jastrow and backflow)",
+      "energy": -214.17
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by Luca F. Tocchio on 2021-09-24, commit 9f4b220, first per site, -0.74365, in 46131c6 (2021-09-16)) [code](https://github.com/varbench/methods/blob/main/scripts/Hubbard/rectangular-6x48_288_P_126_8/VMC-uniform/vmc_hubbard.sh)",
+    "reported_as": "VarBench upload 9f4b220: -214.17 (first per site, -0.74365, in 46131c6 (2021-09-16))",
+    "location": "VarBench history of Hubbard/rectangular-6x48_288_P_126_8.md: 2021-09-24, commit 9f4b220",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked script recompiles programs/vmc_hubbard, whose committed uniform program hard-codes its cluster (parameters nx, nh), so as committed it builds a 45 x 6 cluster, not this instance; the inputs otherwise match it (VB2). His published size-averaged 6 x 48 energies agree with this upload to 1e-4 (arXiv:1905.02658v2 Table 1; arXiv:2111.04623v4 Tables 1 and 2), but the reader found the stored digits only in the upload. So the number is cited to the dataset with the uploader named. Ruling E5 (Tristan, 2026-10-02): a variational row cites the VarBench dataset with the uploader named (ruling 1); the link stays and no row is flagged.",
+    "source_entry": "VB2-varbench-code-hubbard#69 (qmbl-verify 2026-09-29, ambiguous); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/rectangular-6x48_288_P_126_8",
+      "method": "FN on the state above",
+      "energy": -215.991
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by Luca F. Tocchio on 2021-09-24, commit 9f4b220, first per site, -0.74997, in 46131c6 (2021-09-16)) [code](https://github.com/varbench/methods/blob/main/scripts/Hubbard/rectangular-6x48_288_P_126_8/FN-uniform/fn_hubbard.sh)",
+    "reported_as": "VarBench upload 9f4b220: -215.991 (first per site, -0.74997, in 46131c6 (2021-09-16))",
+    "location": "VarBench history of Hubbard/rectangular-6x48_288_P_126_8.md: 2021-09-24, commit 9f4b220",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked script recompiles programs/vmc_hubbard, whose committed uniform program hard-codes its cluster (parameters nx, nh), so as committed it builds a 45 x 6 cluster, not this instance; the inputs otherwise match it (VB2). The reader found the fixed-node energies only in the uploads. So the number is cited to the dataset with the uploader named. Ruling E5 (Tristan, 2026-10-02): a variational row cites the VarBench dataset with the uploader named (ruling 1); the link stays and no row is flagged.",
+    "source_entry": "VB2-varbench-code-hubbard#70 (qmbl-verify 2026-09-29, ambiguous); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/rectangular-6x48_288_P_132_8",
+      "method": "VMC with uniform BCS pairing and Neel AF (+Jastrow and backflow)",
+      "energy": -191.85
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by Luca F. Tocchio on 2021-09-24, commit 173a0e2, first per site, -0.66616, in d5307da (2021-09-16)) [code](https://github.com/varbench/methods/blob/main/scripts/Hubbard/rectangular-6x48_288_P_132_8/VMC-uniform/vmc_hubbard.sh)",
+    "reported_as": "VarBench upload 173a0e2: -191.85 (first per site, -0.66616, in d5307da (2021-09-16))",
+    "location": "VarBench history of Hubbard/rectangular-6x48_288_P_132_8.md: 2021-09-24, commit 173a0e2",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked script recompiles programs/vmc_hubbard, whose committed uniform program hard-codes its cluster (parameters nx, nh), so as committed it builds a 45 x 6 cluster, not this instance; the inputs otherwise match it (VB2). His published size-averaged 6 x 48 energies agree with this upload to 1e-4 (arXiv:1905.02658v2 Table 1; arXiv:2111.04623v4 Tables 1 and 2), but the reader found the stored digits only in the upload. So the number is cited to the dataset with the uploader named. Ruling E5 (Tristan, 2026-10-02): a variational row cites the VarBench dataset with the uploader named (ruling 1); the link stays and no row is flagged.",
+    "source_entry": "VB2-varbench-code-hubbard#71 (qmbl-verify 2026-09-29, ambiguous); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/rectangular-6x48_288_P_132_8",
+      "method": "FN on the state above",
+      "energy": -193.85
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by Luca F. Tocchio on 2021-09-24, commit 173a0e2, first per site, -0.67309, in d5307da (2021-09-16)) [code](https://github.com/varbench/methods/blob/main/scripts/Hubbard/rectangular-6x48_288_P_132_8/FN-uniform/fn_hubbard.sh)",
+    "reported_as": "VarBench upload 173a0e2: -193.85 (first per site, -0.67309, in d5307da (2021-09-16))",
+    "location": "VarBench history of Hubbard/rectangular-6x48_288_P_132_8.md: 2021-09-24, commit 173a0e2",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked script recompiles programs/vmc_hubbard, whose committed uniform program hard-codes its cluster (parameters nx, nh), so as committed it builds a 45 x 6 cluster, not this instance; the inputs otherwise match it (VB2). The reader found the fixed-node energies only in the uploads. So the number is cited to the dataset with the uploader named. Ruling E5 (Tristan, 2026-10-02): a variational row cites the VarBench dataset with the uploader named (ruling 1); the link stays and no row is flagged.",
+    "source_entry": "VB2-varbench-code-hubbard#72 (qmbl-verify 2026-09-29, ambiguous); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_256_P_110_8",
+      "method": "VMC stripe length=8 (+Jastrow and backflow)",
+      "energy": -198.461
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by Luca F. Tocchio on 2022-07-28, commit aaa296d) [code](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_256_P_110_8/VMC-uniform/vmc_hubbard.sh)",
+    "reported_as": "VarBench upload aaa296d: -198.461",
+    "location": "VarBench history of Hubbard/square_256_P_110_8.md: 2022-07-28, commit aaa296d",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked script recompiles programs/vmc_hubbard, whose committed stripes program hard-codes its cluster (parameters nx, nh), so as committed it builds a 48 x 6 cluster, not this instance; the inputs otherwise match it (VB2). The reader found the stored digits only in the upload. So the number is cited to the dataset with the uploader named. Ruling E5 (Tristan, 2026-10-02): a variational row cites the VarBench dataset with the uploader named (ruling 1); the link stays and no row is flagged.",
+    "source_entry": "VB2-varbench-code-hubbard#73 (qmbl-verify 2026-09-29, ambiguous); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_256_P_112_4",
+      "method": "VMC uniform state (+Jastrow and backflow)",
+      "energy": -261.477
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by Luca F. Tocchio on 2022-07-27, commit 123e0a2) [code](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_256_P_112_4/VMC-uniform/vmc_hubbard.sh)",
+    "reported_as": "VarBench upload 123e0a2: -261.477",
+    "location": "VarBench history of Hubbard/square_256_P_112_4.md: 2022-07-27, commit 123e0a2",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked script recompiles programs/vmc_hubbard, whose committed uniform program hard-codes its cluster (parameters nx, nh), so as committed it builds no valid cluster, not this instance; the inputs otherwise match it (VB2). The reader found the stored digits only in the upload. So the number is cited to the dataset with the uploader named. Ruling E5 (Tristan, 2026-10-02): a variational row cites the VarBench dataset with the uploader named (ruling 1); the link stays and no row is flagged.",
+    "source_entry": "VB2-varbench-code-hubbard#74 (qmbl-verify 2026-09-29, ambiguous); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_256_P_112_6",
+      "method": "VMC stripe length=8 (+Jastrow and backflow)",
+      "energy": -219.204
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by Luca F. Tocchio on 2022-07-27, commit a23e5c3) [code](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_256_P_112_6/VMC-uniform/vmc_hubbard.sh)",
+    "reported_as": "VarBench upload a23e5c3: -219.204",
+    "location": "VarBench history of Hubbard/square_256_P_112_6.md: 2022-07-27, commit a23e5c3",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked script recompiles programs/vmc_hubbard, whose committed stripes program hard-codes its cluster (parameters nx, nh), so as committed it builds a 48 x 6 cluster, not this instance; the inputs otherwise match it (VB2). The reader found the stored digits only in the upload. So the number is cited to the dataset with the uploader named. Ruling E5 (Tristan, 2026-10-02): a variational row cites the VarBench dataset with the uploader named (ruling 1); the link stays and no row is flagged.",
+    "source_entry": "VB2-varbench-code-hubbard#75 (qmbl-verify 2026-09-29, ambiguous); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_256_P_112_8",
+      "method": "VMC with stripe of wavelength 8 (+Jastrow and backflow)",
+      "energy": -191.705
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by Luca F. Tocchio on 2021-09-24, commit 4ed1e41) [code](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_256_P_112_8/VMC-stripes/vmc_hubbard.sh)",
+    "reported_as": "VarBench upload 4ed1e41: -191.705",
+    "location": "VarBench history of Hubbard/square_256_P_112_8.md: 2021-09-24, commit 4ed1e41",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked script recompiles programs/vmc_hubbard, whose committed stripes program hard-codes its cluster (parameters nx, nh), so as committed it builds a 48 x 6 cluster, not this instance; the inputs otherwise match it (VB2). The reader found the stored digits only in the upload. So the number is cited to the dataset with the uploader named. Ruling E5 (Tristan, 2026-10-02): a variational row cites the VarBench dataset with the uploader named (ruling 1); the link stays and no row is flagged.",
+    "source_entry": "VB2-varbench-code-hubbard#76 (qmbl-verify 2026-09-29, ambiguous); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_256_P_112_8",
+      "method": "FN on the state above",
+      "energy": -193.12
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by Luca F. Tocchio on 2021-10-04, commit dd64d44) [code](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_256_P_112_8/FN-stripes/fn_hubbard.sh)",
+    "reported_as": "VarBench upload dd64d44: -193.12",
+    "location": "VarBench history of Hubbard/square_256_P_112_8.md: 2021-10-04, commit dd64d44",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked script recompiles programs/vmc_hubbard, whose committed stripes program hard-codes its cluster (parameters nx, nh), so as committed it builds a 48 x 6 cluster, not this instance; the inputs otherwise match it (VB2). The reader found the stored digits only in the upload. So the number is cited to the dataset with the uploader named. Ruling E5 (Tristan, 2026-10-02): a variational row cites the VarBench dataset with the uploader named (ruling 1); the link stays and no row is flagged.",
+    "source_entry": "VB2-varbench-code-hubbard#77 (qmbl-verify 2026-09-29, ambiguous); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_256_P_112_8",
+      "method": "VMC with uniform BCS pairing (+Jastrow and backflow)",
+      "energy": -190.451
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by Luca F. Tocchio on 2021-09-24, commit 4ed1e41) [code](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_256_P_112_8/VMC-uniform/vmc_hubbard.sh)",
+    "reported_as": "VarBench upload 4ed1e41: -190.451",
+    "location": "VarBench history of Hubbard/square_256_P_112_8.md: 2021-09-24, commit 4ed1e41",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked script recompiles programs/vmc_hubbard, whose committed uniform program hard-codes its cluster (parameters nx, nh), so as committed it builds no valid cluster, not this instance; the inputs otherwise match it (VB2). The reader found the stored digits only in the upload. So the number is cited to the dataset with the uploader named. Ruling E5 (Tristan, 2026-10-02): a variational row cites the VarBench dataset with the uploader named (ruling 1); the link stays and no row is flagged.",
+    "source_entry": "VB2-varbench-code-hubbard#78 (qmbl-verify 2026-09-29, ambiguous); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_256_P_112_8",
+      "method": "FN on the state above",
+      "energy": -191.977
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by Luca F. Tocchio on 2021-10-04, commit dd64d44) [code](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_256_P_112_8/FN-uniform/fn_hubbard.sh)",
+    "reported_as": "VarBench upload dd64d44: -191.977",
+    "location": "VarBench history of Hubbard/square_256_P_112_8.md: 2021-10-04, commit dd64d44",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked script recompiles programs/vmc_hubbard, whose committed uniform program hard-codes its cluster (parameters nx, nh), so as committed it builds no valid cluster, not this instance; the inputs otherwise match it (VB2). The reader found the stored digits only in the upload. So the number is cited to the dataset with the uploader named. Ruling E5 (Tristan, 2026-10-02): a variational row cites the VarBench dataset with the uploader named (ruling 1); the link stays and no row is flagged.",
+    "source_entry": "VB2-varbench-code-hubbard#79 (qmbl-verify 2026-09-29, ambiguous); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_256_P_114_4",
+      "method": "VMC uniform state (+Jastrow and backflow)",
+      "energy": -255.74
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by Luca F. Tocchio on 2022-07-27, commit 8f2e39b) [code](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_256_P_114_4/VMC-uniform/vmc_hubbard.sh)",
+    "reported_as": "VarBench upload 8f2e39b: -255.74",
+    "location": "VarBench history of Hubbard/square_256_P_114_4.md: 2022-07-27, commit 8f2e39b",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked script recompiles programs/vmc_hubbard, whose committed uniform program hard-codes its cluster (parameters nx, nh), so as committed it builds no valid cluster, not this instance; the inputs otherwise match it (VB2). The reader found the stored digits only in the upload. So the number is cited to the dataset with the uploader named. Ruling E5 (Tristan, 2026-10-02): a variational row cites the VarBench dataset with the uploader named (ruling 1); the link stays and no row is flagged.",
+    "source_entry": "VB2-varbench-code-hubbard#80 (qmbl-verify 2026-09-29, ambiguous); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_256_P_114_6",
+      "method": "VMC stripe length=8 (+Jastrow and backflow)",
+      "energy": -212.665
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by Luca F. Tocchio on 2022-07-27, commit 16922e6) [code](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_256_P_114_6/VMC-uniform/vmc_hubbard.sh)",
+    "reported_as": "VarBench upload 16922e6: -212.665",
+    "location": "VarBench history of Hubbard/square_256_P_114_6.md: 2022-07-27, commit 16922e6",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked script recompiles programs/vmc_hubbard, whose committed stripes program hard-codes its cluster (parameters nx, nh), so as committed it builds a 48 x 6 cluster, not this instance; the inputs otherwise match it (VB2). The reader found the stored digits only in the upload. So the number is cited to the dataset with the uploader named. Ruling E5 (Tristan, 2026-10-02): a variational row cites the VarBench dataset with the uploader named (ruling 1); the link stays and no row is flagged.",
+    "source_entry": "VB2-varbench-code-hubbard#81 (qmbl-verify 2026-09-29, ambiguous); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_256_P_114_8",
+      "method": "VMC stripe length=8 (+Jastrow and backflow)",
+      "energy": -184.398
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by Luca F. Tocchio on 2022-07-27, commit d1560be) [code](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_256_P_114_8/VMC-uniform/vmc_hubbard.sh)",
+    "reported_as": "VarBench upload d1560be: -184.398",
+    "location": "VarBench history of Hubbard/square_256_P_114_8.md: 2022-07-27, commit d1560be",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked script recompiles programs/vmc_hubbard, whose committed stripes program hard-codes its cluster (parameters nx, nh), so as committed it builds a 48 x 6 cluster, not this instance; the inputs otherwise match it (VB2). The reader found the stored digits only in the upload. So the number is cited to the dataset with the uploader named. Ruling E5 (Tristan, 2026-10-02): a variational row cites the VarBench dataset with the uploader named (ruling 1); the link stays and no row is flagged.",
+    "source_entry": "VB2-varbench-code-hubbard#82 (qmbl-verify 2026-09-29, ambiguous); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_256_P_116_8",
+      "method": "VMC stripe length=8 (+Jastrow and backflow)",
+      "energy": -176.978
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by Luca F. Tocchio on 2022-07-27, commit 830d697) [code](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_256_P_116_8/VMC-uniform/vmc_hubbard.sh)",
+    "reported_as": "VarBench upload 830d697: -176.978",
+    "location": "VarBench history of Hubbard/square_256_P_116_8.md: 2022-07-27, commit 830d697",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked script recompiles programs/vmc_hubbard, whose committed stripes program hard-codes its cluster (parameters nx, nh), so as committed it builds a 48 x 6 cluster, not this instance; the inputs otherwise match it (VB2). The reader found the stored digits only in the upload. So the number is cited to the dataset with the uploader named. Ruling E5 (Tristan, 2026-10-02): a variational row cites the VarBench dataset with the uploader named (ruling 1); the link stays and no row is flagged.",
+    "source_entry": "VB2-varbench-code-hubbard#83 (qmbl-verify 2026-09-29, ambiguous); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_64_P_25_4",
+      "method": "VMC with uniform pairing (+Jastrow and backflow)",
+      "energy": -72.11732
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by Luca F. Tocchio on 2021-10-08, commit cdf9ed5) [code](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_64_P_25_4/VMC-uniform/vmc_hubbard.sh)",
+    "reported_as": "VarBench upload cdf9ed5: -72.11732",
+    "location": "VarBench history of Hubbard/square_64_P_25_4.md: 2021-10-08, commit cdf9ed5",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked script recompiles programs/vmc_hubbard, whose committed uniform program hard-codes its cluster (parameters nx, nh), so as committed it builds no valid cluster, not this instance; the inputs otherwise match it (VB2). Levy et al. quote the 8 x 8 VMC energies as 'VMC [14]' (arXiv:2308.08594 Table I), but the reader found the stored digits only in the upload. So the number is cited to the dataset with the uploader named. Ruling E5 (Tristan, 2026-10-02): a variational row cites the VarBench dataset with the uploader named (ruling 1); the link stays and no row is flagged.",
+    "source_entry": "VB2-varbench-code-hubbard#84 (qmbl-verify 2026-09-29, ambiguous); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_64_P_25_4",
+      "method": "FN on the state above",
+      "energy": -72.2174
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by Luca F. Tocchio on 2021-10-13, commit 0a507e7) [code](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_64_P_25_4/FN-uniform/fn_hubbard.sh)",
+    "reported_as": "VarBench upload 0a507e7: -72.2174",
+    "location": "VarBench history of Hubbard/square_64_P_25_4.md: 2021-10-13, commit 0a507e7",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked script recompiles programs/vmc_hubbard, whose committed uniform program hard-codes its cluster (parameters nx, nh), so as committed it builds no valid cluster, not this instance; the inputs otherwise match it (VB2). The reader found the stored digits only in the upload. So the number is cited to the dataset with the uploader named. Ruling E5 (Tristan, 2026-10-02): a variational row cites the VarBench dataset with the uploader named (ruling 1); the link stays and no row is flagged.",
+    "source_entry": "VB2-varbench-code-hubbard#85 (qmbl-verify 2026-09-29, ambiguous); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_64_P_25_8",
+      "method": "VMC with uniform BCS pairing (+Jastrow and backflow)",
+      "energy": -58.2476
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by Luca F. Tocchio on 2021-10-08, commit a2ef5f7) [code](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_64_P_25_8/VMC-uniform/vmc_hubbard.sh)",
+    "reported_as": "VarBench upload a2ef5f7: -58.2476",
+    "location": "VarBench history of Hubbard/square_64_P_25_8.md: 2021-10-08, commit a2ef5f7",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked script recompiles programs/vmc_hubbard, whose committed uniform program hard-codes its cluster (parameters nx, nh), so as committed it builds no valid cluster, not this instance; the inputs otherwise match it (VB2). Levy et al. quote the 8 x 8 VMC energies as 'VMC [14]' (arXiv:2308.08594 Table I), but the reader found the stored digits only in the upload. So the number is cited to the dataset with the uploader named. Ruling E5 (Tristan, 2026-10-02): a variational row cites the VarBench dataset with the uploader named (ruling 1); the link stays and no row is flagged.",
+    "source_entry": "VB2-varbench-code-hubbard#86 (qmbl-verify 2026-09-29, ambiguous); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_64_P_25_8",
+      "method": "FN on the state above",
+      "energy": -58.4802
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by Luca F. Tocchio on 2021-10-13, commit 8aa80c1) [code](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_64_P_25_8/FN-uniform/fn_hubbard.sh)",
+    "reported_as": "VarBench upload 8aa80c1: -58.4802",
+    "location": "VarBench history of Hubbard/square_64_P_25_8.md: 2021-10-13, commit 8aa80c1",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked script recompiles programs/vmc_hubbard, whose committed uniform program hard-codes its cluster (parameters nx, nh), so as committed it builds no valid cluster, not this instance; the inputs otherwise match it (VB2). The reader found the stored digits only in the upload. So the number is cited to the dataset with the uploader named. Ruling E5 (Tristan, 2026-10-02): a variational row cites the VarBench dataset with the uploader named (ruling 1); the link stays and no row is flagged.",
+    "source_entry": "VB2-varbench-code-hubbard#87 (qmbl-verify 2026-09-29, ambiguous); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_64_P_28_4",
+      "method": "VMC with uniform BCS pairing (+Jastrow and backflow)",
+      "energy": -64.371
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by Luca F. Tocchio on 2021-10-06, commit c0aae00) [code](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_64_P_28_4/VMC-uniform/vmc_hubbard.sh)",
+    "reported_as": "VarBench upload c0aae00: -64.371",
+    "location": "VarBench history of Hubbard/square_64_P_28_4.md: 2021-10-06, commit c0aae00",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked script recompiles programs/vmc_hubbard, whose committed uniform program hard-codes its cluster (parameters nx, nh), so as committed it builds no valid cluster, not this instance; the inputs otherwise match it (VB2). Levy et al. quote the 8 x 8 VMC energies as 'VMC [14]' (arXiv:2308.08594 Table I), but the reader found the stored digits only in the upload. So the number is cited to the dataset with the uploader named. Ruling E5 (Tristan, 2026-10-02): a variational row cites the VarBench dataset with the uploader named (ruling 1); the link stays and no row is flagged.",
+    "source_entry": "VB2-varbench-code-hubbard#88 (qmbl-verify 2026-09-29, ambiguous); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_64_P_28_4",
+      "method": "FN on the state above",
+      "energy": -64.553
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by Luca F. Tocchio on 2021-10-08, commit 0e69c1b) [code](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_64_P_28_4/FN-uniform/fn_hubbard.sh)",
+    "reported_as": "VarBench upload 0e69c1b: -64.553",
+    "location": "VarBench history of Hubbard/square_64_P_28_4.md: 2021-10-08, commit 0e69c1b",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked script recompiles programs/vmc_hubbard, whose committed uniform program hard-codes its cluster (parameters nx, nh), so as committed it builds no valid cluster, not this instance; the inputs otherwise match it (VB2). The reader found the stored digits only in the upload. So the number is cited to the dataset with the uploader named. Ruling E5 (Tristan, 2026-10-02): a variational row cites the VarBench dataset with the uploader named (ruling 1); the link stays and no row is flagged.",
+    "source_entry": "VB2-varbench-code-hubbard#89 (qmbl-verify 2026-09-29, ambiguous); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_64_P_28_8",
+      "method": "VMC with uniform BCS pairing (+Jastrow and backflow)",
+      "energy": -47.501
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by Luca F. Tocchio on 2021-10-04, commit aa090d1) [code](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_64_P_28_8/VMC-uniform/vmc_hubbard.sh)",
+    "reported_as": "VarBench upload aa090d1: -47.501",
+    "location": "VarBench history of Hubbard/square_64_P_28_8.md: 2021-10-04, commit aa090d1",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked script recompiles programs/vmc_hubbard, whose committed uniform program hard-codes its cluster (parameters nx, nh), so as committed it builds no valid cluster, not this instance; the inputs otherwise match it (VB2). Levy et al. quote the 8 x 8 VMC energies as 'VMC [14]' (arXiv:2308.08594 Table I), but the reader found the stored digits only in the upload. So the number is cited to the dataset with the uploader named. Ruling E5 (Tristan, 2026-10-02): a variational row cites the VarBench dataset with the uploader named (ruling 1); the link stays and no row is flagged.",
+    "source_entry": "VB2-varbench-code-hubbard#90 (qmbl-verify 2026-09-29, ambiguous); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_64_P_28_8",
+      "method": "FN on the state above",
+      "energy": -47.954
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by Luca F. Tocchio on 2021-10-08, commit 00066b7) [code](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_64_P_28_8/FN-uniform/fn_hubbard.sh)",
+    "reported_as": "VarBench upload 00066b7: -47.954",
+    "location": "VarBench history of Hubbard/square_64_P_28_8.md: 2021-10-08, commit 00066b7",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked script recompiles programs/vmc_hubbard, whose committed uniform program hard-codes its cluster (parameters nx, nh), so as committed it builds no valid cluster, not this instance; the inputs otherwise match it (VB2). The reader found the stored digits only in the upload. So the number is cited to the dataset with the uploader named. Ruling E5 (Tristan, 2026-10-02): a variational row cites the VarBench dataset with the uploader named (ruling 1); the link stays and no row is flagged.",
+    "source_entry": "VB2-varbench-code-hubbard#91 (qmbl-verify 2026-09-29, ambiguous); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_64_P_32_4",
+      "method": "VMC with Neel AF (+Jastrow and backflow)",
+      "energy": -54.81638
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by Luca F. Tocchio on 2021-10-08, commit 47042df) [code](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_64_P_32_4/VMC-uniform/vmc_hubbard.sh)",
+    "reported_as": "VarBench upload 47042df: -54.81638",
+    "location": "VarBench history of Hubbard/square_64_P_32_4.md: 2021-10-08, commit 47042df",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked script recompiles programs/vmc_hubbard, whose committed uniform program hard-codes its cluster (parameters nx, nh), so as committed it builds no valid cluster, not this instance; the inputs otherwise match it (VB2). The reader found the stored digits only in the upload. So the number is cited to the dataset with the uploader named. Ruling E5 (Tristan, 2026-10-02): a variational row cites the VarBench dataset with the uploader named (ruling 1); the link stays and no row is flagged.",
+    "source_entry": "VB2-varbench-code-hubbard#92 (qmbl-verify 2026-09-29, ambiguous); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_64_P_32_4",
+      "method": "FN on the state above",
+      "energy": -54.8898
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by Luca F. Tocchio on 2021-10-13, commit 93617ed) [code](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_64_P_32_4/FN-uniform/fn_hubbard.sh)",
+    "reported_as": "VarBench upload 93617ed: -54.8898",
+    "location": "VarBench history of Hubbard/square_64_P_32_4.md: 2021-10-13, commit 93617ed",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked script recompiles programs/vmc_hubbard, whose committed uniform program hard-codes its cluster (parameters nx, nh), so as committed it builds no valid cluster, not this instance; the inputs otherwise match it (VB2). The reader found the stored digits only in the upload. So the number is cited to the dataset with the uploader named. Ruling E5 (Tristan, 2026-10-02): a variational row cites the VarBench dataset with the uploader named (ruling 1); the link stays and no row is flagged.",
+    "source_entry": "VB2-varbench-code-hubbard#93 (qmbl-verify 2026-09-29, ambiguous); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_256_PA_107_8",
+      "method": "mVMC with SU(2) and momentum projections (gamma point) + RBM + Lanczos, (U=8), alpha = 1",
+      "energy": -204.48
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by M. Schmid on 2021-10-28 in the collected overview of the Imada group's benchmarks, commit 175fe34, and in the instance's file since ca26677, 2021-11-14) [code](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_256_PA_107_8/mVMC/mVMC.sh)",
+    "reported_as": "VarBench Hubbard/Imada_group_overview/square_lattice_benchmark.md at 175fe34: '-204.48(7) | 0.0175 | 49.7(16)'",
+    "location": "VarBench history: 175fe34 (2021-10-28, milschmid, 'Add collected overview of Imada group benchmarks.'); ca26677 (2021-11-14, 'Finish benchmark Imdagroup'); script link 2d91091 (2024-08-13, Dian Wu)",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked mVMC generator cannot build this Hamiltonian as committed: sub_trans.py writes every hopping as +1.0 with periodic wrap ('# consider AP case later') and sub_qptransidx.py writes no boundary signs, so the script builds a periodic-periodic cluster, and its RBM is always translation-invariant (VB2, the engineer's finding for #104). The number is the Imada group's 2021 upload, produced with def files that are not in varbench/methods, so it is cited to the dataset with the uploader named. Ruling E5 (Tristan, 2026-10-02): a variational row cites the VarBench dataset with the uploader named (ruling 1); the link stays and no row is flagged.",
+    "source_entry": "VB2-varbench-code-hubbard#101 (qmbl-verify 2026-09-29, ambiguous); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_256_PA_107_8_t12",
+      "method": "mVMC with SU(2) and momentum projections (gamma point) + RBM + Lanczos (Ncond = 214), alpha = 1, with 4x4 RBM subspace",
+      "energy": -204.64
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by M. Schmid on 2021-10-28 in the collected overview of the Imada group's benchmarks, commit 175fe34, and in the instance's file since ca26677, 2021-11-14) [code](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_256_PA_107_8_t12/mVMC/mVMC.sh)",
+    "reported_as": "VarBench Hubbard/Imada_group_overview/square_lattice_benchmark.md at 175fe34: '-204.64(4) | 0.0095 | 43.6(11)'",
+    "location": "VarBench history: 175fe34 (2021-10-28, milschmid, 'Add collected overview of Imada group benchmarks.'); ca26677 (2021-11-14, 'Finish benchmark Imdagroup'); script link 2d91091 (2024-08-13, Dian Wu)",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked mVMC generator cannot build this Hamiltonian as committed: sub_trans.py writes every hopping as +1.0 with periodic wrap ('# consider AP case later') and sub_qptransidx.py writes no boundary signs, so the script builds a periodic-periodic cluster, and its RBM is always translation-invariant (VB2, the engineer's finding for #104). The number is the Imada group's 2021 upload, produced with def files that are not in varbench/methods, so it is cited to the dataset with the uploader named. It is the only row on its instance and holds the record; only the citation changes. Ruling E5 (Tristan, 2026-10-02): a variational row cites the VarBench dataset with the uploader named (ruling 1); the link stays and no row is flagged.",
+    "source_entry": "VB2-varbench-code-hubbard#102 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_256_PA_107_8_t12_UV1V2",
+      "method": "mVMC with SU(2) and momentum projections (gamma point) + RBM + Lanczos (Ne = 214), alpha = 2, with 1x1 RBM subpsace",
+      "energy": 322.35
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by M. Schmid on 2021-10-28 in the collected overview of the Imada group's benchmarks, commit 175fe34, and in the instance's file since ca26677, 2021-11-14) [code](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_256_PA_107_8_t12_UV1V2/mVMC/mVMC.sh)",
+    "reported_as": "VarBench Hubbard/Imada_group_overview/square_lattice_benchmark.md at 175fe34: '322.35(6) | 0.00696 | 44.71(6)'",
+    "location": "VarBench history: 175fe34 (2021-10-28, milschmid, 'Add collected overview of Imada group benchmarks.'); ca26677 (2021-11-14, 'Finish benchmark Imdagroup'); script link 2d91091 (2024-08-13, Dian Wu)",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked mVMC generator cannot build this Hamiltonian as committed: sub_trans.py writes every hopping as +1.0 with periodic wrap ('# consider AP case later') and sub_qptransidx.py writes no boundary signs, so the script builds a periodic-periodic cluster, and its RBM is always translation-invariant; on main, make_all.py reads the key 'V' while this input names it 'V1', so no inter-site terms are written at all (VB2, the engineer's finding for #104). The number is the Imada group's 2021 upload, produced with def files that are not in varbench/methods, so it is cited to the dataset with the uploader named. It is the only row on its instance and holds the record; only the citation changes. Ruling E5 (Tristan, 2026-10-02): a variational row cites the VarBench dataset with the uploader named (ruling 1); the link stays and no row is flagged.",
+    "source_entry": "VB2-varbench-code-hubbard#104 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E5, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_256_PA_128_8",
+      "method": "mVMC with SU(2) and momentum projections (gamma point) + RBM + Lanczos, (U=8)",
+      "energy": -132.86
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by M. Schmid on 2021-10-28 in the collected overview of the Imada group's benchmarks, commit 175fe34, and in the instance's file since ca26677, 2021-11-14) [code](https://github.com/varbench/methods/blob/main/scripts/Hubbard/square_256_PA_128_8/mVMC/mVMC.sh)",
+    "reported_as": "VarBench Hubbard/Imada_group_overview/square_lattice_benchmark.md at 175fe34: '-132.86(2) | 0.0044 | 8.1(3)'",
+    "location": "VarBench history: 175fe34 (2021-10-28, milschmid, 'Add collected overview of Imada group benchmarks.'); ca26677 (2021-11-14, 'Finish benchmark Imdagroup'); script link 2d91091 (2024-08-13, Dian Wu)",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify-2026-09-29/varbench-history, git log -S / git show), read 2026-10-02",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-02",
+    "reason": "The linked mVMC generator cannot build this Hamiltonian as committed: sub_trans.py writes every hopping as +1.0 with periodic wrap ('# consider AP case later') and sub_qptransidx.py writes no boundary signs, so the script builds a periodic-periodic cluster, and its RBM is always translation-invariant (VB2, the engineer's finding for #104). The number is the Imada group's 2021 upload, produced with def files that are not in varbench/methods, so it is cited to the dataset with the uploader named. Ruling E5 (Tristan, 2026-10-02): a variational row cites the VarBench dataset with the uploader named (ruling 1); the link stays and no row is flagged.",
+    "source_entry": "VB2-varbench-code-hubbard#107 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E5, Tristan 2026-10-02"
+  },
+  // E8: Moss et al. 8 x 8 open is the authors' selection (add_repo_data_rows.mjs); the compute block written for the old run follows. (3)
+  {
+    "match": {
+      "instance": "Heisenberg/square_64_O",
+      "method": "2D tensorized-GRU RNN wavefunction, best variational",
+      "energy": -158.472824097
+    },
+    "field": "compute.iterations",
+    "from": 20723,
+    "to": 163083,
+    "reported_as": "Square/utils.py L83-84: \"def step_schedule_exp_decay(L, scale=1., rate=0.5): return int((1000 + scale * 100000) * np.exp(-(L - 6) * rate) + (scale * 2000))\"; final_energy_data_plotting.pkl ['open']['rate=0.475']['scale=4.0'], L = 8: -0.619034469127655 +/- 5.80e-6",
+    "location": "HeisenbergRNN@29bf62a Square/utils.py, Square/scripts/enlargeSquare_scaling.py; sources/2502.17144-repo-final_energy_data.json",
+    "version_read": "the compute pass of 2026-09-24 (route2a) as recorded in this block; the authors' pickle as committed in qmbl sources/",
+    "checked_on": "2026-10-02",
+    "source_entry": "VP7-arxiv-2502-17144#45 (qmbl-verify 2026-09-29, ambiguous); ruling E8, Tristan 2026-10-02",
+    "conversion": "step_schedule_exp_decay(L = 8, s = 4, r = 0.475) = int(401000 x exp(-0.95) + 8000) = 163083",
+    "reason": "Ruling E8: the row is the authors' best run at open boundaries, s = 4, r = 0.475, in place of the lowest of all ten, s = 0.5 (add_repo_data_rows.mjs). The block was written for the s = 0.5 run (20723 steps at this size); the code's schedule at s = 4 gives 163083."
+  },
+  {
+    "match": {
+      "instance": "Heisenberg/square_64_O",
+      "method": "2D tensorized-GRU RNN wavefunction, best variational",
+      "energy": -158.472824097
+    },
+    "field": "compute.note",
+    "edit": [
+      "Run: repository run boundary=open, scale s = 0.5, rate r = 0.475, E/N = -0.619049489 +- 1.25e-5 vs row -0.61904949; the match is unique at 1e-7 or better against the other nine runs of that boundary and size. iterations = 20723 = Adam steps at this size only = step_schedule_exp_decay(L = 8, s = 0.5, r = 0.475)",
+      "Run: repository run boundary=open, scale s = 4, rate r = 0.475, E/N = -0.619034469 +- 5.80e-6, the authors' best run at open boundaries (they choose among s = 2 and 4; this block was written on 2026-09-24 for the lowest of all ten runs, s = 0.5, which the row carried until 2026-10-02, ruling E8). iterations = 163083 = Adam steps at this size only = step_schedule_exp_decay(L = 8, s = 4, r = 0.475)"
+    ],
+    "reported_as": "Square/utils.py L83-84: \"def step_schedule_exp_decay(L, scale=1., rate=0.5): return int((1000 + scale * 100000) * np.exp(-(L - 6) * rate) + (scale * 2000))\"; final_energy_data_plotting.pkl ['open']['rate=0.475']['scale=4.0'], L = 8: -0.619034469127655 +/- 5.80e-6",
+    "location": "HeisenbergRNN@29bf62a Square/utils.py, Square/scripts/enlargeSquare_scaling.py; sources/2502.17144-repo-final_energy_data.json",
+    "version_read": "the compute pass of 2026-09-24 (route2a) as recorded in this block; the authors' pickle as committed in qmbl sources/",
+    "checked_on": "2026-10-02",
+    "source_entry": "VP7-arxiv-2502-17144#45 (qmbl-verify 2026-09-29, ambiguous); ruling E8, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The run the block describes follows the row (ruling E8)."
+  },
+  {
+    "match": {
+      "instance": "Heisenberg/square_64_O",
+      "method": "2D tensorized-GRU RNN wavefunction, best variational",
+      "energy": -158.472824097
+    },
+    "field": "compute.note",
+    "edit": [
+      "cumulative steps from scratch through L = 8 = 71723 (L = 6 stages 51000). Paper Eq. (6) as printed, s x [C exp(-r(L - L0)) + F] with C = 101e3, F = 2e3, gives 20530;",
+      "cumulative steps from scratch through L = 8 = 564083 (L = 6 stages 401000). Paper Eq. (6) as printed, s x [C exp(-r(L - L0)) + F] with C = 101e3, F = 2e3, gives 164243;"
+    ],
+    "reported_as": "Square/utils.py L83-84: \"def step_schedule_exp_decay(L, scale=1., rate=0.5): return int((1000 + scale * 100000) * np.exp(-(L - 6) * rate) + (scale * 2000))\"; final_energy_data_plotting.pkl ['open']['rate=0.475']['scale=4.0'], L = 8: -0.619034469127655 +/- 5.80e-6",
+    "location": "HeisenbergRNN@29bf62a Square/utils.py, Square/scripts/enlargeSquare_scaling.py; sources/2502.17144-repo-final_energy_data.json",
+    "version_read": "the compute pass of 2026-09-24 (route2a) as recorded in this block; the authors' pickle as committed in qmbl sources/",
+    "checked_on": "2026-10-02",
+    "source_entry": "VP7-arxiv-2502-17144#45 (qmbl-verify 2026-09-29, ambiguous); ruling E8, Tristan 2026-10-02",
+    "conversion": "L = 6 stages 1000 + 100000 s = 401000; Eq. (6) at s = 4: 4 x (101000 exp(-0.95) + 2000) = 164243",
+    "reason": "The same numbers for the s = 4 run, by the formulas the block states for s = 0.5 (which they reproduce: 51000, 71723, 20530)."
+  },
+  // E9: the NN + Gutzwiller quote is flagged (defects.mjs); peer_reviewed follows the venue that printed it (ruling 4). (1)
+  {
+    "match": {
+      "instance": "Heisenberg/triangular_36_P",
+      "method": "NN + Gutzwiller",
+      "energy": -79.632
+    },
+    "field": "peer_reviewed",
+    "to": false,
+    "reported_as": "'NN + Gutzwiller [12] -0.553 N/A' (arXiv:2104.05085v3 Table I)",
+    "location": "Roth & MacDonald, arXiv:2104.05085 v1-v3 Table I (no journal reference on the abstract page); Ferrari, Becca & Carrasquilla, Phys. Rev. B 100, 125131, Sec. V.C and Fig. 9 (Delta E only)",
+    "version_read": "arXiv:2104.05085v3; arXiv:1906.00463v2 (VP14)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "RULES.md 8.1 (ruling 4, 2026-09-30): peer_reviewed follows the venue that printed the number. The reader found -0.553 printed only in Roth & MacDonald's arXiv paper, which has no journal version; the refereed Ferrari et al. print only Delta E ~ 1.4% (VP14#49). Answers the M10 'peer_reviewed missing' flag of the row, which ruling E9 keeps, flagged.",
+    "source_entry": "VP14-hubbard-j1j2-heisenberg-tfising#49 (qmbl-verify 2026-09-29, ambiguous); ruling E9, Tristan 2026-10-02, with ruling 4"
+  },
+  // E10: the HQT rows: a printed interval that holds the exact energy is not below it (RULES.md 9.4); an undefined variance is null under the existing flag. (2)
+  {
+    "match": {
+      "instance": "Heisenberg/square_64_P",
+      "method": "HQT (Ours)",
+      "energy": -172.416
+    },
+    "field": "defect",
+    "to": null,
+    "reported_as": "-0.6735 (Table 2, row J2/J1 = 0.00, E/N in S.S units, printed to four decimals; no error bar)",
+    "location": "arXiv:2607.00398v1 Table 2 ('Summary of Phase Diagram Scan (8x8)'), p. 6; the SSE row of the instance, Sandvik's e0 = -0.67349005(2)",
+    "version_read": "arXiv:2607.00398v1 PDF (the only arXiv version; VP13)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "RULES.md 9.4 (ruling E10, Tristan 2026-10-02): a row lies below an exact energy only if the whole interval its printed digits allow lies below it. -0.6735 stands for [-0.67355, -0.67345], which holds the SSE e0 = -0.67349005; the stored total sits 0.0025 under the SSE row only because four printed decimals are scaled by 4N = 256 (VP13#64). The below-exact flag (FP1-arxiv-2607-00398#0) is lifted; its finding stays on the row here, in `from`. The row has no sigma, so it holds nothing either way.",
+    "source_entry": "VP13-hubbard-j1j2-heisenberg#64 (qmbl-verify 2026-09-29, ambiguous); ruling E10, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_64_P_0.5",
+      "method": "Holographic Quantum Transformer (HQT)",
+      "energy": -128.0256
+    },
+    "field": "energy_variance",
+    "to": null,
+    "reported_as": "sigma^2_{E/N} = 1.4e-3 (Table 1 notes cell 'tau<0.01, sigma^2=1.4e-3'; Sec. 3.2); Table 2 row 0.50: 0.0034",
+    "location": "arXiv:2607.00398v1 Table 1, Sec. 3.2 and Table 2",
+    "version_read": "arXiv:2607.00398v1 PDF (VP13)",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "The paper defines sigma^2_{E/N} nowhere and prints three variances for this state; read as Var(H)/N in S.S units the stored total is 1.4336, read as Var(H/N) it would be 91.75 (VP13#68). Ruling E10 (Tristan, 2026-10-02): energy_variance is null under the existing energy-variance-inconsistent flag, whose finding keeps every printed value; the V-score goes with it.",
+    "source_entry": "VP13-hubbard-j1j2-heisenberg#68 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E10, Tristan 2026-10-02"
+  },
+  // E12: the three-band impurity DMRG rows keep the SM's 60 sweeps with a note that the linked script runs 15; two compute-note slips fixed. (69)
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT-SOC_119",
+      "method": "DMRG (bond dimension 310) using fork tensor product states with U(1) symmetry for charge sector",
+      "energy": -1305.390226379267
+    },
+    "field": "compute.note",
+    "edit": [
+      "(SM statement; the single-band script also sets sweeps=60, two-site DMRG).",
+      "(SM statement; the single-band script also sets sweeps=60, two-site DMRG). The run script this row links sets no sweep count, so forkTPS's defaults apply: 15 sweeps of its single-site DMRG with subspace expansion ('SSImp'), after a 15-sweep sector search where the SM says 30. The 2022 runs left no log, so iterations keeps the SM's 60 (ruling E12, Tristan 2026-10-02)."
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT-SOC_119.py (ed31bb0): 'Nbath = 119', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT-SOC_119.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#24 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "VarBench's SM says the ground state 'is found by another 60 DMRG sweeps'; the linked script passes no sweep count, so forkTPS runs its default 15 (VA2). Ruling E12: iterations stays 60, the statement describing the runs, with a note that the linked script runs 15."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT-SOC_119",
+      "method": "DMRG (bond dimension 310) using fork tensor product states with U(1) symmetry for charge sector",
+      "energy": -1305.390226379267
+    },
+    "field": "compute.source",
+    "edit": [
+      "Sec. S6 B 2",
+      "Sec. S3 B 2"
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT-SOC_119.py (ed31bb0): 'Nbath = 119', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT-SOC_119.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#24 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The section of arXiv:2302.04919's SM on fork tensor product states for impurity models is S3 B 2 (v1, v2 and the repository copy), not S6 B 2 (VA2)."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT-SOC_119",
+      "method": "DMRG (bond dimension 330) using fork tensor product states with U(1) symmetry for charge sector",
+      "energy": -1305.390229553475
+    },
+    "field": "compute.note",
+    "edit": [
+      "(SM statement; the single-band script also sets sweeps=60, two-site DMRG).",
+      "(SM statement; the single-band script also sets sweeps=60, two-site DMRG). The run script this row links sets no sweep count, so forkTPS's defaults apply: 15 sweeps of its single-site DMRG with subspace expansion ('SSImp'), after a 15-sweep sector search where the SM says 30. The 2022 runs left no log, so iterations keeps the SM's 60 (ruling E12, Tristan 2026-10-02)."
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT-SOC_119.py (ed31bb0): 'Nbath = 119', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT-SOC_119.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#27 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "VarBench's SM says the ground state 'is found by another 60 DMRG sweeps'; the linked script passes no sweep count, so forkTPS runs its default 15 (VA2). Ruling E12: iterations stays 60, the statement describing the runs, with a note that the linked script runs 15."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT-SOC_119",
+      "method": "DMRG (bond dimension 330) using fork tensor product states with U(1) symmetry for charge sector",
+      "energy": -1305.390229553475
+    },
+    "field": "compute.source",
+    "edit": [
+      "Sec. S6 B 2",
+      "Sec. S3 B 2"
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT-SOC_119.py (ed31bb0): 'Nbath = 119', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT-SOC_119.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#27 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The section of arXiv:2302.04919's SM on fork tensor product states for impurity models is S3 B 2 (v1, v2 and the repository copy), not S6 B 2 (VA2)."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT-SOC_119",
+      "method": "DMRG (bond dimension 350) using fork tensor product states with U(1) symmetry for charge sector",
+      "energy": -1305.3902308399847
+    },
+    "field": "compute.note",
+    "edit": [
+      "(SM statement; the single-band script also sets sweeps=60, two-site DMRG).",
+      "(SM statement; the single-band script also sets sweeps=60, two-site DMRG). The run script this row links sets no sweep count, so forkTPS's defaults apply: 15 sweeps of its single-site DMRG with subspace expansion ('SSImp'), after a 15-sweep sector search where the SM says 30. The 2022 runs left no log, so iterations keeps the SM's 60 (ruling E12, Tristan 2026-10-02)."
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT-SOC_119.py (ed31bb0): 'Nbath = 119', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT-SOC_119.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#30 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "VarBench's SM says the ground state 'is found by another 60 DMRG sweeps'; the linked script passes no sweep count, so forkTPS runs its default 15 (VA2). Ruling E12: iterations stays 60, the statement describing the runs, with a note that the linked script runs 15."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT-SOC_119",
+      "method": "DMRG (bond dimension 350) using fork tensor product states with U(1) symmetry for charge sector",
+      "energy": -1305.3902308399847
+    },
+    "field": "compute.source",
+    "edit": [
+      "Sec. S6 B 2",
+      "Sec. S3 B 2"
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT-SOC_119.py (ed31bb0): 'Nbath = 119', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT-SOC_119.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#30 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The section of arXiv:2302.04919's SM on fork tensor product states for impurity models is S3 B 2 (v1, v2 and the repository copy), not S6 B 2 (VA2)."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT-SOC_19",
+      "method": "DMRG (bond dimension 310) using fork tensor product states with U(1) symmetry for charge sector",
+      "energy": -219.7669109204618
+    },
+    "field": "compute.note",
+    "edit": [
+      "(SM statement; the single-band script also sets sweeps=60, two-site DMRG).",
+      "(SM statement; the single-band script also sets sweeps=60, two-site DMRG). The run script this row links sets no sweep count, so forkTPS's defaults apply: 15 sweeps of its single-site DMRG with subspace expansion ('SSImp'), after a 15-sweep sector search where the SM says 30. The 2022 runs left no log, so iterations keeps the SM's 60 (ruling E12, Tristan 2026-10-02)."
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT-SOC_19.py (ed31bb0): 'Nbath = 19', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT-SOC_19.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#33 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "VarBench's SM says the ground state 'is found by another 60 DMRG sweeps'; the linked script passes no sweep count, so forkTPS runs its default 15 (VA2). Ruling E12: iterations stays 60, the statement describing the runs, with a note that the linked script runs 15."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT-SOC_19",
+      "method": "DMRG (bond dimension 310) using fork tensor product states with U(1) symmetry for charge sector",
+      "energy": -219.7669109204618
+    },
+    "field": "compute.source",
+    "edit": [
+      "Sec. S6 B 2",
+      "Sec. S3 B 2"
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT-SOC_19.py (ed31bb0): 'Nbath = 19', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT-SOC_19.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#33 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The section of arXiv:2302.04919's SM on fork tensor product states for impurity models is S3 B 2 (v1, v2 and the repository copy), not S6 B 2 (VA2)."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT-SOC_19",
+      "method": "DMRG (bond dimension 310) using fork tensor product states with U(1) symmetry for charge sector",
+      "energy": -219.7669109204618
+    },
+    "field": "compute.reported_as",
+    "edit": [
+      "VarBench script scripts/Impurity/TB-DMFT-SOC_119.py: Nbath = 119;",
+      "VarBench script scripts/Impurity/TB-DMFT-SOC_19.py: Nbath = 19;"
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT-SOC_19.py (ed31bb0): 'Nbath = 19', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT-SOC_19.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#33 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The block quoted the TB-DMFT-SOC_119 script on every three-band row; this row's script is TB-DMFT-SOC_19.py, with Nbath = 19 and the same bondList and DMRG parameters (VA2)."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT-SOC_19",
+      "method": "DMRG (bond dimension 330) using fork tensor product states with U(1) symmetry for charge sector",
+      "energy": -219.76691095981835
+    },
+    "field": "compute.note",
+    "edit": [
+      "(SM statement; the single-band script also sets sweeps=60, two-site DMRG).",
+      "(SM statement; the single-band script also sets sweeps=60, two-site DMRG). The run script this row links sets no sweep count, so forkTPS's defaults apply: 15 sweeps of its single-site DMRG with subspace expansion ('SSImp'), after a 15-sweep sector search where the SM says 30. The 2022 runs left no log, so iterations keeps the SM's 60 (ruling E12, Tristan 2026-10-02)."
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT-SOC_19.py (ed31bb0): 'Nbath = 19', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT-SOC_19.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#36 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "VarBench's SM says the ground state 'is found by another 60 DMRG sweeps'; the linked script passes no sweep count, so forkTPS runs its default 15 (VA2). Ruling E12: iterations stays 60, the statement describing the runs, with a note that the linked script runs 15."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT-SOC_19",
+      "method": "DMRG (bond dimension 330) using fork tensor product states with U(1) symmetry for charge sector",
+      "energy": -219.76691095981835
+    },
+    "field": "compute.source",
+    "edit": [
+      "Sec. S6 B 2",
+      "Sec. S3 B 2"
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT-SOC_19.py (ed31bb0): 'Nbath = 19', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT-SOC_19.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#36 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The section of arXiv:2302.04919's SM on fork tensor product states for impurity models is S3 B 2 (v1, v2 and the repository copy), not S6 B 2 (VA2)."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT-SOC_19",
+      "method": "DMRG (bond dimension 330) using fork tensor product states with U(1) symmetry for charge sector",
+      "energy": -219.76691095981835
+    },
+    "field": "compute.reported_as",
+    "edit": [
+      "VarBench script scripts/Impurity/TB-DMFT-SOC_119.py: Nbath = 119;",
+      "VarBench script scripts/Impurity/TB-DMFT-SOC_19.py: Nbath = 19;"
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT-SOC_19.py (ed31bb0): 'Nbath = 19', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT-SOC_19.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#36 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The block quoted the TB-DMFT-SOC_119 script on every three-band row; this row's script is TB-DMFT-SOC_19.py, with Nbath = 19 and the same bondList and DMRG parameters (VA2)."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT-SOC_19",
+      "method": "DMRG (bond dimension 350) using fork tensor product states with U(1) symmetry for charge sector",
+      "energy": -219.76691098485568
+    },
+    "field": "compute.note",
+    "edit": [
+      "(SM statement; the single-band script also sets sweeps=60, two-site DMRG).",
+      "(SM statement; the single-band script also sets sweeps=60, two-site DMRG). The run script this row links sets no sweep count, so forkTPS's defaults apply: 15 sweeps of its single-site DMRG with subspace expansion ('SSImp'), after a 15-sweep sector search where the SM says 30. The 2022 runs left no log, so iterations keeps the SM's 60 (ruling E12, Tristan 2026-10-02)."
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT-SOC_19.py (ed31bb0): 'Nbath = 19', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT-SOC_19.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#39 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "VarBench's SM says the ground state 'is found by another 60 DMRG sweeps'; the linked script passes no sweep count, so forkTPS runs its default 15 (VA2). Ruling E12: iterations stays 60, the statement describing the runs, with a note that the linked script runs 15."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT-SOC_19",
+      "method": "DMRG (bond dimension 350) using fork tensor product states with U(1) symmetry for charge sector",
+      "energy": -219.76691098485568
+    },
+    "field": "compute.source",
+    "edit": [
+      "Sec. S6 B 2",
+      "Sec. S3 B 2"
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT-SOC_19.py (ed31bb0): 'Nbath = 19', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT-SOC_19.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#39 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The section of arXiv:2302.04919's SM on fork tensor product states for impurity models is S3 B 2 (v1, v2 and the repository copy), not S6 B 2 (VA2)."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT-SOC_19",
+      "method": "DMRG (bond dimension 350) using fork tensor product states with U(1) symmetry for charge sector",
+      "energy": -219.76691098485568
+    },
+    "field": "compute.reported_as",
+    "edit": [
+      "VarBench script scripts/Impurity/TB-DMFT-SOC_119.py: Nbath = 119;",
+      "VarBench script scripts/Impurity/TB-DMFT-SOC_19.py: Nbath = 19;"
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT-SOC_19.py (ed31bb0): 'Nbath = 19', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT-SOC_19.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#39 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The block quoted the TB-DMFT-SOC_119 script on every three-band row; this row's script is TB-DMFT-SOC_19.py, with Nbath = 19 and the same bondList and DMRG parameters (VA2)."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT-SOC_309",
+      "method": "DMRG (bond dimension 310) using fork tensor product states with U(1) symmetry for charge sector",
+      "energy": -3351.7573502106206
+    },
+    "field": "compute.note",
+    "edit": [
+      "(SM statement; the single-band script also sets sweeps=60, two-site DMRG).",
+      "(SM statement; the single-band script also sets sweeps=60, two-site DMRG). The run script this row links sets no sweep count, so forkTPS's defaults apply: 15 sweeps of its single-site DMRG with subspace expansion ('SSImp'), after a 15-sweep sector search where the SM says 30. The 2022 runs left no log, so iterations keeps the SM's 60 (ruling E12, Tristan 2026-10-02)."
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT-SOC_309.py (ed31bb0): 'Nbath = 309', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT-SOC_309.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#42 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "VarBench's SM says the ground state 'is found by another 60 DMRG sweeps'; the linked script passes no sweep count, so forkTPS runs its default 15 (VA2). Ruling E12: iterations stays 60, the statement describing the runs, with a note that the linked script runs 15."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT-SOC_309",
+      "method": "DMRG (bond dimension 310) using fork tensor product states with U(1) symmetry for charge sector",
+      "energy": -3351.7573502106206
+    },
+    "field": "compute.source",
+    "edit": [
+      "Sec. S6 B 2",
+      "Sec. S3 B 2"
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT-SOC_309.py (ed31bb0): 'Nbath = 309', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT-SOC_309.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#42 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The section of arXiv:2302.04919's SM on fork tensor product states for impurity models is S3 B 2 (v1, v2 and the repository copy), not S6 B 2 (VA2)."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT-SOC_309",
+      "method": "DMRG (bond dimension 310) using fork tensor product states with U(1) symmetry for charge sector",
+      "energy": -3351.7573502106206
+    },
+    "field": "compute.reported_as",
+    "edit": [
+      "VarBench script scripts/Impurity/TB-DMFT-SOC_119.py: Nbath = 119;",
+      "VarBench script scripts/Impurity/TB-DMFT-SOC_309.py: Nbath = 309;"
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT-SOC_309.py (ed31bb0): 'Nbath = 309', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT-SOC_309.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#42 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The block quoted the TB-DMFT-SOC_119 script on every three-band row; this row's script is TB-DMFT-SOC_309.py, with Nbath = 309 and the same bondList and DMRG parameters (VA2)."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT-SOC_309",
+      "method": "DMRG (bond dimension 330) using fork tensor product states with U(1) symmetry for charge sector",
+      "energy": -3351.757353010661
+    },
+    "field": "compute.note",
+    "edit": [
+      "(SM statement; the single-band script also sets sweeps=60, two-site DMRG).",
+      "(SM statement; the single-band script also sets sweeps=60, two-site DMRG). The run script this row links sets no sweep count, so forkTPS's defaults apply: 15 sweeps of its single-site DMRG with subspace expansion ('SSImp'), after a 15-sweep sector search where the SM says 30. The 2022 runs left no log, so iterations keeps the SM's 60 (ruling E12, Tristan 2026-10-02)."
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT-SOC_309.py (ed31bb0): 'Nbath = 309', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT-SOC_309.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#45 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "VarBench's SM says the ground state 'is found by another 60 DMRG sweeps'; the linked script passes no sweep count, so forkTPS runs its default 15 (VA2). Ruling E12: iterations stays 60, the statement describing the runs, with a note that the linked script runs 15."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT-SOC_309",
+      "method": "DMRG (bond dimension 330) using fork tensor product states with U(1) symmetry for charge sector",
+      "energy": -3351.757353010661
+    },
+    "field": "compute.source",
+    "edit": [
+      "Sec. S6 B 2",
+      "Sec. S3 B 2"
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT-SOC_309.py (ed31bb0): 'Nbath = 309', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT-SOC_309.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#45 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The section of arXiv:2302.04919's SM on fork tensor product states for impurity models is S3 B 2 (v1, v2 and the repository copy), not S6 B 2 (VA2)."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT-SOC_309",
+      "method": "DMRG (bond dimension 330) using fork tensor product states with U(1) symmetry for charge sector",
+      "energy": -3351.757353010661
+    },
+    "field": "compute.reported_as",
+    "edit": [
+      "VarBench script scripts/Impurity/TB-DMFT-SOC_119.py: Nbath = 119;",
+      "VarBench script scripts/Impurity/TB-DMFT-SOC_309.py: Nbath = 309;"
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT-SOC_309.py (ed31bb0): 'Nbath = 309', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT-SOC_309.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#45 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The block quoted the TB-DMFT-SOC_119 script on every three-band row; this row's script is TB-DMFT-SOC_309.py, with Nbath = 309 and the same bondList and DMRG parameters (VA2)."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT-SOC_309",
+      "method": "DMRG (bond dimension 350) using fork tensor product states with U(1) symmetry for charge sector",
+      "energy": -3351.757359219215
+    },
+    "field": "compute.note",
+    "edit": [
+      "(SM statement; the single-band script also sets sweeps=60, two-site DMRG).",
+      "(SM statement; the single-band script also sets sweeps=60, two-site DMRG). The run script this row links sets no sweep count, so forkTPS's defaults apply: 15 sweeps of its single-site DMRG with subspace expansion ('SSImp'), after a 15-sweep sector search where the SM says 30. The 2022 runs left no log, so iterations keeps the SM's 60 (ruling E12, Tristan 2026-10-02)."
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT-SOC_309.py (ed31bb0): 'Nbath = 309', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT-SOC_309.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#48 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "VarBench's SM says the ground state 'is found by another 60 DMRG sweeps'; the linked script passes no sweep count, so forkTPS runs its default 15 (VA2). Ruling E12: iterations stays 60, the statement describing the runs, with a note that the linked script runs 15."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT-SOC_309",
+      "method": "DMRG (bond dimension 350) using fork tensor product states with U(1) symmetry for charge sector",
+      "energy": -3351.757359219215
+    },
+    "field": "compute.source",
+    "edit": [
+      "Sec. S6 B 2",
+      "Sec. S3 B 2"
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT-SOC_309.py (ed31bb0): 'Nbath = 309', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT-SOC_309.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#48 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The section of arXiv:2302.04919's SM on fork tensor product states for impurity models is S3 B 2 (v1, v2 and the repository copy), not S6 B 2 (VA2)."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT-SOC_309",
+      "method": "DMRG (bond dimension 350) using fork tensor product states with U(1) symmetry for charge sector",
+      "energy": -3351.757359219215
+    },
+    "field": "compute.reported_as",
+    "edit": [
+      "VarBench script scripts/Impurity/TB-DMFT-SOC_119.py: Nbath = 119;",
+      "VarBench script scripts/Impurity/TB-DMFT-SOC_309.py: Nbath = 309;"
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT-SOC_309.py (ed31bb0): 'Nbath = 309', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT-SOC_309.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#48 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The block quoted the TB-DMFT-SOC_119 script on every three-band row; this row's script is TB-DMFT-SOC_309.py, with Nbath = 309 and the same bondList and DMRG parameters (VA2)."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT-SOC_9",
+      "method": "DMRG (bond dimension 310) using fork tensor product states with U(1) symmetry for charge sector",
+      "energy": -112.87177033416906
+    },
+    "field": "compute.note",
+    "edit": [
+      "(SM statement; the single-band script also sets sweeps=60, two-site DMRG).",
+      "(SM statement; the single-band script also sets sweeps=60, two-site DMRG). The run script this row links sets no sweep count, so forkTPS's defaults apply: 15 sweeps of its single-site DMRG with subspace expansion ('SSImp'), after a 15-sweep sector search where the SM says 30. The 2022 runs left no log, so iterations keeps the SM's 60 (ruling E12, Tristan 2026-10-02)."
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT-SOC_9.py (ed31bb0): 'Nbath = 9', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT-SOC_9.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#51 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "VarBench's SM says the ground state 'is found by another 60 DMRG sweeps'; the linked script passes no sweep count, so forkTPS runs its default 15 (VA2). Ruling E12: iterations stays 60, the statement describing the runs, with a note that the linked script runs 15."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT-SOC_9",
+      "method": "DMRG (bond dimension 310) using fork tensor product states with U(1) symmetry for charge sector",
+      "energy": -112.87177033416906
+    },
+    "field": "compute.source",
+    "edit": [
+      "Sec. S6 B 2",
+      "Sec. S3 B 2"
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT-SOC_9.py (ed31bb0): 'Nbath = 9', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT-SOC_9.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#51 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The section of arXiv:2302.04919's SM on fork tensor product states for impurity models is S3 B 2 (v1, v2 and the repository copy), not S6 B 2 (VA2)."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT-SOC_9",
+      "method": "DMRG (bond dimension 310) using fork tensor product states with U(1) symmetry for charge sector",
+      "energy": -112.87177033416906
+    },
+    "field": "compute.reported_as",
+    "edit": [
+      "VarBench script scripts/Impurity/TB-DMFT-SOC_119.py: Nbath = 119;",
+      "VarBench script scripts/Impurity/TB-DMFT-SOC_9.py: Nbath = 9;"
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT-SOC_9.py (ed31bb0): 'Nbath = 9', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT-SOC_9.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#51 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The block quoted the TB-DMFT-SOC_119 script on every three-band row; this row's script is TB-DMFT-SOC_9.py, with Nbath = 9 and the same bondList and DMRG parameters (VA2)."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT-SOC_9",
+      "method": "DMRG (bond dimension 330) using fork tensor product states with U(1) symmetry for charge sector",
+      "energy": -112.87177033607618
+    },
+    "field": "compute.note",
+    "edit": [
+      "(SM statement; the single-band script also sets sweeps=60, two-site DMRG).",
+      "(SM statement; the single-band script also sets sweeps=60, two-site DMRG). The run script this row links sets no sweep count, so forkTPS's defaults apply: 15 sweeps of its single-site DMRG with subspace expansion ('SSImp'), after a 15-sweep sector search where the SM says 30. The 2022 runs left no log, so iterations keeps the SM's 60 (ruling E12, Tristan 2026-10-02)."
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT-SOC_9.py (ed31bb0): 'Nbath = 9', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT-SOC_9.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#54 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "VarBench's SM says the ground state 'is found by another 60 DMRG sweeps'; the linked script passes no sweep count, so forkTPS runs its default 15 (VA2). Ruling E12: iterations stays 60, the statement describing the runs, with a note that the linked script runs 15."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT-SOC_9",
+      "method": "DMRG (bond dimension 330) using fork tensor product states with U(1) symmetry for charge sector",
+      "energy": -112.87177033607618
+    },
+    "field": "compute.source",
+    "edit": [
+      "Sec. S6 B 2",
+      "Sec. S3 B 2"
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT-SOC_9.py (ed31bb0): 'Nbath = 9', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT-SOC_9.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#54 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The section of arXiv:2302.04919's SM on fork tensor product states for impurity models is S3 B 2 (v1, v2 and the repository copy), not S6 B 2 (VA2)."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT-SOC_9",
+      "method": "DMRG (bond dimension 330) using fork tensor product states with U(1) symmetry for charge sector",
+      "energy": -112.87177033607618
+    },
+    "field": "compute.reported_as",
+    "edit": [
+      "VarBench script scripts/Impurity/TB-DMFT-SOC_119.py: Nbath = 119;",
+      "VarBench script scripts/Impurity/TB-DMFT-SOC_9.py: Nbath = 9;"
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT-SOC_9.py (ed31bb0): 'Nbath = 9', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT-SOC_9.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#54 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The block quoted the TB-DMFT-SOC_119 script on every three-band row; this row's script is TB-DMFT-SOC_9.py, with Nbath = 9 and the same bondList and DMRG parameters (VA2)."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT-SOC_9",
+      "method": "DMRG (bond dimension 350) using fork tensor product states with U(1) symmetry for charge sector",
+      "energy": -112.87177033736539
+    },
+    "field": "compute.note",
+    "edit": [
+      "(SM statement; the single-band script also sets sweeps=60, two-site DMRG).",
+      "(SM statement; the single-band script also sets sweeps=60, two-site DMRG). The run script this row links sets no sweep count, so forkTPS's defaults apply: 15 sweeps of its single-site DMRG with subspace expansion ('SSImp'), after a 15-sweep sector search where the SM says 30. The 2022 runs left no log, so iterations keeps the SM's 60 (ruling E12, Tristan 2026-10-02)."
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT-SOC_9.py (ed31bb0): 'Nbath = 9', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT-SOC_9.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#57 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "VarBench's SM says the ground state 'is found by another 60 DMRG sweeps'; the linked script passes no sweep count, so forkTPS runs its default 15 (VA2). Ruling E12: iterations stays 60, the statement describing the runs, with a note that the linked script runs 15."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT-SOC_9",
+      "method": "DMRG (bond dimension 350) using fork tensor product states with U(1) symmetry for charge sector",
+      "energy": -112.87177033736539
+    },
+    "field": "compute.source",
+    "edit": [
+      "Sec. S6 B 2",
+      "Sec. S3 B 2"
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT-SOC_9.py (ed31bb0): 'Nbath = 9', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT-SOC_9.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#57 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The section of arXiv:2302.04919's SM on fork tensor product states for impurity models is S3 B 2 (v1, v2 and the repository copy), not S6 B 2 (VA2)."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT-SOC_9",
+      "method": "DMRG (bond dimension 350) using fork tensor product states with U(1) symmetry for charge sector",
+      "energy": -112.87177033736539
+    },
+    "field": "compute.reported_as",
+    "edit": [
+      "VarBench script scripts/Impurity/TB-DMFT-SOC_119.py: Nbath = 119;",
+      "VarBench script scripts/Impurity/TB-DMFT-SOC_9.py: Nbath = 9;"
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT-SOC_9.py (ed31bb0): 'Nbath = 9', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT-SOC_9.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#57 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The block quoted the TB-DMFT-SOC_119 script on every three-band row; this row's script is TB-DMFT-SOC_9.py, with Nbath = 9 and the same bondList and DMRG parameters (VA2)."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT_119",
+      "method": "DMRG (bond dimension 310) using fork tensor product states with U(1) symmetries for charge and spin sector",
+      "energy": -1307.5645412226058
+    },
+    "field": "compute.note",
+    "edit": [
+      "(SM statement; the single-band script also sets sweeps=60, two-site DMRG).",
+      "(SM statement; the single-band script also sets sweeps=60, two-site DMRG). The run script this row links sets no sweep count, so forkTPS's defaults apply: 15 sweeps of its single-site DMRG with subspace expansion ('SSImp'), after a 15-sweep sector search where the SM says 30. The 2022 runs left no log, so iterations keeps the SM's 60 (ruling E12, Tristan 2026-10-02)."
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT_119.py (ed31bb0): 'Nbath = 119', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT_119.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#60 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "VarBench's SM says the ground state 'is found by another 60 DMRG sweeps'; the linked script passes no sweep count, so forkTPS runs its default 15 (VA2). Ruling E12: iterations stays 60, the statement describing the runs, with a note that the linked script runs 15."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT_119",
+      "method": "DMRG (bond dimension 310) using fork tensor product states with U(1) symmetries for charge and spin sector",
+      "energy": -1307.5645412226058
+    },
+    "field": "compute.source",
+    "edit": [
+      "Sec. S6 B 2",
+      "Sec. S3 B 2"
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT_119.py (ed31bb0): 'Nbath = 119', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT_119.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#60 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The section of arXiv:2302.04919's SM on fork tensor product states for impurity models is S3 B 2 (v1, v2 and the repository copy), not S6 B 2 (VA2)."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT_119",
+      "method": "DMRG (bond dimension 310) using fork tensor product states with U(1) symmetries for charge and spin sector",
+      "energy": -1307.5645412226058
+    },
+    "field": "compute.reported_as",
+    "edit": [
+      "VarBench script scripts/Impurity/TB-DMFT-SOC_119.py: Nbath = 119;",
+      "VarBench script scripts/Impurity/TB-DMFT_119.py: Nbath = 119;"
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT_119.py (ed31bb0): 'Nbath = 119', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT_119.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#60 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The block quoted the TB-DMFT-SOC_119 script on every three-band row; this row's script is TB-DMFT_119.py, with Nbath = 119 and the same bondList and DMRG parameters (VA2)."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT_119",
+      "method": "DMRG (bond dimension 330) using fork tensor product states with U(1) symmetries for charge and spin sector",
+      "energy": -1307.5645415108731
+    },
+    "field": "compute.note",
+    "edit": [
+      "(SM statement; the single-band script also sets sweeps=60, two-site DMRG).",
+      "(SM statement; the single-band script also sets sweeps=60, two-site DMRG). The run script this row links sets no sweep count, so forkTPS's defaults apply: 15 sweeps of its single-site DMRG with subspace expansion ('SSImp'), after a 15-sweep sector search where the SM says 30. The 2022 runs left no log, so iterations keeps the SM's 60 (ruling E12, Tristan 2026-10-02)."
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT_119.py (ed31bb0): 'Nbath = 119', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT_119.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#63 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "VarBench's SM says the ground state 'is found by another 60 DMRG sweeps'; the linked script passes no sweep count, so forkTPS runs its default 15 (VA2). Ruling E12: iterations stays 60, the statement describing the runs, with a note that the linked script runs 15."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT_119",
+      "method": "DMRG (bond dimension 330) using fork tensor product states with U(1) symmetries for charge and spin sector",
+      "energy": -1307.5645415108731
+    },
+    "field": "compute.source",
+    "edit": [
+      "Sec. S6 B 2",
+      "Sec. S3 B 2"
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT_119.py (ed31bb0): 'Nbath = 119', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT_119.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#63 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The section of arXiv:2302.04919's SM on fork tensor product states for impurity models is S3 B 2 (v1, v2 and the repository copy), not S6 B 2 (VA2)."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT_119",
+      "method": "DMRG (bond dimension 330) using fork tensor product states with U(1) symmetries for charge and spin sector",
+      "energy": -1307.5645415108731
+    },
+    "field": "compute.reported_as",
+    "edit": [
+      "VarBench script scripts/Impurity/TB-DMFT-SOC_119.py: Nbath = 119;",
+      "VarBench script scripts/Impurity/TB-DMFT_119.py: Nbath = 119;"
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT_119.py (ed31bb0): 'Nbath = 119', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT_119.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#63 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The block quoted the TB-DMFT-SOC_119 script on every three-band row; this row's script is TB-DMFT_119.py, with Nbath = 119 and the same bondList and DMRG parameters (VA2)."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT_119",
+      "method": "DMRG (bond dimension 350) using fork tensor product states with U(1) symmetries for charge and spin sector",
+      "energy": -1307.5645416735742
+    },
+    "field": "compute.note",
+    "edit": [
+      "(SM statement; the single-band script also sets sweeps=60, two-site DMRG).",
+      "(SM statement; the single-band script also sets sweeps=60, two-site DMRG). The run script this row links sets no sweep count, so forkTPS's defaults apply: 15 sweeps of its single-site DMRG with subspace expansion ('SSImp'), after a 15-sweep sector search where the SM says 30. The 2022 runs left no log, so iterations keeps the SM's 60 (ruling E12, Tristan 2026-10-02)."
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT_119.py (ed31bb0): 'Nbath = 119', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT_119.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#66 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "VarBench's SM says the ground state 'is found by another 60 DMRG sweeps'; the linked script passes no sweep count, so forkTPS runs its default 15 (VA2). Ruling E12: iterations stays 60, the statement describing the runs, with a note that the linked script runs 15."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT_119",
+      "method": "DMRG (bond dimension 350) using fork tensor product states with U(1) symmetries for charge and spin sector",
+      "energy": -1307.5645416735742
+    },
+    "field": "compute.source",
+    "edit": [
+      "Sec. S6 B 2",
+      "Sec. S3 B 2"
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT_119.py (ed31bb0): 'Nbath = 119', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT_119.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#66 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The section of arXiv:2302.04919's SM on fork tensor product states for impurity models is S3 B 2 (v1, v2 and the repository copy), not S6 B 2 (VA2)."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT_119",
+      "method": "DMRG (bond dimension 350) using fork tensor product states with U(1) symmetries for charge and spin sector",
+      "energy": -1307.5645416735742
+    },
+    "field": "compute.reported_as",
+    "edit": [
+      "VarBench script scripts/Impurity/TB-DMFT-SOC_119.py: Nbath = 119;",
+      "VarBench script scripts/Impurity/TB-DMFT_119.py: Nbath = 119;"
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT_119.py (ed31bb0): 'Nbath = 119', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT_119.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#66 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The block quoted the TB-DMFT-SOC_119 script on every three-band row; this row's script is TB-DMFT_119.py, with Nbath = 119 and the same bondList and DMRG parameters (VA2)."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT_19",
+      "method": "DMRG (bond dimension 310) using fork tensor product states with U(1) symmetries for charge and spin sector",
+      "energy": -224.33607130144975
+    },
+    "field": "compute.note",
+    "edit": [
+      "(SM statement; the single-band script also sets sweeps=60, two-site DMRG).",
+      "(SM statement; the single-band script also sets sweeps=60, two-site DMRG). The run script this row links sets no sweep count, so forkTPS's defaults apply: 15 sweeps of its single-site DMRG with subspace expansion ('SSImp'), after a 15-sweep sector search where the SM says 30. The 2022 runs left no log, so iterations keeps the SM's 60 (ruling E12, Tristan 2026-10-02)."
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT_19.py (ed31bb0): 'Nbath = 19', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT_19.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#69 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "VarBench's SM says the ground state 'is found by another 60 DMRG sweeps'; the linked script passes no sweep count, so forkTPS runs its default 15 (VA2). Ruling E12: iterations stays 60, the statement describing the runs, with a note that the linked script runs 15."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT_19",
+      "method": "DMRG (bond dimension 310) using fork tensor product states with U(1) symmetries for charge and spin sector",
+      "energy": -224.33607130144975
+    },
+    "field": "compute.source",
+    "edit": [
+      "Sec. S6 B 2",
+      "Sec. S3 B 2"
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT_19.py (ed31bb0): 'Nbath = 19', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT_19.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#69 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The section of arXiv:2302.04919's SM on fork tensor product states for impurity models is S3 B 2 (v1, v2 and the repository copy), not S6 B 2 (VA2)."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT_19",
+      "method": "DMRG (bond dimension 310) using fork tensor product states with U(1) symmetries for charge and spin sector",
+      "energy": -224.33607130144975
+    },
+    "field": "compute.reported_as",
+    "edit": [
+      "VarBench script scripts/Impurity/TB-DMFT-SOC_119.py: Nbath = 119;",
+      "VarBench script scripts/Impurity/TB-DMFT_19.py: Nbath = 19;"
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT_19.py (ed31bb0): 'Nbath = 19', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT_19.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#69 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The block quoted the TB-DMFT-SOC_119 script on every three-band row; this row's script is TB-DMFT_19.py, with Nbath = 19 and the same bondList and DMRG parameters (VA2)."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT_19",
+      "method": "DMRG (bond dimension 330) using fork tensor product states with U(1) symmetries for charge and spin sector",
+      "energy": -224.33607130341224
+    },
+    "field": "compute.note",
+    "edit": [
+      "(SM statement; the single-band script also sets sweeps=60, two-site DMRG).",
+      "(SM statement; the single-band script also sets sweeps=60, two-site DMRG). The run script this row links sets no sweep count, so forkTPS's defaults apply: 15 sweeps of its single-site DMRG with subspace expansion ('SSImp'), after a 15-sweep sector search where the SM says 30. The 2022 runs left no log, so iterations keeps the SM's 60 (ruling E12, Tristan 2026-10-02)."
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT_19.py (ed31bb0): 'Nbath = 19', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT_19.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#72 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "VarBench's SM says the ground state 'is found by another 60 DMRG sweeps'; the linked script passes no sweep count, so forkTPS runs its default 15 (VA2). Ruling E12: iterations stays 60, the statement describing the runs, with a note that the linked script runs 15."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT_19",
+      "method": "DMRG (bond dimension 330) using fork tensor product states with U(1) symmetries for charge and spin sector",
+      "energy": -224.33607130341224
+    },
+    "field": "compute.source",
+    "edit": [
+      "Sec. S6 B 2",
+      "Sec. S3 B 2"
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT_19.py (ed31bb0): 'Nbath = 19', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT_19.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#72 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The section of arXiv:2302.04919's SM on fork tensor product states for impurity models is S3 B 2 (v1, v2 and the repository copy), not S6 B 2 (VA2)."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT_19",
+      "method": "DMRG (bond dimension 330) using fork tensor product states with U(1) symmetries for charge and spin sector",
+      "energy": -224.33607130341224
+    },
+    "field": "compute.reported_as",
+    "edit": [
+      "VarBench script scripts/Impurity/TB-DMFT-SOC_119.py: Nbath = 119;",
+      "VarBench script scripts/Impurity/TB-DMFT_19.py: Nbath = 19;"
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT_19.py (ed31bb0): 'Nbath = 19', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT_19.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#72 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The block quoted the TB-DMFT-SOC_119 script on every three-band row; this row's script is TB-DMFT_19.py, with Nbath = 19 and the same bondList and DMRG parameters (VA2)."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT_19",
+      "method": "DMRG (bond dimension 350) using fork tensor product states with U(1) symmetries for charge and spin sector",
+      "energy": -224.33607130480158
+    },
+    "field": "compute.note",
+    "edit": [
+      "(SM statement; the single-band script also sets sweeps=60, two-site DMRG).",
+      "(SM statement; the single-band script also sets sweeps=60, two-site DMRG). The run script this row links sets no sweep count, so forkTPS's defaults apply: 15 sweeps of its single-site DMRG with subspace expansion ('SSImp'), after a 15-sweep sector search where the SM says 30. The 2022 runs left no log, so iterations keeps the SM's 60 (ruling E12, Tristan 2026-10-02)."
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT_19.py (ed31bb0): 'Nbath = 19', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT_19.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#75 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "VarBench's SM says the ground state 'is found by another 60 DMRG sweeps'; the linked script passes no sweep count, so forkTPS runs its default 15 (VA2). Ruling E12: iterations stays 60, the statement describing the runs, with a note that the linked script runs 15."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT_19",
+      "method": "DMRG (bond dimension 350) using fork tensor product states with U(1) symmetries for charge and spin sector",
+      "energy": -224.33607130480158
+    },
+    "field": "compute.source",
+    "edit": [
+      "Sec. S6 B 2",
+      "Sec. S3 B 2"
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT_19.py (ed31bb0): 'Nbath = 19', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT_19.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#75 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The section of arXiv:2302.04919's SM on fork tensor product states for impurity models is S3 B 2 (v1, v2 and the repository copy), not S6 B 2 (VA2)."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT_19",
+      "method": "DMRG (bond dimension 350) using fork tensor product states with U(1) symmetries for charge and spin sector",
+      "energy": -224.33607130480158
+    },
+    "field": "compute.reported_as",
+    "edit": [
+      "VarBench script scripts/Impurity/TB-DMFT-SOC_119.py: Nbath = 119;",
+      "VarBench script scripts/Impurity/TB-DMFT_19.py: Nbath = 19;"
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT_19.py (ed31bb0): 'Nbath = 19', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT_19.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#75 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The block quoted the TB-DMFT-SOC_119 script on every three-band row; this row's script is TB-DMFT_19.py, with Nbath = 19 and the same bondList and DMRG parameters (VA2)."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT_309",
+      "method": "DMRG (bond dimension 310) using fork tensor product states with U(1) symmetries for charge and spin sector",
+      "energy": -3378.676235611746
+    },
+    "field": "compute.note",
+    "edit": [
+      "(SM statement; the single-band script also sets sweeps=60, two-site DMRG).",
+      "(SM statement; the single-band script also sets sweeps=60, two-site DMRG). The run script this row links sets no sweep count, so forkTPS's defaults apply: 15 sweeps of its single-site DMRG with subspace expansion ('SSImp'), after a 15-sweep sector search where the SM says 30. The 2022 runs left no log, so iterations keeps the SM's 60 (ruling E12, Tristan 2026-10-02)."
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT_309.py (ed31bb0): 'Nbath = 309', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT_309.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#78 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "VarBench's SM says the ground state 'is found by another 60 DMRG sweeps'; the linked script passes no sweep count, so forkTPS runs its default 15 (VA2). Ruling E12: iterations stays 60, the statement describing the runs, with a note that the linked script runs 15."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT_309",
+      "method": "DMRG (bond dimension 310) using fork tensor product states with U(1) symmetries for charge and spin sector",
+      "energy": -3378.676235611746
+    },
+    "field": "compute.source",
+    "edit": [
+      "Sec. S6 B 2",
+      "Sec. S3 B 2"
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT_309.py (ed31bb0): 'Nbath = 309', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT_309.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#78 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The section of arXiv:2302.04919's SM on fork tensor product states for impurity models is S3 B 2 (v1, v2 and the repository copy), not S6 B 2 (VA2)."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT_309",
+      "method": "DMRG (bond dimension 310) using fork tensor product states with U(1) symmetries for charge and spin sector",
+      "energy": -3378.676235611746
+    },
+    "field": "compute.reported_as",
+    "edit": [
+      "VarBench script scripts/Impurity/TB-DMFT-SOC_119.py: Nbath = 119;",
+      "VarBench script scripts/Impurity/TB-DMFT_309.py: Nbath = 309;"
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT_309.py (ed31bb0): 'Nbath = 309', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT_309.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#78 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The block quoted the TB-DMFT-SOC_119 script on every three-band row; this row's script is TB-DMFT_309.py, with Nbath = 309 and the same bondList and DMRG parameters (VA2)."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT_309",
+      "method": "DMRG (bond dimension 330) using fork tensor product states with U(1) symmetries for charge and spin sector",
+      "energy": -3378.6762362988934
+    },
+    "field": "compute.note",
+    "edit": [
+      "(SM statement; the single-band script also sets sweeps=60, two-site DMRG).",
+      "(SM statement; the single-band script also sets sweeps=60, two-site DMRG). The run script this row links sets no sweep count, so forkTPS's defaults apply: 15 sweeps of its single-site DMRG with subspace expansion ('SSImp'), after a 15-sweep sector search where the SM says 30. The 2022 runs left no log, so iterations keeps the SM's 60 (ruling E12, Tristan 2026-10-02)."
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT_309.py (ed31bb0): 'Nbath = 309', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT_309.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#81 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "VarBench's SM says the ground state 'is found by another 60 DMRG sweeps'; the linked script passes no sweep count, so forkTPS runs its default 15 (VA2). Ruling E12: iterations stays 60, the statement describing the runs, with a note that the linked script runs 15."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT_309",
+      "method": "DMRG (bond dimension 330) using fork tensor product states with U(1) symmetries for charge and spin sector",
+      "energy": -3378.6762362988934
+    },
+    "field": "compute.source",
+    "edit": [
+      "Sec. S6 B 2",
+      "Sec. S3 B 2"
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT_309.py (ed31bb0): 'Nbath = 309', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT_309.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#81 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The section of arXiv:2302.04919's SM on fork tensor product states for impurity models is S3 B 2 (v1, v2 and the repository copy), not S6 B 2 (VA2)."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT_309",
+      "method": "DMRG (bond dimension 330) using fork tensor product states with U(1) symmetries for charge and spin sector",
+      "energy": -3378.6762362988934
+    },
+    "field": "compute.reported_as",
+    "edit": [
+      "VarBench script scripts/Impurity/TB-DMFT-SOC_119.py: Nbath = 119;",
+      "VarBench script scripts/Impurity/TB-DMFT_309.py: Nbath = 309;"
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT_309.py (ed31bb0): 'Nbath = 309', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT_309.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#81 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The block quoted the TB-DMFT-SOC_119 script on every three-band row; this row's script is TB-DMFT_309.py, with Nbath = 309 and the same bondList and DMRG parameters (VA2)."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT_309",
+      "method": "DMRG (bond dimension 350) using fork tensor product states with U(1) symmetries for charge and spin sector",
+      "energy": -3378.6762368403315
+    },
+    "field": "compute.note",
+    "edit": [
+      "(SM statement; the single-band script also sets sweeps=60, two-site DMRG).",
+      "(SM statement; the single-band script also sets sweeps=60, two-site DMRG). The run script this row links sets no sweep count, so forkTPS's defaults apply: 15 sweeps of its single-site DMRG with subspace expansion ('SSImp'), after a 15-sweep sector search where the SM says 30. The 2022 runs left no log, so iterations keeps the SM's 60 (ruling E12, Tristan 2026-10-02)."
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT_309.py (ed31bb0): 'Nbath = 309', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT_309.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#84 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "VarBench's SM says the ground state 'is found by another 60 DMRG sweeps'; the linked script passes no sweep count, so forkTPS runs its default 15 (VA2). Ruling E12: iterations stays 60, the statement describing the runs, with a note that the linked script runs 15."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT_309",
+      "method": "DMRG (bond dimension 350) using fork tensor product states with U(1) symmetries for charge and spin sector",
+      "energy": -3378.6762368403315
+    },
+    "field": "compute.source",
+    "edit": [
+      "Sec. S6 B 2",
+      "Sec. S3 B 2"
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT_309.py (ed31bb0): 'Nbath = 309', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT_309.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#84 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The section of arXiv:2302.04919's SM on fork tensor product states for impurity models is S3 B 2 (v1, v2 and the repository copy), not S6 B 2 (VA2)."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT_309",
+      "method": "DMRG (bond dimension 350) using fork tensor product states with U(1) symmetries for charge and spin sector",
+      "energy": -3378.6762368403315
+    },
+    "field": "compute.reported_as",
+    "edit": [
+      "VarBench script scripts/Impurity/TB-DMFT-SOC_119.py: Nbath = 119;",
+      "VarBench script scripts/Impurity/TB-DMFT_309.py: Nbath = 309;"
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT_309.py (ed31bb0): 'Nbath = 309', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT_309.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#84 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The block quoted the TB-DMFT-SOC_119 script on every three-band row; this row's script is TB-DMFT_309.py, with Nbath = 309 and the same bondList and DMRG parameters (VA2)."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT_9",
+      "method": "DMRG (bond dimension 310) using fork tensor product states with U(1) symmetries for charge and spin sector",
+      "energy": -112.90428524361056
+    },
+    "field": "compute.note",
+    "edit": [
+      "(SM statement; the single-band script also sets sweeps=60, two-site DMRG).",
+      "(SM statement; the single-band script also sets sweeps=60, two-site DMRG). The run script this row links sets no sweep count, so forkTPS's defaults apply: 15 sweeps of its single-site DMRG with subspace expansion ('SSImp'), after a 15-sweep sector search where the SM says 30. The 2022 runs left no log, so iterations keeps the SM's 60 (ruling E12, Tristan 2026-10-02)."
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT_9.py (ed31bb0): 'Nbath = 9', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT_9.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#87 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "VarBench's SM says the ground state 'is found by another 60 DMRG sweeps'; the linked script passes no sweep count, so forkTPS runs its default 15 (VA2). Ruling E12: iterations stays 60, the statement describing the runs, with a note that the linked script runs 15."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT_9",
+      "method": "DMRG (bond dimension 310) using fork tensor product states with U(1) symmetries for charge and spin sector",
+      "energy": -112.90428524361056
+    },
+    "field": "compute.source",
+    "edit": [
+      "Sec. S6 B 2",
+      "Sec. S3 B 2"
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT_9.py (ed31bb0): 'Nbath = 9', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT_9.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#87 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The section of arXiv:2302.04919's SM on fork tensor product states for impurity models is S3 B 2 (v1, v2 and the repository copy), not S6 B 2 (VA2)."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT_9",
+      "method": "DMRG (bond dimension 310) using fork tensor product states with U(1) symmetries for charge and spin sector",
+      "energy": -112.90428524361056
+    },
+    "field": "compute.reported_as",
+    "edit": [
+      "VarBench script scripts/Impurity/TB-DMFT-SOC_119.py: Nbath = 119;",
+      "VarBench script scripts/Impurity/TB-DMFT_9.py: Nbath = 9;"
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT_9.py (ed31bb0): 'Nbath = 9', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT_9.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#87 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The block quoted the TB-DMFT-SOC_119 script on every three-band row; this row's script is TB-DMFT_9.py, with Nbath = 9 and the same bondList and DMRG parameters (VA2)."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT_9",
+      "method": "DMRG (bond dimension 330) using fork tensor product states with U(1) symmetries for charge and spin sector",
+      "energy": -112.90428524365805
+    },
+    "field": "compute.note",
+    "edit": [
+      "(SM statement; the single-band script also sets sweeps=60, two-site DMRG).",
+      "(SM statement; the single-band script also sets sweeps=60, two-site DMRG). The run script this row links sets no sweep count, so forkTPS's defaults apply: 15 sweeps of its single-site DMRG with subspace expansion ('SSImp'), after a 15-sweep sector search where the SM says 30. The 2022 runs left no log, so iterations keeps the SM's 60 (ruling E12, Tristan 2026-10-02)."
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT_9.py (ed31bb0): 'Nbath = 9', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT_9.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#90 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "VarBench's SM says the ground state 'is found by another 60 DMRG sweeps'; the linked script passes no sweep count, so forkTPS runs its default 15 (VA2). Ruling E12: iterations stays 60, the statement describing the runs, with a note that the linked script runs 15."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT_9",
+      "method": "DMRG (bond dimension 330) using fork tensor product states with U(1) symmetries for charge and spin sector",
+      "energy": -112.90428524365805
+    },
+    "field": "compute.source",
+    "edit": [
+      "Sec. S6 B 2",
+      "Sec. S3 B 2"
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT_9.py (ed31bb0): 'Nbath = 9', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT_9.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#90 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The section of arXiv:2302.04919's SM on fork tensor product states for impurity models is S3 B 2 (v1, v2 and the repository copy), not S6 B 2 (VA2)."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT_9",
+      "method": "DMRG (bond dimension 330) using fork tensor product states with U(1) symmetries for charge and spin sector",
+      "energy": -112.90428524365805
+    },
+    "field": "compute.reported_as",
+    "edit": [
+      "VarBench script scripts/Impurity/TB-DMFT-SOC_119.py: Nbath = 119;",
+      "VarBench script scripts/Impurity/TB-DMFT_9.py: Nbath = 9;"
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT_9.py (ed31bb0): 'Nbath = 9', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT_9.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#90 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The block quoted the TB-DMFT-SOC_119 script on every three-band row; this row's script is TB-DMFT_9.py, with Nbath = 9 and the same bondList and DMRG parameters (VA2)."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT_9",
+      "method": "DMRG (bond dimension 350) using fork tensor product states with U(1) symmetries for charge and spin sector",
+      "energy": -112.90428524370733
+    },
+    "field": "compute.note",
+    "edit": [
+      "(SM statement; the single-band script also sets sweeps=60, two-site DMRG).",
+      "(SM statement; the single-band script also sets sweeps=60, two-site DMRG). The run script this row links sets no sweep count, so forkTPS's defaults apply: 15 sweeps of its single-site DMRG with subspace expansion ('SSImp'), after a 15-sweep sector search where the SM says 30. The 2022 runs left no log, so iterations keeps the SM's 60 (ruling E12, Tristan 2026-10-02)."
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT_9.py (ed31bb0): 'Nbath = 9', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT_9.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#93 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "VarBench's SM says the ground state 'is found by another 60 DMRG sweeps'; the linked script passes no sweep count, so forkTPS runs its default 15 (VA2). Ruling E12: iterations stays 60, the statement describing the runs, with a note that the linked script runs 15."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT_9",
+      "method": "DMRG (bond dimension 350) using fork tensor product states with U(1) symmetries for charge and spin sector",
+      "energy": -112.90428524370733
+    },
+    "field": "compute.source",
+    "edit": [
+      "Sec. S6 B 2",
+      "Sec. S3 B 2"
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT_9.py (ed31bb0): 'Nbath = 9', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT_9.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#93 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The section of arXiv:2302.04919's SM on fork tensor product states for impurity models is S3 B 2 (v1, v2 and the repository copy), not S6 B 2 (VA2)."
+  },
+  {
+    "match": {
+      "instance": "Impurity/TB-DMFT_9",
+      "method": "DMRG (bond dimension 350) using fork tensor product states with U(1) symmetries for charge and spin sector",
+      "energy": -112.90428524370733
+    },
+    "field": "compute.reported_as",
+    "edit": [
+      "VarBench script scripts/Impurity/TB-DMFT-SOC_119.py: Nbath = 119;",
+      "VarBench script scripts/Impurity/TB-DMFT_9.py: Nbath = 9;"
+    ],
+    "reported_as": "varbench/methods scripts/Impurity/TB-DMFT_9.py (ed31bb0): 'Nbath = 9', 'bondList = [310, 330, 350]', 'paramsDMRG = DMRGParams( maxmI=bond, maxmIB=bond, maxmB=bond, twI=1e-12, twIB=1e-12, twB=1e-12 )', 'S.solve(h_int=Hint, tevo=paramsTevo, params_GS=paramsDMRG, eta=0.1, calc_me=[])' (no sweep count); forkTPS python/forktps/solver.py: \"sw = kwargs.get('sweeps', 15)\"; c++/forktps/params.cpp: 'sweeps(15)'",
+    "location": "varbench/methods scripts/Impurity/TB-DMFT_9.py lines 17-18, 64-66 and 80; forkTPS source (forkTPS.src.zip) python/forktps/solver.py, c++/forktps/params.cpp line 213, ForkCalculus.cpp lines 314 and 328; arXiv:2302.04919 Supplementary Materials Sec. S3 B 2",
+    "version_read": "varbench/methods at ed31bb0 (local clone); forkTPS source zip; arXiv:2302.04919 v1, v2 and the repository copy of the SM (VA2)",
+    "checked_on": "2026-09-29",
+    "source_entry": "VA2-10-1103-physrevx-7-031013#93 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E12, Tristan 2026-10-02",
+    "conversion": "none (text field)",
+    "reason": "The block quoted the TB-DMFT-SOC_119 script on every three-band row; this row's script is TB-DMFT_9.py, with Nbath = 9 and the same bondList and DMRG parameters (VA2)."
+  },
 ];

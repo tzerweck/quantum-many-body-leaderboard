@@ -22,10 +22,16 @@
 // Totals therefore scale with N^2 here, not with N as for a printed sigma^2/N_site
 // (add_allresults_rows).
 //
-// One row per (instance): the lowest energy over the ten training schedules, which is
-// what the paper calls its best RNN and what Table V prints where it prints anything.
-// The run that produced it is named in the note. Sizes Table V already covers are
-// skipped by the duplicate check against the tree as built.
+// One row per (instance): the run the authors call their best RNN. With periodic boundaries
+// that is the lowest energy over the ten training schedules; with open ones the authors take
+// the lowest over the s = 2 and 4 schedules only (HeisenbergRNN get_zer_var_energies.ipynb,
+// cell 8: which_scales = [2.0, 4.0]), which is what Table V prints at L = 6 (-0.603517(6), the
+// s = 2 run; the s = 0.5 run is lower). The two rules differ at open L = 8 alone, where the
+// lowest of all ten is the s = 0.5 run, 0.99 sigma below the SSE energy. Until 2026-10-02 the
+// open rows took the lowest of all ten; where that gave another run, its values stay on the
+// row in `corrections` (qmbl-verify 2026-09-29, VP7#45; ruling E8, Tristan 2026-10-02). The
+// run that produced each row is named in the note. Sizes Table V already covers are skipped
+// by the duplicate check against the tree as built.
 import fs from "node:fs";
 import { perSiteDivisor, expectedDof, expectedEinf, vScore } from "./units.mjs";
 
@@ -49,12 +55,20 @@ const COMPUTE = {
     note: "Parameter count is for the OBC (tensorized-GRU) 2D RNN with d_h = 256, shared across all L, so scope is the ansatz. No hardware or run time is stated for the OBC runs. The step count for this row follows from the schedule formula with the (s, r) named in the verification note but is not printed as a number, so iterations stays null." },
 };
 
-// lowest energy per (boundary, L)
-const best = new Map();
-for (const r of SRC.runs) {
-  const k = `${r.boundary}/${r.L}`;
-  if (!best.has(k) || r.energy_per_site < best.get(k).energy_per_site) best.set(k, r);
-}
+// the authors' best run per (boundary, L), and the lowest of all ten, which the open rows took until 2026-10-02
+const AUTHORS_SCALES = { open: [2, 4] };
+const lowest = keep => {
+  const m = new Map();
+  for (const r of SRC.runs.filter(keep)) {
+    const k = `${r.boundary}/${r.L}`;
+    if (!m.has(k) || r.energy_per_site < m.get(k).energy_per_site) m.set(k, r);
+  }
+  return m;
+};
+const best = lowest(r => !AUTHORS_SCALES[r.boundary] || AUTHORS_SCALES[r.boundary].includes(r.scale));
+const lowestOfTen = lowest(() => true);
+const totals = (r, div, n) => ({ energy: +(r.energy_per_site * div).toPrecision(12), sigma: +(r.std_error * div).toPrecision(6),
+  energy_variance: +(r.variance_per_site * n ** 2 * 16).toPrecision(8) });
 
 let added = 0;
 const skipped = [];
@@ -71,10 +85,22 @@ for (const r of [...best.values()].sort((a, b) => a.boundary.localeCompare(b.bou
   const dup = inst.rows.find(x => x.bound_type === "variational" && (x.reference || "").includes("2502.17144")
     && Math.abs(x.energy / div - r.energy_per_site) <= Math.max(x.sigma ?? 0, r.std_error * div) / div + 1e-9);
   if (dup) { skipped.push(`${id} ${r.energy_per_site.toFixed(7)} = "${dup.method}" ${dup.energy / div}`); continue; }
-  const energy = +(r.energy_per_site * div).toPrecision(12);
-  const varTot = +(r.variance_per_site * inst.n_sites ** 2 * 16).toPrecision(8);
+  const { energy, sigma, energy_variance: varTot } = totals(r, div, inst.n_sites);
+  // The run the lowest-of-ten rule took before 2026-10-02, where it is another one: its values stay on the row.
+  const old = lowestOfTen.get(`${r.boundary}/${r.L}`);
+  const was = old !== r ? totals(old, div, inst.n_sites) : null;
+  const fix = (field, conversion) => ({
+    field, to: { energy, sigma, energy_variance: varTot }[field],
+    reported_as: `${r.energy_per_site} +/- ${r.std_error} per site (S.S), Var(E/N) = ${r.variance_per_site}`,
+    location: `${SRC.source}: ['${r.boundary}']['rate=${r.rate}']['scale=${r.scale}'], L = ${r.L}; the authors' selection in HeisenbergRNN@29bf62a get_zer_var_energies.ipynb, cell 8 ('Min energy L=${r.L}: ${r.energy_per_site}')`,
+    version_read: "sources/2502.17144-repo-final_energy_data.json (the authors' pickle, read 2026-09-16); the notebook read by VP7 and its skeptic on 2026-09-29",
+    conversion, checked_on: "2026-10-02",
+    reason: `The authors' best RNN at open boundaries is the lowest of the s = 2 and 4 schedules, here s = ${r.scale}, r = ${r.rate}; this row was built from the lowest of all ten, s = ${old.scale}, r = ${old.rate} (${old.energy_per_site} +/- ${old.std_error} per site), a run the authors exclude and one of the two s = 0.5 runs that sit below the SSE energy (0.99 and 0.85 combined sigma). Table V's open 6 x 6 entry is the s = 2 run by the same rule. Ruling E8, Tristan 2026-10-02: follow the authors' selection.`,
+    source_entry: "VP7-arxiv-2502-17144#45 (qmbl-verify 2026-09-29, ambiguous; the skeptic refuted only its count of runs below SSE); ruling E8, Tristan 2026-10-02",
+    from: was[field],
+  });
   inst.rows.push({
-    energy, sigma: +(r.std_error * div).toPrecision(6),
+    energy, sigma,
     energy_variance: varTot, dof, einf,
     v_score: vScore(varTot, dof, energy, einf),
     method: METHOD[r.boundary], bound_type: "variational",
@@ -85,9 +111,14 @@ for (const r of [...best.values()].sort((a, b) => a.boundary.localeCompare(b.bou
       checked_on: CHECKED,
       method: "authors' data release read locally (pickle via numpy), values copied by key, no transcription; the file is committed as sources/2502.17144-repo-final_energy_data.json and reproduces the four values Table V prints",
       reported_as: `${r.energy_per_site} +/- ${r.std_error} per site (S.S), Var(E/N) = ${r.variance_per_site}`,
-      note: `${SRC.source}: ['${r.boundary}']['rate=${r.rate}']['scale=${r.scale}'], L = ${r.L}; the lowest of the ten training schedules (s = ${r.scale}, r = ${r.rate}). Plotted as a point in Fig. ${r.boundary === "periodic" ? "3(a)" : "12(a)"}, not printed in the paper; Table III prints the zero-variance extrapolation over the s >= 1 runs at this L, carried on this instance as an \`extrapolated\` row. Variance is Var(H)/N^2 in S.S units (see script header); total = var x N^2 x 16.`,
+      note: `${SRC.source}: ['${r.boundary}']['rate=${r.rate}']['scale=${r.scale}'], L = ${r.L}; ${AUTHORS_SCALES[r.boundary] ? `the authors' best run, the lowest of the s = ${AUTHORS_SCALES[r.boundary].join(" and ")} training schedules (s = ${r.scale}, r = ${r.rate})` : `the lowest of the ten training schedules (s = ${r.scale}, r = ${r.rate})`}. Plotted as a point in Fig. ${r.boundary === "periodic" ? "3(a)" : "12(a)"}, not printed in the paper; Table III prints the zero-variance extrapolation over the s >= 1 runs at this L, carried on this instance as an \`extrapolated\` row. Variance is Var(H)/N^2 in S.S units (see script header); total = var x N^2 x 16.`,
       secondary_of: null,
     },
+    ...(was ? { corrections: [
+      fix("energy", `${r.energy_per_site} x 4 x ${inst.n_sites} = ${energy}`),
+      fix("sigma", `${r.std_error} x 4 x ${inst.n_sites} = ${sigma}`),
+      fix("energy_variance", `${r.variance_per_site} x ${inst.n_sites}^2 x 16 = ${varTot}`),
+    ] } : {}),
     compute: COMPUTE[r.boundary],
   });
   added++;

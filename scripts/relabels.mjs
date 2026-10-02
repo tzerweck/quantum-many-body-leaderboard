@@ -63,19 +63,27 @@ export const RELABELS = [
     exact: [-17.603730380085874, -17.603730380008766],
   },
   {
-    // The DMRG run script here sets U = 10 (a copy of the U = 10 file), and its energy sits
-    // 1.2e-7 above the ground state at 7.74264 and 7.3e-7 above the one at 7.74263683: a valid
-    // bound at either, so it stays with the instance (verifications.mjs says so on the row).
+    // The DMRG run script here is a copy of the U = 10 file, so the script does not say at which U the
+    // row ran; its energy is a valid bound at 7.74264 and at 7.74263683. Until 2026-10-02 it moved with
+    // the instance. The sibling 5 + 5 script and the variance pattern of the 4 + 4 DMRG series place it
+    // at 7.74264, so it stays there with the ground state at that U (qmbl-verify 2026-09-29, VB2#46;
+    // ruling E6, Tristan 2026-10-02).
     from: "Hubbard/square_16_P_4_7.74264", to: "Hubbard/square_16_P_4_7.74263683", params: { U: 7.74263683 },
     reason: "The name's 7.74264 rounds the coupling of this Hamiltonian, 7.74263683 (10^(8/9)). The exact diagonalization, -16.509154825265142, is the ground state there; at U = 7.74264 the ground state is 6.1e-7 higher, so the stored exact energy sat below the ground state of the instance as named.",
-    keep: [], exact: null,
+    keep: [{ method: "DMRG (MaxBondDim ~3200)", energy: -16.5091541,
+      why: "its run script is a copy of the U = 10 file, but the sibling 5 + 5 script sets U = 7.74264, and the variance-to-error ratio of the 4 + 4 DMRG series (0.35, 0.92, 1.08, 1.4, 1.8 at U = 2, 4, 6, 8, 10) predicts about 1.3 here, which the row meets at U = 7.74264 (1.16) and misses at 7.74263683 (0.18). It sits 1.1e-7 above the ground state at 7.74264 and 7.3e-7 above the one at 7.74263683." }],
+    exact: [-16.509154214876222, -16.50915421487304],
   },
   {
-    // Ground states at the two couplings differ by 3.0e-9; the DMRG row, run at 4.64158882,
-    // sits 2.2e-9 below the stored exact energy, inside the validator's 1e-8 rounding band.
+    // Ground states at the two couplings differ by 3.0e-9. The DMRG row, run at 4.64158882, resolves
+    // them: its variance puts it within 7e-11 of the ground state there, and it sits 2.2e-9 below the
+    // one at 4.64158883. Until 2026-10-02 it moved with the instance, inside the validator's 1e-8 band;
+    // now it stays at its own U (qmbl-verify 2026-09-29, VB2#15; ruling E6, Tristan 2026-10-02).
     from: "Hubbard/chain_14_P_4_4.64158882", to: "Hubbard/chain_14_P_4_4.64158883", params: { U: 4.64158883 },
     reason: "The name's 4.64158882 misrounds the coupling of this Hamiltonian, 4.6415888336 (10^(6/9)). The exact diagonalization, -10.896957984833337, is the ground state at U = 4.64158883 and 3.03e-9 above the ground state at 4.64158882.",
-    keep: [], exact: null,
+    keep: [{ method: "DMRG (MaxBondDim ~1500)", energy: -10.896957987,
+      why: "its run script sets U = 4.64158882. Its value is the ground state at that U truncated at the ninth decimal (8.6e-10 above it), and its variance, 8.2e-12, places the state within 7e-11 of that ground state (Temple's bound, next level -10.77209441); it sits 2.2e-9 below the ground state at 4.64158883, which no variational energy can." }],
+    exact: [-10.896957987861226, -10.896957987860604],
   },
   {
     // qmbl-verify 2026-09-29, VA2-10-1103-physrevx-7-031013#2 and #5 (skeptic upheld). Nothing was

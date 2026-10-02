@@ -154,7 +154,13 @@ scripts set the named U, and each DMRG energy sits just above the ground state a
 **Conclusion.** The names are wrong, not the energies. `scripts/relabels.mjs` moves the six
 instances to the grid U and keeps the DMRG rows, with the ground state at their own U as the
 exact row, on the old names where the two ground states differ by more than the DMRG rows
-resolve.
+resolve. Since 2026-10-02 that is all six (ruling E6, from the reading of 2026-09-29): the
+14-site chain's DMRG row resolves the 3.0e-9 between its two couplings (its variance, 8.2e-12,
+puts it within 7e-11 of the ground state at U = 4.64158882, and it sits 2.2e-9 below the one at
+4.64158883), and the 4 + 4 DMRG row whose script is a copy of the U = 10 file belongs to
+U = 7.74264 by its sibling 5 + 5 script and its variance-to-error ratio (1.16 there, 0.18 at
+7.74263683, against about 1.3 for the series). Their exact rows at the named U are in
+`ed_results.jsonl` and `logs_fermions_small.log`.
 
 **Reproduce.**
 
@@ -285,6 +291,15 @@ keep their citation and carry QMBL's digits, with the printed value kept on the 
 2026-10-02). J2 = 0.1 keeps the paper's -0.638096 (ruled
 2026-09-30); the recompute is in its verification note.
 
+**The 32-site t-V chains (ruling of 2026-10-02).** VarBench's exact rows on `tV/chain_32_P_16_1`,
+`_2` and `_4` link a lattice-symmetries script that fixes every symmetry sector to 0, and their
+numbers came from a QuSpin run whose script is not in VarBench's methods repository. `ed_full.py`
+over the full N_f = 16 space (601,080,390 states, no spatial symmetry; verification pass of
+2026-09-17, 64 threads, about 5.5 min and 19 GB each) reproduces the three stored energies to
+2.1e-13 relative or better, residuals below 1e-9, with a translation expectation of zero: the
+ground state is the K = ±π/2 doublet (`results/tV__chain_32_P_16_*.json`). The rows cite these
+files beside the script link.
+
 **Reproduce.** Seconds for the shuriken and kagomes 12 and 24 (the node code takes 15 min), 46 min
 and 5 GB on 32 threads for the full kagome-30 space, 10 to 30 min and 77 to 83 GB on 96 threads per
 36-site kagome sector, about a minute and 72 GB per 6x6 J1-J2 sector (numpy,
@@ -295,4 +310,5 @@ python ed_full2.py --model heis_bonds --bonds clusters/shuriken_24.json --instan
 node run_spins.mjs Heisenberg/shuriken_24_P
 python ed_perm2.py --cluster clusters/kagome_36a.json --chars gamma --z 1 --outdir results --tol 1e-9
 python ed_sym.py --lattice square --L 6 --name J1J2__square_36_P --outdir results --group c4v --tol 1e-9 --second_pass 1 --tasks '0.2/0,0/A1/1'
+python ed_full.py --model tv_chain --L 32 --Nf 16 --V 1 --instance tV/chain_32_P_16_1 --out results/tV__chain_32_P_16_1.json
 ```

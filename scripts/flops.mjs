@@ -85,8 +85,9 @@ export const ARCH = {
 // A row renamed after it was estimated keeps the architecture it was estimated as, by its published
 // string: the ResNet1 of Heisenberg/square_100_P was the short name CNN until the verification pass
 // of 2026-09-29 named it ResNet, and stays costed as a CNN. No ResNet entry, which would give the
-// other ResNet rows estimates nobody has checked (Tristan, 2026-10-02).
-const ESTIMATED_AS = { "ResNet1 (MinSR)": "CNN" };
+// other ResNet rows estimates nobody has checked (Tristan, 2026-10-02). The same holds for the 10x10
+// ResNet2 of 34,944 parameters, a "Deep CNN" until its re-identification (ruling E4, 2026-10-02).
+const ESTIMATED_AS = { "ResNet1 (MinSR)": "CNN", "ResNet2": "CNN" };
 export const archOf = r => ARCH[ESTIMATED_AS[r.method_as_published ?? r.method] ?? (r.method === "RBM" && (/^α = \d+(, QMBL run(, H100 size ladder)?)?$/.test(r.method_detail || "") || /\bprojected: (?!unspecified)/.test(r.method_detail || "")) ? "RBM (dense)" : r.method)];
 
 // Point-group order of a lattice, for a group convolution over its full space group.

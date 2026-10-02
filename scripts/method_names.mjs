@@ -88,7 +88,8 @@ export const NAMES = {
 
   // ---------------------------------------------------------------- tensor networks
   "DMRG": ["DMRG", ""],
-  "DMRG (8x4)": ["DMRG", "truncation error ~1e-5"], // PRB 113, 245104, Fig. 2 caption: "a bond dimension of 8000 with maximum truncation error of ≃1×10−5"
+  // A deterministic energy needs no sigma (RULES.md 6); a bracket its source prints goes to the detail (ruling E3, 2026-10-02).
+  "DMRG (8x4)": ["DMRG", "truncation error ~1e-5; printed -0.736329(9) per site"], // PRB 113, 245104, Fig. 2 caption: "a bond dimension of 8000 with maximum truncation error of ≃1×10−5"; Table I
   "DMRG keeping 4096 states": ["DMRG", "", { bond_dimension: 4096 }],
   "DMRG on the L x L torus, 4096 SU(2) states": ["DMRG", "symmetric: SU(2)", { bond_dimension: 4096 }],
   "DMRG on the L x L torus, 6144 SU(2) states": ["DMRG", "symmetric: SU(2)", { bond_dimension: 6144 }],
@@ -98,7 +99,7 @@ export const NAMES = {
   "DMRG, truncation-error extrapolated (Torus 4)": ["DMRG", "extrapolated: truncation error → 0"],
   "DMRG, truncation-error extrapolated (Torus 6)": ["DMRG", "extrapolated: truncation error → 0"],
   "SU(2) DMRG, extrapolated (χ→∞, linear fit vs two-site variance), snake path": ["DMRG", "snake path; symmetric: SU(2); extrapolated: χ → ∞ (linear in two-site variance)"],
-  "DMRG on TPU (bond dimension = 32768)": ["DMRG", "on TPUs", { bond_dimension: 32768 }],
+  "DMRG on TPU (bond dimension = 32768)": ["DMRG", "on TPUs; printed -3.18197(2) per site", { bond_dimension: 32768 }], // PRX Quantum 4, 010317, Fig. 3 caption (ruling E3)
   "DMRG (max truncation error ~ 1.0E-12)": ["DMRG", "truncation error ~1e-12"],
   "DMRG (max truncation error ~ 1.0E-13)": ["DMRG", "truncation error ~1e-13"],
   "DMRG (max truncation error ~ 1.0E-14)": ["DMRG", "truncation error ~1e-14"],
@@ -211,6 +212,9 @@ export const NAMES = {
   // One printed label, two networks: the legend "ResNet2 (MinSR)" is the 16x16 network in Fig. 2c and the 10x10
   // one (more than one million parameters, p. 3) in Fig. 2b.
   "ResNet2 (MinSR)": ["ResNet", "16 conv layers, 16 channels, MinSR", { instance_detail: { "J1J2/square_100_P_0.5": "30 conv layers, 64 channels, more than one million parameters, MinSR" } }],
+  // The 34,944-parameter ResNet2 on 10x10, labelled as in the authors' figure data (data/Fig2b.csv), which is
+  // where its energy is printed; Rende et al. quote it as a 146,320-parameter "Deep CNN" (ruling E4, 2026-10-02).
+  "ResNet2": ["ResNet", "16 conv layers, 16 channels, MinSR"],
   "ResNet2 MinSR, zero-variance extrapolation": ["ResNet", "MinSR; extrapolated: variance → 0"],
   "ConvNext (6,3,3)[2,2], 2.6e5 params": ["ConvNeXt", "(6,3,3)[2,2]", { parameters: 2.6e5 }],
   "aCNN(C4)": ["aCNN", "symmetric: C4"],

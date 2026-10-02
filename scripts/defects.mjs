@@ -351,6 +351,17 @@ export const DEFECTS = [
     "finding": "Quote check in the citing paper passed: arXiv:2602.02665v1 Table I, 30 x 30 block, prints 'Jastrow-Gutzwiller -0.545348 [71]' with no error bar (-0.545348 x 4 x 900 = -1963.2528, the stored energy); [71] = E. Ghorbani, L. F. Tocchio and F. Becca, Phys. Rev. B 93, 085111 (2016). In the cited paper as read (arXiv:1512.03356 v1 and v2, VP15; the published PRB 93, 085111 PDF, VJ2), I could not locate -0.545348 or any 30 x 30 cluster: its tables are 18 x 18 ('All data are presented on the 18 x 18 cluster'), its 6 x 6 figures carry the exact Lanczos energies, and no thermodynamic-limit or size-scaling energy of the isotropic Jastrow-Gutzwiller state is printed. Also read without a hit: Iqbal, Hu, Thomale, Poilblanc & Becca, arXiv:1601.06018v4 (VMC 6x6 -0.548025(3), 2D limit -0.545321(7)); Ferrari & Becca, arXiv:1903.05691v3; a web search for '0.545348' (only arXiv:2602.02665). The citing paper's acknowledgements thank F. Becca 'for useful discussions' only. The row carries a number its cited source does not contain, the case of the Shallow CNN row on J1J2/square_100_P_0.5 (VP13#52), which commit A flagged 'quote-not-in-primary' rather than removing it. Not a record holder on the instance. Resolution: the authors of arXiv:2602.02665 or F. Becca to say where -0.545348 is printed, or removal under RULES.md 8 ('A cited number that cannot be found in the cited source is not admissible').",
     "source_entry": "VJ2-journal-other#54, VP15-hubbard-j1j2-heisenberg#32 (qmbl-verify 2026-09-29, not_found), as RH2#11 (handoff reader, triage of 2026-10-02) by precedent VP13#52; ruling R1, Tristan 2026-10-02"
   },
+  // qmbl-verify 2026-09-29, handoff (2026-10-02), ruling E9 (Tristan): a quote derived from a relative error.
+  {
+    "match": {
+      "instance": "Heisenberg/triangular_36_P",
+      "method": "NN + Gutzwiller",
+      "energy": -79.632
+    },
+    "flag": "quote-not-in-primary",
+    "finding": "Quote check in the citing paper passed: Roth & MacDonald, arXiv:2104.05085v3 Table I, prints 'NN + Gutzwiller [12] -0.553 N/A' (-0.553 x 144 = -79.632, the stored energy), with [12] = F. Ferrari, F. Becca and J. Carrasquilla, Neural Gutzwiller-projected variational wave functions, Phys. Rev. B 100, 125131 (2019), arXiv:1906.00463. In the cited paper as read (arXiv:1906.00463v2, layout and plain text searched for 0.55 and 0.56) I could not locate an energy per site for the 6 x 6 triangular lattice: Sec. V.C gives only the relative error ('from Delta E ~ 2.2% to Delta E ~ 1.4%') and Fig. 9 plots Delta E against N_alpha. -0.553 is a three-digit conversion of that relative error against the exact -0.5603734: -0.5603734 x (1 - 0.014) = -0.552528, and Delta E in [1.35%, 1.45%] gives -0.552808 to -0.552248. The row carries a precision nobody printed and no error bar: the case of the Shallow CNN row on J1J2/square_100_P_0.5 and of the Jastrow-Gutzwiller row on Heisenberg/triangular_900_P, flagged rather than removed (ruling E9, Tristan 2026-10-02). Resolution: Roth & MacDonald or Ferrari et al. to say where -0.553 is printed, or removal under RULES.md 8. It holds no record.",
+    "source_entry": "VP14-hubbard-j1j2-heisenberg-tfising#49 (qmbl-verify 2026-09-29, ambiguous); ruling E9, Tristan 2026-10-02"
+  },
 ];
 
 export const SHARED = {

@@ -318,7 +318,12 @@ ranks, can hold a record, and is cited to its run script, job and commit.
    that no level of a `spectrum` lies below the ground state. A violation counts only past
    3 sigma - the row's own, combined in quadrature with the exact row's where that row is
    stochastic - or past a relative 1e-8 when neither states one. A stochastic exact row
-   without `sigma` is itself an issue.
+   without `sigma` is itself an issue. A row is flagged below the exact energy only if the
+   whole interval its printed digits allow lies below it (Tristan, 2026-10-02): the HQT
+   energy -0.6735 on the 8 x 8 torus, printed to four decimals, stands for anything in
+   [-0.67355, -0.67345], which holds the SSE value -0.67349005, so it carries no flag,
+   although its stored total sits 0.0025 under the exact row's. The validator sees only the
+   stored digits and still lists such a row.
 
 Six issues survive these checks on the imported VarBench data. They are carried as known
 defects attached to the row (§11), not silently corrected.
