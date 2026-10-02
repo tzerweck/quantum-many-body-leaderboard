@@ -195,3 +195,104 @@ threads for the symmetric sector (numba):
 python ed_full.py --model heis_pyrochlore --L 2 --instance Heisenberg/pyrochlore-2x2x2_32_P --out full.json
 python ed_perm.py --W 2 --subgroup full --outdir sectors
 ```
+
+## `hubbard-4x4-half-filling-ed/`: are the 4x4 Hubbard ED rows at half filling the ground state?
+
+**Question.** `Hubbard/square_16_P_8_4` and `square_16_P_8_8` carried `ED` -13.62192 and -8.46896:
+the per-site values -0.85137 and -0.52931 that arXiv:2602.03031 quotes from Anderson et al.,
+Comput. Theor. Chem. 1003, 22 (2013), times 16. The producer prints the totals -13.6219 and
+-8.46888 (arXiv:1207.4847, Table IV). Is either stored value the ground state at its own precision?
+
+**Design.** Lanczos ground state of `H = -t sum (c+c + h.c.) + U sum n_up n_dn`, t = 1, on the
+periodic 4x4 lattice (32 bonds), N_up = N_dn = 8, no spatial symmetry (165,636,900 states; by
+Lieb's theorem the half-filled ground state is the unique singlet, so the (8, 8) sector holds it).
+Two codes on an AMD EPYC 9654 server, 2026-09-29: `ed_full2.py` (code B: the pyrochlore-32
+`ed_full.py` with a fixed-(N_up, N_dn) Hubbard kernel, plain Lanczos, true residual measured on the
+rebuilt Ritz vector) and `hub_fact.py` (code A: the factorised matvec T x 1 + 1 x T + U D of
+`checks/hubbard-u-labels/ed_check.py`, copied unchanged as `ed_check.py`, driven by ARPACK). Both
+first reproduced solved cases to 1e-9 (`validation/`: code B the 14-site chain at 4 + 4, U = 1, and
+the 4x4 lattice at 5 + 5, U = 4, and 4 + 4, U = 8; code A the chain and the 4x4 lattice at 4 + 4,
+U = 4).
+
+**Result.** U = 4: -13.621854821161437 (code B, residual 5.2e-11) and -13.621854821162666 (code A,
+residual 9.8e-12), 1.2e-12 apart; E/N = -0.851365926. U = 8: -8.468875014199401 (code B, residual
+3.7e-11) and -8.468875014196898 (code A, residual 5.7e-12), 2.5e-12 apart; E/N = -0.529304688.
+The stored -13.62192 lies 6.5e-5 and -8.46896 8.5e-5 below the ground state, beyond the producer's
+print precision; the producer's -13.6219 and -8.46888 are the ground state at their printed digits,
+and the quote's -0.52931 is one unit off in its last digit. Qin, Shi & Zhang's AFQMC on the same
+instances, -13.616(6) and -8.476(9), is 1.0 and 0.8 sigma away.
+
+**Conclusion.** The rows carried a per-site rounding times 16 that lies below the ground state, not
+the exact energy: QMBL's recomputed energies stand, to the 10 decimals the two codes agree on
+(`scripts/add_exact_rows.mjs` batch B2). The U = 8 quote is removed (`scripts/removals.mjs`); the
+U = 4 quote is QMBL's energy rounded to its printed digits, so `add_allresults_rows.mjs` skips it as
+the exact row already carried. Ruled 2026-09-30.
+
+**Reproduce.** About 7 min and 5 GB on 32 threads (code B), 30 min and 26 GB on 4 threads (code A),
+with numpy, scipy and numba:
+
+```bash
+python ed_full2.py --model hubbard --lattice square --L 4 --nup 8 --ndn 8 --U 4 --instance Hubbard/square_16_P_8_4 --out Hubbard__square_16_P_8_4__B.json --tol 1e-10
+python hub_fact.py --lattice square --L 4 --n 8 --U 4 --threads 4 --k 1 --ncv 12 --instance Hubbard/square_16_P_8_4 --out Hubbard__square_16_P_8_4__A.json
+```
+
+## `exact-recompute-2026-09/`: which printed exact energies are QMBL's value rounded?
+
+**Question.** Several exact rows carry an energy printed to 6 or 9 digits. Where the printed value
+is the true ground state rounded or truncated to those digits, the row can carry the full value;
+where it is neither, the printed value is not the ground state at its own precision. Which is which
+for the rows recomputed in the verification pass of 2026-09-29?
+
+**Design.** Lanczos ground states on an AMD EPYC 9654 server, 2026-09-29 (the shuriken's second
+code ran in the pass of 2026-09-15). Shuriken 24 (the "D4 symmetric 6x2^2 cluster" of arXiv:2110.08198, Supplement Sec. I,
+48 bonds): `ed_full2.py` over the whole S^z = 0 space (2,704,156 states) and `run_spins.mjs` (node,
+with `ed_lib.mjs`). Kagome clusters 12, 24, 30, 36a, 36b, 36c and 36d of Läuchli, Sudan & Sørensen,
+PRB 83, 212401 (2011), Table I (basis vectors as printed, except 36b: its printed b = (-3,4) gives
+a cluster equivalent to 36c, and (-2,4) reproduces the printed energy; bonds by nearest-neighbour
+search, `gen_clusters.mjs` -> `clusters/`): `ed_full2.py` over the full space for 12, 24 and 30, and
+`ed_perm2.py` (cluster space group, real 1D characters, on the `ed_perm.py` and `ed_sym.py` kernels
+of the pyrochlore-32 check) for all seven, at k = 0 and spin-inversion even for the 36-site
+clusters, for which that basis is the only one computed. On 30 the real characters miss the ground
+state, which carries a complex momentum pair (their lowest level lies 0.0116 higher), so the full
+space is the one determination there. J1-J2 on the 6x6 torus at J2 = 0.1, 0.2, 0.55, 0.65: `ed_sym.py` in the C4v
+A1 sector at k = 0, a second basis (`c2v_axes`, which holds A1 + B1), and a screening of the other
+irreps at k = 0 and M (`*__summary.jsonl` lists every sector computed).
+
+**Result.** Printed value against the recomputed energy (Pauli totals; printed values in the
+source's units):
+
+| row | printed | stored | recomputed | printed is |
+|---|---|---|---|---|
+| `Heisenberg/shuriken_24_P` | -0.448329 per site (the author's upload; the paper plots it) | -43.039584 | -43.0395889922721 | rounded |
+| `Heisenberg/kagome-2x2_12_P` | -5.444875216 (S.S total) | -21.779500864 | -21.779500867887435 | truncated |
+| `Heisenberg/kagome-24_24_P` | -10.589965547 | -42.359862188 | -42.35986218805902 | rounded |
+| `Heisenberg/kagome-30_30_P` | -13.154318948 | -52.617275792 | -52.61727579388159 | rounded |
+| `Heisenberg/kagome-36a_36_P` | -15.787874847 | -63.151499388 | -63.15149939025944 | truncated |
+| `Heisenberg/kagome-36b_36_P` | -15.806927756 | -63.227711024 | -63.22771102445205 | rounded |
+| `Heisenberg/kagome-36c_36_P` | -15.814334002 | -63.257336008 | -63.257336011794834 | truncated |
+| `Heisenberg/kagome-36d_36_P` | -15.781555118 | -63.126220472 | -63.12622047596263 | truncated |
+| `J1J2/square_36_P_0.2` | -0.599046 per site | -86.262624 | -86.26267036121452 | rounded |
+| `J1J2/square_36_P_0.55` | -0.495178 per site | -71.305632 | -71.30558885966441 | rounded |
+| `J1J2/square_36_P_0.65` | -0.506588 per site | -72.948672 | -72.9486516516581 | rounded |
+| `J1J2/square_36_P_0.1` | -0.638096 per site | -91.885824 | -91.88574274986225 | neither (-0.638095436) |
+
+The two shuriken codes agree to 6.4e-11, the two kagome-12 bases to 1e-14, the two kagome-24 bases
+to 1.4e-13, and the two J1-J2 bases to 6e-13 or better; every residual is below 1e-9.
+
+**Conclusion.** The eleven rows whose printed value is the recomputed energy rounded or truncated
+keep their citation and carry QMBL's digits, with the printed value kept on the row
+(`scripts/corrections.mjs`; rule of 2026-09-30, kagome 24, 30 and 36b by the ruling of
+2026-10-02). J2 = 0.1 keeps the paper's -0.638096 (ruled
+2026-09-30); the recompute is in its verification note.
+
+**Reproduce.** Seconds for the shuriken and kagomes 12 and 24 (the node code takes 15 min), 46 min
+and 5 GB on 32 threads for the full kagome-30 space, 10 to 30 min and 77 to 83 GB on 96 threads per
+36-site kagome sector, about a minute and 72 GB per 6x6 J1-J2 sector (numpy,
+numba):
+
+```bash
+python ed_full2.py --model heis_bonds --bonds clusters/shuriken_24.json --instance Heisenberg/shuriken_24_P --out shuriken.json --tol 1e-11
+node run_spins.mjs Heisenberg/shuriken_24_P
+python ed_perm2.py --cluster clusters/kagome_36a.json --chars gamma --z 1 --outdir results --tol 1e-9
+python ed_sym.py --lattice square --L 6 --name J1J2__square_36_P --outdir results --group c4v --tol 1e-9 --second_pass 1 --tasks '0.2/0,0/A1/1'
+```

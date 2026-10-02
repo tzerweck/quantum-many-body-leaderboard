@@ -193,6 +193,24 @@ instances they are computed.
 - Preprint-only sources older than 12 months are flagged `stale-preprint`.
 - A row whose number is quoted from a *different* paper than the one that produced it is
   marked `secondary` and names both.
+- **A number first printed in a dataset is cited to the dataset**, with the author's paper
+  kept as the method reference and the upload named (who, when, commit). Case: the
+  single-cluster VAFQMC energies S. Sorella uploaded to VarBench in February 2022 are in no
+  version of PRB 107, 115133, whose tables print twist averages only; they are printed in the
+  VarBench dataset (Wu et al., Science 386, 296 (2024)) and cite it. The same holds for the t-V
+  VMC energies the first author of arXiv:2406.09077 uploaded before that paper existed. This is
+  not the inadmissible case below: the number is printed, just not in the paper (Tristan,
+  2026-09-30). It also holds for an author's upload that the paper shows only as a plotted point,
+  which is not read (below): the shuriken mVMC energies of PRB 104, L220408 and the open 10x10
+  Tensor-RNN energy of PRR 5, L032001 cite the dataset (Tristan, 2026-10-02).
+- **A private communication printed in a paper is admissible, as `secondary`.** Case: Nomura's
+  12x12 and 16x16 RBM+PP energies exist only as the "Ref. [7]" cells of Roth, Szabo &
+  MacDonald, PRB 108, 054410 (2023), numbers Nomura shared with them; the paper of the method,
+  PRX 11, 031034, prints none. The rows cite "Nomura, private communication, in Roth, Szabo &
+  MacDonald, PRB 108, 054410 (2023)" (Tristan, 2026-09-30).
+- **A table outranks a figure.** Where the source prints a number in a table, the row carries
+  the table's value; a value decoded from a figure's plotted points is not used, even where the
+  table truncates (Tristan, 2026-09-30: PRX 11, 041021, Table II against Fig. 2(a)).
 - **A cited number that cannot be found in the cited source is not admissible.** Case:
   arXiv 2604.25775 reports "the previous best result −0.766073(6) from NNBF [24]", citing
   Loehr & Clark arXiv 2510.26906. That value appears nowhere in the only public version of
@@ -206,6 +224,12 @@ check physics numerics; the same number in a machine-learning conference proceed
 refereed for machine-learning contribution. Both are peer reviewed; only one is evidence about
 the energy. Rows therefore record the venue, and a physics-numerics venue outranks an ML venue
 when the two disagree.
+
+`peer_reviewed` follows the venue that printed the number. A privately provided number printed
+in a refereed paper is peer reviewed (Ferrari & Becca's VMC energies in Choo, Neupert & Carleo,
+PRB 100, 125124; Nomura's numbers in PRB 108, 054410), and so is a number in refereed
+machine-learning proceedings (SIAM SDM); the reference tells the two kinds of venue apart
+(Tristan, 2026-09-30).
 
 Case: arXiv:2607.00398 (conference proceedings) claims -0.49782(3) on 10x10 J1-J2, described in
 its own abstract as "statistically consistent with the variational state of the art". It is 1.3e-4
@@ -358,8 +382,24 @@ instance, is removed, with the ruling and reason listed in `scripts/removals.mjs
 `exact` that independent recomputation places above the ground-state energy, by more than the
 precision it is printed to, is removed on the same footing (Tristan, 2026-09-18): the table carries
 one exact energy per instance and a number that is not it states nothing an exact row may claim.
-The removal names the recomputation and the value that stands. Every other
-correction keeps the old value on the row, listed with its source and reason in
-`scripts/corrections.mjs`. An instance whose name carries a different parameter from the
+The same holds below the ground state, where a per-site rounding was multiplied back to a total
+(the 4x4 Hubbard rows at half filling, 2026-09-30). The removal names the recomputation and the
+value that stands; where no other exact row carries it, QMBL's recomputed row does
+(`scripts/add_exact_rows.mjs`, batch B2).
+
+Where the printed value of an exact row is QMBL's recomputed energy rounded or truncated to the
+printed digits, the row keeps its citation and carries QMBL's digits, with the printed value in
+`corrections` and the recomputation named; where the paper's value is better, the row keeps it
+(Tristan, 2026-09-30). Worked case: Schulz, Ziman & Poilblanc's 6x6 J1-J2 energies print six
+decimals per site; at J2 = 0.2, 0.55 and 0.65 they are the recomputed energies rounded, and the
+rows carry the full values (`checks/exact-recompute-2026-09/`). At J2 = 0.1 the printed -0.638096
+is neither (the recomputation gives -0.638095436); the row keeps the paper's value, and the
+recomputation is recorded on its verification (ruling of the same day).
+
+Every other correction keeps the old value on the row, listed with its source and reason in
+`scripts/corrections.mjs`. That holds for rows QMBL added itself as for imported ones (since
+2026-09-30; before, such a row was fixed in its loader's input, which left no trace on the row).
+A loader that is itself wrong, a bond count or a unit, is fixed in place, and the values it
+published before stay on its rows. An instance whose name carries a different parameter from the
 one its rows were computed at is renamed, with the old name and the reason recorded on it
 (`scripts/relabels.mjs`); rows computed at the named parameter keep the old name.

@@ -586,10 +586,14 @@ Passes are `error-metrics-YYYY-MM-DD.json` at the repository root.
 
 Rows cite **the primary paper that produced the number**. Where a number is quoted from
 a different paper than the one that produced it, the row is marked `secondary` and names
-both. arXiv preprint is the minimum bar; rows record whether the source is peer reviewed
-and at what kind of venue, because a number refereed by a physics-numerics journal and
-the same number refereed for machine-learning contribution are not equal evidence
-([§8.1](RULES.md#81-venue-type)).
+both; a private communication printed in a paper is cited that way too. A number first
+printed in a dataset cites the dataset, naming the upload (who, when, commit) and keeping
+the author's paper as the method reference: VarBench uploads that no paper prints cite
+Wu et al., Science 386, 296 (2024) ([§8](RULES.md#8-provenance)). arXiv preprint is the
+minimum bar; rows record whether the source is peer reviewed and at what kind of venue,
+because a number refereed by a physics-numerics journal and the same number refereed for
+machine-learning contribution are not equal evidence ([§8.1](RULES.md#81-venue-type));
+`peer_reviewed` follows the venue that printed the number.
 
 The validator in [`scripts/validate.mjs`](scripts/validate.mjs) runs on every build and
 checks `dof` and `einf` against the instance definition, the V-score against the row's
@@ -602,9 +606,13 @@ duplicate, or a number that is not an energy of its instance, is removed under
 [RULES.md §11](RULES.md#11-corrections)). The
 flag withholds the record and nothing else; [§10](RULES.md#10-pending-confirmed-objections) is the process for lifting
 or upholding it. A value the maintainers corrected is listed in `corrections` on the row,
-each entry with the value it replaced (`from`), where the new one was read, and why;
-`verified` records a check that found nothing wrong, and an independent re-read of a row
-QMBL added itself is `verified.second_read`. An instance renamed because its upstream name
+each entry with the value it replaced (`from`), where the new one was read, and why, on
+imported rows and, since 2026-09-30, on rows QMBL added itself alike
+([`scripts/corrections.mjs`](scripts/corrections.mjs)). An exact row whose printed value is
+QMBL's recomputed energy rounded or truncated carries QMBL's digits, the printed value in
+`corrections` ([RULES.md §11](RULES.md#11-corrections)). `verified` records a check that
+found nothing wrong, and an independent re-read of a row QMBL added itself is
+`verified.second_read`. An instance renamed because its upstream name
 carries the wrong coupling has `relabelled` (the old id and the reason); the old id, where
 rows were computed at that coupling, stays with `split` and an exact row QMBL computed
 ([`checks/hubbard-u-labels/`](checks/hubbard-u-labels/)). One worked case is in [`checks/`](checks/): three TFIsing `RBM (alpha = 1)` energies

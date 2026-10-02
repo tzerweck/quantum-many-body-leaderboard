@@ -211,7 +211,32 @@ put("Heisenberg/pyrochlore-2x2x2_32_P",
     reported: "-66.15792523719963 (ed_full.py) | -66.15792523721132 (ed_perm.py)",
     note: "Pauli total; E/N = -0.51685879 in S.S units. The ground state is the unique fully symmetric singlet; the lowest S^z = 1 level -63.40912320391 gives the triplet gap (E1 - E0)/4 = 0.68720, the 0.6872 printed for this cluster in arXiv:2010.03563 Table I and arXiv:2101.08787 Table II, whose E/N = -0.5168 is this energy truncated. Replaces VarBench's exact row -66.1514 (-0.5168078 per site), 6.5e-3 above it (RULES.md 11, removals.mjs).",
     source: "qmbl-verify-2026-09-16", checked: "2026-09-16" });
-console.log("batch B2: 1 exact row computed by QMBL (pyrochlore-2x2x2_32_P)");
+//
+// Hubbard/square_16_P_8_4 and square_16_P_8_8, 4x4 torus at half filling (N_up = N_dn = 8), U = 4
+// and 8: the table carried Anderson et al.'s ED (Comput. Theor. Chem. 1003, 22 (2013)) as a later
+// paper's per-site rounding x 16, -13.62192 and -8.46896, 6.5e-5 and 8.5e-5 below the ground
+// state. Two codes on an AMD EPYC 9654 server, 2026-09-29 (checks/hubbard-4x4-half-filling-ed/):
+// plain Lanczos over the whole fixed-(8, 8) space (165,636,900 states) and the factorised matvec
+// of checks/hubbard-u-labels/ed_check.py with ARPACK; they agree to 2.5e-12. By Lieb's theorem
+// the ground state is the unique singlet, in the (8, 8) sector. Ruled 2026-09-30 (Tristan). The
+// U = 8 quote is removed in removals.mjs; the U = 4 quote, -0.85137 per site, is this energy
+// rounded to its printed digits, so add_allresults_rows.mjs's duplicate check skips it as the
+// exact row already carried.
+for (const [U, energy, a, b, perSite, quoted, producer, fate] of [
+  [4, -13.6218548212, "-13.621854821162666", "-13.621854821161437", "-0.851365926", "-13.62192 (-0.85137 x 16)", "-13.6219",
+    "its per-site quote is this energy rounded to the printed digits, so add_allresults_rows.mjs skips it as the exact row already carried"],
+  [8, -8.4688750142, "-8.468875014196898", "-8.468875014199401", "-0.529304688", "-8.46896 (-0.52931 x 16)", "-8.46888",
+    "removed under RULES.md 11 (removals.mjs)"],
+]) put(`Hubbard/square_16_P_8_${U}`,
+  { model: "Hubbard", lattice: "square", n_sites: 16, boundary: "P", params: { Nf: 8, U }, dof: 16, einf: (U * 8 * 8) / 16 },
+  { energy, sigma: null,
+    src: { ref: "QMBL, checks/hubbard-4x4-half-filling-ed/ (exact diagonalization of the 4x4 torus at half filling, two codes)", pr: false },
+    method: "Exact diagonalization", why: "Lanczos exact diagonalization of the full (N_up, N_dn) = (8, 8) space, computed by QMBL; deterministic",
+    read: "ed_full2.py (code B: plain Lanczos, Hubbard kernel with fixed N_up = N_dn = 8, 165,636,900 states, true residual 5.2e-11 at U = 4 and 3.7e-11 at U = 8) and hub_fact.py (code A: the factorised matvec T x 1 + 1 x T + U D of checks/hubbard-u-labels/ed_check.py with ARPACK, residual 9.8e-12 and 5.7e-12), an AMD EPYC 9654 server, 2026-09-29",
+    reported: `${b} (ed_full2.py) | ${a} (hub_fact.py)`,
+    note: `Total energy, t = 1, H = -t sum (c+c + h.c.) + U sum n_up n_dn on the periodic 4x4 lattice (32 bonds); E/N = ${perSite}. Replaces the quoted exact row ${quoted}, which lay below this ground state: ${fate}; the producer prints ${producer} (arXiv:1207.4847 Table IV), this energy to its printed digits. Carried to 10 decimals, the agreement of the two codes.`,
+    source: "qmbl-verify-2026-09-29", checked: "2026-09-29" });
+console.log("batch B2: 3 exact rows computed by QMBL (pyrochlore-2x2x2_32_P; Hubbard 4x4 at half filling, U = 4 and 8)");
 
 // ---------------------------------------------------------------------------------------
 // Batch C: exact diagonalization of frustrated clusters. Deterministic, so no sigma; the
