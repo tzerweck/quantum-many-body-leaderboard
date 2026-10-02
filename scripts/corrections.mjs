@@ -5829,13 +5829,13 @@ export const CORRECTIONS = [
       "energy": -199.07056
     },
     "field": "peer_reviewed",
-    "to": false,
+    "to": true,
     "reported_as": "[48] L. L. Viteritti, R. Rende, and F. Becca (private communication).",
     "location": "PRR 8, L022040 reference [48]; arXiv v1 reference [48]",
     "version_read": "arXiv:2503.10462v1; Phys. Rev. Research 8, L022040 (2026)",
     "conversion": null,
     "checked_on": "2026-09-29",
-    "reason": "Resolves metric flag M10 'peer_reviewed missing'. The number's source is a private communication; no refereed publication of it by its producers was located (the cached papers print it only as this quote and as 2603.14425's copy labelled CTWF); the refereed PRR article only quotes it. Policy note for Tristan: if a quote inside a refereed article should count as peer reviewed, the answer is true instead; RULES 8 does not say.",
+    "reason": "Resolves metric flag M10 'peer_reviewed missing'. The number is a private communication of its producers, printed in the refereed Phys. Rev. Research 8, L022040 (ref. [48]); no refereed publication by the producers themselves was located. A privately provided number printed in a refereed paper counts as peer reviewed (ruling 4, Tristan 2026-09-30; RULES.md 8.1).",
     "source_entry": "VP16-heisenberg-hubbard-j1j2-tfising#9 (qmbl-verify 2026-09-29; skeptic upheld)"
   },
   {
