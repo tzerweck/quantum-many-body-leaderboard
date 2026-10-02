@@ -12,8 +12,11 @@ import { sourceOf, sources, paperOf, identify } from "./enrich_sources.mjs";
 // paper as "Yuntian et al.", which is someone's given name in a public attribution
 // table. Remaining wrong case is unmarked particles ("van der Waals"); the full author
 // list is in sources/openalex.json when the exact form matters.
+// Authors OpenAlex lists family name first, checked against the paper's own byline: Rong Cheng
+// (arXiv:2509.13746, "Rong Cheng and Tao Li") is "Cheng Rong" there and was cited as "Rong".
+const NAME_ORDER = new Map([["Cheng Rong", "Rong Cheng"]]);
 const surname = name => {
-  const n = (name || "").trim();
+  const n = NAME_ORDER.get((name || "").trim()) ?? (name || "").trim();
   const comma = n.match(/^([^,]+),/);
   return comma ? comma[1].trim() : n.split(/\s+/).pop();
 };

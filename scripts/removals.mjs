@@ -26,17 +26,17 @@ export const REMOVALS = [
   },
   {
     match: { instance: "Hubbard/square_64_PA_32_6", method: "VMC Hidden Fermion Determinant State Ansatz (N_hidden = 16. Single hidden layer fully connected net with alpha = 1). Soft mean-field constraint for Neel order.", energy: -42.676 },
-    ruled: "pending Tristan's OK (apply step 2026-09-30, the duplicates rule of 2026-09-17): duplicate, the original paper's row stays",
+    ruled: "2026-10-02 (Tristan): duplicate, the original paper's row stays (apply step of the 2026-09-29 verification pass, the duplicates rule of 2026-09-17)",
     reason: "The first author's VarBench upload (c810bdc, 2022-07-16) of the 8 x 8, U = 6 HFDS state of Robledo Moreno et al., PNAS 119, e2122059119, with a digit slip (-42.076 -> -42.676): the paper prints -0.6574(2) per site (SI Table 5, row L = 8, column U = 6), which add_worklist_rows.mjs carries from the paper itself as -42.0736, sigma 0.0128. A corrected copy would duplicate that row (qmbl-verify 2026-09-29, VA3-10-1073-pnas-2122059119#34, skeptic upheld). Its below-exact flag goes with it; the upload-only sigma 0.007 and variance 0.82(1) have no printed counterpart.",
   },
   {
     match: { instance: "Heisenberg/pyrochlore-2x2x2_128_P", method: "mVMC (PP + RBM + 1st step Lanczos, spin-parity projection, Number of RBM neurons: 128)", energy: -252.007 },
-    ruled: "pending Tristan's OK (apply step 2026-09-30, the duplicates rule of 2026-09-17): duplicate, the original paper's row stays",
+    ruled: "2026-10-02 (Tristan): duplicate, the original paper's row stays (apply step of the 2026-09-29 verification pass, the duplicates rule of 2026-09-17)",
     reason: "First author R. Pohle's VarBench upload of 2022-02-26 (380a1fe), 21 months before arXiv:2311.11561 v1, energy never updated; the paper prints the same spin-parity mVMC-RBM/Lanczos state as -0.49229(7) per site (SM Table SI, column psi+ (random), and App. B), which the table carries from the paper itself (-252.05248). The stored -252.007 is printed nowhere. The 2026-09-16 ruling to supersede the VarBench row was not applied until now (qmbl-verify 2026-09-29, VA5-hubbard-heisenberg-tfising-j1j2#21, skeptic upheld).",
   },
   {
     match: { instance: "Heisenberg/pyrochlore-3x3x3_432_P", method: "mVMC (PP + 1st step Lanczos, spin-parity projection, C3 point-group projection)", energy: -844.084 },
-    ruled: "pending Tristan's OK (apply step 2026-09-30, the duplicates rule of 2026-09-17): duplicate, the original paper's row stays",
+    ruled: "2026-10-02 (Tristan): duplicate, the original paper's row stays (apply step of the 2026-09-29 verification pass, the duplicates rule of 2026-09-17)",
     reason: "First author R. Pohle's VarBench upload of 2022-02-26 (7afd2cc), 21 months before arXiv:2311.11561 v1, never updated; the paper prints the same spin-parity mVMC/Lanczos state as -0.48851(3) per site (SM Table SII), which the table carries from the paper itself (-844.14528). The stored -844.084 is printed nowhere, and the linked VarBench input (RBM with 432 neurons, no C3 projection, no Lanczos step) cannot have produced it. The 2026-09-16 ruling to supersede the VarBench row was not applied until now (qmbl-verify 2026-09-29, VA5-hubbard-heisenberg-tfising-j1j2#22, skeptic upheld).",
   },
   // Declared exact, but above the exact energy (RULES.md 11).
