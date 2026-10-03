@@ -12222,4 +12222,112 @@ export const VERIFICATIONS = [
     "note": "The stored number is J. M. Silvester's upload of 2022-04-01, transcribed correctly, and the script's configuration matches the instance (U = 8, 8 x 4, periodic along the 4-site direction, 14 + 14). It may have lost a digit: the uploader's factor-4 entry of the day before was -94.257, and -94.257 / 4 = -23.56425, while the same day's division turned the variance (0.24766 -> 0.0155) and the extrapolated energy (-94.263 +/- 0.001 -> -23.5658 +/- 0.0003) exactly, as did his conversions of the same week on other instances (-192.213 -> -48.0533, -127.599 -> -31.8998). -23.5645 lies 2.5e-4 below -23.56425, outside the +/-1.25e-4 that the three decimals of -94.257 allow. Kept as uploaded (ruling E13, Tristan 2026-10-02); only the uploader can say which is right. The row holds the instance's variational record either way.",
     "source_entry": "VB2-varbench-code-hubbard#28 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E13, Tristan 2026-10-02 (keep, note the discrepancy; ask J. M. Silvester)"
   },
+  // qmbl-verify 2026-09-29, handoff (2026-10-03), rulings E11, E14 and E17 (Tristan): two finite-PEPS cells left
+  // unflagged beside a flagged one, an upload VarBench replaced and restored within a day, and four 8 x 8 attractive-
+  // Hubbard rows whose periodic boundary is inferred.
+  {
+    "match": {
+      "instance": "Heisenberg/square_100_O",
+      "method": "Finite PEPS, gradient optimization",
+      "energy": -251.4404
+    },
+    "checked_on": "2026-09-29",
+    "scope": "value",
+    "method": "arXiv:1611.09467v3 (4 May 2017, the accepted version of Phys. Rev. B 95, 195154 (2017)), PDF text extracted locally with pypdf layout mode; v1 and v2 extracted the same way for comparison",
+    "location": "Table II, row 'D=10': '-0.603535(1) -0.619033(3) -0.628601(2) -0.635025(3) -0.639764(3) -0.643391(3) -0.66948(42)', column L = 10",
+    "reported_as": "-0.628601(2) per site, S.S units",
+    "conversion": "-0.628601 x 4 x 100 = -251.4404; sigma 0.000002 x 400 = 0.0008",
+    "note": "Second reading, from the producing paper: value and bar agree. The same row's L = 6 cell lies 13 printed sigma below the 6 x 6 open-boundary exact energy and is flagged there (Heisenberg/square_36_O, defects.mjs FP2-arxiv-1611-09467#3). This cell sits 5.5e-5 per site above Sandvik's SSE -0.6286561(2) on this instance, within the paper's own accuracy trend (relative error 8.7e-5 at D = 10 on 10 x 10, Sec. IV), and nothing points at it: left unflagged (ruling E11, Tristan 2026-10-03). The paper gives its bars as the Monte Carlo sampling error.",
+    "source_entry": "VP15-hubbard-j1j2-heisenberg#57 (qmbl-verify 2026-09-29, ambiguous); ruling E11, Tristan 2026-10-03 (leave unflagged)"
+  },
+  {
+    "match": {
+      "instance": "Heisenberg/square_256_O",
+      "method": "Finite PEPS, gradient optimization",
+      "energy": -658.832384
+    },
+    "checked_on": "2026-09-29",
+    "scope": "value",
+    "method": "arXiv:1611.09467v3 (4 May 2017, the accepted version of Phys. Rev. B 95, 195154 (2017)), PDF text extracted locally with pypdf layout mode; v1 and v2 extracted the same way for comparison",
+    "location": "Table II, row 'D=10': '-0.603535(1) -0.619033(3) -0.628601(2) -0.635025(3) -0.639764(3) -0.643391(3) -0.66948(42)', column L = 16",
+    "reported_as": "-0.643391(3) per site, S.S units",
+    "conversion": "-0.643391 x 4 x 256 = -658.832384; sigma 0.000003 x 1024 = 0.003072",
+    "note": "Second reading, from the producing paper: value and bar agree. The same row's L = 6 cell lies 13 printed sigma below the 6 x 6 open-boundary exact energy and is flagged there (Heisenberg/square_36_O, defects.mjs FP2-arxiv-1611-09467#3). This cell sits 1.41e-4 per site above Sandvik's SSE -0.6435317(2) on this instance, within the paper's own accuracy trend (relative error 8.7e-5 at D = 10 on 10 x 10, Sec. IV), and nothing points at it: left unflagged (ruling E11, Tristan 2026-10-03). The paper gives its bars as the Monte Carlo sampling error.",
+    "source_entry": "VP15-hubbard-j1j2-heisenberg#60 (qmbl-verify 2026-09-29, ambiguous); ruling E11, Tristan 2026-10-03 (leave unflagged)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_36_P_0.9",
+      "method": "RBM (alpha = 1)",
+      "energy": -92.3972
+    },
+    "checked_on": "2026-09-29",
+    "scope": "value",
+    "method": "VarBench history of J1J2/square_36_P_0.9 (git log, git show; qmbl-runs/qmbl-verify/varbench-history) and the linked run script varbench/methods scripts/J1J2/square_36_P_0.9/vmc_rbm.sh, read by VB1",
+    "location": "1c99d74 (2022-10-18, 'Add J1-J2 L=6 J2=0.8,0.9'): -92.3972, sigma 0.0047, variance 22.1830; 14d39eb (2022-10-19 09:17, 'Update estimation of some VMC results'): -93.0317, 0.0093, 87.9902; e4e2504 (2022-10-19 19:22, 'Fix slope = 1 in plot_v_score_rel_err.py'): -92.3972, 0.0047, 22.1831",
+    "reported_as": "-92.3972, sigma 0.0047, variance 22.1831 (total, Pauli units)",
+    "conversion": "none",
+    "note": "VarBench replaced this value within a day by -93.0317(93), variance 87.9902 (14d39eb), and put it back (e4e2504) under a commit about a plot script that also changed the triangular-12 RBM row. The two pairs come from two trained states (the variance differs by a factor of 4), and each is internally consistent: sigma / sqrt(variance / 2^20) = 1.02 for both, the script's 2^20-sample estimate, and both satisfy the Bhatia-Davis bound. The script builds this instance (6 x 6 periodic, J2 = 0.9, S^z = 0, RBM alpha = 1 with real parameters). Kept as VarBench carries it (ruling E14, Tristan 2026-10-03); the row holds no record.",
+    "source_entry": "VB1-varbench-code-j1j2#124 (qmbl-verify 2026-09-29, ambiguous); ruling E14, Tristan 2026-10-03 (keep, note the history)"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_64_P_28_-8",
+      "method": "ACE (Accurate Convolutional ansatz for lattice Electrons; deep convolutional backflow NQS)",
+      "energy": -257.056
+    },
+    "checked_on": "2026-09-29",
+    "scope": "value",
+    "method": "arXiv:2604.25775v1 HTML and PDF read locally (Table IV and App. D; Secs. II.6 and III.2; the text and the Fig. 3 and Table IV captions searched for 'periodic', 'PBC', 'OBC', 'boundary'); the authors' Fig. 3 data (github.com/guyuntian/open_data@499d2c0, figure3/8x8_U-8_ACE.npz) inspected with pickletools only",
+    "location": "Table IV (App. D, PDF p. 13), row 'ACE', column '8x8, U=-8'",
+    "reported_as": "-4.0165 (per site)",
+    "conversion": "-4.0165 x 64 = -257.056; U = -8, t' = 0, '1/8 hole doping' (Sec. III.2): 28 + 28 electrons",
+    "note": "Second reading: value, size, U and filling agree. The paper gives no boundary for its 8 x 8 attractive-Hubbard runs, and neither the authors' data repository (guyuntian/open_data) nor their code (bytedance/laqx) holds a configuration for them. Periodic boundaries are inferred: the energy agrees with the instance's periodic AFQMC row (-4.017 per site) and with the paper's own DQMC -4.017(1) to 5e-4 per site, where an open 8 x 8 cluster (112 instead of 128 bonds) would sit near -3.95, and the authors' Fig. 3 correlation data run over distances 1 to L/2, as on a torus. Accepted as periodic (ruling E17, Tristan 2026-10-03). sigma stays null: the table prints no bar (Sec. II.6 puts the error at least ten times below 1e-4 per site).",
+    "source_entry": "VP11-heisenberg-hubbard-j1j2#30 (qmbl-verify 2026-09-29, ambiguous); ruling E17, Tristan 2026-10-03 (accept PBC)"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_64_P_28_-8",
+      "method": "SCALE (Sparse Convolutional Ansatz for Lattice Electrons; efficient backflow NQS)",
+      "energy": -257.0304
+    },
+    "checked_on": "2026-09-29",
+    "scope": "value",
+    "method": "arXiv:2604.25775v1 HTML and PDF read locally (Table IV and App. D; Secs. II.6 and III.2; the text and the Fig. 3 and Table IV captions searched for 'periodic', 'PBC', 'OBC', 'boundary'); the authors' Fig. 3 data (github.com/guyuntian/open_data@499d2c0, figure3/8x8_U-8_ACE.npz) inspected with pickletools only",
+    "location": "Table IV (App. D, PDF p. 13), row 'SCALE', column '8x8, U=-8'",
+    "reported_as": "-4.0161 (per site)",
+    "conversion": "-4.0161 x 64 = -257.0304; U = -8, t' = 0, '1/8 hole doping' (Sec. III.2): 28 + 28 electrons",
+    "note": "Second reading: value, size, U and filling agree. The paper gives no boundary for its 8 x 8 attractive-Hubbard runs, and neither the authors' data repository (guyuntian/open_data) nor their code (bytedance/laqx) holds a configuration for them. Periodic boundaries are inferred: the energy agrees with the instance's periodic AFQMC row (-4.017 per site) and with the paper's own DQMC -4.017(1) to 5e-4 per site, where an open 8 x 8 cluster (112 instead of 128 bonds) would sit near -3.95, and the authors' Fig. 3 correlation data run over distances 1 to L/2, as on a torus. Accepted as periodic (ruling E17, Tristan 2026-10-03). sigma stays null: the table prints no bar (Sec. II.6 puts the error at least ten times below 1e-4 per site).",
+    "source_entry": "VP11-heisenberg-hubbard-j1j2#31 (qmbl-verify 2026-09-29, ambiguous); ruling E17, Tristan 2026-10-03 (accept PBC)"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_64_P_28_-8",
+      "method": "SCALE+GFMC (GFMC projection on the SCALE trial state)",
+      "energy": -257.0688
+    },
+    "checked_on": "2026-09-29",
+    "scope": "value",
+    "method": "arXiv:2604.25775v1 HTML and PDF read locally (Table IV and App. D; Secs. II.6 and III.2; the text and the Fig. 3 and Table IV captions searched for 'periodic', 'PBC', 'OBC', 'boundary'); the authors' Fig. 3 data (github.com/guyuntian/open_data@499d2c0, figure3/8x8_U-8_ACE.npz) inspected with pickletools only",
+    "location": "Table IV (App. D, PDF p. 13), row 'SCALE+GFMC', column '8x8, U=-8'",
+    "reported_as": "-4.0167 (per site)",
+    "conversion": "-4.0167 x 64 = -257.0688; U = -8, t' = 0, '1/8 hole doping' (Sec. III.2): 28 + 28 electrons",
+    "note": "Second reading: value, size, U and filling agree. The paper gives no boundary for its 8 x 8 attractive-Hubbard runs, and neither the authors' data repository (guyuntian/open_data) nor their code (bytedance/laqx) holds a configuration for them. Periodic boundaries are inferred: the energy agrees with the instance's periodic AFQMC row (-4.017 per site) and with the paper's own DQMC -4.017(1) to 5e-4 per site, where an open 8 x 8 cluster (112 instead of 128 bonds) would sit near -3.95, and the authors' Fig. 3 correlation data run over distances 1 to L/2, as on a torus. Accepted as periodic (ruling E17, Tristan 2026-10-03). sigma stays null: the table prints no bar (Sec. II.6 puts the error at least ten times below 1e-4 per site).",
+    "source_entry": "VP11-heisenberg-hubbard-j1j2#32 (qmbl-verify 2026-09-29, ambiguous); ruling E17, Tristan 2026-10-03 (accept PBC)"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_64_P_28_-8",
+      "method": "ACE+GFMC (GFMC projection on the ACE trial state)",
+      "energy": -257.0752
+    },
+    "checked_on": "2026-09-29",
+    "scope": "value",
+    "method": "arXiv:2604.25775v1 HTML and PDF read locally (Table IV and App. D; Secs. II.6 and III.2; the text and the Fig. 3 and Table IV captions searched for 'periodic', 'PBC', 'OBC', 'boundary'); the authors' Fig. 3 data (github.com/guyuntian/open_data@499d2c0, figure3/8x8_U-8_ACE.npz) inspected with pickletools only",
+    "location": "Table IV (App. D, PDF p. 13), row 'ACE+GFMC', column '8x8, U=-8'",
+    "reported_as": "-4.0168 (per site)",
+    "conversion": "-4.0168 x 64 = -257.0752; U = -8, t' = 0, '1/8 hole doping' (Sec. III.2): 28 + 28 electrons",
+    "note": "Second reading: value, size, U and filling agree. The paper gives no boundary for its 8 x 8 attractive-Hubbard runs, and neither the authors' data repository (guyuntian/open_data) nor their code (bytedance/laqx) holds a configuration for them. Periodic boundaries are inferred: the energy agrees with the instance's periodic AFQMC row (-4.017 per site) and with the paper's own DQMC -4.017(1) to 5e-4 per site, where an open 8 x 8 cluster (112 instead of 128 bonds) would sit near -3.95, and the authors' Fig. 3 correlation data run over distances 1 to L/2, as on a torus. Accepted as periodic (ruling E17, Tristan 2026-10-03). sigma stays null: the table prints no bar (Sec. II.6 puts the error at least ten times below 1e-4 per site).",
+    "source_entry": "VP11-heisenberg-hubbard-j1j2#33 (qmbl-verify 2026-09-29, ambiguous); ruling E17, Tristan 2026-10-03 (accept PBC)"
+  },
 ];

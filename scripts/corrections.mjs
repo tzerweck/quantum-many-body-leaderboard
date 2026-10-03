@@ -16440,4 +16440,90 @@ export const CORRECTIONS = [
     "conversion": "none (text field)",
     "reason": "The block quoted the TB-DMFT-SOC_119 script on every three-band row; this row's script is TB-DMFT_9.py, with Nbath = 9 and the same bondList and DMRG parameters (VA2)."
   },
+  // ---------------------------------------------------------------------------------------
+  // qmbl-verify 2026-09-29, handoff (2026-10-03): the reader's last five questions as Tristan ruled them on
+  // 2026-10-03 (E11, E14, E15, E16, E17). E11, E14 and E17 are verification notes; E15 and E16 are here.
+  // source_entry names the triage entry (merged-with-skeptic.json) and the ruling.
+  // E15: an uploaded variance whose own uncertainty exceeds it is null; the V-score goes with it. (2)
+  {
+    "match": {
+      "instance": "Hubbard/square_256_PA_128_8",
+      "method": "VAFQMC",
+      "energy": -134.2125
+    },
+    "field": "energy_variance",
+    "to": null,
+    "reported_as": "'-134.2125 | .00923 | 1(2)' (energy | sigma | variance), Hubbard/square_16_AP_128_128_8.md",
+    "location": "VarBench upload de5e059 (2022-02-13, S. Sorella, 'Added half filling VAFQMC.'), unchanged in the Zenodo releases v1.0.0 and v1.1.0; arXiv:2101.07045 prints no variance for this cluster",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); arXiv:2101.07045 v1 and v2",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "The upload prints the variance as 1(2), an uncertainty twice the value: the variance is consistent with 0 and with 3, so the V-score it gives (6.1e-4) has no significant digit (VA4#6). Ruling E15 (Tristan, 2026-10-03): energy_variance is null where the uploaded variance's own uncertainty exceeds it, and the V-score goes with it. Energy and sigma stay as uploaded.",
+    "source_entry": "VA4-hubbard-tv-heisenberg#6 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E15, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/square_64_PO_32_8",
+      "method": "VAFQMC",
+      "energy": -31.964
+    },
+    "field": "energy_variance",
+    "to": null,
+    "reported_as": "'-31.964 | .0023 | 0.03(90)' (energy | sigma | variance), Hubbard/square_8_OP_32_32_8.md",
+    "location": "VarBench upload 012bd9a (2022-02-14, S. Sorella, 'Better minimum.'), replacing his first upload 282585d (2022-02-13) '-31.914 | .00163 | 0.2(8)'; arXiv:2101.07045 prints no variance for this cluster",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); arXiv:2101.07045 v1 and v2",
+    "conversion": "none",
+    "checked_on": "2026-09-29",
+    "reason": "The upload prints the variance as 0.03(90), an uncertainty 30 times the value: the variance is consistent with 0 and with 0.9, so its V-score (7.5e-5, the lowest of any Hubbard row) could as well be 2.3e-3 (VA4#45). Ruling E15 (Tristan, 2026-10-03): energy_variance is null where the uploaded variance's own uncertainty exceeds it, and the V-score goes with it. Energy and sigma stay as uploaded.",
+    "source_entry": "VA4-hubbard-tv-heisenberg#45 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E15, Tristan 2026-10-03"
+  },
+  // E16: 'C3 projection' leaves the L = 3 pyrochlore strings (only the L = 4 table names one). (3)
+  {
+    "match": {
+      "instance": "Heisenberg/pyrochlore-3x3x3_432_P",
+      "method": "mVMC (PP, spin-parity even, C3 projection), random initial state",
+      "energy": -838.499904
+    },
+    "field": "method",
+    "to": "mVMC (PP, spin-parity even), random initial state",
+    "reported_as": "Table SII caption (L = 3, Ns = 432): 'Variational energies for the spin-parity even, ψ+, singlet ground state and its excited spin-parity odd, ψ−, triplet state for L = 3 (Ns = 432). [...] Optimizations were initiated for ψ+ from a maximally flippable dimer trial wave function (see Appendix D 2 of the main text), and for ψ− from a random initial wave function.' Table SIII caption (L = 4) alone: 'Optimizations were initiated from random initial wave functions with imposed C3 point-group symmetry projections.'",
+    "location": "arXiv:2311.11561v1 SM Table SII, row 'mVMC', column 'ψ+ (random)', and the captions of Tables SII and SIII; App. A",
+    "version_read": "arXiv:2311.11561v1, the only version (no journal version found, checked 2026-10-02), PDF text via pypdf (qmbl sources/2311.11561.txt)",
+    "conversion": "none",
+    "checked_on": "2026-10-02",
+    "reason": "No sentence of arXiv:2311.11561v1 assigns a C3 point-group projection to the L = 3 (432-site) runs: Table SII's caption names none, Table SIII's (L = 4) does, and App. A's 'We respect the full cubic symmetry of the pyrochlore lattice by the quantum number projection [109]' names no group and no size. The authors' 2022 VarBench upload for this instance says 'C3 point-group projection', but the input it links (varbench/methods scripts/Heisenberg/pyrochlore-3x3x3_432_P/mVMC_inputs/qptransidx.def) has NQPTrans 1, the identity only, where the 1024-site input has 3. Ruling E16 (Tristan, 2026-10-03): the L = 3 strings drop it. The corrected string is the one the paper's L = 2 rows carry, so method_names.mjs already names it. Energy, sigma and variance unchanged.",
+    "source_entry": "VP11-heisenberg-hubbard-j1j2#10 (qmbl-verify 2026-09-29, ambiguous); ruling E16, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "Heisenberg/pyrochlore-3x3x3_432_P",
+      "method": "mVMC (PP, spin-parity even, C3 projection), max.-flippable dimer initial state",
+      "energy": -838.601856
+    },
+    "field": "method",
+    "to": "mVMC (PP, spin-parity even), max.-flippable dimer initial state",
+    "reported_as": "Table SII caption (L = 3, Ns = 432): 'Variational energies for the spin-parity even, ψ+, singlet ground state and its excited spin-parity odd, ψ−, triplet state for L = 3 (Ns = 432). [...] Optimizations were initiated for ψ+ from a maximally flippable dimer trial wave function (see Appendix D 2 of the main text), and for ψ− from a random initial wave function.' Table SIII caption (L = 4) alone: 'Optimizations were initiated from random initial wave functions with imposed C3 point-group symmetry projections.'",
+    "location": "arXiv:2311.11561v1 SM Table SII, row 'mVMC', column 'ψ+ (max. flip.)', and the captions of Tables SII and SIII; App. A",
+    "version_read": "arXiv:2311.11561v1, the only version (no journal version found, checked 2026-10-02), PDF text via pypdf (qmbl sources/2311.11561.txt)",
+    "conversion": "none",
+    "checked_on": "2026-10-02",
+    "reason": "No sentence of arXiv:2311.11561v1 assigns a C3 point-group projection to the L = 3 (432-site) runs: Table SII's caption names none, Table SIII's (L = 4) does, and App. A's 'We respect the full cubic symmetry of the pyrochlore lattice by the quantum number projection [109]' names no group and no size. The authors' 2022 VarBench upload for this instance says 'C3 point-group projection', but the input it links (varbench/methods scripts/Heisenberg/pyrochlore-3x3x3_432_P/mVMC_inputs/qptransidx.def) has NQPTrans 1, the identity only, where the 1024-site input has 3. Ruling E16 (Tristan, 2026-10-03): the L = 3 strings drop it. The corrected string is the one the paper's L = 2 rows carry, so method_names.mjs already names it. Energy, sigma and variance unchanged.",
+    "source_entry": "VP11-heisenberg-hubbard-j1j2#12 (qmbl-verify 2026-09-29, ambiguous); ruling E16, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "Heisenberg/pyrochlore-3x3x3_432_P",
+      "method": "mVMC/Lanczos (PP + 1st Lanczos step, spin-parity even, C3 projection), random initial state",
+      "energy": -844.14528
+    },
+    "field": "method",
+    "to": "mVMC/Lanczos (PP + 1st Lanczos step, spin-parity even), random initial state",
+    "reported_as": "Table SII caption (L = 3, Ns = 432): 'Variational energies for the spin-parity even, ψ+, singlet ground state and its excited spin-parity odd, ψ−, triplet state for L = 3 (Ns = 432). [...] Optimizations were initiated for ψ+ from a maximally flippable dimer trial wave function (see Appendix D 2 of the main text), and for ψ− from a random initial wave function.' Table SIII caption (L = 4) alone: 'Optimizations were initiated from random initial wave functions with imposed C3 point-group symmetry projections.'",
+    "location": "arXiv:2311.11561v1 SM Table SII, row 'mVMC/ Lanczos', column 'ψ+ (random)', and the captions of Tables SII and SIII; App. A",
+    "version_read": "arXiv:2311.11561v1, the only version (no journal version found, checked 2026-10-02), PDF text via pypdf (qmbl sources/2311.11561.txt)",
+    "conversion": "none",
+    "checked_on": "2026-10-02",
+    "reason": "No sentence of arXiv:2311.11561v1 assigns a C3 point-group projection to the L = 3 (432-site) runs: Table SII's caption names none, Table SIII's (L = 4) does, and App. A's 'We respect the full cubic symmetry of the pyrochlore lattice by the quantum number projection [109]' names no group and no size. The authors' 2022 VarBench upload for this instance says 'C3 point-group projection', but the input it links (varbench/methods scripts/Heisenberg/pyrochlore-3x3x3_432_P/mVMC_inputs/qptransidx.def) has NQPTrans 1, the identity only, where the 1024-site input has 3. Ruling E16 (Tristan, 2026-10-03): the L = 3 strings drop it. The corrected string is the one the paper's L = 2 rows carry, so method_names.mjs already names it. Energy, sigma and variance unchanged.",
+    "source_entry": "VP11-heisenberg-hubbard-j1j2#14 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E16, Tristan 2026-10-03"
+  },
 ];
