@@ -12330,4 +12330,36 @@ export const VERIFICATIONS = [
     "note": "Second reading: value, size, U and filling agree. The paper gives no boundary for its 8 x 8 attractive-Hubbard runs, and neither the authors' data repository (guyuntian/open_data) nor their code (bytedance/laqx) holds a configuration for them. Periodic boundaries are inferred: the energy agrees with the instance's periodic AFQMC row (-4.017 per site) and with the paper's own DQMC -4.017(1) to 5e-4 per site, where an open 8 x 8 cluster (112 instead of 128 bonds) would sit near -3.95, and the authors' Fig. 3 correlation data run over distances 1 to L/2, as on a torus. Accepted as periodic (ruling E17, Tristan 2026-10-03). sigma stays null: the table prints no bar (Sec. II.6 puts the error at least ten times below 1e-4 per site).",
     "source_entry": "VP11-heisenberg-hubbard-j1j2#33 (qmbl-verify 2026-09-29, ambiguous); ruling E17, Tristan 2026-10-03 (accept PBC)"
   },
+  // qmbl-verify 2026-09-29, triage D1 (Tristan, 2026-10-03): Luo & Clark's L x 4 backflow rows, read in the published
+  // PRL and its SM; the boundary is stated nowhere and accepted as periodic, as inferred.
+  {
+    "match": {
+      "instance": "Hubbard/rectangular-4x8_32_P_14_8",
+      "method": "Neural Network Backflow (NNB) VMC, quoted from ref [31]",
+      "energy": -24.16
+    },
+    "checked_on": "2026-10-03",
+    "scope": "value",
+    "method": "Phys. Rev. Lett. 122, 226401 (2019), published PDF (6 pp.) and Supplemental Material (5 pp.), fetched 2026-10-03 through ETH Zurich's subscription (qmbl-runs/qmbl-verify-2026-09-29/sources/journal/), text extracted locally with pypdf and searched for periodic, boundary, PBC, OBC, open, twist and cylinder; the accepted manuscript (CHORUS) and arXiv:1807.10770v2 read the same way",
+    "location": "SM Table II, row '8 x 4, U/t=8, n=0.875', column 'NNB'",
+    "reported_as": "-0.755 ± 4 × 10^-5 (energy per site)",
+    "conversion": "-0.755 x 32 = -24.16; sigma 4e-5 x 32 = 0.00128",
+    "note": "Second reading, from the published paper and its Supplemental Material: value and bar agree. Neither states the boundary conditions of the L x 4 runs; the only boundary words belong to reference values: DMRG '(PBC, open)' for the 4 x infinity system (main text, ref. [65]) and, for 16 x 4, 'the twist-averaged boundary condition AFQMC result of -49.088' (SM Sec. IV; LeBlanc et al., PRX 5, 041041), a periodic reference. Periodic in both directions is inferred: the 8 x 4 energy (-0.755 per site) fits the fully periodic cluster and not the cylinder (HFDS: -0.7633(7) periodic, -0.7309(6) cylinder), and three papers that quote these runs place them on fully periodic lattices (arXiv:2111.10420v2 Fig. 4(b), arXiv:2606.00924v1 Table IV, arXiv:2308.11823v6 Table III). Accepted as periodic (ruling D1, Tristan 2026-10-03).",
+    "source_entry": "VP6-arxiv-2606-00924#20 (qmbl-verify 2026-09-29, ambiguous); triage D1; ruling D1, Tristan 2026-10-03 (accept PBC-PBC as inferred)"
+  },
+  {
+    "match": {
+      "instance": "Hubbard/rectangular-4x16_64_P_28_8",
+      "method": "Neural Network Backflow (NNB) VMC, quoted from ref [31]",
+      "energy": -47.744
+    },
+    "checked_on": "2026-10-03",
+    "scope": "value",
+    "method": "Phys. Rev. Lett. 122, 226401 (2019), published PDF (6 pp.) and Supplemental Material (5 pp.), fetched 2026-10-03 through ETH Zurich's subscription (qmbl-runs/qmbl-verify-2026-09-29/sources/journal/), text extracted locally with pypdf and searched for periodic, boundary, PBC, OBC, open, twist and cylinder; the accepted manuscript (CHORUS) and arXiv:1807.10770v2 read the same way",
+    "location": "SM Sec. IV (16 x 4, nh = 64) and SM Table II, row '16 x 4, U/t=8, n=0.875', column 'NNB'",
+    "reported_as": "'the energy decreases from -46.211 (for the optimized Slater determinant) to -47.745 (nh = 64)' (Sec. IV); -0.746 ± 6 × 10^-5 per site (Table II)",
+    "conversion": "-47.745 (total, as printed); sigma 6e-5 x 64 = 0.00384",
+    "note": "Second reading, from the published paper and its Supplemental Material: value and bar agree. Neither states the boundary conditions of the L x 4 runs; the only boundary words belong to reference values: DMRG '(PBC, open)' for the 4 x infinity system (main text, ref. [65]) and, for 16 x 4, 'the twist-averaged boundary condition AFQMC result of -49.088' (SM Sec. IV; LeBlanc et al., PRX 5, 041041), a periodic reference. Periodic in both directions is inferred: the 8 x 4 energy (-0.755 per site) fits the fully periodic cluster and not the cylinder (HFDS: -0.7633(7) periodic, -0.7309(6) cylinder), and three papers that quote these runs place them on fully periodic lattices (arXiv:2111.10420v2 Fig. 4(b), arXiv:2606.00924v1 Table IV, arXiv:2308.11823v6 Table III). Accepted as periodic (ruling D1, Tristan 2026-10-03).",
+    "source_entry": "VP6-arxiv-2606-00924#10 (qmbl-verify 2026-09-29, ambiguous); triage D1; ruling D1, Tristan 2026-10-03 (accept PBC-PBC as inferred)"
+  },
 ];
