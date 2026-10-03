@@ -80,6 +80,14 @@ export const REMOVALS = [
     ruled: "2026-09-30 (Tristan): QMBL's recomputed row stands, the quoted row is removed",
     reason: "The ED energy of Anderson et al., Comput. Theor. Chem. 1003, 22 (2013), which prints -8.46888 (arXiv:1207.4847 Table IV, U/t = 8), stored as the per-site -0.52931 that arXiv:2602.03031 quotes (ref. [35]) times 16 = -8.46896. Two diagonalizations of the 4x4 torus at half filling on an AMD EPYC 9654 server give -8.4688750142 (checks/hubbard-4x4-half-filling-ed/): the stored value sits 8.5e-5 below the ground state (the per-site quote is one unit off in its last digit), while the producer's -8.46888 is the ground state correctly rounded. The recomputed energy is carried on this instance (add_exact_rows.mjs, batch B2).",
   },
+  // Declared the ground state, but the lowest level of the one symmetry sector the paper diagonalised:
+  // QMBL's diagonalisation of the cluster's other q = 0 sectors finds a lower level, and its row replaces
+  // this one (rulings R3, 2026-10-02, and E1, 2026-10-03; the pyrochlore-32 mechanism).
+  {
+    match: { instance: "J1J2/square_40_P_0.6", method: "Exact diagonalization (Lanczos)", energy: -76.73472152 },
+    ruled: "2026-10-03 (Tristan; ruling R3 of 2026-10-02): QMBL's recomputed row stands, the A+ sector minimum is removed",
+    reason: "Richter & Schulenburg, Eur. Phys. J. B 73, 117 (2010), Table 1: E_GS(S = 0) = -19.18368038 (S.S total), the lowest level of the one sector they diagonalised, \"the GS symmetry sector\" with n_h = 430,909,650 basis states (q = 0, C4 character A, spin-flip even), reproduced by QMBL as -19.1836803841. The C4 sign sector B+ of the same cluster (430,909,268 states) holds -19.1849299507, 1.25e-3 lower (6.5e-5 relative), found again in a second basis (the C2 subgroup's even sector, A+ + B+, 861,818,918 states) to 2.2e-15; C4's E pair lies higher (-18.1248351936). Lanczos on an AMD EPYC 9654 server (checks/j1j2-40-sector-ed/). The stored value is not the ground-state energy at its own precision; the recomputed energy is carried on this instance (add_exact_rows.mjs, batch B2).",
+  },
   // Not an energy of the instance.
   ...["J1J2/triangular_108_P_0.125", "J1J2/triangular_144_P_0.125"].map(instance => ({
     match: { instance, method: "Thermodynamic-limit estimate interpolated to this size (1/L^3)" },

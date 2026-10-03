@@ -171,7 +171,7 @@ Organised literature for fellow researchers and AI, so that we can see the works
 | square, 40 sites, J2 = 0.4 | **-0.5272092** | ED [Richter & Schulenburg (2009)](https://doi.org/10.48550/arxiv.0909.3723) | none |
 | square, 40 sites, J2 = 0.5 | **-0.4990762** | ED [Richter & Schulenburg (2009)](https://doi.org/10.48550/arxiv.0909.3723) | none |
 | square, 40 sites, J2 = 0.55 | **-0.4879479** | ED [Richter & Schulenburg (2009)](https://doi.org/10.48550/arxiv.0909.3723) | none |
-| square, 40 sites, J2 = 0.6 | **-0.4795920** | ED [Richter & Schulenburg (2009)](https://doi.org/10.48550/arxiv.0909.3723) | none |
+| square, 40 sites, J2 = 0.6 | **-0.4796232** | ED QMBL, checks/j1j2-40-sector-ed/ (exact… | none |
 | square, 40 sites, J2 = 0.65 | **-0.5011508** | ED [Richter & Schulenburg (2009)](https://doi.org/10.48550/arxiv.0909.3723) | none |
 | square, 40 sites, J2 = 0.7 | **-0.5263826** | ED [Richter & Schulenburg (2009)](https://doi.org/10.48550/arxiv.0909.3723) | none |
 | square, 40 sites, J2 = 0.8 | **-0.5835051** | ED [Richter & Schulenburg (2009)](https://doi.org/10.48550/arxiv.0909.3723) | none |

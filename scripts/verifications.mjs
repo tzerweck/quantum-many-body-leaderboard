@@ -12378,4 +12378,82 @@ export const VERIFICATIONS = [
     "note": "Second reading, from the producing paper's published version: the energy agrees and is printed without an error bar (Table 4 and Sec. 4), so sigma is null (ruling E4); Rende et al.'s '(1)' is their own addition. The paper's ansatz is a CNN, the 'large model with 106529 parameters' fine-tuned by transfer learning from the 24 x 24 system (Sec. 4, Figs. 12-13); 'Deep CNN' is Rende et al.'s label.",
     "source_entry": "VP13-hubbard-j1j2-heisenberg#59 (qmbl-verify 2026-09-29, ambiguous); triage D3, the published version read 2026-10-03; ruling E4, Tristan 2026-10-02"
   },
+  // qmbl-verify 2026-09-29, handoff (2026-10-03), rulings R3 and E1 (Tristan): Richter & Schulenburg's 40-site
+  // J1-J2 rows at J2 = 0.65 to 1 against QMBL's diagonalisation of every q = 0, spin-flip-even sector (J2 = 0.6 is
+  // replaced: add_exact_rows.mjs batch B2, removals.mjs).
+  {
+    "match": {
+      "instance": "J1J2/square_40_P_0.65",
+      "method": "Exact diagonalization (Lanczos)",
+      "energy": -80.1841302
+    },
+    "checked_on": "2026-10-03",
+    "scope": "value",
+    "method": "QMBL's symmetric-sector Lanczos (ed40b.py) on the C4-symmetric 40-site cluster L1 = (6, 2), L2 = (-2, 6), every q = 0, spin-flip-even sector: C4 B+ (430,909,268 states), the C2 subgroup's even sector A+ + B+ (861,818,918) and odd sector, C4's E pair (861,309,014); an AMD EPYC 9654 server, 2026-10-03 (checks/j1j2-40-sector-ed/)",
+    "location": "Table 1, row J2 = 0.65, E_GS(S = 0) (arXiv:0909.3723v1)",
+    "reported_as": "E_GS(S = 0) = -20.04603255 (total, S.S, J1 = 1)",
+    "conversion": "-20.04603255 x 4 = -80.1841302 (Pauli total)",
+    "note": "The printed energy is the lowest q = 0, spin-flip-even level of the cluster, so the paper's one sector (A+) holds the ground state here. Lowest levels, S.S totals: A+ + B+ -20.0460325547, the printed value to its eight decimals; B+ -20.0459929784, 4.0e-5 above; E pair -18.5214690356, 1.5e above. Momenta q != 0 were not diagonalised; the paper puts the ground state at q = (0, 0). Rulings R3 (2026-10-02) and E1 (2026-10-03), Tristan.",
+    "source_entry": "VE-exact-recompute#102, VJ2-journal-other#44, VP10-heisenberg-j1j2#45 (qmbl-verify 2026-09-29, E1); rulings R3 and E1, Tristan"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_40_P_0.7",
+      "method": "Exact diagonalization (Lanczos)",
+      "energy": -84.22120956
+    },
+    "checked_on": "2026-10-03",
+    "scope": "value",
+    "method": "QMBL's symmetric-sector Lanczos (ed40b.py) on the C4-symmetric 40-site cluster L1 = (6, 2), L2 = (-2, 6), every q = 0, spin-flip-even sector: C4 B+ (430,909,268 states), the C2 subgroup's even sector A+ + B+ (861,818,918) and odd sector, C4's E pair (861,309,014); an AMD EPYC 9654 server, 2026-10-03 (checks/j1j2-40-sector-ed/)",
+    "location": "Table 1, row J2 = 0.7, E_GS(S = 0) (arXiv:0909.3723v1)",
+    "reported_as": "E_GS(S = 0) = -21.05530239 (total, S.S, J1 = 1)",
+    "conversion": "-21.05530239 x 4 = -84.22120956 (Pauli total)",
+    "note": "The printed energy is the lowest q = 0, spin-flip-even level of the cluster, so the paper's one sector (A+) holds the ground state here. Lowest levels, S.S totals: A+ + B+ -21.0553023878, the printed value to its eight decimals; B+ -21.0540893422, 1.2e-3 above; E pair -19.2114020741, 1.8e above. Momenta q != 0 were not diagonalised; the paper puts the ground state at q = (0, 0). Rulings R3 (2026-10-02) and E1 (2026-10-03), Tristan.",
+    "source_entry": "VE-exact-recompute#103, VJ2-journal-other#45, VP10-heisenberg-j1j2#46 (qmbl-verify 2026-09-29, E1); rulings R3 and E1, Tristan"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_40_P_0.8",
+      "method": "Exact diagonalization (Lanczos)",
+      "energy": -93.36081708
+    },
+    "checked_on": "2026-10-03",
+    "scope": "value",
+    "method": "QMBL's symmetric-sector Lanczos (ed40b.py) on the C4-symmetric 40-site cluster L1 = (6, 2), L2 = (-2, 6), every q = 0, spin-flip-even sector: C4 B+ (430,909,268 states), the C2 subgroup's even sector A+ + B+ (861,818,918) and odd sector, C4's E pair (861,309,014); an AMD EPYC 9654 server, 2026-10-03 (checks/j1j2-40-sector-ed/)",
+    "location": "Table 1, row J2 = 0.8, E_GS(S = 0) (arXiv:0909.3723v1)",
+    "reported_as": "E_GS(S = 0) = -23.34020427 (total, S.S, J1 = 1)",
+    "conversion": "-23.34020427 x 4 = -93.36081708 (Pauli total)",
+    "note": "The printed energy is the lowest q = 0, spin-flip-even level of the cluster, so the paper's one sector (A+) holds the ground state here. Lowest levels, S.S totals: A+ + B+ -23.3402042812, which puts the printed last digit one unit high (4.8e-10 relative); the row keeps the printed digits (ruling E1, Tristan 2026-10-03); B+ -23.3111313615, 2.9e-2 above; E pair -20.8657506590, 2.5e above. Momenta q != 0 were not diagonalised; the paper puts the ground state at q = (0, 0). Rulings R3 (2026-10-02) and E1 (2026-10-03), Tristan.",
+    "source_entry": "VE-exact-recompute#104, VJ2-journal-other#46, VP10-heisenberg-j1j2#47 (qmbl-verify 2026-09-29, E1); rulings R3 and E1, Tristan"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_40_P_0.9",
+      "method": "Exact diagonalization (Lanczos)",
+      "energy": -103.34765148
+    },
+    "checked_on": "2026-10-03",
+    "scope": "value",
+    "method": "QMBL's symmetric-sector Lanczos (ed40b.py) on the C4-symmetric 40-site cluster L1 = (6, 2), L2 = (-2, 6), every q = 0, spin-flip-even sector: C4 B+ (430,909,268 states), the C2 subgroup's even sector A+ + B+ (861,818,918) and odd sector, C4's E pair (861,309,014); an AMD EPYC 9654 server, 2026-10-03 (checks/j1j2-40-sector-ed/)",
+    "location": "Table 1, row J2 = 0.9, E_GS(S = 0) (arXiv:0909.3723v1)",
+    "reported_as": "E_GS(S = 0) = -25.83691287 (total, S.S, J1 = 1)",
+    "conversion": "-25.83691287 x 4 = -103.34765148 (Pauli total)",
+    "note": "The printed energy is the lowest q = 0, spin-flip-even level of the cluster, so the paper's one sector (A+) holds the ground state here. Lowest levels, S.S totals: A+ + B+ -25.8369128683, the printed value to its eight decimals; B+ -25.7288855565, 1.1e-1 above; E pair -22.6741523822, 3.2e above. Momenta q != 0 were not diagonalised; the paper puts the ground state at q = (0, 0). Rulings R3 (2026-10-02) and E1 (2026-10-03), Tristan.",
+    "source_entry": "VE-exact-recompute#105, VJ2-journal-other#47, VP10-heisenberg-j1j2#48 (qmbl-verify 2026-09-29, E1); rulings R3 and E1, Tristan"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_40_P_1",
+      "method": "Exact diagonalization (Lanczos)",
+      "energy": -113.75523568
+    },
+    "checked_on": "2026-10-03",
+    "scope": "value",
+    "method": "QMBL's symmetric-sector Lanczos (ed40b.py) on the C4-symmetric 40-site cluster L1 = (6, 2), L2 = (-2, 6), every q = 0, spin-flip-even sector: C4 B+ (430,909,268 states), the C2 subgroup's even sector A+ + B+ (861,818,918) and odd sector, C4's E pair (861,309,014); an AMD EPYC 9654 server, 2026-10-03 (checks/j1j2-40-sector-ed/)",
+    "location": "Table 1, row J2 = 1, E_GS(S = 0) (arXiv:0909.3723v1)",
+    "reported_as": "E_GS(S = 0) = -28.43880892 (total, S.S, J1 = 1)",
+    "conversion": "-28.43880892 x 4 = -113.75523568 (Pauli total)",
+    "note": "The printed energy is the lowest q = 0, spin-flip-even level of the cluster, so the paper's one sector (A+) holds the ground state here. Lowest levels, S.S totals: A+ + B+ -28.4388089164, the printed value to its eight decimals; A+ alone (C4) -28.4388089164; B+ -28.2241966640, 2.1e-1 above; E pair -24.5705125918, 3.9e above. Momenta q != 0 were not diagonalised; the paper puts the ground state at q = (0, 0). Rulings R3 (2026-10-02) and E1 (2026-10-03), Tristan.",
+    "source_entry": "VE-exact-recompute#106, VJ2-journal-other#48, VP10-heisenberg-j1j2#49 (qmbl-verify 2026-09-29, E1); rulings R3 and E1, Tristan"
+  },
 ];

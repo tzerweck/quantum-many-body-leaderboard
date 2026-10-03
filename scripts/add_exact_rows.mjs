@@ -242,7 +242,24 @@ for (const [U, energy, a, b, perSite, quoted, producer, fate] of [
     reported: `${b} (ed_full2.py) | ${a} (hub_fact.py)`,
     note: `Total energy, t = 1, H = -t sum (c+c + h.c.) + U sum n_up n_dn on the periodic 4x4 lattice (32 bonds); E/N = ${perSite}. Replaces the quoted exact row ${quoted}, which lay below this ground state: ${fate}; the producer prints ${producer} (arXiv:1207.4847 Table IV), this energy to its printed digits. Carried to 10 decimals, the agreement of the two codes.`,
     source: "qmbl-verify-2026-09-29", checked: "2026-09-29" });
-console.log("batch B2: 3 exact rows computed by QMBL (pyrochlore-2x2x2_32_P; Hubbard 4x4 at half filling, U = 4 and 8)");
+//
+// J1J2/square_40_P_0.6, the tilted 40-site cluster of Richter & Schulenburg (batch C1 below): their
+// E_GS(S = 0) = -19.18368038 is the lowest level of the one sector they diagonalised (q = 0, C4 character
+// A, spin-flip even; n_h = 430,909,650). The C4 sign sector B+ (430,909,268 states) holds a level
+// 1.25e-3 lower in S.S units, found again in a second basis (the C2 subgroup's even sector, A+ + B+,
+// 861,818,918 states) to 2.2e-15; C4's E pair lies higher, and QMBL reproduces the printed A+ value
+// (checks/j1j2-40-sector-ed/). Momenta q != 0 were not diagonalised; the paper puts the ground state at
+// q = (0, 0). Ruled 2026-10-02 (R3) and 2026-10-03 (Tristan). The A+ row is removed in removals.mjs.
+put("J1J2/square_40_P_0.6",
+  { model: "J1J2", lattice: "square", n_sites: 40, boundary: "P", params: { J2: 0.6 }, dof: 40, einf: 0 },
+  { energy: -76.73971980261, sigma: null,
+    src: { ref: "QMBL, checks/j1j2-40-sector-ed/ (exact diagonalization of the q = 0 symmetry sectors of Richter & Schulenburg's 40-site cluster, two bases)", pr: false },
+    method: "Exact diagonalization", why: "Lanczos exact diagonalization of every q = 0, spin-flip-even symmetry sector of the S^z = 0 space, computed by QMBL; deterministic",
+    read: "ed40b.py (hashed symmetric-sector Lanczos) in the C4 sector B+ (430,909,268 states, true residual 4.0e-10) and in the C2 subgroup's even sector A+ + B+ (861,818,918 states, residual 5.1e-10), an AMD EPYC 9654 server, 2026-10-03",
+    reported: "-76.73971980260544 (C4, B+) | -76.7397198026056 (C2 even, A+ + B+)",
+    note: "Pauli total; E/N = -0.479623249 in S.S units (S.S total -19.1849299507). The lowest level of every q = 0, spin-flip-even sector of the C4-symmetric cluster L1 = (6, 2), L2 = (-2, 6): A+ -19.1836803841 (the paper's sector, reproduced), B+ (this level), E pair -18.1248351936. Replaces Richter & Schulenburg's -76.73472152 (Table 1, -19.18368038), the lowest A+ level, 5.0e-3 above it (RULES.md 11, removals.mjs). Carried to 11 decimals, the agreement of the two bases; momenta q != 0 not diagonalised.",
+    source: "qmbl-verify-2026-09-29", checked: "2026-10-03" });
+console.log("batch B2: 4 exact rows computed by QMBL (pyrochlore-2x2x2_32_P; Hubbard 4x4 at half filling, U = 4 and 8; J1-J2 40-site, J2 = 0.6)");
 
 // ---------------------------------------------------------------------------------------
 // Batch C: exact diagonalization of frustrated clusters. Deterministic, so no sigma; the

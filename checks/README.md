@@ -312,3 +312,59 @@ python ed_perm2.py --cluster clusters/kagome_36a.json --chars gamma --z 1 --outd
 python ed_sym.py --lattice square --L 6 --name J1J2__square_36_P --outdir results --group c4v --tol 1e-9 --second_pass 1 --tasks '0.2/0,0/A1/1'
 python ed_full.py --model tv_chain --L 32 --Nf 16 --V 1 --instance tV/chain_32_P_16_1 --out results/tV__chain_32_P_16_1.json
 ```
+
+## `j1j2-40-sector-ed/`: are Richter & Schulenburg's 40-site J1-J2 energies the ground state?
+
+**Question.** `J1J2/square_40_P_{0.6, 0.65, 0.7, 0.8, 0.9, 1}` carried E_GS(S = 0) from Richter & Schulenburg,
+Eur. Phys. J. B 73, 117 (2010), arXiv:0909.3723, Table 1, the only exact reference on each instance. The paper
+diagonalised one sector, "the GS symmetry sector" with n_h = 430,909,650 basis states: momentum q = 0, the trivial
+character of the cluster's C4 rotation, spin-flip even (A+). On C4 clusters the ground state can leave that sector as
+J2 grows: on the 20-site cluster below it moves to the C4 sign character (B+) between J2 = 0.55 and 0.6, and on 6 x 6
+the B1 level is the ground state from J2 = 0.7. Is the printed A+ level the ground state at J2 >= 0.6?
+
+**Design.** Lanczos in the symmetric sectors of the S^z = 0 space (C(40, 20) = 137,846,528,820 states) of the
+C4-symmetric tilted cluster L1 = (6, 2), L2 = (-2, 6), `H = sum_NN sigma_i . sigma_j + J2 sum_NNN sigma_i . sigma_j`
+(Pauli, J1 = 1). `ed40b.py` builds a hashed basis of orbit representatives under translations x C4 x spin flip (320
+elements) and runs several (sector, J2) vectors in lockstep, measuring the true residual and the Hermiticity of every
+matvec. Sectors, all at q = 0 and spin-flip even: A+ and B+ of C4 (430,909,650 and 430,909,268 states), and a second
+basis over the C2 subgroup, whose even sector is A+ + B+ (861,818,918) and whose odd sector is C4's complex pair E
+(861,309,014). Before the 40-site runs, a gate: on the 20-site C4 cluster (4, 2), (-2, 4) every sector energy and
+dimension against `bf_check.py` (full S^z = 0 space, explicit projector, ARPACK, its own site bookkeeping), to 3e-15;
+on 6 x 6 (the C4 subgroup of C4v) the stored exact rows and B1 levels to 5e-15 and the sector dimensions exactly
+(`validation/`, `logs/W4_compare.log`, `logs/G3_compare_c2.log`). An AMD EPYC 9654 server, 2026-10-03.
+
+**Result.** S.S totals as Table 1 prints them; true residuals at most 9.7e-10, Hermiticity at most 5.1e-12, the A and B
+dimensions as above (A = the paper's n_h).
+
+| J2 | printed (A+) | lowest of A+ + B+ (C2 even) | lowest B+ (C4) | lowest of the E pair (C2 odd) |
+|---|---|---|---|---|
+| 0.6 | -19.18368038 | -19.1849299507 | -19.1849299507 | -18.1248351936 |
+| 0.65 | -20.04603255 | -20.0460325547 | -20.0459929784 | -18.5214690356 |
+| 0.7 | -21.05530239 | -21.0553023878 | -21.0540893422 | -19.2114020741 |
+| 0.8 | -23.34020427 | -23.3402042812 | -23.3111313615 | -20.8657506590 |
+| 0.9 | -25.83691287 | -25.8369128683 | -25.7288855565 | -22.6741523822 |
+| 1 | -28.43880892 | -28.4388089164 | -28.2241966640 | -24.5705125918 |
+
+The C4 A+ runs reproduce the printed values directly at J2 = 0.6 (-19.1836803841) and 1 (-28.4388089164); the C2-even
+basis reproduces them at 0.55, 0.65, 0.7, 0.9 and 1 to all eight printed decimals, while at 0.8 the printed last digit
+is one unit high (QMBL -23.3402042812, 4.8e-10 relative). At J2 = 0.6 the lowest B+ level lies 1.25e-3 below
+the printed one (6.5e-5 relative), and the C2-even basis finds the same level to 2.2e-15; the printed
+state's <s0 . s1> = -0.129468 (Table 2) belongs to the A+ level (QMBL -0.1294685), not to the B+ one
+(-0.1290810). At 0.65 to 1 the B+ and E levels lie above the printed one.
+
+**Conclusion.** At J2 = 0.6 the printed energy is the lowest A+ level, not the ground state: the row is removed and
+QMBL's B+ energy, -76.73971980261 (Pauli total), stands, to the 11 decimals the two bases agree on (RULES.md §11;
+`scripts/removals.mjs`, `scripts/add_exact_rows.mjs` batch B2; ruled 2026-10-02 and 2026-10-03). At 0.65 to 1 the
+printed energies are the lowest q = 0, spin-flip-even level and stay, QMBL's values in their verification notes; 0.8
+keeps its printed digits (ruled 2026-10-03). Momenta q != 0 and odd total spin were not diagonalised: the paper puts the
+ground state at q = (0, 0), and its triplet levels above it.
+
+**Reproduce.** numpy, scipy and numba, 192 threads: about 2 to 2.5 h and 170 GB per C4 command, 5.5 to 6 h and 340 GB per C2 one:
+
+```bash
+python ed40b.py --L1 6,2 --L2 -2,6 --group c4 --name sq40 --outdir r40c4b --vectors B:0.6,B:0.65,B:0.7,B:0.8,B:0.9,B:1,A:1 --expect A=430909650,B=430909268
+python ed40b.py --L1 6,2 --L2 -2,6 --group c2 --name sq40c2 --outdir r40c2 --vectors A:0.6,A:0.65,A:0.7,A:0.8,A:0.9,A:1,A:0.55 --expect A=861818918
+python ed40b.py --L1 6,2 --L2 -2,6 --group c2 --name sq40c2m --outdir r40c2m --vectors B:0.6,B:0.65,B:0.7,B:0.8,B:0.9,B:1 --expect A=861818918,B=861309014
+python ed40b.py --L1 6,2 --L2 -2,6 --group c4 --name sq40a --outdir r40c4a --vectors A:0.6 --expect A=430909650,B=430909268
+python bf_check.py --sectors A,B,E --J2 0.5,0.55,0.6,0.7,1 --out bf20e.json
+```
