@@ -18132,4 +18132,55 @@ export const CORRECTIONS = [
     "reason": "The linked vmc_rnn.sh runs a plain FastLSTMNet, and vmc.py has no symmetrisation option, so the link does not implement the method named (VB1#15). The number was uploaded years before the script and is printed in no paper the readers found, so it is cited to the dataset with the uploader named, as its three Heisenberg siblings are (ruling E5, Tristan 2026-10-02). The link stays. Ruling L3 (Tristan 2026-10-03).",
     "source_entry": "VB1-varbench-code-j1j2#15 (qmbl-verify 2026-09-29; skeptic upheld); ruling L3, Tristan 2026-10-03"
   },
+  // ---------------------------------------------------------------------------------------
+  // qmbl-verify 2026-09-29, triage D3 (2026-10-03): Li et al.'s 10 x 10 CNN energy read in the published IEEE TPDS
+  // version, which prints no error bar: sigma null (ruling E4), the row primary and citing the paper directly.
+  {
+    "match": {
+      "instance": "J1J2/square_100_P_0.5",
+      "method": "Deep CNN",
+      "energy": -198.868
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "-0.49717 (energy per site, S.S units), printed without an error bar in the table and the text",
+    "location": "Table 4, 'Energies for Varied J2/J1 && System Scales', row '10 × 10', column 0.50 (p. 2856); Sec. 4, 'The energies achieved by transfer learning reach -0.49626 and -0.49717' (pp. 2855-2856)",
+    "version_read": "IEEE Trans. Parallel Distrib. Syst. 33(11), 2846-2859 (2022), published PDF from IEEE Xplore (ETH Zurich subscription), downloaded 2026-10-03, text extracted locally with pypdf (qmbl-runs/qmbl-verify-2026-09-29/sources/journal/Li-et-al-IEEE-TPDS-33-2846.*); arXiv:2108.13830v4 Table 4 as read by VP13",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "Ruling E4 (Tristan, 2026-10-02): follow the producing paper, sigma null where it prints none. The published version prints -0.49717 with no error bar, in Table 4 and in the text, as arXiv:2108.13830v4 does; the (1) of the stored 0.004 exists only in Rende et al.'s quote (arXiv:2310.05715, Table I). The row is sampled without a sigma, eligible for nothing (RULES.md 6); it held no record.",
+    "source_entry": "VP13-hubbard-j1j2-heisenberg#59 (qmbl-verify 2026-09-29, ambiguous); triage D3, the published version read 2026-10-03; ruling E4, Tristan 2026-10-02"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_100_P_0.5",
+      "method": "Deep CNN",
+      "energy": -198.868
+    },
+    "field": "provenance",
+    "to": "primary",
+    "reported_as": "-0.49717 (energy per site, S.S units), printed without an error bar in the table and the text",
+    "location": "Table 4, 'Energies for Varied J2/J1 && System Scales', row '10 × 10', column 0.50 (p. 2856); Sec. 4, 'The energies achieved by transfer learning reach -0.49626 and -0.49717' (pp. 2855-2856)",
+    "version_read": "IEEE Trans. Parallel Distrib. Syst. 33(11), 2846-2859 (2022), published PDF from IEEE Xplore (ETH Zurich subscription), downloaded 2026-10-03, text extracted locally with pypdf (qmbl-runs/qmbl-verify-2026-09-29/sources/journal/Li-et-al-IEEE-TPDS-33-2846.*); arXiv:2108.13830v4 Table 4 as read by VP13",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "The number is now read in the paper that produced it (the published TPDS version), not only in Rende et al.'s quote; the 2026-09-15 reading of the quote stays in `verified` with its secondary_of. As for Liu et al.'s finite-PEPS rows (VP15#55, #58).",
+    "source_entry": "VP13-hubbard-j1j2-heisenberg#59 (qmbl-verify 2026-09-29, ambiguous); triage D3, the published version read 2026-10-03; ruling E4, Tristan 2026-10-02 (follow the producing paper)"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_100_P_0.5",
+      "method": "Deep CNN",
+      "energy": -198.868
+    },
+    "field": "reference",
+    "to": "M. Li, J. Chen, Q. Xiao, F. Wang, Q. Jiang, X. Zhao, R. Lin, H. An, X. Liang, and L. He, Bridging the Gap between Deep Learning and Frustrated Quantum Spin System for Extreme-Scale Simulations on New Generation of Sunway Supercomputer, IEEE Trans. Parallel Distrib. Syst. 33, 2846 (2022), doi:10.1109/TPDS.2022.3145163, arXiv:2108.13830",
+    "reported_as": "title page: 'Bridging the Gap between Deep Learning and Frustrated Quantum Spin System for Extreme-Scale Simulations on New Generation of Sunway Supercomputer', Mingfan Li, Junshi Chen, Qian Xiao, Fei Wang, Qingcai Jiang, Xuncheng Zhao, Rongfen Lin, Hong An, Xiao Liang, and Lixin He; IEEE TPDS 33(11), 2846-2859 (2022)",
+    "location": "title page and running heads of the published PDF",
+    "version_read": "IEEE Trans. Parallel Distrib. Syst. 33(11), 2846-2859 (2022), published PDF from IEEE Xplore (ETH Zurich subscription), downloaded 2026-10-03, text extracted locally with pypdf (qmbl-runs/qmbl-verify-2026-09-29/sources/journal/Li-et-al-IEEE-TPDS-33-2846.*); arXiv:2108.13830v4 Table 4 as read by VP13",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-03",
+    "reason": "Follows the provenance entry: read in the producing paper, the row cites it directly, with its title, DOI and arXiv number; the clause naming the quoting paper goes.",
+    "source_entry": "VP13-hubbard-j1j2-heisenberg#59 (qmbl-verify 2026-09-29, ambiguous); triage D3, the published version read 2026-10-03; ruling E4, Tristan 2026-10-02 (follow the producing paper)"
+  },
 ];

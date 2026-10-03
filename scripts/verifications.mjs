@@ -12362,4 +12362,20 @@ export const VERIFICATIONS = [
     "note": "Second reading, from the published paper and its Supplemental Material: value and bar agree. Neither states the boundary conditions of the L x 4 runs; the only boundary words belong to reference values: DMRG '(PBC, open)' for the 4 x infinity system (main text, ref. [65]) and, for 16 x 4, 'the twist-averaged boundary condition AFQMC result of -49.088' (SM Sec. IV; LeBlanc et al., PRX 5, 041041), a periodic reference. Periodic in both directions is inferred: the 8 x 4 energy (-0.755 per site) fits the fully periodic cluster and not the cylinder (HFDS: -0.7633(7) periodic, -0.7309(6) cylinder), and three papers that quote these runs place them on fully periodic lattices (arXiv:2111.10420v2 Fig. 4(b), arXiv:2606.00924v1 Table IV, arXiv:2308.11823v6 Table III). Accepted as periodic (ruling D1, Tristan 2026-10-03).",
     "source_entry": "VP6-arxiv-2606-00924#10 (qmbl-verify 2026-09-29, ambiguous); triage D1; ruling D1, Tristan 2026-10-03 (accept PBC-PBC as inferred)"
   },
+  // qmbl-verify 2026-09-29, triage D3 (2026-10-03): the published IEEE TPDS version of Li et al. read.
+  {
+    "match": {
+      "instance": "J1J2/square_100_P_0.5",
+      "method": "Deep CNN",
+      "energy": -198.868
+    },
+    "checked_on": "2026-10-03",
+    "scope": "value",
+    "method": "IEEE Trans. Parallel Distrib. Syst. 33(11), 2846-2859 (2022), published PDF from IEEE Xplore (ETH Zurich subscription), downloaded 2026-10-03, text extracted locally with pypdf (qmbl-runs/qmbl-verify-2026-09-29/sources/journal/Li-et-al-IEEE-TPDS-33-2846.*); arXiv:2108.13830v4 Table 4 as read by VP13",
+    "location": "Table 4, 'Energies for Varied J2/J1 && System Scales', row '10 × 10', column 0.50 (p. 2856); Sec. 4, 'The energies achieved by transfer learning reach -0.49626 and -0.49717' (pp. 2855-2856)",
+    "reported_as": "-0.49717 (energy per site, S.S units), printed without an error bar in the table and the text",
+    "conversion": "-0.49717 x 4 x 100 = -198.868 (Pauli total)",
+    "note": "Second reading, from the producing paper's published version: the energy agrees and is printed without an error bar (Table 4 and Sec. 4), so sigma is null (ruling E4); Rende et al.'s '(1)' is their own addition. The paper's ansatz is a CNN, the 'large model with 106529 parameters' fine-tuned by transfer learning from the 24 x 24 system (Sec. 4, Figs. 12-13); 'Deep CNN' is Rende et al.'s label.",
+    "source_entry": "VP13-hubbard-j1j2-heisenberg#59 (qmbl-verify 2026-09-29, ambiguous); triage D3, the published version read 2026-10-03; ruling E4, Tristan 2026-10-02"
+  },
 ];
