@@ -16526,4 +16526,1610 @@ export const CORRECTIONS = [
     "reason": "No sentence of arXiv:2311.11561v1 assigns a C3 point-group projection to the L = 3 (432-site) runs: Table SII's caption names none, Table SIII's (L = 4) does, and App. A's 'We respect the full cubic symmetry of the pyrochlore lattice by the quantum number projection [109]' names no group and no size. The authors' 2022 VarBench upload for this instance says 'C3 point-group projection', but the input it links (varbench/methods scripts/Heisenberg/pyrochlore-3x3x3_432_P/mVMC_inputs/qptransidx.def) has NQPTrans 1, the identity only, where the 1024-site input has 3. Ruling E16 (Tristan, 2026-10-03): the L = 3 strings drop it. The corrected string is the one the paper's L = 2 rows carry, so method_names.mjs already names it. Energy, sigma and variance unchanged.",
     "source_entry": "VP11-heisenberg-hubbard-j1j2#14 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E16, Tristan 2026-10-03"
   },
+  // ---------------------------------------------------------------------------------------
+  // qmbl-verify 2026-09-29, handoff item 3 (the smaller leftovers), as Tristan ruled them on 2026-10-03
+  // (L1-L4; L5, two documentation sentences, not taken). L4 is scripts/validate.mjs.
+  // L1: no sigma on deterministic energies (RULES.md 6, rule E3): the four Wietek & Läuchli ED rows and the 47 spectrum levels. (51)
+  {
+    "match": {
+      "instance": "Heisenberg/kagome-4x4_48_P",
+      "method": "Exact Diagonalization",
+      "energy": -84.231148254
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench Heisenberg/kagome-4x4_48_P.md: '-84.2311482540 | 4e-10 |  | 48 | 0 | Exact Diagonalization' (energy | Sigma | variance | DOF | Einf | method)",
+    "location": "VarBench Heisenberg/kagome-4x4_48_P.md (unchanged since the file rename 37648ad, 2023-01-30; vendored snapshot 390a21e)",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history)",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The 4e-10 is VarBench's Sigma column on Wietek & Läuchli, Phys. Rev. E 98, 033309 (2018)'s exact diagonalization, defined nowhere; with it the README printed this exact record with a bracket at twelve decimals, beyond the deposited digits. Exact records are printed to the stored digits. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule beyond the ruled entries); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "Heisenberg/rectangular-6x8_48_P",
+      "method": "Exact Diagonalization",
+      "energy": -129.7894394912
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench Heisenberg/rectangular-6x8_48_P.md: '-129.7894394912 | 4e-10 |  | 48 | 0 | Exact Diagonalization' (energy | Sigma | variance | DOF | Einf | method)",
+    "location": "VarBench Heisenberg/rectangular-6x8_48_P.md (unchanged since the file rename 37648ad, 2023-01-30; vendored snapshot 390a21e)",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history)",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The 4e-10 is VarBench's Sigma column on Wietek & Läuchli, Phys. Rev. E 98, 033309 (2018)'s exact diagonalization, defined nowhere; with it the README printed this exact record with a bracket at twelve decimals, beyond the deposited digits. Exact records are printed to the stored digits. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule beyond the ruled entries); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "Heisenberg/square_50_P",
+      "method": "Exact Diagonalization",
+      "energy": -135.020407726
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench Heisenberg/square_50_P.md: '-135.0204077260 | 4e-10 |  | 50 | 0 | Exact Diagonalization' (energy | Sigma | variance | DOF | Einf | method)",
+    "location": "VarBench Heisenberg/square_50_P.md (unchanged since the file rename 37648ad, 2023-01-30; vendored snapshot 390a21e)",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history)",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The 4e-10 is VarBench's Sigma column on Wietek & Läuchli, Phys. Rev. E 98, 033309 (2018)'s exact diagonalization, defined nowhere; with it the README printed this exact record with a bracket at twelve decimals, beyond the deposited digits. Exact records are printed to the stored digits. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule beyond the ruled entries); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "Heisenberg/triangular_48_P",
+      "method": "Exact Diagonalization",
+      "energy": -107.251781086
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench Heisenberg/triangular_48_P.md: '-107.2517810860 | 4e-10 |  | 48 | 0 | Exact Diagonalization' (energy | Sigma | variance | DOF | Einf | method)",
+    "location": "VarBench Heisenberg/triangular_48_P.md (unchanged since the file rename 37648ad, 2023-01-30; vendored snapshot 390a21e)",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history)",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The 4e-10 is VarBench's Sigma column on Wietek & Läuchli, Phys. Rev. E 98, 033309 (2018)'s exact diagonalization, defined nowhere; with it the README printed this exact record with a bracket at twelve decimals, beyond the deposited digits. Exact records are printed to the stored digits. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule beyond the ruled entries); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Gamma.D6.E2 1",
+      "energy": -98.7034711151
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-98.7034711151 | 5.56e-06 | | 48 | 0 | Exact Diagonalization Gamma.D6.E2  1'",
+    "location": "VarBench PR #10 (4aa5e29, 2024-07-29, Alexander Wietek, 'Added energies for J1J2 Triangular from Phys. Rev. X 14, 021010 (2024)')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); PRX 14, 021010 prints no error bar for these levels",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The uploaded Sigma column of PR #10 is defined nowhere (not in the PR, the paper or DATA.md); its value here, 5.56e-06, stays on the entry in `from`. It is larger than the rounding of the stored digits; what it measures is not stated. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule on the spectrum levels; the VA1 Sigma questions); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization X2.D1.A 1",
+      "energy": -97.834443385
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-97.8344433850 | 3.94e-06 | | 48 | 0 | Exact Diagonalization X2.D1.A      1'",
+    "location": "VarBench PR #10 (4aa5e29, 2024-07-29, Alexander Wietek, 'Added energies for J1J2 Triangular from Phys. Rev. X 14, 021010 (2024)')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); PRX 14, 021010 prints no error bar for these levels",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The uploaded Sigma column of PR #10 is defined nowhere (not in the PR, the paper or DATA.md); its value here, 3.94e-06, stays on the entry in `from`. It is larger than the rounding of the stored digits; what it measures is not stated. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule on the spectrum levels; the VA1 Sigma questions); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization X1.D1.A 1",
+      "energy": -97.6530994904
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-97.6530994904 | 3.41e-13 | | 48 | 0 | Exact Diagonalization X1.D1.A      1'",
+    "location": "VarBench PR #10 (4aa5e29, 2024-07-29, Alexander Wietek, 'Added energies for J1J2 Triangular from Phys. Rev. X 14, 021010 (2024)')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); PRX 14, 021010 prints no error bar for these levels",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The uploaded Sigma column of PR #10 is defined nowhere (not in the PR, the paper or DATA.md); its value here, 3.41e-13, stays on the entry in `from`. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule on the spectrum levels; the VA1 Sigma questions); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Gamma.D6.A2 1",
+      "energy": -97.5148828301
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-97.5148828301 | 2.69e-13 | | 48 | 0 | Exact Diagonalization Gamma.D6.A2  1'",
+    "location": "VarBench PR #10 (4aa5e29, 2024-07-29, Alexander Wietek, 'Added energies for J1J2 Triangular from Phys. Rev. X 14, 021010 (2024)')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); PRX 14, 021010 prints no error bar for these levels",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The uploaded Sigma column of PR #10 is defined nowhere (not in the PR, the paper or DATA.md); its value here, 2.69e-13, stays on the entry in `from`. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule on the spectrum levels; the VA1 Sigma questions); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization K.D3.A1 -1",
+      "energy": -97.4765394893
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-97.4765394893 | 4.43e-08 | | 48 | 0 | Exact Diagonalization K.D3.A1     -1'",
+    "location": "VarBench PR #10 (4aa5e29, 2024-07-29, Alexander Wietek, 'Added energies for J1J2 Triangular from Phys. Rev. X 14, 021010 (2024)')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); PRX 14, 021010 prints no error bar for these levels",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The uploaded Sigma column of PR #10 is defined nowhere (not in the PR, the paper or DATA.md); its value here, 4.43e-08, stays on the entry in `from`. It is larger than the rounding of the stored digits; what it measures is not stated. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule on the spectrum levels; the VA1 Sigma questions); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization M.D2.B2 1",
+      "energy": -97.2186312049
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-97.2186312049 | 3.74e-13 | | 48 | 0 | Exact Diagonalization M.D2.B2      1'",
+    "location": "VarBench PR #10 (4aa5e29, 2024-07-29, Alexander Wietek, 'Added energies for J1J2 Triangular from Phys. Rev. X 14, 021010 (2024)')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); PRX 14, 021010 prints no error bar for these levels",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The uploaded Sigma column of PR #10 is defined nowhere (not in the PR, the paper or DATA.md); its value here, 3.74e-13, stays on the entry in `from`. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule on the spectrum levels; the VA1 Sigma questions); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization M.D2.A1 -1",
+      "energy": -97.1935450193
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-97.1935450193 | 3.72e-13 | | 48 | 0 | Exact Diagonalization M.D2.A1     -1'",
+    "location": "VarBench PR #10 (4aa5e29, 2024-07-29, Alexander Wietek, 'Added energies for J1J2 Triangular from Phys. Rev. X 14, 021010 (2024)')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); PRX 14, 021010 prints no error bar for these levels",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The uploaded Sigma column of PR #10 is defined nowhere (not in the PR, the paper or DATA.md); its value here, 3.72e-13, stays on the entry in `from`. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule on the spectrum levels; the VA1 Sigma questions); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Z.D1.A -1",
+      "energy": -97.0958765689
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-97.0958765689 | 2.40e-04 | | 48 | 0 | Exact Diagonalization Z.D1.A      -1'",
+    "location": "VarBench PR #10 (4aa5e29, 2024-07-29, Alexander Wietek, 'Added energies for J1J2 Triangular from Phys. Rev. X 14, 021010 (2024)')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); PRX 14, 021010 prints no error bar for these levels",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The uploaded Sigma column of PR #10 is defined nowhere (not in the PR, the paper or DATA.md); its value here, 2.40e-04, stays on the entry in `from`. It is larger than the rounding of the stored digits; what it measures is not stated. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule on the spectrum levels; the VA1 Sigma questions); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization 0.C1.A 1",
+      "energy": -97.0283840497
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-97.0283840497 | 5.29e-05 | | 48 | 0 | Exact Diagonalization 0.C1.A       1'",
+    "location": "VarBench PR #10 (4aa5e29, 2024-07-29, Alexander Wietek, 'Added energies for J1J2 Triangular from Phys. Rev. X 14, 021010 (2024)')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); PRX 14, 021010 prints no error bar for these levels",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The uploaded Sigma column of PR #10 is defined nowhere (not in the PR, the paper or DATA.md); its value here, 5.29e-05, stays on the entry in `from`. It is larger than the rounding of the stored digits; what it measures is not stated. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule on the spectrum levels; the VA1 Sigma questions); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Y.D1.B 1",
+      "energy": -96.9477428863
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-96.9477428863 | 1.68e-04 | | 48 | 0 | Exact Diagonalization Y.D1.B       1'",
+    "location": "VarBench PR #10 (4aa5e29, 2024-07-29, Alexander Wietek, 'Added energies for J1J2 Triangular from Phys. Rev. X 14, 021010 (2024)')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); PRX 14, 021010 prints no error bar for these levels",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The uploaded Sigma column of PR #10 is defined nowhere (not in the PR, the paper or DATA.md); its value here, 1.68e-04, stays on the entry in `from`. It is larger than the rounding of the stored digits; what it measures is not stated. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule on the spectrum levels; the VA1 Sigma questions); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Gamma.D6.B1 -1",
+      "energy": -96.914108562
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-96.9141085620 | 3.57e-13 | | 48 | 0 | Exact Diagonalization Gamma.D6.B1 -1'",
+    "location": "VarBench PR #10 (4aa5e29, 2024-07-29, Alexander Wietek, 'Added energies for J1J2 Triangular from Phys. Rev. X 14, 021010 (2024)')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); PRX 14, 021010 prints no error bar for these levels",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The uploaded Sigma column of PR #10 is defined nowhere (not in the PR, the paper or DATA.md); its value here, 3.57e-13, stays on the entry in `from`. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule on the spectrum levels; the VA1 Sigma questions); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization M.D2.B1 1",
+      "energy": -96.8417378948
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-96.8417378948 | 3.61e-13 | | 48 | 0 | Exact Diagonalization M.D2.B1      1'",
+    "location": "VarBench PR #10 (4aa5e29, 2024-07-29, Alexander Wietek, 'Added energies for J1J2 Triangular from Phys. Rev. X 14, 021010 (2024)')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); PRX 14, 021010 prints no error bar for these levels",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The uploaded Sigma column of PR #10 is defined nowhere (not in the PR, the paper or DATA.md); its value here, 3.61e-13, stays on the entry in `from`. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule on the spectrum levels; the VA1 Sigma questions); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization X2.D1.B 1",
+      "energy": -96.722959862
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-96.7229598620 | 3.38e-06 | | 48 | 0 | Exact Diagonalization X2.D1.B      1'",
+    "location": "VarBench PR #10 (4aa5e29, 2024-07-29, Alexander Wietek, 'Added energies for J1J2 Triangular from Phys. Rev. X 14, 021010 (2024)')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); PRX 14, 021010 prints no error bar for these levels",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The uploaded Sigma column of PR #10 is defined nowhere (not in the PR, the paper or DATA.md); its value here, 3.38e-06, stays on the entry in `from`. It is larger than the rounding of the stored digits; what it measures is not stated. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule on the spectrum levels; the VA1 Sigma questions); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization X1.D1.B 1",
+      "energy": -96.6555615785
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-96.6555615785 | 3.12e-13 | | 48 | 0 | Exact Diagonalization X1.D1.B      1'",
+    "location": "VarBench PR #10 (4aa5e29, 2024-07-29, Alexander Wietek, 'Added energies for J1J2 Triangular from Phys. Rev. X 14, 021010 (2024)')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); PRX 14, 021010 prints no error bar for these levels",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The uploaded Sigma column of PR #10 is defined nowhere (not in the PR, the paper or DATA.md); its value here, 3.12e-13, stays on the entry in `from`. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule on the spectrum levels; the VA1 Sigma questions); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Y.D1.A 1",
+      "energy": -96.5822631024
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-96.5822631024 | 5.08e-05 | | 48 | 0 | Exact Diagonalization Y.D1.A       1'",
+    "location": "VarBench PR #10 (4aa5e29, 2024-07-29, Alexander Wietek, 'Added energies for J1J2 Triangular from Phys. Rev. X 14, 021010 (2024)')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); PRX 14, 021010 prints no error bar for these levels",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The uploaded Sigma column of PR #10 is defined nowhere (not in the PR, the paper or DATA.md); its value here, 5.08e-05, stays on the entry in `from`. It is larger than the rounding of the stored digits; what it measures is not stated. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule on the spectrum levels; the VA1 Sigma questions); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Gamma.D6.E1 -1",
+      "energy": -96.5143890817
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-96.5143890817 | 3.85e-13 | | 48 | 0 | Exact Diagonalization Gamma.D6.E1 -1'",
+    "location": "VarBench PR #10 (4aa5e29, 2024-07-29, Alexander Wietek, 'Added energies for J1J2 Triangular from Phys. Rev. X 14, 021010 (2024)')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); PRX 14, 021010 prints no error bar for these levels",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The uploaded Sigma column of PR #10 is defined nowhere (not in the PR, the paper or DATA.md); its value here, 3.85e-13, stays on the entry in `from`. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule on the spectrum levels; the VA1 Sigma questions); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization M.D2.A2 -1",
+      "energy": -96.4814676427
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-96.4814676427 | 3.38e-13 | | 48 | 0 | Exact Diagonalization M.D2.A2     -1'",
+    "location": "VarBench PR #10 (4aa5e29, 2024-07-29, Alexander Wietek, 'Added energies for J1J2 Triangular from Phys. Rev. X 14, 021010 (2024)')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); PRX 14, 021010 prints no error bar for these levels",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The uploaded Sigma column of PR #10 is defined nowhere (not in the PR, the paper or DATA.md); its value here, 3.38e-13, stays on the entry in `from`. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule on the spectrum levels; the VA1 Sigma questions); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization 0.C1.A -1",
+      "energy": -96.4643112641
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-96.4643112641 | 4.21e-05 | | 48 | 0 | Exact Diagonalization 0.C1.A      -1'",
+    "location": "VarBench PR #10 (4aa5e29, 2024-07-29, Alexander Wietek, 'Added energies for J1J2 Triangular from Phys. Rev. X 14, 021010 (2024)')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); PRX 14, 021010 prints no error bar for these levels",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The uploaded Sigma column of PR #10 is defined nowhere (not in the PR, the paper or DATA.md); its value here, 4.21e-05, stays on the entry in `from`. It is larger than the rounding of the stored digits; what it measures is not stated. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule on the spectrum levels; the VA1 Sigma questions); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization X2.D1.A -1",
+      "energy": -96.4368007071
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-96.4368007071 | 3.51e-06 | | 48 | 0 | Exact Diagonalization X2.D1.A     -1'",
+    "location": "VarBench PR #10 (4aa5e29, 2024-07-29, Alexander Wietek, 'Added energies for J1J2 Triangular from Phys. Rev. X 14, 021010 (2024)')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); PRX 14, 021010 prints no error bar for these levels",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The uploaded Sigma column of PR #10 is defined nowhere (not in the PR, the paper or DATA.md); its value here, 3.51e-06, stays on the entry in `from`. It is larger than the rounding of the stored digits; what it measures is not stated. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule on the spectrum levels; the VA1 Sigma questions); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization X1.D1.A -1",
+      "energy": -96.4289679218
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-96.4289679218 | 6.99e-13 | | 48 | 0 | Exact Diagonalization X1.D1.A     -1'",
+    "location": "VarBench PR #10 (4aa5e29, 2024-07-29, Alexander Wietek, 'Added energies for J1J2 Triangular from Phys. Rev. X 14, 021010 (2024)')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); PRX 14, 021010 prints no error bar for these levels",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The uploaded Sigma column of PR #10 is defined nowhere (not in the PR, the paper or DATA.md); its value here, 6.99e-13, stays on the entry in `from`. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule on the spectrum levels; the VA1 Sigma questions); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization K.D3.E -1",
+      "energy": -96.4257227302
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-96.4257227302 | 1.46e-04 | | 48 | 0 | Exact Diagonalization K.D3.E      -1'",
+    "location": "VarBench PR #10 (4aa5e29, 2024-07-29, Alexander Wietek, 'Added energies for J1J2 Triangular from Phys. Rev. X 14, 021010 (2024)')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); PRX 14, 021010 prints no error bar for these levels",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The uploaded Sigma column of PR #10 is defined nowhere (not in the PR, the paper or DATA.md); its value here, 1.46e-04, stays on the entry in `from`. It is larger than the rounding of the stored digits; what it measures is not stated. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule on the spectrum levels; the VA1 Sigma questions); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Z.D1.B 1",
+      "energy": -96.3509561853
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-96.3509561853 | 6.22e-06 | | 48 | 0 | Exact Diagonalization Z.D1.B       1'",
+    "location": "VarBench PR #10 (4aa5e29, 2024-07-29, Alexander Wietek, 'Added energies for J1J2 Triangular from Phys. Rev. X 14, 021010 (2024)')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); PRX 14, 021010 prints no error bar for these levels",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The uploaded Sigma column of PR #10 is defined nowhere (not in the PR, the paper or DATA.md); its value here, 6.22e-06, stays on the entry in `from`. It is larger than the rounding of the stored digits; what it measures is not stated. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule on the spectrum levels; the VA1 Sigma questions); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization X0.D1.A 1",
+      "energy": -96.3236008361
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-96.3236008361 | 3.67e-13 | | 48 | 0 | Exact Diagonalization X0.D1.A      1'",
+    "location": "VarBench PR #10 (4aa5e29, 2024-07-29, Alexander Wietek, 'Added energies for J1J2 Triangular from Phys. Rev. X 14, 021010 (2024)')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); PRX 14, 021010 prints no error bar for these levels",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The uploaded Sigma column of PR #10 is defined nowhere (not in the PR, the paper or DATA.md); its value here, 3.67e-13, stays on the entry in `from`. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule on the spectrum levels; the VA1 Sigma questions); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Z.D1.A 1",
+      "energy": -96.2907393386
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-96.2907393386 | 9.70e-05 | | 48 | 0 | Exact Diagonalization Z.D1.A       1'",
+    "location": "VarBench PR #10 (4aa5e29, 2024-07-29, Alexander Wietek, 'Added energies for J1J2 Triangular from Phys. Rev. X 14, 021010 (2024)')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); PRX 14, 021010 prints no error bar for these levels",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The uploaded Sigma column of PR #10 is defined nowhere (not in the PR, the paper or DATA.md); its value here, 9.70e-05, stays on the entry in `from`. It is larger than the rounding of the stored digits; what it measures is not stated. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule on the spectrum levels; the VA1 Sigma questions); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization X0.D1.A -1",
+      "energy": -96.1430463315
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-96.1430463315 | 3.39e-13 | | 48 | 0 | Exact Diagonalization X0.D1.A     -1'",
+    "location": "VarBench PR #10 (4aa5e29, 2024-07-29, Alexander Wietek, 'Added energies for J1J2 Triangular from Phys. Rev. X 14, 021010 (2024)')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); PRX 14, 021010 prints no error bar for these levels",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The uploaded Sigma column of PR #10 is defined nowhere (not in the PR, the paper or DATA.md); its value here, 3.39e-13, stays on the entry in `from`. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule on the spectrum levels; the VA1 Sigma questions); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization X0.D1.B 1",
+      "energy": -96.0665487981
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-96.0665487981 | 9.05e-13 | | 48 | 0 | Exact Diagonalization X0.D1.B      1'",
+    "location": "VarBench PR #10 (4aa5e29, 2024-07-29, Alexander Wietek, 'Added energies for J1J2 Triangular from Phys. Rev. X 14, 021010 (2024)')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); PRX 14, 021010 prints no error bar for these levels",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The uploaded Sigma column of PR #10 is defined nowhere (not in the PR, the paper or DATA.md); its value here, 9.05e-13, stays on the entry in `from`. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule on the spectrum levels; the VA1 Sigma questions); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization K.D3.E 1",
+      "energy": -96.0123967672
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-96.0123967672 | 3.64e-12 | | 48 | 0 | Exact Diagonalization K.D3.E       1'",
+    "location": "VarBench PR #10 (4aa5e29, 2024-07-29, Alexander Wietek, 'Added energies for J1J2 Triangular from Phys. Rev. X 14, 021010 (2024)')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); PRX 14, 021010 prints no error bar for these levels",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The uploaded Sigma column of PR #10 is defined nowhere (not in the PR, the paper or DATA.md); its value here, 3.64e-12, stays on the entry in `from`. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule on the spectrum levels; the VA1 Sigma questions); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization X0.D1.B -1",
+      "energy": -95.9591878447
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-95.9591878447 | 3.42e-13 | | 48 | 0 | Exact Diagonalization X0.D1.B     -1'",
+    "location": "VarBench PR #10 (4aa5e29, 2024-07-29, Alexander Wietek, 'Added energies for J1J2 Triangular from Phys. Rev. X 14, 021010 (2024)')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); PRX 14, 021010 prints no error bar for these levels",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The uploaded Sigma column of PR #10 is defined nowhere (not in the PR, the paper or DATA.md); its value here, 3.42e-13, stays on the entry in `from`. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule on the spectrum levels; the VA1 Sigma questions); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization M.D2.A1 1",
+      "energy": -95.895488336
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-95.8954883360 | 3.67e-13 | | 48 | 0 | Exact Diagonalization M.D2.A1      1'",
+    "location": "VarBench PR #10 (4aa5e29, 2024-07-29, Alexander Wietek, 'Added energies for J1J2 Triangular from Phys. Rev. X 14, 021010 (2024)')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); PRX 14, 021010 prints no error bar for these levels",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The uploaded Sigma column of PR #10 is defined nowhere (not in the PR, the paper or DATA.md); its value here, 3.67e-13, stays on the entry in `from`. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule on the spectrum levels; the VA1 Sigma questions); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Y.D1.A -1",
+      "energy": -95.8701895419
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-95.8701895419 | 1.36e-05 | | 48 | 0 | Exact Diagonalization Y.D1.A      -1'",
+    "location": "VarBench PR #10 (4aa5e29, 2024-07-29, Alexander Wietek, 'Added energies for J1J2 Triangular from Phys. Rev. X 14, 021010 (2024)')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); PRX 14, 021010 prints no error bar for these levels",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The uploaded Sigma column of PR #10 is defined nowhere (not in the PR, the paper or DATA.md); its value here, 1.36e-05, stays on the entry in `from`. It is larger than the rounding of the stored digits; what it measures is not stated. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule on the spectrum levels; the VA1 Sigma questions); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Y.D1.B -1",
+      "energy": -95.7758437002
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-95.7758437002 | 3.07e-04 | | 48 | 0 | Exact Diagonalization Y.D1.B      -1'",
+    "location": "VarBench PR #10 (4aa5e29, 2024-07-29, Alexander Wietek, 'Added energies for J1J2 Triangular from Phys. Rev. X 14, 021010 (2024)')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); PRX 14, 021010 prints no error bar for these levels",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The uploaded Sigma column of PR #10 is defined nowhere (not in the PR, the paper or DATA.md); its value here, 3.07e-04, stays on the entry in `from`. It is larger than the rounding of the stored digits; what it measures is not stated. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule on the spectrum levels; the VA1 Sigma questions); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Z.D1.B -1",
+      "energy": -95.7222960611
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-95.7222960611 | 8.25e-04 | | 48 | 0 | Exact Diagonalization Z.D1.B      -1'",
+    "location": "VarBench PR #10 (4aa5e29, 2024-07-29, Alexander Wietek, 'Added energies for J1J2 Triangular from Phys. Rev. X 14, 021010 (2024)')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); PRX 14, 021010 prints no error bar for these levels",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The uploaded Sigma column of PR #10 is defined nowhere (not in the PR, the paper or DATA.md); its value here, 8.25e-04, stays on the entry in `from`. It is larger than the rounding of the stored digits; what it measures is not stated. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule on the spectrum levels; the VA1 Sigma questions); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization X2.D1.B -1",
+      "energy": -95.6379830325
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-95.6379830325 | 3.33e-06 | | 48 | 0 | Exact Diagonalization X2.D1.B     -1'",
+    "location": "VarBench PR #10 (4aa5e29, 2024-07-29, Alexander Wietek, 'Added energies for J1J2 Triangular from Phys. Rev. X 14, 021010 (2024)')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); PRX 14, 021010 prints no error bar for these levels",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The uploaded Sigma column of PR #10 is defined nowhere (not in the PR, the paper or DATA.md); its value here, 3.33e-06, stays on the entry in `from`. It is larger than the rounding of the stored digits; what it measures is not stated. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule on the spectrum levels; the VA1 Sigma questions); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization X1.D1.B -1",
+      "energy": -95.5777670451
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-95.5777670451 | 3.50e-13 | | 48 | 0 | Exact Diagonalization X1.D1.B     -1'",
+    "location": "VarBench PR #10 (4aa5e29, 2024-07-29, Alexander Wietek, 'Added energies for J1J2 Triangular from Phys. Rev. X 14, 021010 (2024)')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); PRX 14, 021010 prints no error bar for these levels",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The uploaded Sigma column of PR #10 is defined nowhere (not in the PR, the paper or DATA.md); its value here, 3.50e-13, stays on the entry in `from`. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule on the spectrum levels; the VA1 Sigma questions); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization K.D3.A1 1",
+      "energy": -95.4097231118
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-95.4097231118 | 3.23e-13 | | 48 | 0 | Exact Diagonalization K.D3.A1      1'",
+    "location": "VarBench PR #10 (4aa5e29, 2024-07-29, Alexander Wietek, 'Added energies for J1J2 Triangular from Phys. Rev. X 14, 021010 (2024)')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); PRX 14, 021010 prints no error bar for these levels",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The uploaded Sigma column of PR #10 is defined nowhere (not in the PR, the paper or DATA.md); its value here, 3.23e-13, stays on the entry in `from`. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule on the spectrum levels; the VA1 Sigma questions); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization M.D2.B2 -1",
+      "energy": -95.3191248118
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-95.3191248118 | 3.50e-13 | | 48 | 0 | Exact Diagonalization M.D2.B2     -1'",
+    "location": "VarBench PR #10 (4aa5e29, 2024-07-29, Alexander Wietek, 'Added energies for J1J2 Triangular from Phys. Rev. X 14, 021010 (2024)')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); PRX 14, 021010 prints no error bar for these levels",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The uploaded Sigma column of PR #10 is defined nowhere (not in the PR, the paper or DATA.md); its value here, 3.50e-13, stays on the entry in `from`. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule on the spectrum levels; the VA1 Sigma questions); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization M.D2.A2 1",
+      "energy": -95.1104612519
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-95.1104612519 | 3.36e-13 | | 48 | 0 | Exact Diagonalization M.D2.A2      1'",
+    "location": "VarBench PR #10 (4aa5e29, 2024-07-29, Alexander Wietek, 'Added energies for J1J2 Triangular from Phys. Rev. X 14, 021010 (2024)')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); PRX 14, 021010 prints no error bar for these levels",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The uploaded Sigma column of PR #10 is defined nowhere (not in the PR, the paper or DATA.md); its value here, 3.36e-13, stays on the entry in `from`. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule on the spectrum levels; the VA1 Sigma questions); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization K.D3.A2 1",
+      "energy": -95.006305924
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-95.0063059240 | 3.43e-13 | | 48 | 0 | Exact Diagonalization K.D3.A2      1'",
+    "location": "VarBench PR #10 (4aa5e29, 2024-07-29, Alexander Wietek, 'Added energies for J1J2 Triangular from Phys. Rev. X 14, 021010 (2024)')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); PRX 14, 021010 prints no error bar for these levels",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The uploaded Sigma column of PR #10 is defined nowhere (not in the PR, the paper or DATA.md); its value here, 3.43e-13, stays on the entry in `from`. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule on the spectrum levels; the VA1 Sigma questions); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization K.D3.A2 -1",
+      "energy": -95.0029307855
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-95.0029307855 | 6.16e-04 | | 48 | 0 | Exact Diagonalization K.D3.A2     -1'",
+    "location": "VarBench PR #10 (4aa5e29, 2024-07-29, Alexander Wietek, 'Added energies for J1J2 Triangular from Phys. Rev. X 14, 021010 (2024)')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); PRX 14, 021010 prints no error bar for these levels",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The uploaded Sigma column of PR #10 is defined nowhere (not in the PR, the paper or DATA.md); its value here, 6.16e-04, stays on the entry in `from`. It is larger than the rounding of the stored digits; what it measures is not stated. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule on the spectrum levels; the VA1 Sigma questions); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Gamma.D6.B2 -1",
+      "energy": -94.823165815
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-94.8231658150 | 3.29e-05 | | 48 | 0 | Exact Diagonalization Gamma.D6.B2 -1'",
+    "location": "VarBench PR #10 (4aa5e29, 2024-07-29, Alexander Wietek, 'Added energies for J1J2 Triangular from Phys. Rev. X 14, 021010 (2024)')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); PRX 14, 021010 prints no error bar for these levels",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The uploaded Sigma column of PR #10 is defined nowhere (not in the PR, the paper or DATA.md); its value here, 3.29e-05, stays on the entry in `from`. It is larger than the rounding of the stored digits; what it measures is not stated. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule on the spectrum levels; the VA1 Sigma questions); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization M.D2.B1 -1",
+      "energy": -94.7108761422
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-94.7108761422 | 4.60e-13 | | 48 | 0 | Exact Diagonalization M.D2.B1     -1'",
+    "location": "VarBench PR #10 (4aa5e29, 2024-07-29, Alexander Wietek, 'Added energies for J1J2 Triangular from Phys. Rev. X 14, 021010 (2024)')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); PRX 14, 021010 prints no error bar for these levels",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The uploaded Sigma column of PR #10 is defined nowhere (not in the PR, the paper or DATA.md); its value here, 4.60e-13, stays on the entry in `from`. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule on the spectrum levels; the VA1 Sigma questions); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Gamma.D6.E2 -1",
+      "energy": -94.6108993244
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-94.6108993244 | 3.24e-13 | | 48 | 0 | Exact Diagonalization Gamma.D6.E2 -1'",
+    "location": "VarBench PR #10 (4aa5e29, 2024-07-29, Alexander Wietek, 'Added energies for J1J2 Triangular from Phys. Rev. X 14, 021010 (2024)')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); PRX 14, 021010 prints no error bar for these levels",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The uploaded Sigma column of PR #10 is defined nowhere (not in the PR, the paper or DATA.md); its value here, 3.24e-13, stays on the entry in `from`. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule on the spectrum levels; the VA1 Sigma questions); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Gamma.D6.A1 -1",
+      "energy": -94.6001195408
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-94.6001195408 | 3.73e-13 | | 48 | 0 | Exact Diagonalization Gamma.D6.A1 -1'",
+    "location": "VarBench PR #10 (4aa5e29, 2024-07-29, Alexander Wietek, 'Added energies for J1J2 Triangular from Phys. Rev. X 14, 021010 (2024)')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); PRX 14, 021010 prints no error bar for these levels",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The uploaded Sigma column of PR #10 is defined nowhere (not in the PR, the paper or DATA.md); its value here, 3.73e-13, stays on the entry in `from`. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule on the spectrum levels; the VA1 Sigma questions); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Gamma.D6.B1 1",
+      "energy": -94.3993360171
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-94.3993360171 | 3.12e-13 | | 48 | 0 | Exact Diagonalization Gamma.D6.B1  1'",
+    "location": "VarBench PR #10 (4aa5e29, 2024-07-29, Alexander Wietek, 'Added energies for J1J2 Triangular from Phys. Rev. X 14, 021010 (2024)')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); PRX 14, 021010 prints no error bar for these levels",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The uploaded Sigma column of PR #10 is defined nowhere (not in the PR, the paper or DATA.md); its value here, 3.12e-13, stays on the entry in `from`. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule on the spectrum levels; the VA1 Sigma questions); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Gamma.D6.B2 1",
+      "energy": -94.1370349394
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-94.1370349394 | 2.18e-11 | | 48 | 0 | Exact Diagonalization Gamma.D6.B2  1'",
+    "location": "VarBench PR #10 (4aa5e29, 2024-07-29, Alexander Wietek, 'Added energies for J1J2 Triangular from Phys. Rev. X 14, 021010 (2024)')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); PRX 14, 021010 prints no error bar for these levels",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The uploaded Sigma column of PR #10 is defined nowhere (not in the PR, the paper or DATA.md); its value here, 2.18e-11, stays on the entry in `from`. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule on the spectrum levels; the VA1 Sigma questions); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Gamma.D6.E1 1",
+      "energy": -94.1191636896
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-94.1191636896 | 2.92e-04 | | 48 | 0 | Exact Diagonalization Gamma.D6.E1  1'",
+    "location": "VarBench PR #10 (4aa5e29, 2024-07-29, Alexander Wietek, 'Added energies for J1J2 Triangular from Phys. Rev. X 14, 021010 (2024)')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); PRX 14, 021010 prints no error bar for these levels",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The uploaded Sigma column of PR #10 is defined nowhere (not in the PR, the paper or DATA.md); its value here, 2.92e-04, stays on the entry in `from`. It is larger than the rounding of the stored digits; what it measures is not stated. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule on the spectrum levels; the VA1 Sigma questions); ruling L1, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Gamma.D6.A2 -1",
+      "energy": -93.9964710035
+    },
+    "field": "sigma",
+    "to": null,
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-93.9964710035 | 3.28e-13 | | 48 | 0 | Exact Diagonalization Gamma.D6.A2 -1'",
+    "location": "VarBench PR #10 (4aa5e29, 2024-07-29, Alexander Wietek, 'Added energies for J1J2 Triangular from Phys. Rev. X 14, 021010 (2024)')",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); PRX 14, 021010 prints no error bar for these levels",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "RULES.md 6 (rule E3, Tristan 2026-10-02): a deterministic energy needs no sigma. The uploaded Sigma column of PR #10 is defined nowhere (not in the PR, the paper or DATA.md); its value here, 3.28e-13, stays on the entry in `from`. Ruling L1 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L1 (the E3 rule on the spectrum levels; the VA1 Sigma questions); ruling L1, Tristan 2026-10-03"
+  },
+  // L2: the 47 spectrum levels cite the VarBench dataset with the depositor named (ruling 1). (47)
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Gamma.D6.E2 1",
+      "energy": -98.7034711151
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number deposited by Alexander Wietek in his table of the lowest level of all 48 symmetry sectors, PR #10, commit 4aa5e29 (2024-07-29); method: A. Wietek et al., Phys. Rev. X 14, 021010 (2024), arXiv:2303.01585, which plots the spectrum as (E - E0)/J1 only)",
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-98.7034711151 | 5.56e-06 | | 48 | 0 | Exact Diagonalization Gamma.D6.E2  1'",
+    "location": "VarBench history of J1J2/triangular_48_P_0.125.md: the level first appears in PR #10 (4aa5e29); PRX 14, 021010 Fig. 2 plots (E - E0)/J1",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); arXiv:2303.01585 v1, v2 and the journal PDF as read by VA1",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-03",
+    "reason": "Ruling 1 (Tristan, 2026-09-30): a number first printed in a dataset is cited to it, the producing paper kept as the method reference. PRX 14, 021010 plots the spectrum as (E - E0)/J1 only; the energies are Alexander Wietek's deposit in VarBench. The ground-state row of this instance has cited the dataset this way since the handoff series (RH2#0). Ruling L2 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L2 (reader triage note on A1); ruling L2, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization X2.D1.A 1",
+      "energy": -97.834443385
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number deposited by Alexander Wietek in his table of the lowest level of all 48 symmetry sectors, PR #10, commit 4aa5e29 (2024-07-29); method: A. Wietek et al., Phys. Rev. X 14, 021010 (2024), arXiv:2303.01585, which plots the spectrum as (E - E0)/J1 only)",
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-97.8344433850 | 3.94e-06 | | 48 | 0 | Exact Diagonalization X2.D1.A      1'",
+    "location": "VarBench history of J1J2/triangular_48_P_0.125.md: the level first appears in PR #10 (4aa5e29); PRX 14, 021010 Fig. 2 plots (E - E0)/J1",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); arXiv:2303.01585 v1, v2 and the journal PDF as read by VA1",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-03",
+    "reason": "Ruling 1 (Tristan, 2026-09-30): a number first printed in a dataset is cited to it, the producing paper kept as the method reference. PRX 14, 021010 plots the spectrum as (E - E0)/J1 only; the energies are Alexander Wietek's deposit in VarBench. The ground-state row of this instance has cited the dataset this way since the handoff series (RH2#0). Ruling L2 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L2 (reader triage note on A1); ruling L2, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization X1.D1.A 1",
+      "energy": -97.6530994904
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number deposited by Alexander Wietek in his table of the lowest level of all 48 symmetry sectors, PR #10, commit 4aa5e29 (2024-07-29); method: A. Wietek et al., Phys. Rev. X 14, 021010 (2024), arXiv:2303.01585, which plots the spectrum as (E - E0)/J1 only)",
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-97.6530994904 | 3.41e-13 | | 48 | 0 | Exact Diagonalization X1.D1.A      1'",
+    "location": "VarBench history of J1J2/triangular_48_P_0.125.md: the level first appears in PR #10 (4aa5e29); PRX 14, 021010 Fig. 2 plots (E - E0)/J1",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); arXiv:2303.01585 v1, v2 and the journal PDF as read by VA1",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-03",
+    "reason": "Ruling 1 (Tristan, 2026-09-30): a number first printed in a dataset is cited to it, the producing paper kept as the method reference. PRX 14, 021010 plots the spectrum as (E - E0)/J1 only; the energies are Alexander Wietek's deposit in VarBench. The ground-state row of this instance has cited the dataset this way since the handoff series (RH2#0). Ruling L2 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L2 (reader triage note on A1); ruling L2, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Gamma.D6.A2 1",
+      "energy": -97.5148828301
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number deposited by Alexander Wietek in his table of the lowest level of all 48 symmetry sectors, PR #10, commit 4aa5e29 (2024-07-29); method: A. Wietek et al., Phys. Rev. X 14, 021010 (2024), arXiv:2303.01585, which plots the spectrum as (E - E0)/J1 only)",
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-97.5148828301 | 2.69e-13 | | 48 | 0 | Exact Diagonalization Gamma.D6.A2  1'",
+    "location": "VarBench history of J1J2/triangular_48_P_0.125.md: the level first appears in PR #10 (4aa5e29); PRX 14, 021010 Fig. 2 plots (E - E0)/J1",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); arXiv:2303.01585 v1, v2 and the journal PDF as read by VA1",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-03",
+    "reason": "Ruling 1 (Tristan, 2026-09-30): a number first printed in a dataset is cited to it, the producing paper kept as the method reference. PRX 14, 021010 plots the spectrum as (E - E0)/J1 only; the energies are Alexander Wietek's deposit in VarBench. The ground-state row of this instance has cited the dataset this way since the handoff series (RH2#0). Ruling L2 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L2 (reader triage note on A1); ruling L2, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization K.D3.A1 -1",
+      "energy": -97.4765394893
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number deposited by Alexander Wietek in his table of the lowest level of all 48 symmetry sectors, PR #10, commit 4aa5e29 (2024-07-29); method: A. Wietek et al., Phys. Rev. X 14, 021010 (2024), arXiv:2303.01585, which plots the spectrum as (E - E0)/J1 only)",
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-97.4765394893 | 4.43e-08 | | 48 | 0 | Exact Diagonalization K.D3.A1     -1'",
+    "location": "VarBench history of J1J2/triangular_48_P_0.125.md: the level first appears in PR #10 (4aa5e29); PRX 14, 021010 Fig. 2 plots (E - E0)/J1",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); arXiv:2303.01585 v1, v2 and the journal PDF as read by VA1",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-03",
+    "reason": "Ruling 1 (Tristan, 2026-09-30): a number first printed in a dataset is cited to it, the producing paper kept as the method reference. PRX 14, 021010 plots the spectrum as (E - E0)/J1 only; the energies are Alexander Wietek's deposit in VarBench. The ground-state row of this instance has cited the dataset this way since the handoff series (RH2#0). Ruling L2 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L2 (reader triage note on A1); ruling L2, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization M.D2.B2 1",
+      "energy": -97.2186312049
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number deposited by Alexander Wietek in his table of the lowest level of all 48 symmetry sectors, PR #10, commit 4aa5e29 (2024-07-29); method: A. Wietek et al., Phys. Rev. X 14, 021010 (2024), arXiv:2303.01585, which plots the spectrum as (E - E0)/J1 only)",
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-97.2186312049 | 3.74e-13 | | 48 | 0 | Exact Diagonalization M.D2.B2      1'",
+    "location": "VarBench history of J1J2/triangular_48_P_0.125.md: the level first appears in PR #10 (4aa5e29); PRX 14, 021010 Fig. 2 plots (E - E0)/J1",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); arXiv:2303.01585 v1, v2 and the journal PDF as read by VA1",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-03",
+    "reason": "Ruling 1 (Tristan, 2026-09-30): a number first printed in a dataset is cited to it, the producing paper kept as the method reference. PRX 14, 021010 plots the spectrum as (E - E0)/J1 only; the energies are Alexander Wietek's deposit in VarBench. The ground-state row of this instance has cited the dataset this way since the handoff series (RH2#0). Ruling L2 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L2 (reader triage note on A1); ruling L2, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization M.D2.A1 -1",
+      "energy": -97.1935450193
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number deposited by Alexander Wietek in his table of the lowest level of all 48 symmetry sectors, PR #10, commit 4aa5e29 (2024-07-29); method: A. Wietek et al., Phys. Rev. X 14, 021010 (2024), arXiv:2303.01585, which plots the spectrum as (E - E0)/J1 only)",
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-97.1935450193 | 3.72e-13 | | 48 | 0 | Exact Diagonalization M.D2.A1     -1'",
+    "location": "VarBench history of J1J2/triangular_48_P_0.125.md: the level first appears in PR #10 (4aa5e29); PRX 14, 021010 Fig. 2 plots (E - E0)/J1",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); arXiv:2303.01585 v1, v2 and the journal PDF as read by VA1",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-03",
+    "reason": "Ruling 1 (Tristan, 2026-09-30): a number first printed in a dataset is cited to it, the producing paper kept as the method reference. PRX 14, 021010 plots the spectrum as (E - E0)/J1 only; the energies are Alexander Wietek's deposit in VarBench. The ground-state row of this instance has cited the dataset this way since the handoff series (RH2#0). Ruling L2 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L2 (reader triage note on A1); ruling L2, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Z.D1.A -1",
+      "energy": -97.0958765689
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number deposited by Alexander Wietek in his table of the lowest level of all 48 symmetry sectors, PR #10, commit 4aa5e29 (2024-07-29); method: A. Wietek et al., Phys. Rev. X 14, 021010 (2024), arXiv:2303.01585, which plots the spectrum as (E - E0)/J1 only)",
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-97.0958765689 | 2.40e-04 | | 48 | 0 | Exact Diagonalization Z.D1.A      -1'",
+    "location": "VarBench history of J1J2/triangular_48_P_0.125.md: the level first appears in PR #10 (4aa5e29); PRX 14, 021010 Fig. 2 plots (E - E0)/J1",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); arXiv:2303.01585 v1, v2 and the journal PDF as read by VA1",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-03",
+    "reason": "Ruling 1 (Tristan, 2026-09-30): a number first printed in a dataset is cited to it, the producing paper kept as the method reference. PRX 14, 021010 plots the spectrum as (E - E0)/J1 only; the energies are Alexander Wietek's deposit in VarBench. The ground-state row of this instance has cited the dataset this way since the handoff series (RH2#0). Ruling L2 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L2 (reader triage note on A1); ruling L2, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization 0.C1.A 1",
+      "energy": -97.0283840497
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number deposited by Alexander Wietek in his table of the lowest level of all 48 symmetry sectors, PR #10, commit 4aa5e29 (2024-07-29); method: A. Wietek et al., Phys. Rev. X 14, 021010 (2024), arXiv:2303.01585, which plots the spectrum as (E - E0)/J1 only)",
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-97.0283840497 | 5.29e-05 | | 48 | 0 | Exact Diagonalization 0.C1.A       1'",
+    "location": "VarBench history of J1J2/triangular_48_P_0.125.md: the level first appears in PR #10 (4aa5e29); PRX 14, 021010 Fig. 2 plots (E - E0)/J1",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); arXiv:2303.01585 v1, v2 and the journal PDF as read by VA1",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-03",
+    "reason": "Ruling 1 (Tristan, 2026-09-30): a number first printed in a dataset is cited to it, the producing paper kept as the method reference. PRX 14, 021010 plots the spectrum as (E - E0)/J1 only; the energies are Alexander Wietek's deposit in VarBench. The ground-state row of this instance has cited the dataset this way since the handoff series (RH2#0). Ruling L2 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L2 (reader triage note on A1); ruling L2, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Y.D1.B 1",
+      "energy": -96.9477428863
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number deposited by Alexander Wietek in his table of the lowest level of all 48 symmetry sectors, PR #10, commit 4aa5e29 (2024-07-29); method: A. Wietek et al., Phys. Rev. X 14, 021010 (2024), arXiv:2303.01585, which plots the spectrum as (E - E0)/J1 only)",
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-96.9477428863 | 1.68e-04 | | 48 | 0 | Exact Diagonalization Y.D1.B       1'",
+    "location": "VarBench history of J1J2/triangular_48_P_0.125.md: the level first appears in PR #10 (4aa5e29); PRX 14, 021010 Fig. 2 plots (E - E0)/J1",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); arXiv:2303.01585 v1, v2 and the journal PDF as read by VA1",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-03",
+    "reason": "Ruling 1 (Tristan, 2026-09-30): a number first printed in a dataset is cited to it, the producing paper kept as the method reference. PRX 14, 021010 plots the spectrum as (E - E0)/J1 only; the energies are Alexander Wietek's deposit in VarBench. The ground-state row of this instance has cited the dataset this way since the handoff series (RH2#0). Ruling L2 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L2 (reader triage note on A1); ruling L2, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Gamma.D6.B1 -1",
+      "energy": -96.914108562
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number deposited by Alexander Wietek in his table of the lowest level of all 48 symmetry sectors, PR #10, commit 4aa5e29 (2024-07-29); method: A. Wietek et al., Phys. Rev. X 14, 021010 (2024), arXiv:2303.01585, which plots the spectrum as (E - E0)/J1 only)",
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-96.9141085620 | 3.57e-13 | | 48 | 0 | Exact Diagonalization Gamma.D6.B1 -1'",
+    "location": "VarBench history of J1J2/triangular_48_P_0.125.md: the level first appears in PR #10 (4aa5e29); PRX 14, 021010 Fig. 2 plots (E - E0)/J1",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); arXiv:2303.01585 v1, v2 and the journal PDF as read by VA1",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-03",
+    "reason": "Ruling 1 (Tristan, 2026-09-30): a number first printed in a dataset is cited to it, the producing paper kept as the method reference. PRX 14, 021010 plots the spectrum as (E - E0)/J1 only; the energies are Alexander Wietek's deposit in VarBench. The ground-state row of this instance has cited the dataset this way since the handoff series (RH2#0). Ruling L2 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L2 (reader triage note on A1); ruling L2, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization M.D2.B1 1",
+      "energy": -96.8417378948
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number deposited by Alexander Wietek in his table of the lowest level of all 48 symmetry sectors, PR #10, commit 4aa5e29 (2024-07-29); method: A. Wietek et al., Phys. Rev. X 14, 021010 (2024), arXiv:2303.01585, which plots the spectrum as (E - E0)/J1 only)",
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-96.8417378948 | 3.61e-13 | | 48 | 0 | Exact Diagonalization M.D2.B1      1'",
+    "location": "VarBench history of J1J2/triangular_48_P_0.125.md: the level first appears in PR #10 (4aa5e29); PRX 14, 021010 Fig. 2 plots (E - E0)/J1",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); arXiv:2303.01585 v1, v2 and the journal PDF as read by VA1",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-03",
+    "reason": "Ruling 1 (Tristan, 2026-09-30): a number first printed in a dataset is cited to it, the producing paper kept as the method reference. PRX 14, 021010 plots the spectrum as (E - E0)/J1 only; the energies are Alexander Wietek's deposit in VarBench. The ground-state row of this instance has cited the dataset this way since the handoff series (RH2#0). Ruling L2 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L2 (reader triage note on A1); ruling L2, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization X2.D1.B 1",
+      "energy": -96.722959862
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number deposited by Alexander Wietek in his table of the lowest level of all 48 symmetry sectors, PR #10, commit 4aa5e29 (2024-07-29); method: A. Wietek et al., Phys. Rev. X 14, 021010 (2024), arXiv:2303.01585, which plots the spectrum as (E - E0)/J1 only)",
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-96.7229598620 | 3.38e-06 | | 48 | 0 | Exact Diagonalization X2.D1.B      1'",
+    "location": "VarBench history of J1J2/triangular_48_P_0.125.md: the level first appears in PR #10 (4aa5e29); PRX 14, 021010 Fig. 2 plots (E - E0)/J1",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); arXiv:2303.01585 v1, v2 and the journal PDF as read by VA1",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-03",
+    "reason": "Ruling 1 (Tristan, 2026-09-30): a number first printed in a dataset is cited to it, the producing paper kept as the method reference. PRX 14, 021010 plots the spectrum as (E - E0)/J1 only; the energies are Alexander Wietek's deposit in VarBench. The ground-state row of this instance has cited the dataset this way since the handoff series (RH2#0). Ruling L2 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L2 (reader triage note on A1); ruling L2, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization X1.D1.B 1",
+      "energy": -96.6555615785
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number deposited by Alexander Wietek in his table of the lowest level of all 48 symmetry sectors, PR #10, commit 4aa5e29 (2024-07-29); method: A. Wietek et al., Phys. Rev. X 14, 021010 (2024), arXiv:2303.01585, which plots the spectrum as (E - E0)/J1 only)",
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-96.6555615785 | 3.12e-13 | | 48 | 0 | Exact Diagonalization X1.D1.B      1'",
+    "location": "VarBench history of J1J2/triangular_48_P_0.125.md: the level first appears in PR #10 (4aa5e29); PRX 14, 021010 Fig. 2 plots (E - E0)/J1",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); arXiv:2303.01585 v1, v2 and the journal PDF as read by VA1",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-03",
+    "reason": "Ruling 1 (Tristan, 2026-09-30): a number first printed in a dataset is cited to it, the producing paper kept as the method reference. PRX 14, 021010 plots the spectrum as (E - E0)/J1 only; the energies are Alexander Wietek's deposit in VarBench. The ground-state row of this instance has cited the dataset this way since the handoff series (RH2#0). Ruling L2 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L2 (reader triage note on A1); ruling L2, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Y.D1.A 1",
+      "energy": -96.5822631024
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number deposited by Alexander Wietek in his table of the lowest level of all 48 symmetry sectors, PR #10, commit 4aa5e29 (2024-07-29); method: A. Wietek et al., Phys. Rev. X 14, 021010 (2024), arXiv:2303.01585, which plots the spectrum as (E - E0)/J1 only)",
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-96.5822631024 | 5.08e-05 | | 48 | 0 | Exact Diagonalization Y.D1.A       1'",
+    "location": "VarBench history of J1J2/triangular_48_P_0.125.md: the level first appears in PR #10 (4aa5e29); PRX 14, 021010 Fig. 2 plots (E - E0)/J1",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); arXiv:2303.01585 v1, v2 and the journal PDF as read by VA1",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-03",
+    "reason": "Ruling 1 (Tristan, 2026-09-30): a number first printed in a dataset is cited to it, the producing paper kept as the method reference. PRX 14, 021010 plots the spectrum as (E - E0)/J1 only; the energies are Alexander Wietek's deposit in VarBench. The ground-state row of this instance has cited the dataset this way since the handoff series (RH2#0). Ruling L2 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L2 (reader triage note on A1); ruling L2, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Gamma.D6.E1 -1",
+      "energy": -96.5143890817
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number deposited by Alexander Wietek in his table of the lowest level of all 48 symmetry sectors, PR #10, commit 4aa5e29 (2024-07-29); method: A. Wietek et al., Phys. Rev. X 14, 021010 (2024), arXiv:2303.01585, which plots the spectrum as (E - E0)/J1 only)",
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-96.5143890817 | 3.85e-13 | | 48 | 0 | Exact Diagonalization Gamma.D6.E1 -1'",
+    "location": "VarBench history of J1J2/triangular_48_P_0.125.md: the level first appears in PR #10 (4aa5e29); PRX 14, 021010 Fig. 2 plots (E - E0)/J1",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); arXiv:2303.01585 v1, v2 and the journal PDF as read by VA1",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-03",
+    "reason": "Ruling 1 (Tristan, 2026-09-30): a number first printed in a dataset is cited to it, the producing paper kept as the method reference. PRX 14, 021010 plots the spectrum as (E - E0)/J1 only; the energies are Alexander Wietek's deposit in VarBench. The ground-state row of this instance has cited the dataset this way since the handoff series (RH2#0). Ruling L2 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L2 (reader triage note on A1); ruling L2, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization M.D2.A2 -1",
+      "energy": -96.4814676427
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number deposited by Alexander Wietek in his table of the lowest level of all 48 symmetry sectors, PR #10, commit 4aa5e29 (2024-07-29); method: A. Wietek et al., Phys. Rev. X 14, 021010 (2024), arXiv:2303.01585, which plots the spectrum as (E - E0)/J1 only)",
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-96.4814676427 | 3.38e-13 | | 48 | 0 | Exact Diagonalization M.D2.A2     -1'",
+    "location": "VarBench history of J1J2/triangular_48_P_0.125.md: the level first appears in PR #10 (4aa5e29); PRX 14, 021010 Fig. 2 plots (E - E0)/J1",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); arXiv:2303.01585 v1, v2 and the journal PDF as read by VA1",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-03",
+    "reason": "Ruling 1 (Tristan, 2026-09-30): a number first printed in a dataset is cited to it, the producing paper kept as the method reference. PRX 14, 021010 plots the spectrum as (E - E0)/J1 only; the energies are Alexander Wietek's deposit in VarBench. The ground-state row of this instance has cited the dataset this way since the handoff series (RH2#0). Ruling L2 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L2 (reader triage note on A1); ruling L2, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization 0.C1.A -1",
+      "energy": -96.4643112641
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number deposited by Alexander Wietek in his table of the lowest level of all 48 symmetry sectors, PR #10, commit 4aa5e29 (2024-07-29); method: A. Wietek et al., Phys. Rev. X 14, 021010 (2024), arXiv:2303.01585, which plots the spectrum as (E - E0)/J1 only)",
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-96.4643112641 | 4.21e-05 | | 48 | 0 | Exact Diagonalization 0.C1.A      -1'",
+    "location": "VarBench history of J1J2/triangular_48_P_0.125.md: the level first appears in PR #10 (4aa5e29); PRX 14, 021010 Fig. 2 plots (E - E0)/J1",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); arXiv:2303.01585 v1, v2 and the journal PDF as read by VA1",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-03",
+    "reason": "Ruling 1 (Tristan, 2026-09-30): a number first printed in a dataset is cited to it, the producing paper kept as the method reference. PRX 14, 021010 plots the spectrum as (E - E0)/J1 only; the energies are Alexander Wietek's deposit in VarBench. The ground-state row of this instance has cited the dataset this way since the handoff series (RH2#0). Ruling L2 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L2 (reader triage note on A1); ruling L2, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization X2.D1.A -1",
+      "energy": -96.4368007071
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number deposited by Alexander Wietek in his table of the lowest level of all 48 symmetry sectors, PR #10, commit 4aa5e29 (2024-07-29); method: A. Wietek et al., Phys. Rev. X 14, 021010 (2024), arXiv:2303.01585, which plots the spectrum as (E - E0)/J1 only)",
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-96.4368007071 | 3.51e-06 | | 48 | 0 | Exact Diagonalization X2.D1.A     -1'",
+    "location": "VarBench history of J1J2/triangular_48_P_0.125.md: the level first appears in PR #10 (4aa5e29); PRX 14, 021010 Fig. 2 plots (E - E0)/J1",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); arXiv:2303.01585 v1, v2 and the journal PDF as read by VA1",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-03",
+    "reason": "Ruling 1 (Tristan, 2026-09-30): a number first printed in a dataset is cited to it, the producing paper kept as the method reference. PRX 14, 021010 plots the spectrum as (E - E0)/J1 only; the energies are Alexander Wietek's deposit in VarBench. The ground-state row of this instance has cited the dataset this way since the handoff series (RH2#0). Ruling L2 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L2 (reader triage note on A1); ruling L2, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization X1.D1.A -1",
+      "energy": -96.4289679218
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number deposited by Alexander Wietek in his table of the lowest level of all 48 symmetry sectors, PR #10, commit 4aa5e29 (2024-07-29); method: A. Wietek et al., Phys. Rev. X 14, 021010 (2024), arXiv:2303.01585, which plots the spectrum as (E - E0)/J1 only)",
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-96.4289679218 | 6.99e-13 | | 48 | 0 | Exact Diagonalization X1.D1.A     -1'",
+    "location": "VarBench history of J1J2/triangular_48_P_0.125.md: the level first appears in PR #10 (4aa5e29); PRX 14, 021010 Fig. 2 plots (E - E0)/J1",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); arXiv:2303.01585 v1, v2 and the journal PDF as read by VA1",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-03",
+    "reason": "Ruling 1 (Tristan, 2026-09-30): a number first printed in a dataset is cited to it, the producing paper kept as the method reference. PRX 14, 021010 plots the spectrum as (E - E0)/J1 only; the energies are Alexander Wietek's deposit in VarBench. The ground-state row of this instance has cited the dataset this way since the handoff series (RH2#0). Ruling L2 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L2 (reader triage note on A1); ruling L2, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization K.D3.E -1",
+      "energy": -96.4257227302
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number deposited by Alexander Wietek in his table of the lowest level of all 48 symmetry sectors, PR #10, commit 4aa5e29 (2024-07-29); method: A. Wietek et al., Phys. Rev. X 14, 021010 (2024), arXiv:2303.01585, which plots the spectrum as (E - E0)/J1 only)",
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-96.4257227302 | 1.46e-04 | | 48 | 0 | Exact Diagonalization K.D3.E      -1'",
+    "location": "VarBench history of J1J2/triangular_48_P_0.125.md: the level first appears in PR #10 (4aa5e29); PRX 14, 021010 Fig. 2 plots (E - E0)/J1",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); arXiv:2303.01585 v1, v2 and the journal PDF as read by VA1",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-03",
+    "reason": "Ruling 1 (Tristan, 2026-09-30): a number first printed in a dataset is cited to it, the producing paper kept as the method reference. PRX 14, 021010 plots the spectrum as (E - E0)/J1 only; the energies are Alexander Wietek's deposit in VarBench. The ground-state row of this instance has cited the dataset this way since the handoff series (RH2#0). Ruling L2 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L2 (reader triage note on A1); ruling L2, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Z.D1.B 1",
+      "energy": -96.3509561853
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number deposited by Alexander Wietek in his table of the lowest level of all 48 symmetry sectors, PR #10, commit 4aa5e29 (2024-07-29); method: A. Wietek et al., Phys. Rev. X 14, 021010 (2024), arXiv:2303.01585, which plots the spectrum as (E - E0)/J1 only)",
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-96.3509561853 | 6.22e-06 | | 48 | 0 | Exact Diagonalization Z.D1.B       1'",
+    "location": "VarBench history of J1J2/triangular_48_P_0.125.md: the level first appears in PR #10 (4aa5e29); PRX 14, 021010 Fig. 2 plots (E - E0)/J1",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); arXiv:2303.01585 v1, v2 and the journal PDF as read by VA1",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-03",
+    "reason": "Ruling 1 (Tristan, 2026-09-30): a number first printed in a dataset is cited to it, the producing paper kept as the method reference. PRX 14, 021010 plots the spectrum as (E - E0)/J1 only; the energies are Alexander Wietek's deposit in VarBench. The ground-state row of this instance has cited the dataset this way since the handoff series (RH2#0). Ruling L2 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L2 (reader triage note on A1); ruling L2, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization X0.D1.A 1",
+      "energy": -96.3236008361
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number deposited by Alexander Wietek in his table of the lowest level of all 48 symmetry sectors, PR #10, commit 4aa5e29 (2024-07-29); method: A. Wietek et al., Phys. Rev. X 14, 021010 (2024), arXiv:2303.01585, which plots the spectrum as (E - E0)/J1 only)",
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-96.3236008361 | 3.67e-13 | | 48 | 0 | Exact Diagonalization X0.D1.A      1'",
+    "location": "VarBench history of J1J2/triangular_48_P_0.125.md: the level first appears in PR #10 (4aa5e29); PRX 14, 021010 Fig. 2 plots (E - E0)/J1",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); arXiv:2303.01585 v1, v2 and the journal PDF as read by VA1",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-03",
+    "reason": "Ruling 1 (Tristan, 2026-09-30): a number first printed in a dataset is cited to it, the producing paper kept as the method reference. PRX 14, 021010 plots the spectrum as (E - E0)/J1 only; the energies are Alexander Wietek's deposit in VarBench. The ground-state row of this instance has cited the dataset this way since the handoff series (RH2#0). Ruling L2 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L2 (reader triage note on A1); ruling L2, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Z.D1.A 1",
+      "energy": -96.2907393386
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number deposited by Alexander Wietek in his table of the lowest level of all 48 symmetry sectors, PR #10, commit 4aa5e29 (2024-07-29); method: A. Wietek et al., Phys. Rev. X 14, 021010 (2024), arXiv:2303.01585, which plots the spectrum as (E - E0)/J1 only)",
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-96.2907393386 | 9.70e-05 | | 48 | 0 | Exact Diagonalization Z.D1.A       1'",
+    "location": "VarBench history of J1J2/triangular_48_P_0.125.md: the level first appears in PR #10 (4aa5e29); PRX 14, 021010 Fig. 2 plots (E - E0)/J1",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); arXiv:2303.01585 v1, v2 and the journal PDF as read by VA1",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-03",
+    "reason": "Ruling 1 (Tristan, 2026-09-30): a number first printed in a dataset is cited to it, the producing paper kept as the method reference. PRX 14, 021010 plots the spectrum as (E - E0)/J1 only; the energies are Alexander Wietek's deposit in VarBench. The ground-state row of this instance has cited the dataset this way since the handoff series (RH2#0). Ruling L2 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L2 (reader triage note on A1); ruling L2, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization X0.D1.A -1",
+      "energy": -96.1430463315
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number deposited by Alexander Wietek in his table of the lowest level of all 48 symmetry sectors, PR #10, commit 4aa5e29 (2024-07-29); method: A. Wietek et al., Phys. Rev. X 14, 021010 (2024), arXiv:2303.01585, which plots the spectrum as (E - E0)/J1 only)",
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-96.1430463315 | 3.39e-13 | | 48 | 0 | Exact Diagonalization X0.D1.A     -1'",
+    "location": "VarBench history of J1J2/triangular_48_P_0.125.md: the level first appears in PR #10 (4aa5e29); PRX 14, 021010 Fig. 2 plots (E - E0)/J1",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); arXiv:2303.01585 v1, v2 and the journal PDF as read by VA1",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-03",
+    "reason": "Ruling 1 (Tristan, 2026-09-30): a number first printed in a dataset is cited to it, the producing paper kept as the method reference. PRX 14, 021010 plots the spectrum as (E - E0)/J1 only; the energies are Alexander Wietek's deposit in VarBench. The ground-state row of this instance has cited the dataset this way since the handoff series (RH2#0). Ruling L2 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L2 (reader triage note on A1); ruling L2, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization X0.D1.B 1",
+      "energy": -96.0665487981
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number deposited by Alexander Wietek in his table of the lowest level of all 48 symmetry sectors, PR #10, commit 4aa5e29 (2024-07-29); method: A. Wietek et al., Phys. Rev. X 14, 021010 (2024), arXiv:2303.01585, which plots the spectrum as (E - E0)/J1 only)",
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-96.0665487981 | 9.05e-13 | | 48 | 0 | Exact Diagonalization X0.D1.B      1'",
+    "location": "VarBench history of J1J2/triangular_48_P_0.125.md: the level first appears in PR #10 (4aa5e29); PRX 14, 021010 Fig. 2 plots (E - E0)/J1",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); arXiv:2303.01585 v1, v2 and the journal PDF as read by VA1",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-03",
+    "reason": "Ruling 1 (Tristan, 2026-09-30): a number first printed in a dataset is cited to it, the producing paper kept as the method reference. PRX 14, 021010 plots the spectrum as (E - E0)/J1 only; the energies are Alexander Wietek's deposit in VarBench. The ground-state row of this instance has cited the dataset this way since the handoff series (RH2#0). Ruling L2 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L2 (reader triage note on A1); ruling L2, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization K.D3.E 1",
+      "energy": -96.0123967672
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number deposited by Alexander Wietek in his table of the lowest level of all 48 symmetry sectors, PR #10, commit 4aa5e29 (2024-07-29); method: A. Wietek et al., Phys. Rev. X 14, 021010 (2024), arXiv:2303.01585, which plots the spectrum as (E - E0)/J1 only)",
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-96.0123967672 | 3.64e-12 | | 48 | 0 | Exact Diagonalization K.D3.E       1'",
+    "location": "VarBench history of J1J2/triangular_48_P_0.125.md: the level first appears in PR #10 (4aa5e29); PRX 14, 021010 Fig. 2 plots (E - E0)/J1",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); arXiv:2303.01585 v1, v2 and the journal PDF as read by VA1",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-03",
+    "reason": "Ruling 1 (Tristan, 2026-09-30): a number first printed in a dataset is cited to it, the producing paper kept as the method reference. PRX 14, 021010 plots the spectrum as (E - E0)/J1 only; the energies are Alexander Wietek's deposit in VarBench. The ground-state row of this instance has cited the dataset this way since the handoff series (RH2#0). Ruling L2 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L2 (reader triage note on A1); ruling L2, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization X0.D1.B -1",
+      "energy": -95.9591878447
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number deposited by Alexander Wietek in his table of the lowest level of all 48 symmetry sectors, PR #10, commit 4aa5e29 (2024-07-29); method: A. Wietek et al., Phys. Rev. X 14, 021010 (2024), arXiv:2303.01585, which plots the spectrum as (E - E0)/J1 only)",
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-95.9591878447 | 3.42e-13 | | 48 | 0 | Exact Diagonalization X0.D1.B     -1'",
+    "location": "VarBench history of J1J2/triangular_48_P_0.125.md: the level first appears in PR #10 (4aa5e29); PRX 14, 021010 Fig. 2 plots (E - E0)/J1",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); arXiv:2303.01585 v1, v2 and the journal PDF as read by VA1",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-03",
+    "reason": "Ruling 1 (Tristan, 2026-09-30): a number first printed in a dataset is cited to it, the producing paper kept as the method reference. PRX 14, 021010 plots the spectrum as (E - E0)/J1 only; the energies are Alexander Wietek's deposit in VarBench. The ground-state row of this instance has cited the dataset this way since the handoff series (RH2#0). Ruling L2 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L2 (reader triage note on A1); ruling L2, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization M.D2.A1 1",
+      "energy": -95.895488336
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number deposited by Alexander Wietek in his table of the lowest level of all 48 symmetry sectors, PR #10, commit 4aa5e29 (2024-07-29); method: A. Wietek et al., Phys. Rev. X 14, 021010 (2024), arXiv:2303.01585, which plots the spectrum as (E - E0)/J1 only)",
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-95.8954883360 | 3.67e-13 | | 48 | 0 | Exact Diagonalization M.D2.A1      1'",
+    "location": "VarBench history of J1J2/triangular_48_P_0.125.md: the level first appears in PR #10 (4aa5e29); PRX 14, 021010 Fig. 2 plots (E - E0)/J1",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); arXiv:2303.01585 v1, v2 and the journal PDF as read by VA1",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-03",
+    "reason": "Ruling 1 (Tristan, 2026-09-30): a number first printed in a dataset is cited to it, the producing paper kept as the method reference. PRX 14, 021010 plots the spectrum as (E - E0)/J1 only; the energies are Alexander Wietek's deposit in VarBench. The ground-state row of this instance has cited the dataset this way since the handoff series (RH2#0). Ruling L2 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L2 (reader triage note on A1); ruling L2, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Y.D1.A -1",
+      "energy": -95.8701895419
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number deposited by Alexander Wietek in his table of the lowest level of all 48 symmetry sectors, PR #10, commit 4aa5e29 (2024-07-29); method: A. Wietek et al., Phys. Rev. X 14, 021010 (2024), arXiv:2303.01585, which plots the spectrum as (E - E0)/J1 only)",
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-95.8701895419 | 1.36e-05 | | 48 | 0 | Exact Diagonalization Y.D1.A      -1'",
+    "location": "VarBench history of J1J2/triangular_48_P_0.125.md: the level first appears in PR #10 (4aa5e29); PRX 14, 021010 Fig. 2 plots (E - E0)/J1",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); arXiv:2303.01585 v1, v2 and the journal PDF as read by VA1",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-03",
+    "reason": "Ruling 1 (Tristan, 2026-09-30): a number first printed in a dataset is cited to it, the producing paper kept as the method reference. PRX 14, 021010 plots the spectrum as (E - E0)/J1 only; the energies are Alexander Wietek's deposit in VarBench. The ground-state row of this instance has cited the dataset this way since the handoff series (RH2#0). Ruling L2 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L2 (reader triage note on A1); ruling L2, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Y.D1.B -1",
+      "energy": -95.7758437002
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number deposited by Alexander Wietek in his table of the lowest level of all 48 symmetry sectors, PR #10, commit 4aa5e29 (2024-07-29); method: A. Wietek et al., Phys. Rev. X 14, 021010 (2024), arXiv:2303.01585, which plots the spectrum as (E - E0)/J1 only)",
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-95.7758437002 | 3.07e-04 | | 48 | 0 | Exact Diagonalization Y.D1.B      -1'",
+    "location": "VarBench history of J1J2/triangular_48_P_0.125.md: the level first appears in PR #10 (4aa5e29); PRX 14, 021010 Fig. 2 plots (E - E0)/J1",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); arXiv:2303.01585 v1, v2 and the journal PDF as read by VA1",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-03",
+    "reason": "Ruling 1 (Tristan, 2026-09-30): a number first printed in a dataset is cited to it, the producing paper kept as the method reference. PRX 14, 021010 plots the spectrum as (E - E0)/J1 only; the energies are Alexander Wietek's deposit in VarBench. The ground-state row of this instance has cited the dataset this way since the handoff series (RH2#0). Ruling L2 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L2 (reader triage note on A1); ruling L2, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Z.D1.B -1",
+      "energy": -95.7222960611
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number deposited by Alexander Wietek in his table of the lowest level of all 48 symmetry sectors, PR #10, commit 4aa5e29 (2024-07-29); method: A. Wietek et al., Phys. Rev. X 14, 021010 (2024), arXiv:2303.01585, which plots the spectrum as (E - E0)/J1 only)",
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-95.7222960611 | 8.25e-04 | | 48 | 0 | Exact Diagonalization Z.D1.B      -1'",
+    "location": "VarBench history of J1J2/triangular_48_P_0.125.md: the level first appears in PR #10 (4aa5e29); PRX 14, 021010 Fig. 2 plots (E - E0)/J1",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); arXiv:2303.01585 v1, v2 and the journal PDF as read by VA1",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-03",
+    "reason": "Ruling 1 (Tristan, 2026-09-30): a number first printed in a dataset is cited to it, the producing paper kept as the method reference. PRX 14, 021010 plots the spectrum as (E - E0)/J1 only; the energies are Alexander Wietek's deposit in VarBench. The ground-state row of this instance has cited the dataset this way since the handoff series (RH2#0). Ruling L2 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L2 (reader triage note on A1); ruling L2, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization X2.D1.B -1",
+      "energy": -95.6379830325
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number deposited by Alexander Wietek in his table of the lowest level of all 48 symmetry sectors, PR #10, commit 4aa5e29 (2024-07-29); method: A. Wietek et al., Phys. Rev. X 14, 021010 (2024), arXiv:2303.01585, which plots the spectrum as (E - E0)/J1 only)",
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-95.6379830325 | 3.33e-06 | | 48 | 0 | Exact Diagonalization X2.D1.B     -1'",
+    "location": "VarBench history of J1J2/triangular_48_P_0.125.md: the level first appears in PR #10 (4aa5e29); PRX 14, 021010 Fig. 2 plots (E - E0)/J1",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); arXiv:2303.01585 v1, v2 and the journal PDF as read by VA1",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-03",
+    "reason": "Ruling 1 (Tristan, 2026-09-30): a number first printed in a dataset is cited to it, the producing paper kept as the method reference. PRX 14, 021010 plots the spectrum as (E - E0)/J1 only; the energies are Alexander Wietek's deposit in VarBench. The ground-state row of this instance has cited the dataset this way since the handoff series (RH2#0). Ruling L2 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L2 (reader triage note on A1); ruling L2, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization X1.D1.B -1",
+      "energy": -95.5777670451
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number deposited by Alexander Wietek in his table of the lowest level of all 48 symmetry sectors, PR #10, commit 4aa5e29 (2024-07-29); method: A. Wietek et al., Phys. Rev. X 14, 021010 (2024), arXiv:2303.01585, which plots the spectrum as (E - E0)/J1 only)",
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-95.5777670451 | 3.50e-13 | | 48 | 0 | Exact Diagonalization X1.D1.B     -1'",
+    "location": "VarBench history of J1J2/triangular_48_P_0.125.md: the level first appears in PR #10 (4aa5e29); PRX 14, 021010 Fig. 2 plots (E - E0)/J1",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); arXiv:2303.01585 v1, v2 and the journal PDF as read by VA1",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-03",
+    "reason": "Ruling 1 (Tristan, 2026-09-30): a number first printed in a dataset is cited to it, the producing paper kept as the method reference. PRX 14, 021010 plots the spectrum as (E - E0)/J1 only; the energies are Alexander Wietek's deposit in VarBench. The ground-state row of this instance has cited the dataset this way since the handoff series (RH2#0). Ruling L2 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L2 (reader triage note on A1); ruling L2, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization K.D3.A1 1",
+      "energy": -95.4097231118
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number deposited by Alexander Wietek in his table of the lowest level of all 48 symmetry sectors, PR #10, commit 4aa5e29 (2024-07-29); method: A. Wietek et al., Phys. Rev. X 14, 021010 (2024), arXiv:2303.01585, which plots the spectrum as (E - E0)/J1 only)",
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-95.4097231118 | 3.23e-13 | | 48 | 0 | Exact Diagonalization K.D3.A1      1'",
+    "location": "VarBench history of J1J2/triangular_48_P_0.125.md: the level first appears in PR #10 (4aa5e29); PRX 14, 021010 Fig. 2 plots (E - E0)/J1",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); arXiv:2303.01585 v1, v2 and the journal PDF as read by VA1",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-03",
+    "reason": "Ruling 1 (Tristan, 2026-09-30): a number first printed in a dataset is cited to it, the producing paper kept as the method reference. PRX 14, 021010 plots the spectrum as (E - E0)/J1 only; the energies are Alexander Wietek's deposit in VarBench. The ground-state row of this instance has cited the dataset this way since the handoff series (RH2#0). Ruling L2 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L2 (reader triage note on A1); ruling L2, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization M.D2.B2 -1",
+      "energy": -95.3191248118
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number deposited by Alexander Wietek in his table of the lowest level of all 48 symmetry sectors, PR #10, commit 4aa5e29 (2024-07-29); method: A. Wietek et al., Phys. Rev. X 14, 021010 (2024), arXiv:2303.01585, which plots the spectrum as (E - E0)/J1 only)",
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-95.3191248118 | 3.50e-13 | | 48 | 0 | Exact Diagonalization M.D2.B2     -1'",
+    "location": "VarBench history of J1J2/triangular_48_P_0.125.md: the level first appears in PR #10 (4aa5e29); PRX 14, 021010 Fig. 2 plots (E - E0)/J1",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); arXiv:2303.01585 v1, v2 and the journal PDF as read by VA1",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-03",
+    "reason": "Ruling 1 (Tristan, 2026-09-30): a number first printed in a dataset is cited to it, the producing paper kept as the method reference. PRX 14, 021010 plots the spectrum as (E - E0)/J1 only; the energies are Alexander Wietek's deposit in VarBench. The ground-state row of this instance has cited the dataset this way since the handoff series (RH2#0). Ruling L2 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L2 (reader triage note on A1); ruling L2, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization M.D2.A2 1",
+      "energy": -95.1104612519
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number deposited by Alexander Wietek in his table of the lowest level of all 48 symmetry sectors, PR #10, commit 4aa5e29 (2024-07-29); method: A. Wietek et al., Phys. Rev. X 14, 021010 (2024), arXiv:2303.01585, which plots the spectrum as (E - E0)/J1 only)",
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-95.1104612519 | 3.36e-13 | | 48 | 0 | Exact Diagonalization M.D2.A2      1'",
+    "location": "VarBench history of J1J2/triangular_48_P_0.125.md: the level first appears in PR #10 (4aa5e29); PRX 14, 021010 Fig. 2 plots (E - E0)/J1",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); arXiv:2303.01585 v1, v2 and the journal PDF as read by VA1",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-03",
+    "reason": "Ruling 1 (Tristan, 2026-09-30): a number first printed in a dataset is cited to it, the producing paper kept as the method reference. PRX 14, 021010 plots the spectrum as (E - E0)/J1 only; the energies are Alexander Wietek's deposit in VarBench. The ground-state row of this instance has cited the dataset this way since the handoff series (RH2#0). Ruling L2 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L2 (reader triage note on A1); ruling L2, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization K.D3.A2 1",
+      "energy": -95.006305924
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number deposited by Alexander Wietek in his table of the lowest level of all 48 symmetry sectors, PR #10, commit 4aa5e29 (2024-07-29); method: A. Wietek et al., Phys. Rev. X 14, 021010 (2024), arXiv:2303.01585, which plots the spectrum as (E - E0)/J1 only)",
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-95.0063059240 | 3.43e-13 | | 48 | 0 | Exact Diagonalization K.D3.A2      1'",
+    "location": "VarBench history of J1J2/triangular_48_P_0.125.md: the level first appears in PR #10 (4aa5e29); PRX 14, 021010 Fig. 2 plots (E - E0)/J1",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); arXiv:2303.01585 v1, v2 and the journal PDF as read by VA1",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-03",
+    "reason": "Ruling 1 (Tristan, 2026-09-30): a number first printed in a dataset is cited to it, the producing paper kept as the method reference. PRX 14, 021010 plots the spectrum as (E - E0)/J1 only; the energies are Alexander Wietek's deposit in VarBench. The ground-state row of this instance has cited the dataset this way since the handoff series (RH2#0). Ruling L2 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L2 (reader triage note on A1); ruling L2, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization K.D3.A2 -1",
+      "energy": -95.0029307855
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number deposited by Alexander Wietek in his table of the lowest level of all 48 symmetry sectors, PR #10, commit 4aa5e29 (2024-07-29); method: A. Wietek et al., Phys. Rev. X 14, 021010 (2024), arXiv:2303.01585, which plots the spectrum as (E - E0)/J1 only)",
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-95.0029307855 | 6.16e-04 | | 48 | 0 | Exact Diagonalization K.D3.A2     -1'",
+    "location": "VarBench history of J1J2/triangular_48_P_0.125.md: the level first appears in PR #10 (4aa5e29); PRX 14, 021010 Fig. 2 plots (E - E0)/J1",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); arXiv:2303.01585 v1, v2 and the journal PDF as read by VA1",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-03",
+    "reason": "Ruling 1 (Tristan, 2026-09-30): a number first printed in a dataset is cited to it, the producing paper kept as the method reference. PRX 14, 021010 plots the spectrum as (E - E0)/J1 only; the energies are Alexander Wietek's deposit in VarBench. The ground-state row of this instance has cited the dataset this way since the handoff series (RH2#0). Ruling L2 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L2 (reader triage note on A1); ruling L2, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Gamma.D6.B2 -1",
+      "energy": -94.823165815
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number deposited by Alexander Wietek in his table of the lowest level of all 48 symmetry sectors, PR #10, commit 4aa5e29 (2024-07-29); method: A. Wietek et al., Phys. Rev. X 14, 021010 (2024), arXiv:2303.01585, which plots the spectrum as (E - E0)/J1 only)",
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-94.8231658150 | 3.29e-05 | | 48 | 0 | Exact Diagonalization Gamma.D6.B2 -1'",
+    "location": "VarBench history of J1J2/triangular_48_P_0.125.md: the level first appears in PR #10 (4aa5e29); PRX 14, 021010 Fig. 2 plots (E - E0)/J1",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); arXiv:2303.01585 v1, v2 and the journal PDF as read by VA1",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-03",
+    "reason": "Ruling 1 (Tristan, 2026-09-30): a number first printed in a dataset is cited to it, the producing paper kept as the method reference. PRX 14, 021010 plots the spectrum as (E - E0)/J1 only; the energies are Alexander Wietek's deposit in VarBench. The ground-state row of this instance has cited the dataset this way since the handoff series (RH2#0). Ruling L2 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L2 (reader triage note on A1); ruling L2, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization M.D2.B1 -1",
+      "energy": -94.7108761422
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number deposited by Alexander Wietek in his table of the lowest level of all 48 symmetry sectors, PR #10, commit 4aa5e29 (2024-07-29); method: A. Wietek et al., Phys. Rev. X 14, 021010 (2024), arXiv:2303.01585, which plots the spectrum as (E - E0)/J1 only)",
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-94.7108761422 | 4.60e-13 | | 48 | 0 | Exact Diagonalization M.D2.B1     -1'",
+    "location": "VarBench history of J1J2/triangular_48_P_0.125.md: the level first appears in PR #10 (4aa5e29); PRX 14, 021010 Fig. 2 plots (E - E0)/J1",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); arXiv:2303.01585 v1, v2 and the journal PDF as read by VA1",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-03",
+    "reason": "Ruling 1 (Tristan, 2026-09-30): a number first printed in a dataset is cited to it, the producing paper kept as the method reference. PRX 14, 021010 plots the spectrum as (E - E0)/J1 only; the energies are Alexander Wietek's deposit in VarBench. The ground-state row of this instance has cited the dataset this way since the handoff series (RH2#0). Ruling L2 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L2 (reader triage note on A1); ruling L2, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Gamma.D6.E2 -1",
+      "energy": -94.6108993244
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number deposited by Alexander Wietek in his table of the lowest level of all 48 symmetry sectors, PR #10, commit 4aa5e29 (2024-07-29); method: A. Wietek et al., Phys. Rev. X 14, 021010 (2024), arXiv:2303.01585, which plots the spectrum as (E - E0)/J1 only)",
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-94.6108993244 | 3.24e-13 | | 48 | 0 | Exact Diagonalization Gamma.D6.E2 -1'",
+    "location": "VarBench history of J1J2/triangular_48_P_0.125.md: the level first appears in PR #10 (4aa5e29); PRX 14, 021010 Fig. 2 plots (E - E0)/J1",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); arXiv:2303.01585 v1, v2 and the journal PDF as read by VA1",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-03",
+    "reason": "Ruling 1 (Tristan, 2026-09-30): a number first printed in a dataset is cited to it, the producing paper kept as the method reference. PRX 14, 021010 plots the spectrum as (E - E0)/J1 only; the energies are Alexander Wietek's deposit in VarBench. The ground-state row of this instance has cited the dataset this way since the handoff series (RH2#0). Ruling L2 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L2 (reader triage note on A1); ruling L2, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Gamma.D6.A1 -1",
+      "energy": -94.6001195408
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number deposited by Alexander Wietek in his table of the lowest level of all 48 symmetry sectors, PR #10, commit 4aa5e29 (2024-07-29); method: A. Wietek et al., Phys. Rev. X 14, 021010 (2024), arXiv:2303.01585, which plots the spectrum as (E - E0)/J1 only)",
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-94.6001195408 | 3.73e-13 | | 48 | 0 | Exact Diagonalization Gamma.D6.A1 -1'",
+    "location": "VarBench history of J1J2/triangular_48_P_0.125.md: the level first appears in PR #10 (4aa5e29); PRX 14, 021010 Fig. 2 plots (E - E0)/J1",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); arXiv:2303.01585 v1, v2 and the journal PDF as read by VA1",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-03",
+    "reason": "Ruling 1 (Tristan, 2026-09-30): a number first printed in a dataset is cited to it, the producing paper kept as the method reference. PRX 14, 021010 plots the spectrum as (E - E0)/J1 only; the energies are Alexander Wietek's deposit in VarBench. The ground-state row of this instance has cited the dataset this way since the handoff series (RH2#0). Ruling L2 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L2 (reader triage note on A1); ruling L2, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Gamma.D6.B1 1",
+      "energy": -94.3993360171
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number deposited by Alexander Wietek in his table of the lowest level of all 48 symmetry sectors, PR #10, commit 4aa5e29 (2024-07-29); method: A. Wietek et al., Phys. Rev. X 14, 021010 (2024), arXiv:2303.01585, which plots the spectrum as (E - E0)/J1 only)",
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-94.3993360171 | 3.12e-13 | | 48 | 0 | Exact Diagonalization Gamma.D6.B1  1'",
+    "location": "VarBench history of J1J2/triangular_48_P_0.125.md: the level first appears in PR #10 (4aa5e29); PRX 14, 021010 Fig. 2 plots (E - E0)/J1",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); arXiv:2303.01585 v1, v2 and the journal PDF as read by VA1",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-03",
+    "reason": "Ruling 1 (Tristan, 2026-09-30): a number first printed in a dataset is cited to it, the producing paper kept as the method reference. PRX 14, 021010 plots the spectrum as (E - E0)/J1 only; the energies are Alexander Wietek's deposit in VarBench. The ground-state row of this instance has cited the dataset this way since the handoff series (RH2#0). Ruling L2 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L2 (reader triage note on A1); ruling L2, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Gamma.D6.B2 1",
+      "energy": -94.1370349394
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number deposited by Alexander Wietek in his table of the lowest level of all 48 symmetry sectors, PR #10, commit 4aa5e29 (2024-07-29); method: A. Wietek et al., Phys. Rev. X 14, 021010 (2024), arXiv:2303.01585, which plots the spectrum as (E - E0)/J1 only)",
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-94.1370349394 | 2.18e-11 | | 48 | 0 | Exact Diagonalization Gamma.D6.B2  1'",
+    "location": "VarBench history of J1J2/triangular_48_P_0.125.md: the level first appears in PR #10 (4aa5e29); PRX 14, 021010 Fig. 2 plots (E - E0)/J1",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); arXiv:2303.01585 v1, v2 and the journal PDF as read by VA1",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-03",
+    "reason": "Ruling 1 (Tristan, 2026-09-30): a number first printed in a dataset is cited to it, the producing paper kept as the method reference. PRX 14, 021010 plots the spectrum as (E - E0)/J1 only; the energies are Alexander Wietek's deposit in VarBench. The ground-state row of this instance has cited the dataset this way since the handoff series (RH2#0). Ruling L2 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L2 (reader triage note on A1); ruling L2, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Gamma.D6.E1 1",
+      "energy": -94.1191636896
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number deposited by Alexander Wietek in his table of the lowest level of all 48 symmetry sectors, PR #10, commit 4aa5e29 (2024-07-29); method: A. Wietek et al., Phys. Rev. X 14, 021010 (2024), arXiv:2303.01585, which plots the spectrum as (E - E0)/J1 only)",
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-94.1191636896 | 2.92e-04 | | 48 | 0 | Exact Diagonalization Gamma.D6.E1  1'",
+    "location": "VarBench history of J1J2/triangular_48_P_0.125.md: the level first appears in PR #10 (4aa5e29); PRX 14, 021010 Fig. 2 plots (E - E0)/J1",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); arXiv:2303.01585 v1, v2 and the journal PDF as read by VA1",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-03",
+    "reason": "Ruling 1 (Tristan, 2026-09-30): a number first printed in a dataset is cited to it, the producing paper kept as the method reference. PRX 14, 021010 plots the spectrum as (E - E0)/J1 only; the energies are Alexander Wietek's deposit in VarBench. The ground-state row of this instance has cited the dataset this way since the handoff series (RH2#0). Ruling L2 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L2 (reader triage note on A1); ruling L2, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/triangular_48_P_0.125",
+      "method": "Exact Diagonalization Gamma.D6.A2 -1",
+      "energy": -93.9964710035
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number deposited by Alexander Wietek in his table of the lowest level of all 48 symmetry sectors, PR #10, commit 4aa5e29 (2024-07-29); method: A. Wietek et al., Phys. Rev. X 14, 021010 (2024), arXiv:2303.01585, which plots the spectrum as (E - E0)/J1 only)",
+    "reported_as": "VarBench J1J2/triangular_48_P_0.125.md at 4aa5e29: '-93.9964710035 | 3.28e-13 | | 48 | 0 | Exact Diagonalization Gamma.D6.A2 -1'",
+    "location": "VarBench history of J1J2/triangular_48_P_0.125.md: the level first appears in PR #10 (4aa5e29); PRX 14, 021010 Fig. 2 plots (E - E0)/J1",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history); arXiv:2303.01585 v1, v2 and the journal PDF as read by VA1",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-03",
+    "reason": "Ruling 1 (Tristan, 2026-09-30): a number first printed in a dataset is cited to it, the producing paper kept as the method reference. PRX 14, 021010 plots the spectrum as (E - E0)/J1 only; the energies are Alexander Wietek's deposit in VarBench. The ground-state row of this instance has cited the dataset this way since the handoff series (RH2#0). Ruling L2 (Tristan 2026-10-03).",
+    "source_entry": "qmbl-verify 2026-09-29, handoff item 3, L2 (reader triage note on A1); ruling L2, Tristan 2026-10-03"
+  },
+  // L3: the J1-J2 10x10 RNN + translational symmetry row is treated as its Heisenberg siblings (ruling E5): flag lifted, dataset cited. (2)
+  {
+    "match": {
+      "instance": "J1J2/square_100_P_0.5",
+      "method": "RNN + translational symmetry",
+      "energy": -198.239
+    },
+    "field": "defect",
+    "to": null,
+    "reported_as": "n/a (flag lift)",
+    "location": "scripts/defects.mjs, entry VB1-varbench-code-j1j2#15",
+    "version_read": "same sources as the reference correction",
+    "conversion": "none",
+    "checked_on": "2026-10-03",
+    "reason": "Ruling L3 (Tristan 2026-10-03): the flag is lifted so that this row is treated as its three Heisenberg siblings are under ruling E5 (Tristan, 2026-10-02), whose linked script has the same defect (vmc_rnn.sh runs a plain FastLSTMNet and vmc.py has no symmetrisation option): cited to the VarBench dataset with the uploader named, the link kept, no flag. The finding stays on the row here, in `from`. RULES.md 10 lifts a flag by correcting `defect` to null. No record at stake.",
+    "source_entry": "VB1-varbench-code-j1j2#15 (qmbl-verify 2026-09-29; skeptic upheld); ruling L3, Tristan 2026-10-03"
+  },
+  {
+    "match": {
+      "instance": "J1J2/square_100_P_0.5",
+      "method": "RNN + translational symmetry",
+      "energy": -198.239
+    },
+    "field": "reference",
+    "to": "[paper](https://doi.org/10.1126/science.adg9774) (Wu et al., Science 386, 296 (2024), arXiv:2302.04919: VarBench dataset, number uploaded by Dian Wu on 2022-03-04, commit 5af37ba) [code](https://github.com/varbench/methods/blob/main/scripts/J1J2/square_100_P_0.5/vmc_rnn.sh)",
+    "reported_as": "VarBench upload 5af37ba (J1J2/square_10_PP_100_0.5.md): '-198.239 | 0.017 | 4.671 | RNN + translational symmetry'",
+    "location": "VarBench history of J1J2/square_100_P_0.5.md (on 2022-03-04, commit 5af37ba, 'Add RNN results'; renamed in 37648ad)",
+    "version_read": "VarBench git history (qmbl-runs/qmbl-verify/varbench-history, git log -S / git show), read 2026-10-03",
+    "conversion": "none (citation)",
+    "checked_on": "2026-10-03",
+    "reason": "The linked vmc_rnn.sh runs a plain FastLSTMNet, and vmc.py has no symmetrisation option, so the link does not implement the method named (VB1#15). The number was uploaded years before the script and is printed in no paper the readers found, so it is cited to the dataset with the uploader named, as its three Heisenberg siblings are (ruling E5, Tristan 2026-10-02). The link stays. Ruling L3 (Tristan 2026-10-03).",
+    "source_entry": "VB1-varbench-code-j1j2#15 (qmbl-verify 2026-09-29; skeptic upheld); ruling L3, Tristan 2026-10-03"
+  },
 ];

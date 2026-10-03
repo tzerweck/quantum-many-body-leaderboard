@@ -53,7 +53,11 @@ for (const m of fs.readdirSync("data")) {
           const gap = r.energy - o.energy;
           const sigma = o.sigma != null || refSigma != null ? Math.hypot(o.sigma ?? 0, refSigma ?? 0) : null;
           const realViolation = sigma != null ? gap > 3 * sigma : rel > 1e-8;
-          (realViolation ? issues : rounding).push(
+          // A ruling that lifted this row's flag (a `defect` correction to null, RULES.md 10) has
+          // judged this relation, e.g. a printed interval that holds the exact energy (RULES.md
+          // 9.4): counted with the tolerated ones, not an issue.
+          const ruled = (o.corrections || []).some(c => c.field === "defect" && c.to === null);
+          (realViolation && !ruled ? issues : rounding).push(
             `BOUND ${at}: variational ${o.energy} below ${stochasticExact(r) ? "exact (stochastic)" : "exact"} ${r.energy} (rel ${rel.toExponential(1)}) "${o.method.slice(0,38)}"`);
         }
       }
@@ -229,5 +233,5 @@ for (const f of fs.readdirSync(path.join("data", "TFIsing"))) {
 
 console.log(`rows=${rows}  dof_checked=${checkedD}  einf_checked=${checkedE}  vscore_checked=${checkedV}  tfising_exact_checked=${checkedT}`);
 console.log(`compute_blocks=${checkedC}  coverage_entries=${checkedCov}  spectrum_entries=${checkedS}`);
-console.log(`tolerated bound violations (within 3 sigma, or rel < 1e-8 where neither states one; ignored): ${rounding.length}`);
+console.log(`tolerated bound violations (within 3 sigma, or rel < 1e-8 where neither states one, or ruled when a flag was lifted; ignored): ${rounding.length}`);
 console.log(issues.length ? `\n${issues.length} ISSUES:\n` + issues.slice(0, 25).join("\n") : "\nall checks pass");

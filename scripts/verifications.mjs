@@ -12220,7 +12220,7 @@ export const VERIFICATIONS = [
     "reported_as": "-23.5645 (total)",
     "conversion": "none",
     "note": "The stored number is J. M. Silvester's upload of 2022-04-01, transcribed correctly, and the script's configuration matches the instance (U = 8, 8 x 4, periodic along the 4-site direction, 14 + 14). It may have lost a digit: the uploader's factor-4 entry of the day before was -94.257, and -94.257 / 4 = -23.56425, while the same day's division turned the variance (0.24766 -> 0.0155) and the extrapolated energy (-94.263 +/- 0.001 -> -23.5658 +/- 0.0003) exactly, as did his conversions of the same week on other instances (-192.213 -> -48.0533, -127.599 -> -31.8998). -23.5645 lies 2.5e-4 below -23.56425, outside the +/-1.25e-4 that the three decimals of -94.257 allow. Kept as uploaded (ruling E13, Tristan 2026-10-02); only the uploader can say which is right. The row holds the instance's variational record either way.",
-    "source_entry": "VB2-varbench-code-hubbard#28 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E13, Tristan 2026-10-02 (keep, note the discrepancy; ask J. M. Silvester)"
+    "source_entry": "VB2-varbench-code-hubbard#28 (qmbl-verify 2026-09-29, ambiguous; skeptic upheld); ruling E13, Tristan 2026-10-02 (keep, note the discrepancy); the uploader is not asked (Tristan, 2026-10-03)"
   },
   // qmbl-verify 2026-09-29, handoff (2026-10-03), rulings E11, E14 and E17 (Tristan): two finite-PEPS cells left
   // unflagged beside a flagged one, an upload VarBench replaced and restored within a day, and four 8 x 8 attractive-

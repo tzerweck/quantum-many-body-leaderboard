@@ -38,7 +38,7 @@ Organised literature for fellow researchers and AI, so that we can see the works
 | kagome-36d, 36 sites | **-0.4383765** | ED [Läuchli et al. (2011)](https://doi.org/10.48550/arxiv.1103.1159) | none |
 | kagome-42a, 42 sites | **-0.4379990** | ED [Läuchli et al. (2011)](https://doi.org/10.48550/arxiv.1103.1159) | none |
 | kagome-42b, 42 sites | **-0.4381426** | ED [Läuchli et al. (2011)](https://doi.org/10.48550/arxiv.1103.1159) | none |
-| kagome 4x4 (48 sites) | **-0.438703897156(2)** | ED [Wietek & Läuchli (2018)](https://doi.org/10.1103/physreve.98.033309) | -0.437500000000 (+1.2e-3) GCNN (6 layers, 6 feature maps;... [Đurić et al. (2024)](https://doi.org/10.48550/arxiv.2401.02866) |
+| kagome 4x4 (48 sites) | **-0.4387039** | ED [Wietek & Läuchli (2018)](https://doi.org/10.1103/physreve.98.033309) | -0.4375000 (+1.2e-3) GCNN (6 layers, 6 feature maps;... [Đurić et al. (2024)](https://doi.org/10.48550/arxiv.2401.02866) |
 | kagome 6x6 (108 sites) | no record | every variational row is flagged | |
 | kagome 8x8 (192 sites) | **-0.42987(1)** | VMC (Dirac spin liquid + Jastrow) [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/kagome-8x8_192_P/vmc_gutzwiller.sh), [Wu et al. (2024)](https://doi.org/10.1126/science.adg9774) | -0.42868 (+1.2e-3) VMC (U(1) Dirac spin liquid, [0... [He et al. (2024)](https://doi.org/10.48550/arxiv.2407.20629) |
 | pyrochlore 2x2x2 (32 sites) | **-0.5168588** | ED QMBL, checks/pyrochlore-32-ed/ (exact… | -0.5162000 (+6.6e-4) mVMC (projected: SU(2)... [Astrakhantsev et al. (2021)](https://doi.org/10.1103/physrevx.11.041021) |
@@ -59,7 +59,7 @@ Organised literature for fellow researchers and AI, so that we can see the works
 | rectangular 4x8, periodic/open | **-0.6623181(4)** | SSE QMC [Sandvik (2026)](https://doi.org/10.48550/arxiv.2601.20189) | none |
 | rectangular 64x128, periodic/open | **-0.6677918(4)** | SSE QMC [Sandvik (2026)](https://doi.org/10.48550/arxiv.2601.20189) | none |
 | rectangular 6x12, periodic/open | **-0.6570101(4)** | SSE QMC [Sandvik (2026)](https://doi.org/10.48550/arxiv.2601.20189) | none |
-| rectangular 6x8 | **-0.675986664017(2)** | ED [Wietek & Läuchli (2018)](https://doi.org/10.1103/physreve.98.033309) | none |
+| rectangular 6x8 | **-0.6759867** | ED [Wietek & Läuchli (2018)](https://doi.org/10.1103/physreve.98.033309) | none |
 | rectangular 8x16, periodic/open | **-0.6583592(4)** | SSE QMC [Sandvik (2026)](https://doi.org/10.48550/arxiv.2601.20189) | none |
 | shuriken, 24 sites | **-0.4483291** | ED [Astrakhantsev et al. (2021)](https://doi.org/10.1103/physrevb.104.l220408) | none |
 | shuriken, 96 sites | **-0.43826(1)** | mVMC (projected: SU(2), point group) [Wu et al. (2024)](https://doi.org/10.1126/science.adg9774) | none |
@@ -69,7 +69,7 @@ Organised literature for fellow researchers and AI, so that we can see the works
 | square 6x6, open | **-0.6035218** | ED [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/square_36_O/ed_lattice_symmetries.sh), [Wu et al. (2024)](https://doi.org/10.1126/science.adg9774) | -0.6035218 &#9675; (+<1e-7) DMRG (bond dimension 4096) [Huang et al. (2016)](https://doi.org/10.48550/arxiv.1611.09574) |
 | square 6x6 | **-0.6788721** | ED [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/square_36_P/ed_lattice_symmetries.sh), [Wu et al. (2024)](https://doi.org/10.1126/science.adg9774) | -0.6788710 (+1.1e-6) GVMC (ConvNeXt backflow + complex... [Hendry et al. (2025)](https://doi.org/10.48550/arxiv.2507.10287) |
 | square, 40 sites | **-0.6773713** | ED [Richter & Schulenburg (2009)](https://doi.org/10.48550/arxiv.0909.3723) | none |
-| square, 50 sites | **-0.675102038630(2)** | ED [Wietek & Läuchli (2018)](https://doi.org/10.1103/physreve.98.033309) | none |
+| square, 50 sites | **-0.6751020** | ED [Wietek & Läuchli (2018)](https://doi.org/10.1103/physreve.98.033309) | none |
 | square 8x8, open | **-0.6190371(2)** | SSE QMC [Sandvik (2026)](https://doi.org/10.48550/arxiv.2601.20189) | -0.6190345 (+2.7e-6) 2D RNN (tensorized GRU) [Moss et al. (2025)](https://doi.org/10.48550/arxiv.2502.17144) |
 | square 8x8 | **-0.67349005(2)** | SSE QMC [Sandvik (2026)](https://doi.org/10.48550/arxiv.2601.20189) | -0.67348200 (+8.0e-6) RBM (symmetric: spin parity... [Chen et al. (2022)](https://doi.org/10.48550/arxiv.2206.14307) |
 | square 10x10, open | **-0.6286561(2)** | SSE QMC [Sandvik (2026)](https://doi.org/10.48550/arxiv.2601.20189) | -0.6286560 (+1.2e-7) 2D RNN (tensorized GRU) [Moss et al. (2025)](https://doi.org/10.48550/arxiv.2502.17144) |
@@ -113,7 +113,7 @@ Organised literature for fellow researchers and AI, so that we can see the works
 | square 128x128, open | **-0.6661389(2)** | SSE QMC [Sandvik (2026)](https://doi.org/10.48550/arxiv.2601.20189) | none |
 | triangular 4x4 | **-0.5347197** | ED [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/triangular_16_P/ed_netket.sh), [Wu et al. (2024)](https://doi.org/10.1126/science.adg9774) | -0.5340324 (+6.9e-4) VQE (SR; symmetric: unspecified) [Wu et al. (2024)](https://doi.org/10.1126/science.adg9774) |
 | triangular 6x6 | **-0.5603734** | ED [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/triangular_36_P/ed_lattice_symmetries.sh), [Wu et al. (2024)](https://doi.org/10.1126/science.adg9774) | -0.5603130 (+6.0e-5) GCNN (deep; projected:... [Roth et al. (2022)](https://doi.org/10.48550/arxiv.2211.07749) |
-| triangular, 48 sites | **-0.558603026490(2)** | ED [Wietek & Läuchli (2018)](https://doi.org/10.1103/physreve.98.033309) | none |
+| triangular, 48 sites | **-0.5586030** | ED [Wietek & Läuchli (2018)](https://doi.org/10.1103/physreve.98.033309) | none |
 | triangular 10x10, open | **-0.5147668** | DMRG (bond dimension 4096) [run script](https://github.com/varbench/methods/blob/main/scripts/Heisenberg/triangular_100_O/dmrg.sh), [Wu et al. (2024)](https://doi.org/10.1126/science.adg9774) | -0.5138630 (+9.0e-4) Tensor-RNN (bond dimension 40) [Wu et al. (2023)](https://doi.org/10.1103/physrevresearch.5.l032001) |
 | triangular, 108 sites | **-0.55315(3)** | GCNN [Roth et al. (2022)](https://doi.org/10.48550/arxiv.2211.07749) | -0.55190 (+1.2e-3) GNN (separate network per output... [Kochkov et al. (2021)](https://doi.org/10.48550/arxiv.2110.06390) |
 | triangular 12x12, open | **-0.5150648** | DMRG (bond dimension 3000) [run script](https://github.com/varbench/methods/blob/main/programs/dmrg_itensor_cpp/dmrg_triangular_heisenberg_12x12.cc), [Wu et al. (2024)](https://doi.org/10.1126/science.adg9774) | -0.5119722 (+3.1e-3) 2D RNN (gated) [Wu et al. (2024)](https://doi.org/10.1126/science.adg9774) |
