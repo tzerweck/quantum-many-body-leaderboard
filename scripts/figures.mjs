@@ -391,7 +391,7 @@ write("error-metrics", t => {
   const rows = instances.flatMap(i => i.rows).filter(r => r.bound_type !== "exact");
   const groups = [
     ["Imported from VarBench", rows.filter(r => r.source.startsWith("varbench@"))],
-    ["Added since from the literature", rows.filter(r => !r.source.startsWith("varbench@"))],
+    ["Added since from the literature", rows.filter(r => !r.source.startsWith("varbench@") && r.computed_by !== "qmbl")],
   ].map(([label, rs]) => ({ label, total: rs.length, by: Object.fromEntries(METRICS.map(([k]) => [k, rs.filter(r => kind(r) === k).length])) }));
   const [vb, lit] = groups;
   const h = header(t, "Which error metrics the rows carry, by where they came from",
@@ -415,7 +415,7 @@ write("error-metrics", t => {
     });
   });
   const fn = footnote(t, "Bars are shares of each source's rows. A deterministic energy (DMRG at a stated bond dimension) needs no error bar " +
-    "to hold a record; a sampled one does.", top + groups.length * pitch + 4);
+    "to hold a record; a sampled one does. QMBL's own runs are not counted.", top + groups.length * pitch + 4);
   parts.push(fn.svg);
   return doc(t, fn.bottom + 24, "Which error metrics the rows carry, by where they came from",
     groups.map(g => `${g.label} (${g.total} rows): ${METRICS.map(([k, label]) => `${label} ${g.by[k]}`).join(", ")}`).join("; "), parts);
