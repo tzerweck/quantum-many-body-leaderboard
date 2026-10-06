@@ -309,6 +309,21 @@ function layoutLabels({ pts, named, X, Y, front, left, right, top, bottom, nameO
 const toRows = (rows, svg) => (rows.length > 1
   ? `<a class="pt" href="${rowHref(rows[0].inst, rows[0].r)}" data-rows="${rows.map(p => rowId(p.inst, p.r)).join(" ")}">${svg}</a>`
   : linked(rowHref(rows[0].inst, rows[0].r), svg));
+
+// The marks, each linked to its row; marks drawn as one, within 6 px (as layoutLabels groups
+// their names), all carry the whole pile, best first, so hovering whichever lies on top lists
+// every row under it, as its name does (Tristan, 2026-10-06).
+function drawMarks(t, parts, pts, X, Y) {
+  const piles = [];
+  for (const p of pts) {
+    const x = X(p.cost.value), y = Y(p.e);
+    const near = piles.filter(g => g.some(q => Math.abs(X(q.cost.value) - x) <= 6 && Math.abs(Y(q.e) - y) <= 6));
+    piles.splice(0, piles.length, ...piles.filter(g => !near.includes(g)), [p, ...near.flat()]);
+  }
+  const pileOf = new Map(piles.flatMap(g => g.map(p => [p, [...g].sort((a, b) => a.e - b.e)])));
+  for (const p of [...pts].sort((a, b) => a.eligible - b.eligible))
+    parts.push(toRows(pileOf.get(p), mark(t, X(p.cost.value), Y(p.e), t.series[BOUNDS[p.r.bound_type]], p.eligible, p.cost.unit, null)));
+}
 function drawLabels(t, parts, inst, L) {
   const extent = l => (l.anchor === "start" ? [l.x, l.x + l.w] : [l.x - l.w, l.x]);
   for (const l of L.leaders) parts.push(`<path d="M${n(l.x)} ${n(l.y0)}V${n(l.y1)}" stroke="${t.muted}" stroke-width="1"/>`);
@@ -377,8 +392,7 @@ function drawInset(t, parts, inst, pts, front, r, box, nameOf, heading) {
     for (const p of front.slice(1)) d += `H${n(X(p.cost.value))}V${n(Y(p.e))}`;
     parts.push(`<path d="${d}" fill="none" stroke="${t.series[0]}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" opacity="0.7"/>`);
   }
-  for (const p of [...pts].sort((a, b) => a.eligible - b.eligible))
-    parts.push(mark(t, X(p.cost.value), Y(p.e), t.series[BOUNDS[p.r.bound_type]], p.eligible, p.cost.unit, rowHref(p.inst, p.r)));
+  drawMarks(t, parts, pts, X, Y);
   drawLabels(t, parts, inst, layoutLabels({ pts, named: pts, X, Y, front, left: r.x0 + 6, right: r.x1 - 6, top: r.y0 + 14, bottom: r.y1 - 4, nameOf, nameAll: true, avoid: tickBoxes }));
 }
 
@@ -454,8 +468,7 @@ function drawPanel(t, parts, inst, pts, { px, left, right, top, bottom, xLabel, 
     for (const p of front.slice(1)) d += `H${n(X(p.cost.value))}V${n(Y(p.e))}`;
     parts.push(`<path d="${d}" fill="none" stroke="${t.series[0]}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" opacity="0.7"/>`);
   }
-  for (const p of [...pts].sort((a, b) => a.eligible - b.eligible))
-    parts.push(mark(t, X(p.cost.value), Y(p.e), t.series[BOUNDS[p.r.bound_type]], p.eligible, p.cost.unit, rowHref(p.inst, p.r)));
+  drawMarks(t, parts, pts, X, Y);
   // Two boxes are lettered from the left, "a" over the box and "Box a, enlarged" on its inset.
   zooms.sort((a, b) => a.rect.x0 - b.rect.x0).forEach((z, i) => {
     const { rect: r, box, inBox, frame } = z, tag = zooms.length > 1 ? "ab"[i] : null;
