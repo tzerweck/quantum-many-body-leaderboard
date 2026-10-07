@@ -441,6 +441,33 @@ for (const k of Object.keys(NAMES).filter(k => k.endsWith(QMBL_RUN))) {
   NAMES[k + LADDER] = [name, [head + LADDER, ...slots].join("; "), ...(extra ? [extra] : [])];
 }
 
+// Pass 2026-10-07-records (SWEEP.md): the strings its generator writes.
+Object.assign(NAMES, {
+  "RBM+PP (6 x 6 sublattice structure)": ["RBM + PP", "6x6 sublattice structure; projected: momentum, spin parity, point group (simplified)"], // arXiv:2005.14142 note [73], 18 x 18
+  "CP-AFQMC (half-filled stripe, λ = 6, fully periodic, no pinning fields)": ["CP-AFQMC", "trial state: half-filled stripe, λ = 6", { family: "AFQMC / GFMC" }],
+  "CP-AFQMC (2/3-filled stripe, λ = 8, fully periodic, no pinning fields)": ["CP-AFQMC", "trial state: 2/3-filled stripe, λ = 8", { family: "AFQMC / GFMC" }],
+  "CP-AFQMC (filled stripe, λ = 12, fully periodic, no pinning fields)": ["CP-AFQMC", "trial state: filled stripe, λ = 12", { family: "AFQMC / GFMC" }],
+  // arXiv:2502.01264 Table IV: ResNet-v2 sign and amplitude networks; SLL = supervised-learning Lanczos,
+  // VMCL = the Lanczos superposition with its amplitude networks re-optimised by VMC
+  "NQS Lanczos SLL (p = 0)": ["ResNet", "sign and amplitude networks", { family: "CNN / ResNet" }],
+  "NQS Lanczos SLL (p = 1)": ["ResNet", `sign and amplitude networks, supervised-learning Lanczos, ${LANCZOS(1)}`, { family: "CNN / ResNet" }],
+  "NQS Lanczos SLL (p = 2)": ["ResNet", `sign and amplitude networks, supervised-learning Lanczos, ${LANCZOS(2)}`, { family: "CNN / ResNet" }],
+  "NQS Lanczos VMCL (p = 1, ANet1)": ["ResNet", `sign and amplitude networks, VMC-optimised Lanczos, ${LANCZOS(1)}`, { family: "CNN / ResNet" }],
+  "NQS Lanczos VMCL (p = 2, ANet1)": ["ResNet", `sign and amplitude networks, VMC-optimised Lanczos, ${LANCZOS(2)}`, { family: "CNN / ResNet" }],
+  "NQS Lanczos VMCL (p = 2, ANet1 & ANet2)": ["ResNet", `sign and amplitude networks, VMC-optimised Lanczos, ${LANCZOS(2)}, both amplitude networks optimised`, { family: "CNN / ResNet" }],
+  // arXiv:1112.3331 Table I: D = 9 tensors on the L x L torus, finite-size energies extrapolated linearly in 1/Dc^2
+  "TPS (D = 9) on the L x L torus, contraction dimension extrapolated": ["TPS", "extrapolated: χ → ∞ (contraction dimension Dc, linear in 1/Dc²)", { bond_dimension: 9, family: "tensor network" }],
+  // arXiv:2111.04623 Tables 1 and 2 (Tocchio's VMC code)
+  "VMC, stripe λ = 6 (Jastrow + backflow)": ["VMC", "stripe λ = 6 + Jastrow + backflow"],
+  "VMC, stripe λ = 8 (Jastrow + backflow)": ["VMC", "stripe λ = 8 + Jastrow + backflow"],
+  "VMC, uniform state (Jastrow + backflow)": ["VMC", "uniform + Jastrow + backflow"],
+});
+// arXiv:2406.12207 Tables I and III: the PEPS trial state's own energy and the fixed-node GFMC energy on it
+for (let D = 2; D <= 7; D++) {
+  NAMES[`PEPS (D = ${D}), trial state of the PEPS-GFMC approach`] = ["PEPS", "trial state of PEPS-GFMC", { bond_dimension: D, family: "tensor network" }];
+  NAMES[`PEPS (D = ${D}) + fixed-node GFMC`] = ["Fixed-node GFMC", `trial state: PEPS, D = ${D}`, { family: "AFQMC / GFMC" }];
+}
+
 // Systematic families of strings, matched when no exact entry exists.
 export const PATTERNS = [
   [/^DMRG \(chi = (\d+)\), QMBL cost-to-reproduce run$/, m => ["DMRG", "QMBL run", { bond_dimension: +m[1] }]],
