@@ -55,9 +55,26 @@ file byte for byte. **143 rows, 29 new instances; one record moves.**
     instances need an exact row first; the paper prints ED values for them.
   - Xu et al.'s Table I (edge pinning fields) and Table III (twist averaging).
   - Every quote of a number QMBL carries from its primary.
-- **Open (Tristan):**
-  - Naming for t' ≠ 0 instances, so the held Marino values and the t' literature can go in.
-  - Whether QMBL computes the 4x4 and 6x6 exact energies at J2 = 0.48, 0.52 and 0.55 itself.
+- **Second reading (qmbl-verify 2026-10-07, run `qmbl-runs/qmbl-verify-2026-10-07`, applied the same day; Tristan:
+  "apply all 6").**
+  - The reading: 7 reader groups, each with a skeptic; 223 proposals; skeptics upheld 135 of 135.
+  - No energy was misread.
+  - What the generator got wrong, and what now guards against it:
+    - Two titles were typed from memory and were wrong (Lin et al.'s and Xu et al.'s; 32 rows). A generator copies a
+      title from the source or Crossref, never from memory.
+    - "PEPS" in a method string matched the deterministic regex, so Lin et al.'s PEPS and GFMC energies counted as
+      deterministic: `sampled: true` on their 26 rows.
+    - The duplicate check cannot see a state that a group reuses under a new name: Wang-He-Lu's L = 10 p = 0 rows are
+      their earlier aCNN(C4v) values, so they are removed (`removals.mjs`).
+  - Method details fixed in `method_names.mjs`:
+    - the TPS fit is quadratic in 1/Dc²;
+    - Lin's PEPS are iPEPS tensors tiled on the torus;
+    - Li et al.'s label is the paper's own.
+  - Two energies take the finer digits the MLST text prints.
+  - Li et al.'s 30 CNN rows carry a note: their energies are means over a local-energy window.
+  - The t12 and t12_UV1V2 records stay, with the open boundary-sign question on the rows.
+- **Not pursued (Tristan, 2026-10-07):** naming for t' ≠ 0 instances, and QMBL-computed 4x4 and 6x6 exact energies at
+  J2 = 0.48, 0.52 and 0.55.
 
 ## The triangular pass (2026-09-28): Table 1 of arXiv:2602.02665 and the papers it quotes
 

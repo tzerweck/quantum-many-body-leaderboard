@@ -94,4 +94,14 @@ export const REMOVALS = [
     ruled: "2026-09-17 (Tristan): not a finite-size result",
     reason: "Table III of Roth, Szabo & MacDonald, PRB 108, 054410 (2023) fills this size from the thermodynamic-limit estimate of Iqbal et al., PRB 93, 144411 (2016) and the exact 36-site energy, assuming 1/L^3 finite-size scaling. Nobody computed this cluster.",
   })),
+  {
+    match: { instance: "J1J2/square_100_P_0.5", method: "NQS Lanczos SLL (p = 0)", energy: -198.2508 },
+    ruled: "2026-10-07 (Tristan): duplicate, the original paper's row stays (qmbl-verify 2026-10-07 (record-attempts pass), ruling 2)",
+    reason: "arXiv:2502.01264 Table IV 'SLL (p=0)' at L = 10 is the energy of its initial state, Ref. [35]'s aCNN(C4v) (-0.495627(6), arXiv:2308.09664 Table III row aCNN(C4v), column J2/J1 = 0.5), which QMBL carries from arXiv:2308.09664 itself.",
+  },
+  {
+    match: { instance: "J1J2/square_100_P_0.55", method: "NQS Lanczos SLL (p = 0)", energy: -193.396 },
+    ruled: "2026-10-07 (Tristan): duplicate, the original paper's row stays (qmbl-verify 2026-10-07 (record-attempts pass), ruling 2)",
+    reason: "arXiv:2502.01264 Table IV 'SLL (p=0)' at L = 10 is the energy of its initial state, Ref. [35]'s aCNN(C4v) (-0.483490(5), arXiv:2308.09664 Table III row aCNN(C4v), column J2/J1 = 0.55), which QMBL carries from arXiv:2308.09664 itself.",
+  },
 ];
