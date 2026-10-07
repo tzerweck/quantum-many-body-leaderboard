@@ -90,11 +90,39 @@ function mark(t, x, y, color, filled, unit, href) {
 // (2026-09-23). The colour says the kind of number.
 const markName = r => shortLabel({ ...r, method_detail: undefined, compute: undefined, bound_type: "variational", defect: undefined });
 
+// The figures whose energy axis is broken in two, the few high energies above and the crowd
+// below (Tristan, 2026-10-07, after option D of the paper's figure 2): picked by eye from the
+// 21 on which breaking it named the marks better or spread a crowd; on the others one scale
+// reads as well. Names as costFigureName, flopsFigureName and paramsFigureName give them.
+const BROKEN = new Set([
+  "cost/Heisenberg--triangular_36_P", "cost/J1J2--square_36_P_0.5", "flops/J1J2--square_36_P_0.5",
+  "params/Heisenberg--square_36_P", "params/Hubbard--rectangular-4x16_64_P_28_8", "params/J1J2--square_100_P_0.4",
+  "params/J1J2--square_100_P_0.5", "params/J1J2--square_256_P_0.5", "params/J1J2--square_36_P_0.5",
+]);
+const brokenAxes = new Map();
+
 // An instance's own figure: every mark named in place where it can be. Where two or more
 // marks still find no room, their region is boxed and drawn again, enlarged, in an inset in
 // the plot's top right corner, a second crowd's in the top left (Tristan, 2026-09-29: no
-// second panel under the plot). Returns the y the footnote starts at.
+// second panel under the plot). A figure in BROKEN takes, instead, the broken axis that names
+// its marks best - fewest numbered, then fewest names on lines, then the shortest lines, then
+// the most spread up the plot - and no inset. Returns the y the footnote starts at.
 function drawInstance(t, parts, inst, pts, g) {
+  if (BROKEN.has(g.name)) {
+    if (!brokenAxes.has(g.name)) {
+      const clashes = labelClashes.length;
+      const runs = brokenCandidates(pts.map(p => p.e), g.top, g.bottom).map(axis => {
+        const stats = {};
+        drawPanel(t, [], inst, pts, { ...g, nameAll: true, axis, stats });
+        return { axis, ...stats };
+      });
+      labelClashes.length = clashes;   // the trial layouts' clashes are not the figure's
+      runs.sort((a, b) => a.keyed - b.keyed || a.leaders - b.leaders || a.length - b.length || b.axis.spread - a.axis.spread);
+      brokenAxes.set(g.name, runs[0]?.axis ?? null);
+    }
+    const axis = brokenAxes.get(g.name);
+    if (axis) { drawPanel(t, parts, inst, pts, { ...g, nameAll: true, axis }); return g.bottom + 70; }
+  }
   const trial = [], crowd = [];
   drawPanel(t, trial, inst, pts, { ...g, nameAll: true, keyOut: crowd });
   if (crowd.length >= 2) {
@@ -396,11 +424,69 @@ function drawInset(t, parts, inst, pts, front, r, box, nameOf, heading) {
   drawLabels(t, parts, inst, layoutLabels({ pts, named: pts, X, Y, front, left: r.x0 + 6, right: r.x1 - 6, top: r.y0 + 14, bottom: r.y1 - 4, nameOf, nameAll: true, avoid: tickBoxes }));
 }
 
+// An energy axis: one scale, or two parts with a gap between them, the high energies above and
+// the low ones below, each on its own scale and ticks. A part's outer edge is a tick, its inner
+// edge 10 px past its nearest mark; the two parts never share an energy.
+const GAP = 18, INNER = 10;
+const yOf = (g, e) => g.bottom - ((e - g.e0) / (g.e1 - g.e0)) * (g.bottom - g.top);
+const axisY = segs => e => yOf(segs.find(g => e >= g.lo) ?? segs.at(-1), e);
+function oneScale(es, top, bottom) {
+  const span = Math.max(Math.max(...es) - Math.min(...es), 1e-6);
+  const step = niceStep(span / 4);
+  const e0 = Math.floor((Math.min(...es) - span * 0.08) / step) * step;
+  const e1 = Math.ceil((Math.max(...es) + span * 0.08) / step) * step;
+  return { segs: [{ e0, e1, step, top, bottom, lo: -Infinity, ticked: true }], gap: null };
+}
+// A part: its marks lo..hi in the band y0..y1, at least minPerPx energy to the pixel (so a part
+// is never enlarged past what its marks need, nor past the cap given), its outer edge on a tick,
+// its inner edge 10 px past its nearest mark (marks the cap holds together are centred), and
+// two ticks or more.
+function part(lo, hi, y0, y1, outerTop, minPerPx) {
+  const h = y1 - y0, perPx = Math.max(((hi - lo) * 1.08) / (h - INNER), minPerPx);
+  const pad = Math.max(INNER, (h - (hi - lo) / perPx) / 2);
+  let step = niceStep((h * perPx) / Math.max(1, Math.round(h / 60)));
+  for (let k = 0; k < 12; k++, step = niceStep(step * 0.4)) {
+    const g = outerTop
+      ? (e1 => ({ e1, e0: (h * lo - pad * e1) / (h - pad) }))(Math.ceil((lo - pad * perPx + h * perPx) / step) * step)
+      : (e0 => ({ e0, e1: (h * hi - pad * e0) / (h - pad) }))(Math.floor((hi + pad * perPx - h * perPx) / step) * step);
+    if (Math.floor(g.e1 / step + 1e-9) - Math.ceil(g.e0 / step - 1e-9) >= 1) return { ...g, step, top: y0, bottom: y1 };
+  }
+  return null;
+}
+// How far apart the marks lie up the plot: each mark's distance to its nearest, up to 24 px.
+const spreadOf = (es, Y) => { const ys = es.map(Y); return ys.reduce((a, y, i) => a + Math.min(24, ...ys.map((z, j) => (j === i ? 24 : Math.abs(y - z)))), 0); };
+// The broken axes worth laying out: at each split with three marks or more below it, the upper
+// part a quarter to 45% of the height and never enlarged more than the lower one (a lone mark
+// up there would take any scale); the eight that spread the marks most.
+function brokenCandidates(es, top, bottom) {
+  const plotH = bottom - top, span = Math.max(...es) - Math.min(...es), out = [];
+  const levels = [...new Set(es)].sort((a, b) => a - b);
+  for (let k = 1; k < levels.length; k++) {
+    const low = es.filter(e => e <= levels[k - 1]), high = es.filter(e => e >= levels[k]);
+    if (low.length < 3) continue;
+    for (const fT of [0.25, 0.32, 0.38, 0.45]) {
+      const hT = Math.round(fT * (plotH - GAP)), hB = plotH - GAP - hT;
+      const bt = part(Math.min(...low), Math.max(...low), top + hT + GAP, bottom, false, (0.02 * span) / hB);
+      const tp = bt && part(Math.min(...high), Math.max(...high), top, top + hT, true, (bt.e1 - bt.e0) / hB);
+      if (!tp || !(tp.e0 > bt.e1)) continue;
+      const segs = [{ ...tp, lo: tp.e0 }, { ...bt, lo: -Infinity }];
+      out.push({ segs, gap: { y0: top + hT, y1: top + hT + GAP }, spread: spreadOf(es, axisY(segs)) });
+    }
+  }
+  return out.sort((a, b) => b.spread - a.spread).slice(0, 8);
+}
+// The break: two short slashes across each end of the gap between the parts.
+function breakMarks(t, left, right, gap) {
+  const yc = (gap.y0 + gap.y1) / 2;
+  return [left, right].map(x => [-2.5, 2.5].map(dy =>
+    `<path d="M${n(x - 6)} ${n(yc + dy + 3)}L${n(x + 6)} ${n(yc + dy - 3)}" stroke="${t.muted}" stroke-width="1.2" stroke-linecap="round"/>`).join("")).join("");
+}
+
 // A panel: axes, frontier, marks and names. With `zoom`, the marks that found no room, their
 // region is boxed and its marks are named in an inset instead; returns false when the plot
-// has no room for one, so the caller keeps the panel without it.
-function drawPanel(t, parts, inst, pts, { px, left, right, top, bottom, xLabel, title, nameAll = false, zoom = null, keyOut = null }) {
-  const plotH = bottom - top;
+// has no room for one, so the caller keeps the panel without it. With `axis`, the energy axis
+// given (one scale otherwise); with `stats`, how its names came out.
+function drawPanel(t, parts, inst, pts, { px, left, right, top, bottom, xLabel, title, nameAll = false, zoom = null, keyOut = null, axis = null, stats = null }) {
   const rec = recordOf(inst), recE = rec ? rec.energy / perSiteDivisor(inst) : null;
   const front = frontierOf(pts);
   const nameOf = p => markName(p.r) + (p.cost.measuredByQmbl ? " (cost measured by QMBL)" : "");
@@ -410,11 +496,10 @@ function drawPanel(t, parts, inst, pts, { px, left, right, top, bottom, xLabel, 
   const x0 = 10 ** Math.floor(log(Math.min(...cs)) - 0.5), x1 = 10 ** Math.ceil(log(Math.max(...cs)) + 0.5);
   const X = logScale(x0, x1, left, right);
   const es = pts.map(p => p.e);
-  const span = Math.max(Math.max(...es) - Math.min(...es), 1e-6);
-  const step = niceStep(span / 4);
-  const e0 = Math.floor((Math.min(...es) - span * 0.08) / step) * step;
-  const e1 = Math.ceil((Math.max(...es) + span * 0.08) / step) * step;
-  const Y = e => bottom - ((e - e0) / (e1 - e0)) * plotH;
+  axis ??= oneScale(es, top, bottom);
+  const Y = axisY(axis.segs);
+  const { e0, e1 } = axis.segs.at(-1);   // the zoom below runs on one scale only
+  const gapBox = axis.gap ? [{ x0: left - 1, x1: right + 1, y0: axis.gap.y0, y1: axis.gap.y1 }] : [];
   // The boxes: the marks to zoom on, in clusters of marks less than 80 px apart (a lone one
   // stays in the plot), each with a margin and grown until every mark it touches is one of its
   // own; boxes that meet merge. The rightmost gets an inset in the top right corner, the next
@@ -455,17 +540,27 @@ function drawPanel(t, parts, inst, pts, { px, left, right, top, bottom, xLabel, 
   }
   if (title) parts.push(text(px, top - 14, title, { size: 12.5, fill: t.ink, weight: 600 }));
   parts.push(text(right, top - 14, perSiteLabel(inst), { size: 9.5, fill: t.muted, anchor: "end" }));
-  const decimals = Math.max(0, -Math.floor(Math.log10(step)));
-  for (let i = 0; i <= Math.round((e1 - e0) / step); i++) {
-    const v = e0 + i * step;
-    parts.push(hline(left, right, Y(v), t.grid));
-    parts.push(text(left - 6, Y(v) + 4, v.toFixed(decimals).replace("-", "−"), { size: 10, fill: t.muted, anchor: "end", nums: true }));
+  // Ticks part by part; one scale's run from edge to edge, a broken part's at its step's multiples.
+  for (const g of axis.segs) {
+    const { step } = g, decimals = Math.max(0, -Math.floor(Math.log10(step)));
+    const first = g.ticked ? 0 : Math.ceil(g.e0 / step - 1e-9), last = g.ticked ? Math.round((g.e1 - g.e0) / step) : Math.floor(g.e1 / step + 1e-9);
+    for (let i = first; i <= last; i++) {
+      const v = g.ticked ? g.e0 + i * step : i * step, y = yOf(g, v);
+      parts.push(hline(left, right, y, t.grid));
+      parts.push(text(left - 6, y + 4, v.toFixed(decimals).replace("-", "−"), { size: 10, fill: t.muted, anchor: "end", nums: true }));
+    }
   }
+  if (axis.gap) parts.push(breakMarks(t, left, right, axis.gap));
   for (let k2 = Math.ceil(log(x0)); k2 <= Math.floor(log(x1)); k2++)
     parts.push(text(X(10 ** k2), bottom + 16, pow10(k2), { size: 10, fill: t.muted, anchor: "middle", nums: true }));
+  // The frontier, interrupted where it crosses the gap of a broken axis.
   if (front.length > 1) {
     let d = `M${n(X(front[0].cost.value))} ${n(Y(front[0].e))}`;
-    for (const p of front.slice(1)) d += `H${n(X(p.cost.value))}V${n(Y(p.e))}`;
+    front.slice(1).forEach((p, i) => {
+      d += `H${n(X(p.cost.value))}`;
+      if (axis.gap && Y(front[i].e) < axis.gap.y0 && Y(p.e) > axis.gap.y1) d += `V${n(axis.gap.y0)}M${n(X(p.cost.value))} ${n(axis.gap.y1)}`;
+      d += `V${n(Y(p.e))}`;
+    });
     parts.push(`<path d="${d}" fill="none" stroke="${t.series[0]}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" opacity="0.7"/>`);
   }
   drawMarks(t, parts, pts, X, Y);
@@ -481,8 +576,9 @@ function drawPanel(t, parts, inst, pts, { px, left, right, top, bottom, xLabel, 
   // all piles the labels on each other.
   const hide = new Set(zooms.flatMap(z => z.inBox));
   const named = [...new Set([...front, ...(nameAll ? pts : [])])].filter(p => !hide.has(p));
-  const L = layoutLabels({ pts, named, X, Y, front, left, right, top, bottom, nameOf, nameAll, avoid: zooms.flatMap(z => [z.rect, z.frame, ...(z.tagRect ? [z.tagRect] : [])]) });
+  const L = layoutLabels({ pts, named, X, Y, front, left, right, top, bottom, nameOf, nameAll, avoid: [...zooms.flatMap(z => [z.rect, z.frame, ...(z.tagRect ? [z.tagRect] : [])]), ...gapBox] });
   keyOut?.push(...L.keyed.map(k => k.p));
+  if (stats) Object.assign(stats, { keyed: L.keyed.length, leaders: L.leaders.length, length: L.leaders.reduce((a, l) => a + l.y1 - l.y0, 0) });
   // An overview label with no free spot is nudged down only past labels it actually overlaps,
   // horizontally as well as vertically.
   const labels = L.lines.sort((a, b) => a.y - b.y);
@@ -578,7 +674,7 @@ for (const { inst, pts } of hoursPanels) {
     const lg = legend(t, HOURS_LEGEND(t), h.bottom + 34);
     const top = lg.bottom + 36, bottom = top + plotHeight(pts), left = PAD + 66, right = W - PAD - 8;
     const parts = [h.svg, lg.svg];
-    const fn = footnote(t, HOURS_FOOTER(pts), drawInstance(t, parts, inst, pts, { px: PAD, left, right, top, bottom, xLabel: "hours, as reported", title: null }));
+    const fn = footnote(t, HOURS_FOOTER(pts), drawInstance(t, parts, inst, pts, { px: PAD, left, right, top, bottom, xLabel: "hours, as reported", title: null, name }));
     parts.push(fn.svg);
     return doc(t, fn.bottom + 24, title, describeHours([{ inst, pts }]), parts);
   });
@@ -636,7 +732,7 @@ for (const { inst, pts } of flopsPanels) {
     const lg = legend(t, FLOPS_LEGEND(t), h.bottom + 34);
     const top = lg.bottom + 36, bottom = top + plotHeight(pts), left = PAD + 66, right = W - PAD - 8;
     const parts = [h.svg, lg.svg];
-    const fn = footnote(t, FLOPS_FOOTER(pts), drawInstance(t, parts, inst, pts, { px: PAD, left, right, top, bottom, xLabel: "FLOPs, estimated", title: null }));
+    const fn = footnote(t, FLOPS_FOOTER(pts), drawInstance(t, parts, inst, pts, { px: PAD, left, right, top, bottom, xLabel: "FLOPs, estimated", title: null, name }));
     parts.push(fn.svg);
     return doc(t, fn.bottom + 24, title, describeFlops([{ inst, pts }]), parts);
   });
@@ -678,7 +774,7 @@ for (const { inst, pts } of paramPanels) {
     const lg = legend(t, PARAMS_LEGEND(t), h.bottom + 34);
     const top = lg.bottom + 36, bottom = top + plotHeight(pts), left = PAD + 66, right = W - PAD - 8;
     const parts = [h.svg, lg.svg];
-    const fn = footnote(t, PARAMS_FOOTER, drawInstance(t, parts, inst, pts, { px: PAD, left, right, top, bottom, xLabel: "variational parameters", title: null }));
+    const fn = footnote(t, PARAMS_FOOTER, drawInstance(t, parts, inst, pts, { px: PAD, left, right, top, bottom, xLabel: "variational parameters", title: null, name }));
     parts.push(fn.svg);
     return doc(t, fn.bottom + 24, title, describeParams([{ inst, pts }]), parts);
   });
@@ -688,3 +784,5 @@ console.log(`${OUT}/: ${written.length + own.written.length} files (${hoursPanel
   `energy vs estimated FLOPs: ${flopsPanels.length} instances, ${flopsPanels.reduce((a, p) => a + p.pts.length, 0)} rows; ` +
   `energy vs parameters: ${paramPanels.length} instances, ${paramPanels.reduce((a, p) => a + p.pts.length, 0)} rows)`);
 if (labelClashes.length) console.log(`LABEL CLASHES with the frontier line (${labelClashes.length}): ${labelClashes.join("; ")}`);
+const unbroken = [...BROKEN].filter(f => !brokenAxes.get(f));
+console.log(`broken energy axis on ${BROKEN.size - unbroken.length} figures` + (unbroken.length ? `; NOT BROKEN (no such figure, or no break fits): ${unbroken.join(", ")}` : ""));
