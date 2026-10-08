@@ -19,7 +19,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
-import { perSiteDivisor, perSiteLabel, isSampled, recordEligible, boundLabel, stochasticExact, publishedMethod, methodLabel } from "./units.mjs";
+import { perSiteDivisor, perSiteLabel, recordEligible, boundLabel, stochasticExact, publishedMethod, methodLabel } from "./units.mjs";
 import { collect, recordOf, summarize, rowId } from "./summary.mjs";
 import { THEMES, W } from "./chart.mjs";
 import { citeRef, paperYear } from "./cite.mjs";
@@ -155,9 +155,9 @@ const BOUND_LABEL = {
   null: "Not yet classified",
 };
 const BOUND_NOTE = {
-  variational: "Where the instance is not solved, the record is the lowest eligible energy in this group; where it is, the lowest eligible energy here is the best variational bound and the closest challenger to the exact one.",
-  projected: "Variational only within a constraint: fixed-node, constrained-path, GFMC on a trial state. Node- or constraint-dependent, so not cleanly comparable to each other or to the group above, and never the record.",
-  extrapolated: "Zero-variance, bond-dimension or Trotter-error extrapolations. Not a bound: no ansatz ever reached the number, so it cannot hold the record.",
+  variational: "Where the instance is not solved, the record is the lowest unflagged energy in this group or among the projected and extrapolated ones, with or without an error bar; where it is solved, the exact energy is the record and the lowest of these is the closest challenger.",
+  projected: "Variational only within a constraint: fixed-node, constrained-path, GFMC on a trial state. Node- or constraint-dependent, so not cleanly comparable to each other or to strict bounds. Like any unflagged energy, one holds the record where it is the lowest on an unsolved instance.",
+  extrapolated: "Zero-variance, bond-dimension or Trotter-error extrapolations. Not a bound: no ansatz reached the number itself. Like any unflagged energy, one holds the record where it is the lowest on an unsolved instance.",
   exact: "Exact diagonalization, an exact solution, or sign-problem-free QMC where that is established: the answer, not a claim about it, and therefore the record wherever one exists. QMC is exact only within its statistical error bar, which it must state, and its rows read exact (stochastic); an exact diagonalization outranks it. A diagonalization resolved by symmetry sector is listed for the ground state's sector only; the lowest energies of the other sectors are the instance's spectrum, in its JSON, and hold nothing.",
   null: "The method string does not say whether the energy is sign-problem-free or constrained, so no bound_type could be assigned without guessing.",
 };
@@ -302,7 +302,7 @@ function relabelNote(inst) {
 // light one and the stylesheet recolours it in dark mode (FIG_DARK). One entry per figure.
 const FIGURES = [
   ["size-vs-accuracy", "The best published energies, by system size",
-    "The energies on instances with an exact ground-state energy, placed by its relative gap to it so that different Hamiltonians share one axis; a better energy is lower. Colour is the kind of number; filled marks can hold a record, hollow ones cannot, and a slashed mark is a flagged row."],
+    "The energies on instances with an exact ground-state energy, placed by its relative gap to it so that different Hamiltonians share one axis; a better energy is lower. Colour is the kind of number, and a slashed mark is a flagged row."],
   ["size-vs-accuracy-by-family", "The best energies by system size, one panel per method family",
     "Each panel colours one family's energies over all the others in grey and joins the family's best energy at each size."],
 ];
@@ -783,14 +783,18 @@ function searchIndex(inst, name) {
 // is shown because 62% of rows carry one (2026-09-16); Var(E) and the V-score, on 36%, stay
 // on the instance page. The Table names a method alone; its detail, bond dimension and
 // sector are on the instance page (Tristan, 2026-09-29).
-// Distance to the record, per site: 0 on the record, the gap above it for an unflagged
-// variational row, n/a elsewhere (Tristan, 2026-09-28). The Table's opened row and the
-// instance page both show it.
+// Distance to the record, per site: 0 on the record, the gap to it for an unflagged row of
+// any kind but exact, n/a elsewhere (Tristan, 2026-09-28; every such kind since 2026-10-08).
+// The Table's opened row and the instance page both show it. Only a solved instance can
+// have such a row below its record - an extrapolation can overshoot the exact energy - and
+// that distance is shown negative.
 function distanceCell(r, inst) {
   const rec = recordOf(inst);
   if (r === rec) return "0";
-  if (!rec || r.bound_type !== "variational" || r.defect) return '<span class="muted">n/a</span>';
-  return esc(gapAbove(rec, r, perSiteDivisor(inst) ?? 1, quoteRow(rec, inst).decimals).replace(/^\+/, ""));
+  if (!rec || !recordEligible(r)) return '<span class="muted">n/a</span>';
+  const f = perSiteDivisor(inst) ?? 1, decimals = quoteRow(rec, inst).decimals;
+  if (r.energy < rec.energy) return esc(`−${gapAbove(r, rec, f, decimals).replace(/^\+/, "")}`);
+  return esc(gapAbove(rec, r, f, decimals).replace(/^\+/, ""));
 }
 
 function allRows(inst) {
@@ -817,12 +821,11 @@ function allRows(inst) {
 }
 
 // The Table's energy column: the record, or on an instance without one the lowest unflagged
-// variational or exact row. Whether it is a record, and why not, shows when the row opens
+// row, else the lowest row. Whether it is a record, and why not, shows when the row opens
 // (Tristan, 2026-09-29).
 function bestRow(inst) {
   const sorted = [...inst.rows].sort((a, b) => a.energy - b.energy);
-  return sorted.find(r => !r.defect && (r.bound_type === "variational" || r.bound_type === "exact"))
-    ?? sorted.find(r => !r.defect) ?? sorted[0];
+  return sorted.find(r => !r.defect) ?? sorted[0];
 }
 
 function instancesPage() {
@@ -963,8 +966,6 @@ function rowTable(rows, inst) {
       r.provenance === "secondary" ? '<span class="badge">quoted from another paper</span>' : "",
       r.peer_reviewed === true ? '<span class="badge">peer reviewed</span>' : "",
       r.peer_reviewed === false ? '<span class="badge">preprint</span>' : "",
-      !r.defect && r.bound_type === "variational" && !recordEligible(r) && isSampled(r) && r.sigma == null
-        ? '<span class="badge">ineligible: sampled, no error bar</span>' : "",
     ].filter(Boolean).join(" ");
     const { sigma } = perSite(r, inst);
     return `<tr id="${rowId(inst, r)}" class="${rec ? "is-record" : ""}${r.defect ? " is-flagged" : ""}">
@@ -1027,7 +1028,7 @@ function instancePage(inst) {
           ? stochasticExact(rec)
             ? "exact (stochastic) energy: sign-problem-free QMC, exact within its error bar, and the state of the art on this instance"
             : "exact energy: the instance is solved, and this is the state of the art on it"
-          : "lowest eligible strict variational bound"}
+          : `lowest unflagged energy published, ${{ variational: "a strict variational bound", projected: "a projected estimate", extrapolated: "an extrapolation, not a bound" }[rec.bound_type]}`}
           (<a href="${RULES}#6-records-and-ties">rules &sect;6</a>)</p>
       </div>`
     : `<div class="record-box none">
@@ -1067,7 +1068,7 @@ ${recordBox}
 
 <section>
   <h2>Every published energy</h2>
-  <p>Grouped by what the number is. Ranking happens only inside the first group.</p>
+  <p>Grouped by what the number is. Where the instance is not solved, the lowest unflagged energy of any group is the record.</p>
   ${groups}
 </section>
 
@@ -1099,7 +1100,7 @@ ${verified ? `<section><h2>How these numbers were read</h2>
 
 // --------------------------------------------------------------------- contribute page
 function contributePage() {
-  const b = summary.blocked_on_sigma;
+  const b = summary.sampled_no_sigma;
   const costed = instances.flatMap(i => i.rows).filter(r => r.compute?.gpu_hours != null || r.compute?.cpu_core_hours != null || r.compute?.parameters != null).length;
   const body = `
 <h2>Open an issue</h2>
@@ -1111,9 +1112,9 @@ function contributePage() {
   <li><b>A number is wrong, or attributed to the wrong paper.</b> Name the instance and what it
   should be. Rows are corrected in place and the history stays in git.</li>
   <li><b>An error bar we could not find.</b> ${b.rows} sampled energies across ${b.instances}
-  instances are listed but rank for nothing because no error bar was found in the source we read,
-  and ${b.would_take_record} of them sit below their instance's current record. One message closes
-  that (<a href="${RULES}#6-records-and-ties">rules &sect;6</a>).</li>
+  instances are listed without one, because none was found in the source we read. They rank like
+  any other row; with an error bar, results that agree within it share a rank
+  (<a href="${RULES}#6-records-and-ties">rules &sect;6</a>).</li>
   <li><b>An objection to a row.</b> Wrong symmetry sector, a mis-declared <code>bound_type</code>,
   an error bar with no autocorrelation correction: these are technical disputes with a process,
   <a href="${RULES}#10-pending-confirmed-objections">rules &sect;10</a>.</li>
@@ -1171,8 +1172,8 @@ function llmsTxt() {
     "error bar, the method, the primary reference, and a `bound_type`: strict variational bound,",
     "projected/fixed-node estimate, zero-variance extrapolation, or numerically exact (exact (stochastic)",
     "for sign-problem-free QMC, which is exact within its stated error bar). An exact",
-    "energy is the record wherever one exists; otherwise only a strict variational bound can hold",
-    "it. Energies are stored as totals in VarBench's convention",
+    "energy is the record wherever one exists; otherwise the lowest energy that is not flagged",
+    "holds it, of any kind and with or without an error bar. Energies are stored as totals in VarBench's convention",
     "and quoted per site; the conversion is in DATA.md. Individual energies must be cited to the",
     "primary paper named on the row, not to this site.",
     "",

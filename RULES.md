@@ -42,8 +42,9 @@ A missing field never excludes a row. Only §6 and §7 govern what can hold a re
 
 ## 4. `bound_type`
 
-Every row declares exactly one. **This is the field that keeps the table honest**, because
-energies from different classes are not comparable and mixing them manufactures false records.
+Every row declares exactly one. **This is the field that keeps the table honest**: energies
+from different classes are different claims, and since a record can be of any class but a
+flagged row (6), the class beside a record is how a reader knows what was claimed.
 
 - **`variational`**: a strict variational upper bound on the ground-state energy in the
   stated sector. VMC, DMRG and MPS at finite bond dimension, PEPS, NQS, VQE and other
@@ -70,8 +71,9 @@ Worked cases that fixed the boundaries:
 - *p-step Lanczos stays variational.* A Lanczos step applied to a variational state is a
   variational improvement, not a projection.
 - *Zero-variance extrapolation is its own class.* Chen & Heyl report both a variational
-  −0.4976921(4) and an extrapolated −0.497715(9) on 10x10 J1-J2. Ranking them in one
-  column would award the record to a number no wave function achieved.
+  −0.4976921(4) and an extrapolated −0.497715(9) on 10x10 J1-J2: an energy a wave function
+  reached, and an estimate of the ground-state energy. Both can hold a record since
+  2026-10-08 (6), and the class says which kind does.
 - *Stochastic exact says so.* An energy with an error bar is an estimate, so a QMC row is not
   exact in the sense a diagonalization is. It stays `exact` - unbiased, and on most of its
   instances the most precise number there is - but its label reads `exact (stochastic)` and
@@ -107,13 +109,22 @@ Any submitted number is converted by the loader, never by hand.
 ## 6. Records and ties
 
 The record for an instance is its **state-of-the-art energy**: the `exact` energy where the
-instance is solved, otherwise the **lowest eligible `variational` energy**. `projected` and
-`extrapolated` rows are displayed alongside but never hold it.
+instance is solved, otherwise the **lowest energy of any other kind** - `variational`,
+`projected` or `extrapolated`, with or without an error bar - that is not flagged (6.1). Every
+published result counts. The `bound_type` beside the record says what kind of number holds it
+(4): a record held by an extrapolation is an estimate of the ground-state energy, not an
+energy any state reached.
+
+Until 2026-10-08 only a `variational` energy could hold the record, and a sampled one only
+with its `sigma`; `projected` and `extrapolated` rows and sampled rows without an error bar
+were listed but held nothing, and 47 instances had no record at all. Tristan dropped both
+conditions on 2026-10-08, so that no published result is listed as unable to hold a record.
 
 - **A solved instance has a record, and exact diagonalization holds it.** The exact energy is
-  the answer, so it is the state of the art on that instance by definition; the variational
-  rows on it are ranked below it by their distance to it, and the best of them is the closest
-  challenger, not the record. Until 2026-09-16 this document said the opposite ("`exact` rows
+  the answer, so it is the state of the art on that instance by definition; every other row
+  on it is ranked by its distance to it, and the lowest one at or above it is the closest
+  challenger, not the record. An extrapolation can overshoot the exact energy; it then sits
+  below the record and still does not hold it. Until 2026-09-16 this document said the opposite ("`exact` rows
   never hold it") and the table reported solved instances as having "nothing to compete for".
   That was inherited from VarBench, which uses exact energies as references for the V-score
   rather than as results, and it misread ED as something other than the state of the art.
@@ -130,18 +141,18 @@ instance is solved, otherwise the **lowest eligible `variational` energy**. `pro
   other 47 are not rows but the instance's `spectrum` (rulings of 2026-09-16 and 2026-09-30;
   [DATA.md](DATA.md#the-lowest-energy-of-each-symmetry-sector-spectrum)), where they hold
   nothing. `groundStateExact` in `scripts/units.mjs` draws the line.
-- Rows whose error bars overlap at **2 sigma** share the rank.
-- **A sampled energy must state its `sigma` to be eligible.** `sigma` must also state how it
-  was estimated. An error bar that ignores autocorrelation understates by around an order of
-  magnitude, which is enough to manufacture a record. Report the blocking or binning analysis,
-  or the raw chain. A sampled row without `sigma` is listed and is eligible for nothing.
-- **A deterministic energy needs no `sigma`.** DMRG at a stated bond dimension, exact
+- Rows whose error bars overlap at **2 sigma** share the rank. A row without `sigma` is
+  compared by its energy alone.
+- **An error bar is asked for, not required.** A sampled row without `sigma` ranks and can
+  hold the record like any other (Tristan, 2026-10-08). Where `sigma` is given it must state
+  how it was estimated: an error bar that ignores autocorrelation understates by around an
+  order of magnitude, which is enough to make or break a tie. Report the blocking or binning
+  analysis, or the raw chain.
+- **A deterministic energy has no `sigma` to give.** DMRG at a stated bond dimension, exact
   diagonalization, statevector circuits and tensor-network contractions carry no statistical
-  error, so there is no error bar to withhold; their convergence control is the bond dimension
-  (`compute.bond_dimension`) or the truncation error (`method_detail`). 231 of the 942
-  variational rows are of this kind (2026-10-02), and 26 of the 107 records held by a
-  variational bound belong to deterministic rows without `sigma`; requiring one of them would
-  vacate those records over a field that cannot exist.
+  error; their convergence control is the bond dimension (`compute.bond_dimension`) or the
+  truncation error (`method_detail`). 231 of the 942 variational rows are of this kind
+  (2026-10-02).
 - **Sampled or deterministic is read from the source, per row** (Tristan, 2026-09-30). The
   method's name does not settle it. A finite PEPS whose energy is a Monte Carlo average over
   spin configurations, an MPS-RNN, a PEPS + CNN state or a Gutzwiller-projected mean-field
@@ -193,12 +204,13 @@ The headline is **records held**: the number of instances where a group holds th
 There is no cross-instance score. The V-score is shown where `energy_variance` is present
 and is never ranked on.
 
-**Aggregates over methods count only records held by a `variational` bound.** The medal
-table, records by ansatz family and records by year are statements about ansätze competing;
-an exact energy is the answer rather than an ansatz, and counting it would hand the most
+**Aggregates over methods count only records on unsolved instances.** The medal table,
+records by ansatz family and records by year are statements about methods competing; an
+exact energy is the answer rather than a method's claim, and counting it would hand the most
 records to whoever ran exact diagonalization on the most small instances. The per-instance
 record is still the exact energy where one exists (6); the aggregates simply say over which
-instances they are computed.
+instances they are computed. A record held by a projected or extrapolated energy counts for
+its method like any other (since 2026-10-08).
 
 ## 8. Provenance
 
@@ -343,7 +355,7 @@ the defect block on each row. A diagnosis is written for the rows it was establi
 attached to those rows alone: keying it by flag name put this one on five unrelated rows
 until 2026-09-21.
 
-This is why §6 requires a stated sigma *and* how it was estimated, and why §10 admits
+This is why §6 asks how a stated sigma was estimated, and why §10 admits
 "violates the variational principle against a known exact reference" as grounds for
 objection. A leaderboard that ranked on energy alone, with no exact-reference check, would
 have carried all three as records.
@@ -365,12 +377,12 @@ Three things make this the sharpest case in this document:
    an upper bound too, so an energy below it is not evidence of error; ordinarily it is just
    a better state. There is no exact reference at 108 sites. The refutation had to come from
    the *sampler*, which is why §10 now admits non-ergodic sampling as its own ground.
-2. **The instance ends with no record at all.** There is no exact energy at 108 sites, its only
+2. **The record is an extrapolation.** There is no exact energy at 108 sites, its only
    `variational` row is flagged, and the DMRG row is `extrapolated`: Depenbrock et al. state
    their energies are "extrapolated in the truncation error of single-site DMRG", which lies
-   below any energy an MPS achieved.
-   "No eligible record" is the correct answer here, and a table ranking on energy alone would
-   instead have printed a refuted number as the record.
+   below any energy an MPS achieved. Until 2026-10-08 that left the instance with no record;
+   since then the extrapolation holds it (6), labelled as one. Without the flag, a table
+   ranking on energy would have printed a refuted number as the record.
 3. **DMRG is not one `bound_type`.** At a *stated bond dimension* it is a strict variational
    bound; *extrapolated in the truncation error* it is not. The same method name maps to two
    different classes depending on one sentence in the methods section.

@@ -37,8 +37,8 @@ export function rowId(inst, r) {
 }
 
 // The record for an instance is its state-of-the-art energy (RULES.md 6): the exact
-// energy where the instance is solved, otherwise the lowest eligible variational bound.
-// Eligibility itself lives in units.mjs and is not restated here - two copies of that
+// energy where the instance is solved, otherwise the lowest unflagged energy of any other
+// kind, with or without an error bar. Eligibility itself lives in units.mjs and is not restated here - two copies of that
 // rule would drift, and the one in units.mjs is what records.mjs already rules by.
 // Returns null where no row qualifies: that is a real state of the table, not an
 // error, and the README reports how often it happens.
@@ -48,7 +48,7 @@ export function rowId(inst, r) {
 // energies as references for the V-score rather than as results, and it read as if
 // exact diagonalization were not the state of the art on the instances it solves.
 export function recordOf(inst) {
-  return exactRecordOf(inst) ?? variationalRecordOf(inst);
+  return exactRecordOf(inst) ?? lowestEnergyOf(inst);
 }
 
 // The most precise eligible exact row, not the lowest: exact rows are estimates of one
@@ -62,10 +62,10 @@ export function exactRecordOf(inst) {
     .sort((a, b) => (a.sigma ?? 0) - (b.sigma ?? 0) || a.energy - b.energy)[0] ?? null;
 }
 
-// Lowest eligible variational bound: the record where no exact row exists, and the
-// best variational number - the closest challenger - where one does. The medal-table
-// views count only instances where this IS the record (RULES.md 7).
-export function variationalRecordOf(inst) {
+// Lowest unflagged energy that is not exact - variational, projected or extrapolated: the
+// record where no exact row exists, and the closest challenger where one does. The
+// medal-table views count only instances where this IS the record (RULES.md 7).
+export function lowestEnergyOf(inst) {
   return [...inst.rows].sort((a, b) => a.energy - b.energy).find(recordEligible) ?? null;
 }
 
@@ -78,19 +78,20 @@ export function summarize(instances) {
     by_bound: {}, by_source: {}, by_provenance: {},
     vscore_rows: 0, no_variance: 0, no_sigma: 0, no_error_metrics: 0, flagged: 0,
     // Rows VarBench computed itself rather than collected from a paper, and the subset
-    // of those that currently hold a variational record - i.e. unsolved instances where
-    // no published result has ever beaten the benchmark's own reference run. VarBench's
+    // of those that currently hold the record of an unsolved instance - i.e. where no
+    // published result has ever beaten the benchmark's own reference run. VarBench's
     // own exact diagonalizations are baseline rows too and hold records, but "beatable"
-    // is a question about variational bounds, so they are not counted here.
+    // is a question about unsolved instances, so they are not counted here.
     baseline_rows: 0, baseline_records: 0,
     // held_by_exact: the instance is solved and the exact energy is the record.
-    // held_by_variational: no exact row, so the lowest eligible variational bound is.
+    // held_by_variational / _projected / _extrapolated: no exact row, so the lowest
+    // unflagged energy is, and this is its kind.
     // The none_* keys say why an instance has neither, in the order they are tested.
-    records: { held: 0, held_by_exact: 0, held_by_variational: 0, none_no_sigma: 0, none_flagged: 0, none_sector_only: 0, none_no_variational: 0 },
-    // Sampled variational energies published without an error bar: listed, ranking for
-    // nothing. `would_take_record` is the subset sitting below their instance's current
-    // record, i.e. the rows where a single missing number is costing someone a record.
-    blocked_on_sigma: { rows: 0, instances: 0, would_take_record: 0 },
+    records: { held: 0, held_by_exact: 0, held_by_variational: 0, held_by_projected: 0, held_by_extrapolated: 0,
+      none_flagged: 0, none_sector_only: 0, none_unclassified: 0, none_no_rows: 0 },
+    // Unflagged sampled energies published without an error bar. They rank like any other
+    // row (RULES.md 6, since 2026-10-08); an error bar would let close results share a rank.
+    sampled_no_sigma: { rows: 0, instances: 0 },
     needs_review: [],
   };
   for (const inst of instances) {
@@ -110,38 +111,31 @@ export function summarize(instances) {
       if (!r.bound_type) s.needs_review.push(`${inst.instance_id}: "${methodLabel(r)}"`);
     }
     const rec = recordOf(inst);
-    let blockedHere = 0;
-    for (const r of inst.rows) {
-      if (r.bound_type !== "variational" || r.defect || !isSampled(r) || r.sigma != null) continue;
-      blockedHere++;
-      if (!rec || r.energy < rec.energy) s.blocked_on_sigma.would_take_record++;
-    }
-    s.blocked_on_sigma.rows += blockedHere;
-    if (blockedHere) s.blocked_on_sigma.instances++;
+    const noSigmaHere = inst.rows.filter(r => r.bound_type !== "exact" && !r.defect && isSampled(r) && r.sigma == null).length;
+    s.sampled_no_sigma.rows += noSigmaHere;
+    if (noSigmaHere) s.sampled_no_sigma.instances++;
 
     if (rec) {
       s.records.held++;
-      if (rec.bound_type === "exact") s.records.held_by_exact++; else s.records.held_by_variational++;
-      if (rec.baseline && rec.bound_type === "variational") s.baseline_records++;
+      s.records[`held_by_${rec.bound_type}`]++;
+      if (rec.baseline && rec.bound_type !== "exact") s.baseline_records++;
       continue;
     }
-    // Why an instance has no record decides whether it is an invitation or a fact of
-    // life: one blocked only by a missing error bar becomes rankable the moment an
-    // author sends it. Same order as noRecordReason() in readme_table.mjs.
+    // Same order as noRecordReason() in readme_table.mjs.
     s.records[`none_${noRecordKey(inst)}`]++;
   }
   return s;
 }
 
-// Why an instance has neither an exact row nor an eligible variational one, as a key
-// into summary.records. readme_table.mjs turns the key into the cell text, so the
-// reasons under the table and the counts beneath it are one computation.
+// Why an instance has no record, as a key into summary.records. Since 2026-10-08 every
+// unflagged row that is not a sector-resolved exact one can hold it, so only flags and
+// missing rows leave an instance without. readme_table.mjs turns the key into the cell
+// text, so the reasons under the table and the counts beneath it are one computation.
 export function noRecordKey(inst) {
-  const v = inst.rows.filter(r => r.bound_type === "variational");
-  if (v.some(r => !r.defect && isSampled(r) && r.sigma == null)) return "no_sigma";
-  if (v.some(r => r.defect)) return "flagged";
+  if (inst.rows.some(r => r.defect)) return "flagged";
   if (inst.rows.some(r => r.bound_type === "exact")) return "sector_only";
-  return "no_variational";
+  if (inst.rows.some(r => !r.bound_type)) return "unclassified";
+  return "no_rows";
 }
 
 // Side effect only when run directly: readme_table.mjs imports collect/recordOf/summarize

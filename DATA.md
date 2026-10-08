@@ -68,10 +68,11 @@ name. The validator rejects symmetry or extrapolation wording outside a slot.
 `baseline: true` marks a row VarBench **computed itself** rather than collected from a
 paper: a reference calculation run across the instance set so the V-score would have
 something to measure against, not a published state-of-the-art claim. 376 of the 583
-imported rows are of this kind. 75 of VarBench's own exact diagonalizations hold their
-instance's record, as any exact energy does ([§6](RULES.md#6-records-and-ties)), and 27
-of its variational reference runs do, which means *no published result has ever beaten the
-benchmark's own reference run on those instances*
+imported rows are of this kind. 76 of VarBench's own exact diagonalizations hold their
+instance's record, as any exact energy does ([§6](RULES.md#6-records-and-ties)), and 28
+of its other reference runs do (23 variational, 3 projected, 2 extrapolated; 2026-10-08),
+which means *no published result has ever beaten the benchmark's own reference run on
+those instances*
 (`baseline_records` in `data/_summary.json` counts the latter). See
 [§8.2](RULES.md#82-baseline-collected-versus-computed).
 
@@ -594,8 +595,10 @@ variance, or the checkpoint all resolve it.
 
 ### Sampled or deterministic: `sampled`
 
-Whether a row's energy is a Monte Carlo estimate decides whether it needs a `sigma` to hold a
-record ([RULES.md §6](RULES.md#6-records-and-ties)). Where a reader established it from the
+Whether a row's energy is a Monte Carlo estimate decides whether a missing `sigma` is a missing
+error bar: the README marks such a row with &dagger; where it has a variance, and the Contribute
+page counts them. No row needs a `sigma` to hold a record
+([RULES.md §6](RULES.md#6-records-and-ties), since 2026-10-08). Where a reader established it from the
 source, the row says so: `sampled: true` or `false`, set in
 [`scripts/corrections.mjs`](scripts/corrections.mjs) with the evidence, and the verdict the
 method string gave stays in `corrections[].from`. Where the field is absent, the method string

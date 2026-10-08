@@ -30,7 +30,7 @@ const ADD = {
   "Hubbard/square_64_P_32_8": { fermion: true, rows: [
     { eps: -0.52582, err: null, m: "Transformer backflow + MARCH optimizer", bt: "variational", src: TRF,
       reported: "-0.52582 per site, no error bar",
-      note: 'Supplementary Table S1 of arXiv:2507.02644, "Benchmark energy in pure Hubbard model at half-filling with PBC", column 8 x 8, row "NQS"; the AFQMC reference in the same table is -0.5262(5). Same method string as this paper\'s 16 x 4 row. No error bar, so it is eligible for nothing (RULES.md 6). It sits 1.6e-4 per site below the stored AFQMC exact row -0.5256563(78) - see the defect flag. Read from the arXiv supplement; the Nat. Commun. version was not compared.' },
+      note: 'Supplementary Table S1 of arXiv:2507.02644, "Benchmark energy in pure Hubbard model at half-filling with PBC", column 8 x 8, row "NQS"; the AFQMC reference in the same table is -0.5262(5). Same method string as this paper\'s 16 x 4 row. No error bar. It sits 1.6e-4 per site below the stored AFQMC exact row -0.5256563(78) - see the defect flag. Read from the arXiv supplement; the Nat. Commun. version was not compared.' },
   ]},
 
   // VarBench's only row here is the 8x8 energy copied into the 6x6 file (defect
@@ -69,7 +69,7 @@ const ADD = {
         source_entry: "qmbl-runs/repo-data-census/search/replies/2509.13746-cheng-2026-09-19.txt, ruling 1 (2026-09-19)",
         from: +((-0.4855 * 1024).toPrecision(12)),
       }],
-      note: 'Sec. A: "The obtained ground state energy is E0 ~ -0.5118 J/site for the L = 2 cluster and E0 ~ -0.4855 J/site for the L = 4 cluster", periodic boundary conditions on both; the L = 4 cluster carries Nv = 4N^2 = 262144 parameters, so N = 256. Units: the same passage quotes the mVMC energy -0.5162 J/site for L = 2, which is the pyrochlore-2x2x2_32_P record -0.516266 in the S.S per-site convention. Approximate and without an error bar, so it is eligible for nothing (RULES.md 6). It is nonetheless 0.5% below the VarBench mVMC record -0.4830957, although the ansatz has no symmetry projection and sits above mVMC at L = 2 - which says more about that record than about this row. 2026-09-19: the authors measured the fixed state on request, E/N = -0.4855840(29) J with Var(H) = 4.894(22) J^2 (see corrections and error_metrics on this row); with a sigma it is eligible and holds the variational record on this instance.' },
+      note: 'Sec. A: "The obtained ground state energy is E0 ~ -0.5118 J/site for the L = 2 cluster and E0 ~ -0.4855 J/site for the L = 4 cluster", periodic boundary conditions on both; the L = 4 cluster carries Nv = 4N^2 = 262144 parameters, so N = 256. Units: the same passage quotes the mVMC energy -0.5162 J/site for L = 2, which is the pyrochlore-2x2x2_32_P record -0.516266 in the S.S per-site convention. Approximate and without an error bar. It is 0.5% below the VarBench mVMC record -0.4830957, although the ansatz has no symmetry projection and sits above mVMC at L = 2 - which says more about that record than about this row. 2026-09-19: the authors measured the fixed state on request, E/N = -0.4855840(29) J with Var(H) = 4.894(22) J^2 (see corrections and error_metrics on this row).' },
   ]},
 };
 

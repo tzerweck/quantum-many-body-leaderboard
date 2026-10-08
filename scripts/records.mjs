@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import { perSiteDivisor, perSiteLabel, SPIN_MODELS, isSampled, recordEligible, noErrorMetrics, boundLabel, methodLabel } from "./units.mjs";
+import { perSiteDivisor, perSiteLabel, SPIN_MODELS, recordEligible, noErrorMetrics, boundLabel, methodLabel } from "./units.mjs";
 import { exactRecordOf } from "./summary.mjs";
 
 for (const id of process.argv.slice(2)) {
@@ -28,20 +28,17 @@ for (const id of process.argv.slice(2)) {
     + "\n          o no error metric found in the source read - needs verification, not a criticism");
   // A flagged row is listed in place but cannot hold the record (RULES.md 6.1). Suspicion is
   // enough to withhold the record, never enough to hide the row; RULES.md 10 is how a flag
-  // gets lifted or upheld. A sampled energy with no stated sigma is likewise listed and
-  // ineligible (RULES.md 6); a deterministic one needs no sigma. Where the instance is
-  // solved the exact energy is the record and the best bound is the closest challenger.
+  // gets lifted or upheld. Every other row can hold it, of any kind and with or without an
+  // error bar (RULES.md 6, since 2026-10-08). Where the instance is solved the exact energy
+  // is the record and the lowest other row is the closest challenger.
   const exact = exactRecordOf(d);
   const best = sorted.find(recordEligible);
   for (const b of sorted) {
-    if (b.bound_type !== "variational" || (best && b.energy >= best.energy)) continue;
-    if (b.defect)
-      console.log(`  !! excluded from the record: ${(b.energy / f).toFixed(7)} [${b.defect.flag}] ${methodLabel(b).slice(0, 42)}`);
-    else if (isSampled(b) && b.sigma == null)
-      console.log(`  !! excluded from the record: ${(b.energy / f).toFixed(7)} [no-sigma, sampled energy] ${methodLabel(b).slice(0, 42)}`);
+    if (b.bound_type === "exact" || !b.defect || (best && b.energy >= best.energy)) continue;
+    console.log(`  !! excluded from the record: ${(b.energy / f).toFixed(7)} [${b.defect.flag}] ${methodLabel(b).slice(0, 42)}`);
   }
   if (exact) console.log(`  --> RECORD (${boundLabel(exact)}, the instance is solved): ${(exact.energy / f).toFixed(7)}  ${methodLabel(exact).slice(0, 52)}`);
   console.log(best
-    ? `  --> ${exact ? "BEST VARIATIONAL BOUND" : "RECORD (strict variational bound)"}: ${(best.energy / f).toFixed(7)}  ${methodLabel(best).slice(0, 52)}`
-    : `  --> ${exact ? "no eligible variational bound" : "NO RECORD"}: every variational row is flagged or absent`);
+    ? `  --> ${exact ? "LOWEST NON-EXACT ENERGY" : "RECORD"} (${boundLabel(best)}): ${(best.energy / f).toFixed(7)}  ${methodLabel(best).slice(0, 52)}`
+    : `  --> ${exact ? "no unflagged non-exact row" : "NO RECORD"}: every row that could hold it is flagged or absent`);
 }

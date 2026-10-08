@@ -58,7 +58,7 @@ const ADD = {
     { eps: -0.55922, err: null, m: "Group CNN", bt: "variational",
       src: MOSS_TRI, primary: P.gcnn21,
       direct: 'arXiv:2104.05085, results table: "J2 = 0 ... ED [28] -0.5603734 ... G-CNN -0.55922".',
-      note: T5_TRI + ' Row "Group Convolutional Neural Network [104]" = arXiv:2104.05085. No error bar is given in the table, so under RULES.md 6 this sampled row cannot hold a record.' },
+      note: T5_TRI + ' Row "Group Convolutional Neural Network [104]" = arXiv:2104.05085. No error bar is given in the table.' },
     { eps: -0.5562, err: 2e-4, m: "2D RNN wavefunction (iterative retraining, s=4.0, r=0.158)", bt: "variational",
       src: MOSS_TRI, primary: null, note: T5_TRI + " The citing paper's own result." },
   ]},

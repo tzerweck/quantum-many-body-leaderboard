@@ -9,7 +9,7 @@
 // compared the README against the front page.
 import fs from "node:fs";
 import path from "node:path";
-import { perSiteDivisor, perSiteLabel, isSampled, noErrorMetrics, methodLabel } from "./units.mjs";
+import { perSiteDivisor, perSiteLabel, isSampled, noErrorMetrics, methodLabel, recordEligible } from "./units.mjs";
 import { collect, recordOf, summarize, noRecordKey } from "./summary.mjs";
 import { citeCell } from "./cite.mjs";
 import { sources } from "./enrich_sources.mjs";
@@ -24,7 +24,13 @@ export function quote(energy, sigma) {
   // A stated sigma of exactly 0 is how the upstream tables write "deterministic" on an
   // exact diagonalization. There is no last digit for it to qualify, and taking its
   // logarithm asks for infinitely many decimals, so it is quoted like a row with none.
-  if (sigma == null || !(sigma > 0)) return { text: energy.toFixed(7), decimals: 7 };
+  // Without a sigma the energy is quoted to at most 7 decimals with the padding zeros
+  // dropped, so a printed -0.4988 is not shown as -0.4988000 (2026-10-08: such rows can
+  // hold records since then, 64 of them with padding).
+  if (sigma == null || !(sigma > 0)) {
+    const text = energy.toFixed(7).replace(/\.?0+$/, "");
+    return { text, decimals: text.split(".")[1]?.length ?? 0 };
+  }
   const rounded = Number(sigma.toPrecision(1));
   const decimals = Math.max(0, -Math.floor(Math.log10(rounded)));
   const digit = Math.round(rounded * 10 ** decimals);
@@ -110,21 +116,21 @@ export function byGeometry(a, b) {
 // Why an instance has no record, in the words the table prints. The test order is
 // summary.mjs's (noRecordKey), so the cells agree with the totals under the table.
 const NO_RECORD = {
-  no_sigma: "sampled rows carry no error bar",
-  flagged: "every variational row is flagged",
+  flagged: "every row that could hold it is flagged",
   sector_only: "exact rows are sector-resolved, no ground-state energy stated",
-  no_variational: "no variational row",
+  unclassified: "no row has a bound_type yet",
+  no_rows: "no row",
 };
 export function noRecordReason(inst) {
   return NO_RECORD[noRecordKey(inst)];
 }
 
-// The closest challenger: the lowest unflagged variational row above the record. On a
-// solved instance that is the best variational bound anyone has published, and the
-// number a new method has to beat to become the best variational one.
+// The closest challenger: the lowest row above the record that could hold one itself
+// (unflagged and not exact, of any other kind). On a solved instance that is the best
+// non-exact energy anyone has published at or above the exact one.
 export function challengerOf(inst, rec) {
   const sorted = [...inst.rows].sort((a, b) => a.energy - b.energy);
-  return sorted.slice(sorted.indexOf(rec) + 1).find(r => r.bound_type === "variational" && !r.defect) ?? null;
+  return sorted.slice(sorted.indexOf(rec) + 1).find(recordEligible) ?? null;
 }
 
 // How far above the record the challenger sits, per site, to two figures: "+1.7e-3".

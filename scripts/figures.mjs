@@ -137,12 +137,11 @@ write("record-over-time", t => {
 
   const h = header(t, "The record over time on two frontier instances",
     "Energy per site of every dated result, by publication year. " +
-    "Filled marks can hold the record; hollow marks are listed but cannot, for want of an error bar; a slashed mark is a flagged row.");
+    "A slashed mark is a flagged row.");
   const lg = legend(t, [
     { kind: "dot", color: t.series[0], label: "Variational bound" },
     { kind: "dot", color: t.series[1], label: "Projected (fixed-node)" },
     { kind: "dot", color: t.series[2], label: "Extrapolated" },
-    { kind: "ring", color: t.ink2, label: "Listed, cannot hold the record" },
     { kind: "flag", color: t.ink2, label: "Flagged, see the row" },
     { kind: "line", color: t.ink2, label: "Standing record" },
   ], h.bottom + 34);
@@ -245,7 +244,7 @@ write("record-over-time", t => {
   const ownRuns = panels.every(p => p.undated === p.undatedQmbl) ? " (QMBL's own runs)" : "";
   const units = panels.map(p => `${p.title.split(" ")[0]} as ${p.unit}`).join(", ");
   const fn = footnote(t, `Energies per site: ${units}. Not shown: rows with no publication year, ${undated}${ownRuns}. ` +
-    "Year is the source's publication year. The line steps down only when an eligible row beats the standing record.", end + 22);
+    "Year is the source's publication year. The line steps down only when an unflagged row beats the standing record.", end + 22);
   parts.push(fn.svg);
   return doc(t, fn.bottom + 24, "The record over time on two frontier instances",
     `Energy per site versus publication year for ${FRONTIER.map(f => f[1]).join(" and ")}.`, parts);
@@ -280,13 +279,14 @@ write("rows-per-instance", t => {
 const MODELS = { Heisenberg: "Heisenberg", J1J2: "J1-J2", Hubbard: "Hubbard", tV: "Spinless t-V", TFIsing: "Transverse-field Ising", Impurity: "Impurity" };
 
 // A solved instance's record is its exact energy (RULES.md 6); the competition categories
-// describe the variational-held records only, since "contested" is about how many bounds
-// were published against each other, and on a solved instance they compete for second.
+// describe the other records only, since "contested" is about how many results were
+// published against each other, and on a solved instance they compete for second. A
+// "single number" is an instance where only one row could hold the record.
 function status(i) {
   const rec = recordOf(i);
   if (!rec) return "other";
   if (rec.bound_type === "exact") return "exact";
-  return i.rows.length >= CONTESTED ? "contested" : variationalRows(i).length === 1 ? "single" : "challenged";
+  return i.rows.length >= CONTESTED ? "contested" : i.rows.filter(recordEligible).length === 1 ? "single" : "challenged";
 }
 
 write("record-status", t => {
@@ -303,7 +303,7 @@ write("record-status", t => {
   const held = instances.filter(recordOf).length;
   const tally = k => models.reduce((s, m) => s + m.by[k], 0);
   const h = header(t, "Record status of every instance, by model",
-    `${held} of ${instances.length} instances have a record, ${tally("exact")} of them solved. Of the ${held - tally("exact")} variational-held records, ` +
+    `${held} of ${instances.length} instances have a record, ${tally("exact")} of them solved. Of the ${held - tally("exact")} records on unsolved instances, ` +
     `${tally("single")} stand on a single published number and ${tally("contested")} were taken on instances with ${CONTESTED} or more rows.`);
   const lg = legend(t, STATUS.map(([, label, color]) => ({ kind: "square", color, label })), h.bottom + 34);
   const top = lg.bottom + 26, pitch = 36, bh = 22, left = PAD + 190, right = W - PAD - 36;
@@ -323,7 +323,7 @@ write("record-status", t => {
       x += w;
     });
   });
-  const fn = footnote(t, "Bar length is the number of instances. A record is the exact energy where the instance is solved, otherwise the lowest eligible variational energy; " +
+  const fn = footnote(t, "Bar length is the number of instances. A record is the exact energy where the instance is solved, otherwise the lowest unflagged energy of any kind; " +
     `"rows" counts every published row on the instance; ${CONTESTED} or more is contested.`, top + models.length * pitch + 20);
   parts.push(fn.svg);
   return doc(t, fn.bottom + 24, "Record status of every instance, by model",
@@ -331,14 +331,14 @@ write("record-status", t => {
 });
 
 // --------------------------------------------------------------- 4. records by family
-// The medal table counts records held by a variational bound only (RULES.md 7). An exact
+// The medal table counts records not held by an exact energy (RULES.md 7). An exact
 // energy is the answer, not an ansatz, and counting it would hand the most records to
 // whoever ran exact diagonalization on the most small instances.
 write("records-by-family", t => {
   const allCount = {}, hard = {};
   for (const i of instances) {
     const rec = recordOf(i);
-    if (!rec || rec.bound_type !== "variational") continue;
+    if (!rec || rec.bound_type === "exact") continue;
     const f = rec.family;
     allCount[f] = (allCount[f] || 0) + 1;
     if (i.rows.length >= CONTESTED) hard[f] = (hard[f] || 0) + 1;
@@ -350,7 +350,7 @@ write("records-by-family", t => {
   const solved = instances.filter(i => recordOf(i)?.bound_type === "exact").length;
   const varHeld = Object.values(allCount).reduce((a, b) => a + b, 0);
   const h = header(t, "Records by ansatz family",
-    `Over the ${varHeld} records held by a variational bound; the ${solved} solved instances, where the exact energy is the record, are left out. ` +
+    `Over the ${varHeld} records on unsolved instances; the ${solved} solved instances, where the exact energy is the record, are left out. ` +
     "Counting every instance rewards whichever method was run on the most easy problems, so " +
     `the contested bars count only instances with ${CONTESTED}+ published rows, which is where the field is actually competing.`);
   const lg = legend(t, [
@@ -422,10 +422,10 @@ write("error-metrics", t => {
 });
 
 // ------------------------------------------------------------ 6. standing records by year
-// Variational-held records only, as in the family chart: an exact energy has no year of
-// setting a record in the sense meant here, and most cite a run script anyway.
+// Records not held by an exact energy, as in the family chart: an exact energy has no year
+// of setting a record in the sense meant here, and most cite a run script anyway.
 write("records-by-year", t => {
-  const recs = instances.map(recordOf).filter(r => r?.bound_type === "variational");
+  const recs = instances.map(recordOf).filter(r => r && r.bound_type !== "exact");
   const dated = recs.map(yearOf).filter(Boolean);
   const noPaper = recs.filter(r => !yearOf(r) && citeRef(r, cache).text === "run script").length;
   const y0 = Math.min(...dated), y1 = Math.max(...dated);
@@ -433,8 +433,8 @@ write("records-by-year", t => {
   const count = years.map(y => dated.filter(d => d === y).length);
   const rest = recs.length - dated.length;
   const h = header(t, "Standing records by the year their source was published",
-    !rest ? `All ${recs.length} variational-held records resolve to a publication year (a VarBench run script to its paper's).` :
-    `${dated.length} of the ${recs.length} variational-held records resolve to a publication year. ` +
+    !rest ? `All ${recs.length} records on unsolved instances resolve to a publication year (a VarBench run script to its paper's).` :
+    `${dated.length} of the ${recs.length} records on unsolved instances resolve to a publication year. ` +
     (rest === noPaper
       ? `The other ${rest} cite a run script, so they have no year to plot.`
       : `The other ${rest} have no year to plot: ${noPaper} cite a run script, ${rest - noPaper} cite one with no year on record.`));

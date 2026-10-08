@@ -20,8 +20,9 @@
 //
 // The frontier is the staircase of results nothing beats for less: sorted by cost, a row
 // is on it when its energy is below every cheaper row that could hold a record (RULES.md
-// 6: a strict bound with an error bar, or a ground-state exact energy). Projections and
-// extrapolations are drawn but never on the frontier, as they are not bounds.
+// 6: any unflagged row of any kind, with or without an error bar, or a ground-state exact
+// energy). Until 2026-10-08 projections, extrapolations and sampled energies without an
+// error bar were drawn hollow and kept off the frontier.
 import fs from "node:fs";
 import { recordEligible, exactEligible, boundLabel, perSiteDivisor, perSiteLabel } from "./units.mjs";
 import { collect, recordOf, rowId } from "./summary.mjs";
@@ -630,7 +631,6 @@ const HOURS_LEGEND = t => [
   { kind: "dot", color: t.series[1], label: "Projected" },
   { kind: "dot", color: t.series[2], label: "Extrapolated" },
   { kind: "dot", color: t.series[3], label: "Exact" },
-  { kind: "ring", color: t.ink2, label: "Cannot hold a record" },
   { kind: "line", color: t.series[0], label: "Frontier" },
 ];
 // The marks, the derived hours and QMBL's own runs (Tristan, 2026-09-18 and 09-23): the
@@ -651,7 +651,7 @@ const hoursPanels = costFigure({
   name: "energy-vs-compute",
   title: "The best energies at each cost, instance by instance",
   subtitle: panels => `Every energy whose paper, or QMBL's own run, states what it cost in hours, on the ${panels.length} instances with at least two such rows. ` +
-    "Colour is the kind of number; filled marks can hold a record, hollow ones cannot.",
+    "Colour is the kind of number.",
   costOf: hoursOrEdOf, minRows: MIN_COSTED,
   xLabel: "hours, as reported",
   legendItems: HOURS_LEGEND,
@@ -686,7 +686,6 @@ const FLOPS_LEGEND = t => [
   { kind: "dot", color: t.series[0], label: "Variational bound" },
   { kind: "dot", color: t.series[1], label: "Projected" },
   { kind: "dot", color: t.series[2], label: "Extrapolated" },
-  { kind: "ring", color: t.ink2, label: "Cannot hold a record" },
   { kind: "line", color: t.series[0], label: "Frontier" },
 ];
 // One sentence per model drawn (flops.mjs): what it counts and what it leaves out.
@@ -713,7 +712,7 @@ const flopsPanels = costFigure({
   name: "energy-vs-flops",
   title: "The best energies at each estimated cost in FLOPs, instance by instance",
   subtitle: panels => `Every published energy whose paper or run script states enough to estimate its cost in floating-point operations, on the ${panels.length} instances with at least two such rows. ` +
-    "Colour is the kind of number; filled marks can hold a record, hollow ones cannot.",
+    "Colour is the kind of number.",
   costOf: estimatedFlopsOf, minRows: MIN_COSTED,
   xLabel: "FLOPs, estimated",
   legendItems: FLOPS_LEGEND,
@@ -744,7 +743,6 @@ const PARAMS_LEGEND = t => [
   { kind: "dot", color: t.series[0], label: "Variational bound" },
   { kind: "dot", color: t.series[1], label: "Projected" },
   { kind: "dot", color: t.series[2], label: "Extrapolated" },
-  { kind: "ring", color: t.ink2, label: "Cannot hold a record" },
   { kind: "line", color: t.series[0], label: "Frontier" },
 ];
 const PARAMS_FOOTER = "Parameter counts as the papers print them; a count evaluated from a printed formula is marked medium confidence in the row. " +
@@ -755,7 +753,7 @@ const paramPanels = costFigure({
   name: "energy-vs-parameters",
   title: "The best energies at each parameter count, instance by instance",
   subtitle: panels => `Every published energy whose paper states the ansatz's parameter count, on the ${panels.length} instances with at least three such rows. ` +
-    "Colour is the kind of number; filled marks can hold a record, hollow ones cannot.",
+    "Colour is the kind of number.",
   costOf: parametersOf, minRows: 3,
   xLabel: "variational parameters",
   legendItems: PARAMS_LEGEND,

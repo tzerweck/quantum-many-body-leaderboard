@@ -13,8 +13,8 @@
 //
 // Energy is per site (the impurity problems in total energy) on a linear axis, lower is
 // lower as in the cost figures. Every drawn row (ladders.mjs, drawnRows) is a mark coloured
-// by its kind, filled where it can hold a record, slashed where the row is flagged, and a
-// line joins the record at each size or coupling; a flagged row cannot hold a record
+// by its kind, slashed where the row is flagged, and a line joins the record at each size
+// or coupling (RULES.md 6: any unflagged row can hold it); a flagged row cannot hold a record
 // (RULES.md 6.1), so the line passes it by. The directory is emptied first, as figures/cost/ is, so the site never
 // inlines a figure whose panels have gone.
 import fs from "node:fs";
@@ -103,7 +103,6 @@ const LEGEND = t => [
   { kind: "dot", color: t.series[1], label: "Projected" },
   { kind: "dot", color: t.series[2], label: "Extrapolated" },
   { kind: "dot", color: t.series[3], label: "Exact" },
-  { kind: "ring", color: t.ink2, label: "Cannot hold a record" },
   { kind: "flag", color: t.ink2, label: "Flagged, see the row" },
   { kind: "line", color: t.ink2, label: "Record" },
 ];
@@ -154,7 +153,7 @@ function stripFigure(f) {
       return Number.isFinite(e) ? [{ N, e }] : [];
     })]));
     // Where the count mark sits: on the record of the largest size, or, for a stop with
-    // no record at any size (rows that cannot hold one), on its lowest energy there.
+    // no record at any size (every row flagged), on its lowest energy there.
     const markAt = s => recs.get(s).at(-1)?.e ?? Math.min(...drawnRows(s.ladder.members.at(-1)).map(r => r.energy / perSite(s.ladder.members.at(-1))));
     const parts = [];
     const es = [...[...recs.values()].flat().map(p => p.e), ...stops.map(markAt)];
@@ -217,7 +216,7 @@ for (const f of figures) {
   write(f.name, t => {
     const specs = f.scans.map(s => ({ title: s.label, slots: s.slots, xLabel: s.x }));
     const h = header(t, f.title, "Every Hamiltonian of this model with energies published at only one size and no strip to join, grouped where they " +
-      "share lattice, boundary and size; the coupling or filling that differs between them runs along x. Colour is the kind of number; filled marks can hold a record, hollow ones cannot, and a slashed mark is a flagged row.");
+      "share lattice, boundary and size; the coupling or filling that differs between them runs along x. Colour is the kind of number, and a slashed mark is a flagged row.");
     const lg = legend(t, LEGEND(t), h.bottom + 34);
     const parts = [h.svg, lg.svg];
     parts.push(text(W - PAD, lg.bottom + 30, perSiteLabel(f.scans[0].slots[0].members[0]), { size: 11, fill: t.muted, anchor: "end" }));

@@ -200,7 +200,6 @@ write("size-vs-accuracy", t => {
     { kind: "dot", color: t.series[1], label: "Projected (fixed-node)" },
     { kind: "dot", color: t.series[2], label: "Extrapolated" },
     { kind: "dot", color: t.series[3], label: "Exact (diagonalization or QMC)" },
-    { kind: "ring", color: t.ink2, label: "Listed, cannot hold a record" },
     FLAGGED(t),
   ], h.bottom + 34);
   const top = lg.bottom + 28, bottom = top + 380, left = PAD + 62, right = W - PAD - 8;
@@ -248,7 +247,7 @@ write("size-vs-accuracy-by-family", t => {
   });
   const y = top0 + (rows - 1) * pitch + plotH + EXACT_RISE + 62;
   const fn = footnote(t, "Each method name belongs to one family (scripts/method_names.mjs); 'other' holds exact methods and names no family covers. " +
-    "Filled marks can hold a record, hollow ones cannot, a slashed mark is a flagged row, and a number counts the rows a mark holds. Axes, the exact line and the error-bar floor as in the figure above: " +
+    "A slashed mark is a flagged row, and a number counts the rows a mark holds. Axes, the exact line and the error-bar floor as in the figure above: " +
     `a better energy is lower. ${UNDER}`, y);
   parts.push(fn.svg);
   return doc(t, fn.bottom + 24, "The best published energies by system size, one panel per method family",
@@ -351,8 +350,7 @@ for (const f of FIGS) write(f.name, t => {
   const lg = legend(t, [
     { kind: "line", color: t.series[0], label: "Best at each size" },
     { kind: "line", color: t.recessive[1], label: "One method family" },
-    { kind: "dot", color: t.ink2, label: "Can hold a record" },
-    { kind: "ring", color: t.ink2, label: "Cannot" },
+    { kind: "dot", color: t.ink2, label: "Published energy" },
     FLAGGED(t),
     BELOW(t),
   ], h.bottom + 34);

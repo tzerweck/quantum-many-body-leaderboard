@@ -5,10 +5,10 @@
 export const SPIN_MODELS = new Set(["Heisenberg", "J1J2", "TFIsing"]);
 
 // Is the reported energy a Monte-Carlo estimate, or a deterministic contraction?
-// RULES.md 6 requires a stated sigma before a row can hold a record, but that rule
-// only makes sense for a sampled energy. DMRG at a stated bond dimension, exact
-// diagonalization and statevector circuits carry no statistical error at all, and
-// requiring sigma of them would vacate their records over a field that cannot exist.
+// Only a sampled energy has an error bar to report: DMRG at a stated bond dimension, exact
+// diagonalization and statevector circuits carry no statistical error at all. Since
+// 2026-10-08 no row needs a sigma to hold a record (RULES.md 6); the distinction still
+// decides the README's dagger marker and which rows the error-bar counts ask about.
 //
 // Which kind a row is, is a statement read from its source, per row (Tristan, 2026-09-30,
 // qmbl-verify 2026-09-29 ruling 2). A row whose reader established it carries `sampled`,
@@ -100,14 +100,14 @@ export const groundStateExact = r =>
 // about it. A flagged exact row is skipped like any other (6.1).
 export const exactEligible = r => groundStateExact(r) && !r.defect;
 
-// A row may hold its instance's VARIATIONAL record only if it is a strict variational
-// bound, carries no unresolved defect (RULES.md 6.1), and - when its energy was sampled -
-// states the error bar the tie rule needs (RULES.md 6). On an instance with an eligible
-// exact row this decides the best variational bound, not the record.
-export function recordEligible(r) {
-  if (r.bound_type !== "variational" || r.defect) return false;
-  return !isSampled(r) || r.sigma != null;
-}
+// Where no exact row exists, the record is the lowest energy of any other kind -
+// variational, projected or extrapolated, with or without an error bar - that carries no
+// unresolved defect (RULES.md 6, 6.1). On an instance with an eligible exact row this
+// decides the closest challenger, not the record. Until 2026-10-08 only a variational bound
+// could hold a record, and a sampled one only with its sigma; Tristan dropped both, so
+// that every published result counts and nothing is listed as unable to hold a record.
+const RECORD_KINDS = new Set(["variational", "projected", "extrapolated"]);
+export const recordEligible = r => RECORD_KINDS.has(r.bound_type) && !r.defect;
 
 // VarBench writes spin Hamiltonians with PAULI matrices (sigma.sigma) and stores
 // TOTAL energies. NQS papers quote E/N in the S.S convention. Factor 4 N_sites.
