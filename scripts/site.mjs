@@ -31,7 +31,7 @@ import { FRONTIER } from "./views.mjs";
 import { energyFigures } from "./ladders.mjs";
 
 const OUT = "_site";
-const REPO = "https://github.com/tzerweck/quantum-many-body-leaderboard";
+const REPO = "https://github.com/quantum-many-body-leaderboard/quantum-many-body-leaderboard";
 const RULES = `${REPO}/blob/main/RULES.md`;
 const DATA = `${REPO}/blob/main/DATA.md`;
 const DOI = "10.5281/zenodo.22753734";

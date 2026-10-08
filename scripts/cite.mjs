@@ -94,7 +94,7 @@ export const paperYear = (row, cache = sources()) =>
 // paper of its own says where it was read. The README renders this as markdown and the site
 // as HTML; splitting it here is what keeps the citation under a number identical in both.
 // A row QMBL computed cites the code that produced it, at the commit that ran, so it can be rerun.
-const REPO = "https://github.com/tzerweck/quantum-many-body-leaderboard";
+const REPO = "https://github.com/quantum-many-body-leaderboard/quantum-many-body-leaderboard";
 
 export function citeRef(row, cache = sources()) {
   if (row.computed_by === "qmbl") {
