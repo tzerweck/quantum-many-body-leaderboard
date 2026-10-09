@@ -295,7 +295,9 @@ keep their citation and carry QMBL's digits, with the printed value kept on the 
 so QMBL's own Lanczos is its exact row (Tristan, 2026-10-09; `scripts/add_exact_rows.mjs`, batch
 B3). `ed_sym.py` at k = 0 and M, every C4v irrep, spin inversion even, on the same server,
 2026-09-28: the lowest level is k = 0, A1, -74.2546644341862 (Pauli total, -0.515657392 per site;
-15,804,956 states, residual 6.0e-10); the next is -71.9586017 (k = 0, B1). Chen et al. quote
+15,804,956 states, residual 6.0e-10); the next is -71.9586017 (k = 0, B1). The second basis
+(`c2v_axes`, A1 + B1 at k = 0, 31,601,346 states, 2026-10-09) gives -74.25466443418684, 6.4e-13
+from it, residual 4.0e-10. Chen et al. quote
 -0.51565739 at this coupling, which matches to 1e-8; Golubev et al.'s ED lies 6.1e-7 below it
 (`SWEEP.md`).
 
