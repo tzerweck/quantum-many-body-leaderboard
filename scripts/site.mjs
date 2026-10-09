@@ -319,7 +319,7 @@ function tabs(id, items, lead = "") {
 }
 const tabRules = (id, count) => [...Array(count).keys()].map(k =>
   `#${id}-${k}:checked ~ .tab-panels > :nth-child(${k + 1}) { display: block; }
-#${id}-${k}:checked ~ .tab-labels > label[for="${id}-${k}"] { color: #fff; background: var(--accent); border-color: var(--accent); }
+#${id}-${k}:checked ~ .tab-labels > label[for="${id}-${k}"] { color: var(--bg); background: var(--accent); border-color: var(--accent); }
 #${id}-${k}:focus-visible ~ .tab-labels > label[for="${id}-${k}"] { outline: 2px solid var(--accent); outline-offset: 2px; }`).join("\n");
 
 // The cost figures: one per instance with enough energies costed in hours, drawn by
@@ -422,7 +422,7 @@ ${f.facets.map(x => `<span class="axis" style="left:${pct(x.stops[0].x - f.pitch
 const sliderRules = ({ id, f }) => (f.strip ? f.stops.map((s, k) =>
   `#${id}-${k}:checked ~ .panels > :nth-child(${k + 1}) { display: block; }
 #${id}-${k}:checked ~ .track .cur-${k} { display: inline; }
-#${id}-${k}:checked ~ .track label[for="${id}-${k}"] { color: #fff; background: var(--accent); border-color: var(--accent); }
+#${id}-${k}:checked ~ .track label[for="${id}-${k}"] { color: var(--bg); background: var(--accent); border-color: var(--accent); }
 #${id}-${k}:focus-visible ~ .track label[for="${id}-${k}"] { outline: 2px solid var(--accent); outline-offset: 2px; }`).join("\n") : "");
 
 function energySwitcher() {
@@ -1201,7 +1201,7 @@ function llmsTxt() {
 // ------------------------------------------------------------------------------- css
 const CSS = `:root {
   --bg: #fcfcfb; --surface: #ffffff; --ink: #0b0b0b; --ink2: #52514e; --muted: #898781;
-  --grid: #e1e0d9; --accent: #2a78d6; --flag: #eb6834; --exact: #1baf7a; --record: #104281;
+  --grid: #e1e0d9; --accent: #104281; --flag: #eb6834; --exact: #1baf7a; --record: #104281;
   --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
   --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
   --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
@@ -1209,7 +1209,7 @@ const CSS = `:root {
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #1a1a19; --surface: #211f1e; --ink: #ffffff; --ink2: #c3c2b7; --muted: #898781;
-    --grid: #2c2c2a; --accent: #3987e5; --flag: #d95926; --exact: #199e70; --record: #9ec5f4;
+    --grid: #2c2c2a; --accent: #9ec5f4; --flag: #d95926; --exact: #199e70; --record: #9ec5f4;
   }
 }
 * { box-sizing: border-box; }
@@ -1333,7 +1333,7 @@ main > p.lead:first-child { margin-top: 0; }
   color: var(--ink2); background: var(--surface); border: 1px solid var(--grid); border-radius: 999px;
 }
 .quick button:hover { border-color: var(--accent); color: var(--accent); }
-.quick button.on { color: #fff; background: var(--accent); border-color: var(--accent); }
+.quick button.on { color: var(--bg); background: var(--accent); border-color: var(--accent); }
 
 tr.inst { cursor: pointer; }
 tr.inst th button {
