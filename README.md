@@ -1,6 +1,6 @@
 
 <!-- Header and footer animations are text-mode GIFs from scripts/ascii.mjs. -->
-<img src="figures/qmbl-ascii.gif" width="920" alt="QMBL - the Quantum Many-Body Leaderboard">
+<img src="figures/qmbl-ascii.gif" width="920" alt="QMBL: the Quantum Many-Body Leaderboard">
 
 <!-- All badges via shields.io. Zenodo's own badge endpoint (zenodo.org/badge/DOI/....svg)
      returns 403 and renders as a broken image, so the DOI badge is built here instead. -->
@@ -520,7 +520,7 @@ a moving table.
 - **v0.2.0: [10.5281/zenodo.22799412](https://doi.org/10.5281/zenodo.22799412)**.
 - **v0.1.0: [10.5281/zenodo.22753735](https://doi.org/10.5281/zenodo.22753735)**.
 
-> T. Zerweck and J. Carrasquilla, *QMBL - the Quantum Many-Body Leaderboard*, v0.4.0, Zenodo (2026).
+> T. Zerweck and J. Carrasquilla, *QMBL: the Quantum Many-Body Leaderboard*, v0.4.0, Zenodo (2026).
 > [10.5281/zenodo.23239245](https://doi.org/10.5281/zenodo.23239245)
 
 Many imported rows, instances, stored conventions and the V-score come from

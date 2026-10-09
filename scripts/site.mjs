@@ -46,7 +46,7 @@ const VERSION = cffField("version");
 const RELEASED = cffField("date-released");
 if (!VERSION || !RELEASED) throw new Error("CITATION.cff: version or date-released not found");
 const CITE_HEAD = "T. Zerweck and J. Carrasquilla";
-const CITE_TITLE = "QMBL - the Quantum Many-Body Leaderboard";
+const CITE_TITLE = "QMBL: the Quantum Many-Body Leaderboard";
 const CITE_TAIL = `v${VERSION}, Zenodo (${RELEASED.slice(0, 4)}).`;
 const CITATION = `${CITE_HEAD}, ${CITE_TITLE}, ${CITE_TAIL} https://doi.org/${DOI}`;
 
@@ -98,7 +98,7 @@ function page({ url, title, description, body, wide = false }) {
 <link rel="icon" href="/favicon.svg" type="image/svg+xml" sizes="any">
 <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-<meta property="og:title" content="${esc(title ?? "QMBL - the Quantum Many-Body Leaderboard")}">
+<meta property="og:title" content="${esc(title ?? "QMBL: the Quantum Many-Body Leaderboard")}">
 <meta property="og:description" content="${esc(description)}">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://qmbl.org${url}">
@@ -1164,7 +1164,7 @@ function apiInstance(inst) {
 
 function llmsTxt() {
   const lines = [
-    "# QMBL - the Quantum Many-Body Leaderboard",
+    "# QMBL: the Quantum Many-Body Leaderboard",
     "",
     `> The best published ground-state energies for ${summary.instances} lattice Hamiltonian instances (${summary.rows} energies, ${summary.records.held} with a record, ${summary.records.held_by_exact} of them solved exactly). Read-only, generated from the repository's data/ directory, Apache-2.0.`,
     "",
@@ -1522,7 +1522,7 @@ write("api/instances.json", JSON.stringify(instances.map(i => {
   };
 }), null, 2) + "\n");
 write("api/qmbl.json", JSON.stringify({
-  name: "QMBL - the Quantum Many-Body Leaderboard",
+  name: "QMBL: the Quantum Many-Body Leaderboard",
   url: "https://qmbl.org/", repository: REPO, license: "Apache-2.0", doi: DOI,
   built: BUILT, note: "Individual energies must be cited to the primary paper named on the row.",
   summary, instances: instances.map(apiInstance),
