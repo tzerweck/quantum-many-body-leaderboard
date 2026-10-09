@@ -261,6 +261,25 @@ put("J1J2/square_40_P_0.6",
     source: "qmbl-verify-2026-09-29", checked: "2026-10-03" });
 console.log("batch B2: 4 exact rows computed by QMBL (pyrochlore-2x2x2_32_P; Hubbard 4x4 at half filling, U = 4 and 8; J1-J2 40-site, J2 = 0.6)");
 
+// Batch B3: exact diagonalizations QMBL ran itself where no published exact energy is carried
+// (Tristan, 2026-10-09: an instance exact diagonalization reaches gets its exact energy, as a row
+// QMBL computed). J1J2/square_36_P_0.45, the 6x6 torus: ed_sym.py of checks/exact-recompute-2026-09/
+// over the sectors k = (0,0) and (pi,pi), each C4v irrep, even spin inversion, on an AMD EPYC 9654
+// server, 2026-09-28; the lowest level is k = (0,0) A1. The same run reproduces the exact rows at
+// J2 = 0.5 and Schulz, Ziman & Poilblanc's printed 0.2, 0.55 and 0.65 (checks/README.md). Chen et
+// al. quote -0.51565739 here, citing Schulz et al., who have no J2 = 0.45 row; Golubev et al.'s ED
+// lies 6.1e-7 below it (SWEEP.md, instance-gap pass).
+put("J1J2/square_36_P_0.45",
+  { model: "J1J2", lattice: "square", n_sites: 36, boundary: "P", params: { J2: 0.45 }, dof: 36, einf: 0 },
+  { energy: -74.2546644341862, sigma: null,
+    src: { ref: "QMBL, checks/exact-recompute-2026-09/ (exact diagonalization of the 6x6 torus at J2 = 0.45, ed_sym.py)", pr: false },
+    method: "Exact diagonalization", why: "Lanczos exact diagonalization in the symmetry sectors of the 6x6 torus, computed by QMBL; deterministic",
+    read: "ed_sym.py (numba matrix-free Lanczos in the sectors of the torus translations, the C4v point group and spin inversion; tol 1e-9 with a second pass) at k = (0,0) and (pi,pi), every C4v irrep, even spin inversion, an AMD EPYC 9654 server, 2026-09-28; results in checks/exact-recompute-2026-09/results/",
+    reported: "-74.2546644341862 (k = (0,0), A1; 15,804,956 states; residual 6.0e-10)",
+    note: "Pauli total; E/N = -0.515657392 in S.S units. Lowest of the eight sectors computed; the next is -71.9586017 (k = (0,0), B1). The same code reproduces the exact rows at J2 = 0.5 to 12 digits and the printed 36-site values of Schulz, Ziman & Poilblanc at 0.2, 0.55 and 0.65 (checks/README.md, exact-recompute-2026-09). Chen et al. quote -0.51565739 at this coupling, which matches to 1e-8, citing Schulz et al., who have no J2 = 0.45 row; Golubev et al. (arXiv:2606.04558, Table I) print an ED value 6.1e-7 below it (SWEEP.md). No published exact row is carried, so QMBL's stands (Tristan, 2026-10-09).",
+    source: "qmbl-verify-2026-09-28", checked: "2026-09-28" });
+console.log("batch B3: 1 exact row computed by QMBL where none was published (J1-J2 6x6, J2 = 0.45)");
+
 // ---------------------------------------------------------------------------------------
 // Batch C: exact diagonalization of frustrated clusters. Deterministic, so no sigma; the
 // energies are exact to the printed digits.

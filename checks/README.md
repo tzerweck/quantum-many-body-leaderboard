@@ -291,6 +291,14 @@ keep their citation and carry QMBL's digits, with the printed value kept on the 
 2026-10-02). J2 = 0.1 keeps the paper's -0.638096 (ruled
 2026-09-30); the recompute is in its verification note.
 
+**J2 = 0.45 (2026-10-09).** No published exact energy is carried for the 6x6 torus at J2 = 0.45,
+so QMBL's own Lanczos is its exact row (Tristan, 2026-10-09; `scripts/add_exact_rows.mjs`, batch
+B3). `ed_sym.py` at k = 0 and M, every C4v irrep, spin inversion even, on the same server,
+2026-09-28: the lowest level is k = 0, A1, -74.2546644341862 (Pauli total, -0.515657392 per site;
+15,804,956 states, residual 6.0e-10); the next is -71.9586017 (k = 0, B1). Chen et al. quote
+-0.51565739 at this coupling, which matches to 1e-8; Golubev et al.'s ED lies 6.1e-7 below it
+(`SWEEP.md`).
+
 **The 32-site t-V chains (ruling of 2026-10-02).** VarBench's exact rows on `tV/chain_32_P_16_1`,
 `_2` and `_4` link a lattice-symmetries script that fixes every symmetry sector to 0, and their
 numbers came from a QuSpin run whose script is not in VarBench's methods repository. `ed_full.py`
